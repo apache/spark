@@ -305,8 +305,33 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
         n.split match {
           case s: CategoricalSplit =>
             assert(s.leftCategories === Array(1.0))
+          case other =>
+            fail(s"All splits should be categorical, but got ${other.getClass.getName}: $other.")
         }
+      case other =>
+        fail(s"Root node should be an internal node, but got ${other.getClass.getName}: $other.")
     }
+  }
+
+  test("Feature importance with toy data") {
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("gini")
+      .setMaxDepth(3)
+      .setSeed(123)
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val numFeatures = data.first().features.size
+    val categoricalFeatures = (0 to numFeatures).map(i => (i, 2)).toMap
+    val df = TreeTests.setMetadata(data, categoricalFeatures, 2)
+
+    val model = dt.fit(df)
+
+    val importances = model.featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
+    assert(importances.toArray.sum === 1.0)
+    assert(importances.toArray.forall(_ >= 0.0))
   }
 
   /////////////////////////////////////////////////////////////////////////////

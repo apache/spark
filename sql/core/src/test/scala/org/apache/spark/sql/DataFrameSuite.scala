@@ -26,9 +26,11 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
-import org.apache.spark.sql.execution.Exchange
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.exchange.{BroadcastExchange, ReusedExchange, ShuffleExchange}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
@@ -37,23 +39,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
-    // Eager analysis.
-    withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "true") {
-      intercept[Exception] { testData.select('nonExistentName) }
-      intercept[Exception] {
-        testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
-      }
-      intercept[Exception] {
-        testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
-      }
-      intercept[Exception] {
-        testData.groupBy($"abcd").agg(Map("key" -> "sum"))
-      }
+    intercept[Exception] { testData.select('nonExistentName) }
+    intercept[Exception] {
+      testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
     }
-
-    // No more eager analysis once the flag is turned off
-    withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "false") {
-      testData.select('nonExistentName)
+    intercept[Exception] {
+      testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
+    }
+    intercept[Exception] {
+      testData.groupBy($"abcd").agg(Map("key" -> "sum"))
     }
   }
 
@@ -71,7 +65,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(1, 1) :: Nil)
   }
 
-  test("invalid plan toString, debug mode") {
+  ignore("invalid plan toString, debug mode") {
     // Turn on debug mode so we can see invalid query plans.
     import org.apache.spark.sql.execution.debug._
 
@@ -109,6 +103,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       unionDF.agg(avg('key), max('key), min('key), sum('key)),
       Row(50.5, 100, 1, 25250) :: Nil
+    )
+  }
+
+  test("unionAll should union DataFrames with UDTs (SPARK-13410)") {
+    val rowRDD1 = sparkContext.parallelize(Seq(Row(1, new ExamplePoint(1.0, 2.0))))
+    val schema1 = StructType(Array(StructField("label", IntegerType, false),
+                    StructField("point", new ExamplePointUDT(), false)))
+    val rowRDD2 = sparkContext.parallelize(Seq(Row(2, new ExamplePoint(3.0, 4.0))))
+    val schema2 = StructType(Array(StructField("label", IntegerType, false),
+                    StructField("point", new ExamplePointUDT(), false)))
+    val df1 = sqlContext.createDataFrame(rowRDD1, schema1)
+    val df2 = sqlContext.createDataFrame(rowRDD2, schema2)
+
+    checkAnswer(
+      df1.unionAll(df2).orderBy("label"),
+      Seq(Row(1, new ExamplePoint(1.0, 2.0)), Row(2, new ExamplePoint(3.0, 4.0)))
     )
   }
 
@@ -176,6 +186,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(explode($"a").as("a"), $"*"),
       Row("a", Seq("a"), 1) :: Nil)
+  }
+
+  test("sort after generate with join=true") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select($"*", explode($"a").as("c")).sortWithinPartitions("b", "c"),
+      Row(Seq("a"), 1, "a") :: Nil)
   }
 
   test("selectExpr") {
@@ -578,7 +596,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(parquetDF.inputFiles.nonEmpty)
 
       val unioned = jsonDF.unionAll(parquetDF).inputFiles.sorted
-      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).toSet.toArray.sorted
+      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
       assert(unioned === allFiles)
     }
   }
@@ -864,7 +882,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .write.format("parquet").save("temp")
     }
     assert(e.getMessage.contains("Duplicate column(s)"))
-    assert(e.getMessage.contains("parquet"))
     assert(e.getMessage.contains("column1"))
     assert(!e.getMessage.contains("column2"))
 
@@ -875,7 +892,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .write.format("json").save("temp")
     }
     assert(f.getMessage.contains("Duplicate column(s)"))
-    assert(f.getMessage.contains("JSON"))
     assert(f.getMessage.contains("column1"))
     assert(f.getMessage.contains("column3"))
     assert(!f.getMessage.contains("column2"))
@@ -918,7 +934,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      new DataFrame(sqlContext, OneRowRelation).registerTempTable("one_row")
+      Dataset.newDataFrame(sqlContext, OneRowRelation).registerTempTable("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
@@ -1119,7 +1135,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         }
         atFirstAgg = true
       }
-      case e: Exchange => atFirstAgg = false
+      case e: ShuffleExchange => atFirstAgg = false
       case _ =>
     }
   }
@@ -1293,6 +1309,40 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   }
 
+  test("reuse exchange") {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "2") {
+      val df = sqlContext.range(100)
+      val join = df.join(df, "id")
+      val plan = join.queryExecution.executedPlan
+      checkAnswer(join, df)
+      assert(
+        join.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
+      assert(join.queryExecution.executedPlan.collect { case e: ReusedExchange => true }.size === 1)
+      val broadcasted = broadcast(join)
+      val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
+      checkAnswer(join2, df)
+      assert(
+        join2.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
+      assert(
+        join2.queryExecution.executedPlan.collect { case e: BroadcastExchange => true }.size === 1)
+      assert(
+        join2.queryExecution.executedPlan.collect { case e: ReusedExchange => true }.size === 4)
+    }
+  }
+
+  test("sameResult() on aggregate") {
+    val df = sqlContext.range(100)
+    val agg1 = df.groupBy().count()
+    val agg2 = df.groupBy().count()
+    // two aggregates with different ExprId within them should have same result
+    assert(agg1.queryExecution.executedPlan.sameResult(agg2.queryExecution.executedPlan))
+    val agg3 = df.groupBy().sum()
+    assert(!agg1.queryExecution.executedPlan.sameResult(agg3.queryExecution.executedPlan))
+    val df2 = sqlContext.range(101)
+    val agg4 = df2.groupBy().count()
+    assert(!agg1.queryExecution.executedPlan.sameResult(agg4.queryExecution.executedPlan))
+  }
+
   test("SPARK-12512: support `.` in column name for withColumn()") {
     val df = Seq("a" -> "b").toDF("col.a", "col.b")
     checkAnswer(df.select(df("*")), Row("a", "b"))
@@ -1304,5 +1354,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
+  }
+
+  test("SPARK-12982: Add table name validation in temp table registration") {
+    val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
+    // invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("t~"))
+    // valid table name test as below
+    df.registerTempTable("table1")
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("#$@sum"))
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("table!#"))
+  }
+
+  test("assertAnalyzed shouldn't replace original stack trace") {
+    val e = intercept[AnalysisException] {
+      sqlContext.range(1).select('id as 'a, 'id as 'b).groupBy('a).agg('b)
+    }
+
+    assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
   }
 }

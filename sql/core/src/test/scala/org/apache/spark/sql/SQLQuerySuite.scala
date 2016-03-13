@@ -21,17 +21,13 @@ import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
-import org.apache.spark.sql.catalyst.CatalystQl
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.parser.ParserConf
-import org.apache.spark.sql.execution.{aggregate, SparkQl}
-import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
+import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
-
 
 class SQLQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -785,8 +781,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
     val smj = df.queryExecution.sparkPlan.collect {
       case smj: SortMergeJoin => smj
+      case j: BroadcastHashJoin => j
     }
-    assert(smj.size > 0, "should use SortMergeJoin")
+    assert(smj.size > 0, "should use SortMergeJoin or BroadcastHashJoin")
     checkAnswer(df, Row(100) :: Nil)
   }
 
@@ -1565,16 +1562,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       e.message.contains("Cannot save interval data type into external storage")
     })
 
-    def checkIntervalParseError(s: String): Unit = {
-      val e = intercept[AnalysisException] {
-        sql(s)
-      }
-      e.message.contains("at least one time unit should be given for interval literal")
+    val e1 = intercept[AnalysisException] {
+      sql("select interval")
     }
-
-    checkIntervalParseError("select interval")
+    assert(e1.message.contains("at least one time unit should be given for interval literal"))
     // Currently we don't yet support nanosecond
-    checkIntervalParseError("select interval 23 nanosecond")
+    val e2 = intercept[AnalysisException] {
+      sql("select interval 23 nanosecond")
+    }
+    assert(e2.message.contains("cannot recognize input near"))
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
@@ -1745,7 +1741,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e3 = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
     }
-    assert(e3.message.contains("No input paths specified"))
+    assert(e3.message.contains("Unable to infer schema"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
@@ -1984,9 +1980,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       verifyCallCount(
         df.groupBy().agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 1)
 
-      // Would be nice if semantic equals for `+` understood commutative
       verifyCallCount(
-        df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 2)
+        df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 1)
 
       // Try disabling it via configuration.
       sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "false")
@@ -2037,6 +2032,36 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row("dotNET", null, 63000.0) ::
         Row("dotNET", 2012, 15000.0) ::
         Row("dotNET", 2013, 48000.0) :: Nil
+    )
+  }
+
+  test("grouping sets when aggregate functions containing groupBy columns") {
+    checkAnswer(
+      sql("select course, sum(earnings) as sum from courseSales group by course, earnings " +
+        "grouping sets((), (course), (course, earnings)) " +
+        "order by course, sum"),
+      Row(null, 113000.0) ::
+        Row("Java", 20000.0) ::
+        Row("Java", 30000.0) ::
+        Row("Java", 50000.0) ::
+        Row("dotNET", 5000.0) ::
+        Row("dotNET", 10000.0) ::
+        Row("dotNET", 48000.0) ::
+        Row("dotNET", 63000.0) :: Nil
+    )
+
+    checkAnswer(
+      sql("select course, sum(earnings) as sum, grouping_id(course, earnings) from courseSales " +
+        "group by course, earnings grouping sets((), (course), (course, earnings)) " +
+        "order by course, sum"),
+      Row(null, 113000.0, 3) ::
+        Row("Java", 20000.0, 0) ::
+        Row("Java", 30000.0, 0) ::
+        Row("Java", 50000.0, 1) ::
+        Row("dotNET", 5000.0, 0) ::
+        Row("dotNET", 10000.0, 0) ::
+        Row("dotNET", 48000.0, 0) ::
+        Row("dotNET", 63000.0, 1) :: Nil
     )
   }
 
@@ -2103,6 +2128,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("select course, year, grouping_id(course, year) from courseSales group by course, year")
     }
     assert(error.getMessage contains "grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year, grouping__id from courseSales group by cube(course, year)")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
   }
 
   test("SPARK-13056: Null in map value causes NPE") {

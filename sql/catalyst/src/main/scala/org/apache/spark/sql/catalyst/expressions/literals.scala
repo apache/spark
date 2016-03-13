@@ -203,7 +203,7 @@ case class Literal protected (value: Any, dataType: DataType)
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].genCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}f"
@@ -212,7 +212,7 @@ case class Literal protected (value: Any, dataType: DataType)
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].genCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}D"
@@ -232,54 +232,26 @@ case class Literal protected (value: Any, dataType: DataType)
           ""
         // eval() version may be faster for non-primitive types
         case other =>
-          super.genCode(ctx, ev)
+          super[CodegenFallback].genCode(ctx, ev)
       }
     }
   }
 
   override def sql: String = (value, dataType) match {
-    case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null =>
-      "NULL"
-
-    case _ if value == null =>
-      s"CAST(NULL AS ${dataType.sql})"
-
+    case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
+    case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
     case (v: UTF8String, StringType) =>
       // Escapes all backslashes and double quotes.
       "\"" + v.toString.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-
-    case (v: Byte, ByteType) =>
-      s"CAST($v AS ${ByteType.simpleString.toUpperCase})"
-
-    case (v: Short, ShortType) =>
-      s"CAST($v AS ${ShortType.simpleString.toUpperCase})"
-
-    case (v: Long, LongType) =>
-      s"CAST($v AS ${LongType.simpleString.toUpperCase})"
-
-    case (v: Float, FloatType) =>
-      s"CAST($v AS ${FloatType.simpleString.toUpperCase})"
-
-    case (v: Decimal, DecimalType.Fixed(precision, scale)) =>
-      s"CAST($v AS ${DecimalType.simpleString.toUpperCase}($precision, $scale))"
-
-    case (v: Int, DateType) =>
-      s"DATE '${DateTimeUtils.toJavaDate(v)}'"
-
-    case (v: Long, TimestampType) =>
-      s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
-
+    case (v: Byte, ByteType) => v + "Y"
+    case (v: Short, ShortType) => v + "S"
+    case (v: Long, LongType) => v + "L"
+    // Float type doesn't have a suffix
+    case (v: Float, FloatType) => s"CAST($v AS ${FloatType.sql})"
+    case (v: Double, DoubleType) => v + "D"
+    case (v: Decimal, t: DecimalType) => s"CAST($v AS ${t.sql})"
+    case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
+    case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
     case _ => value.toString
   }
-}
-
-// TODO: Specialize
-case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
-  extends LeafExpression with CodegenFallback {
-
-  def update(expression: Expression, input: InternalRow): Unit = {
-    value = expression.eval(input)
-  }
-
-  override def eval(input: InternalRow): Any = value
 }

@@ -20,6 +20,7 @@ package org.apache.spark.examples.ml;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
@@ -28,7 +29,6 @@ import java.util.Arrays;
 import org.apache.spark.ml.feature.IndexToString;
 import org.apache.spark.ml.feature.StringIndexer;
 import org.apache.spark.ml.feature.StringIndexerModel;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -56,18 +56,18 @@ public class JavaIndexToStringExample {
       new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("category", DataTypes.StringType, false, Metadata.empty())
     });
-    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
 
     StringIndexerModel indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex")
       .fit(df);
-    DataFrame indexed = indexer.transform(df);
+    Dataset<Row> indexed = indexer.transform(df);
 
     IndexToString converter = new IndexToString()
       .setInputCol("categoryIndex")
       .setOutputCol("originalCategory");
-    DataFrame converted = converter.transform(indexed);
+    Dataset<Row> converted = converter.transform(indexed);
     converted.select("id", "originalCategory").show();
     // $example off$
     jsc.stop();

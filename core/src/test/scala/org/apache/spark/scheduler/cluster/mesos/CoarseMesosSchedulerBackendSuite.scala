@@ -33,7 +33,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
-import org.apache.spark.rpc.{RpcEndpointRef}
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
@@ -41,12 +41,12 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     with MockitoSugar
     with BeforeAndAfter {
 
-  var sparkConf: SparkConf = _
-  var driver: SchedulerDriver = _
-  var taskScheduler: TaskSchedulerImpl = _
-  var backend: CoarseMesosSchedulerBackend = _
-  var externalShuffleClient: MesosExternalShuffleClient = _
-  var driverEndpoint: RpcEndpointRef = _
+  private var sparkConf: SparkConf = _
+  private var driver: SchedulerDriver = _
+  private var taskScheduler: TaskSchedulerImpl = _
+  private var backend: CoarseMesosSchedulerBackend = _
+  private var externalShuffleClient: MesosExternalShuffleClient = _
+  private var driverEndpoint: RpcEndpointRef = _
 
   test("mesos supports killing and limiting executors") {
     setBackend()
@@ -210,6 +210,35 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     verify(driver, times(1)).killTask(createTaskId("0"))
   }
 
+  test("weburi is set in created scheduler driver") {
+    setBackend()
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+    val securityManager = mock[SecurityManager]
+
+    val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
+      override protected def createSchedulerDriver(
+        masterUrl: String,
+        scheduler: Scheduler,
+        sparkUser: String,
+        appName: String,
+        conf: SparkConf,
+        webuiUrl: Option[String] = None,
+        checkpoint: Option[Boolean] = None,
+        failoverTimeout: Option[Double] = None,
+        frameworkId: Option[String] = None): SchedulerDriver = {
+        markRegistered()
+        assert(webuiUrl.isDefined)
+        assert(webuiUrl.get.equals("http://webui"))
+        driver
+      }
+    }
+
+    backend.start()
+  }
+
   private def verifyDeclinedOffer(driver: SchedulerDriver,
       offerId: OfferID,
       filter: Boolean = false): Unit = {
@@ -312,6 +341,11 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
       override protected def createDriverEndpointRef(
           properties: ArrayBuffer[(String, String)]): RpcEndpointRef = endpoint
 
+      // override to avoid race condition with the driver thread on `mesosDriver`
+      override def startScheduler(newDriver: SchedulerDriver): Unit = {
+        mesosDriver = newDriver
+      }
+
       markRegistered()
     }
     backend.start()
@@ -323,6 +357,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
       .setMaster("local[*]")
       .setAppName("test-mesos-dynamic-alloc")
       .setSparkHome("/path")
+      .set("spark.mesos.driver.webui.url", "http://webui")
 
     if (sparkConfVars != null) {
       for (attr <- sparkConfVars) {

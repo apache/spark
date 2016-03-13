@@ -195,8 +195,8 @@ streaming_kinesis_asl = Module(
     name="streaming-kinesis-asl",
     dependencies=[],
     source_file_regexes=[
-        "extras/kinesis-asl/",
-        "extras/kinesis-asl-assembly/",
+        "external/kinesis-asl/",
+        "external/kinesis-asl-assembly/",
     ],
     build_profile_flags=[
         "-Pkinesis-asl",
@@ -473,7 +473,7 @@ yarn = Module(
     dependencies=[],
     source_file_regexes=[
         "yarn/",
-        "network/yarn/",
+        "common/network-yarn/",
     ],
     sbt_test_goals=[
         "yarn/test",

@@ -23,13 +23,13 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, FunctionRegistry}
-import org.apache.spark.sql.catalyst.parser.ParserConf
-import org.apache.spark.sql.execution.SparkQl
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.hive.{HiveContext, HiveQl, MetastoreRelation}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -90,6 +90,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     df.registerTempTable("table1")
     val query = sql("SELECT c1, v FROM table1 LATERAL VIEW stack(3, 1, c1 + 1, c1 + 2) d AS v")
     checkAnswer(query, Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
+  }
+
+  test("SPARK-13651: generator outputs shouldn't be resolved from its child's output") {
+    withTempTable("src") {
+      Seq(("id1", "value1")).toDF("key", "value").registerTempTable("src")
+      val query =
+        sql("SELECT genoutput.* FROM src " +
+          "LATERAL VIEW explode(map('key1', 100, 'key2', 200)) genoutput AS key, value")
+      checkAnswer(query, Row("key1", 100) :: Row("key2", 200) :: Nil)
+    }
   }
 
   test("SPARK-6851: Self-joined converted parquet tables") {
@@ -254,6 +264,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(
       sql("SELECT ints FROM nestedArray LATERAL VIEW explode(a.b) a AS ints"),
       Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    checkAnswer(
+      sql("SELECT `ints` FROM nestedArray LATERAL VIEW explode(a.b) `a` AS `ints`"),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    checkAnswer(
+      sql("SELECT `a`.`ints` FROM nestedArray LATERAL VIEW explode(a.b) `a` AS `ints`"),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT `weird``tab`.`weird``col`
+          |FROM nestedArray
+          |LATERAL VIEW explode(a.b) `weird``tab` AS `weird``col`
+        """.stripMargin),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
   test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
@@ -265,19 +292,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("CTAS without serde") {
     def checkRelation(tableName: String, isDataSourceParquet: Boolean): Unit = {
-      val relation = EliminateSubQueries(catalog.lookupRelation(TableIdentifier(tableName)))
+      val relation = EliminateSubqueryAliases(catalog.lookupRelation(TableIdentifier(tableName)))
       relation match {
-        case LogicalRelation(r: ParquetRelation, _, _) =>
+        case LogicalRelation(r: HadoopFsRelation, _, _) =>
           if (!isDataSourceParquet) {
             fail(
               s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
-              s"${ParquetRelation.getClass.getCanonicalName}.")
+              s"${HadoopFsRelation.getClass.getCanonicalName}.")
           }
 
         case r: MetastoreRelation =>
           if (isDataSourceParquet) {
             fail(
-              s"${ParquetRelation.getClass.getCanonicalName} is expected, but found " +
+              s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
               s"${classOf[MetastoreRelation].getCanonicalName}.")
           }
       }
@@ -731,7 +758,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     data.toDF("key", "value").registerTempTable("test")
     checkAnswer(
       sql("""FROM
-          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
+          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` int, thing2 string)) t
           |SELECT thing1 + 1
         """.stripMargin), (2 to 6).map(i => Row(i)))
   }
@@ -927,6 +954,33 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
+  test("Sorting columns are not in Generate") {
+    withTempTable("data") {
+      sqlContext.range(1, 5)
+        .select(array($"id", $"id" + 1).as("a"), $"id".as("b"), (lit(10) - $"id").as("c"))
+        .registerTempTable("data")
+
+      // case 1: missing sort columns are resolvable if join is true
+      checkAnswer(
+        sql("SELECT explode(a) AS val, b FROM data WHERE b < 2 order by val, c"),
+        Row(1, 1) :: Row(2, 1) :: Nil)
+
+      // case 2: missing sort columns are resolvable if join is false
+      checkAnswer(
+        sql("SELECT explode(a) AS val FROM data order by val, c"),
+        Seq(1, 2, 2, 3, 3, 4, 4, 5).map(i => Row(i)))
+
+      // case 3: missing sort columns are resolvable if join is true and outer is true
+      checkAnswer(
+        sql(
+          """
+            |SELECT C.val, b FROM data LATERAL VIEW OUTER explode(a) C as val
+            |where b < 2 order by c, val, b
+          """.stripMargin),
+        Row(1, 1) :: Row(2, 1) :: Nil)
+    }
+  }
+
   test("window function: Sorting columns are not in Project") {
     val data = Seq(
       WindowData(1, "d", 10),
@@ -977,6 +1031,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         ("c", 1),
         ("d", 1),
         ("c", 2)
+      ).map(i => Row(i._1, i._2)))
+
+    checkAnswer(
+      sql(
+        """
+          |select area, sum(product) / sum(sum(product)) over (partition by area) as c1
+          |from windowData group by area, month order by month, c1
+        """.stripMargin),
+      Seq(
+        ("d", 1.0),
+        ("a", 1.0),
+        ("b", 0.4666666666666667),
+        ("b", 0.5333333333333333),
+        ("c", 0.45),
+        ("c", 0.55)
       ).map(i => Row(i._1, i._2)))
   }
 
@@ -1534,6 +1603,116 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("DROP VIEW testView")
       }
     }
+  }
+
+  test("SPARK-8976 Wrong Result for Rollup #1") {
+    checkAnswer(sql(
+      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH ROLLUP"),
+      Seq(
+        (113, 3, 0),
+        (91, 0, 0),
+        (500, null, 1),
+        (84, 1, 0),
+        (105, 2, 0),
+        (107, 4, 0)
+      ).map(i => Row(i._1, i._2, i._3)))
+  }
+
+  test("SPARK-8976 Wrong Result for Rollup #2") {
+    checkAnswer(sql(
+      """
+        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+        |FROM src GROUP BY key%5, key-5
+        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+      """.stripMargin),
+      Seq(
+        (1, 0, 5, 0),
+        (1, 0, 15, 0),
+        (1, 0, 25, 0),
+        (1, 0, 60, 0),
+        (1, 0, 75, 0),
+        (1, 0, 80, 0),
+        (1, 0, 100, 0),
+        (1, 0, 140, 0),
+        (1, 0, 145, 0),
+        (1, 0, 150, 0)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("SPARK-8976 Wrong Result for Rollup #3") {
+    checkAnswer(sql(
+      """
+        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+      """.stripMargin),
+      Seq(
+        (1, 0, 5, 0),
+        (1, 0, 15, 0),
+        (1, 0, 25, 0),
+        (1, 0, 60, 0),
+        (1, 0, 75, 0),
+        (1, 0, 80, 0),
+        (1, 0, 100, 0),
+        (1, 0, 140, 0),
+        (1, 0, 145, 0),
+        (1, 0, 150, 0)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("SPARK-8976 Wrong Result for CUBE #1") {
+    checkAnswer(sql(
+      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH CUBE"),
+      Seq(
+        (113, 3, 0),
+        (91, 0, 0),
+        (500, null, 1),
+        (84, 1, 0),
+        (105, 2, 0),
+        (107, 4, 0)
+      ).map(i => Row(i._1, i._2, i._3)))
+  }
+
+  test("SPARK-8976 Wrong Result for CUBE #2") {
+    checkAnswer(sql(
+      """
+        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+        |WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
+      """.stripMargin),
+    Seq(
+      (1, null, -3, 2),
+      (1, null, -1, 2),
+      (1, null, 3, 2),
+      (1, null, 4, 2),
+      (1, null, 5, 2),
+      (1, null, 6, 2),
+      (1, null, 12, 2),
+      (1, null, 14, 2),
+      (1, null, 15, 2),
+      (1, null, 22, 2)
+    ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("SPARK-8976 Wrong Result for GroupingSet") {
+    checkAnswer(sql(
+      """
+        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+        |GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
+      """.stripMargin),
+    Seq(
+      (1, null, -3, 2),
+      (1, null, -1, 2),
+      (1, null, 3, 2),
+      (1, null, 4, 2),
+      (1, null, 5, 2),
+      (1, null, 6, 2),
+      (1, null, 12, 2),
+      (1, null, 14, 2),
+      (1, null, 15, 2),
+      (1, null, 22, 2)
+    ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
   test("SPARK-10562: partition by column with mixed case name") {

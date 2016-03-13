@@ -27,7 +27,6 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Loader, Saveable}
-import org.apache.spark.mllib.util.MLUtils.appendBias
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.storage.StorageLevel
@@ -408,6 +407,10 @@ class LogisticRegressionWithLBFGS
    * defaults to the mllib implementation. If more than two classes
    * or feature scaling is disabled, always uses mllib implementation.
    * Uses user provided weights.
+   *
+   * In the ml LogisticRegression implementation, the number of corrections
+   * used in the LBFGS update can not be configured. So `optimizer.setNumCorrections()`
+   * will have no effect if we fall into that route.
    */
   override def run(input: RDD[LabeledPoint], initialWeights: Vector): LogisticRegressionModel = {
     run(input, initialWeights, userSuppliedWeights = true)
@@ -444,8 +447,8 @@ class LogisticRegressionWithLBFGS
         createModel(weights, mlLogisticRegresionModel.intercept)
       }
       optimizer.getUpdater() match {
-        case x: SquaredL2Updater => runWithMlLogisitcRegression(1.0)
-        case x: L1Updater => runWithMlLogisitcRegression(0.0)
+        case x: SquaredL2Updater => runWithMlLogisitcRegression(0.0)
+        case x: L1Updater => runWithMlLogisitcRegression(1.0)
         case _ => super.run(input, initialWeights)
       }
     } else {

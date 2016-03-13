@@ -25,7 +25,8 @@ import org.json4s.JsonDSL._
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
-import org.apache.spark.sql.catalyst.util.{DataTypeParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 
 /**
  * :: DeveloperApi ::
@@ -280,7 +281,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   override def sql: String = {
-    val fieldTypes = fields.map(f => s"`${f.name}`: ${f.dataType.sql}")
+    val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
     s"STRUCT<${fieldTypes.mkString(", ")}>"
   }
 
@@ -292,7 +293,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     builder.append("struct<")
     builder.append(fieldTypes.mkString(", "))
     if (fields.length > 2) {
-      if (fields.length - fieldTypes.size == 1) {
+      if (fields.length - fieldTypes.length == 1) {
         builder.append(" ... 1 more field")
       } else {
         builder.append(" ... " + (fields.length - 2) + " more fields")

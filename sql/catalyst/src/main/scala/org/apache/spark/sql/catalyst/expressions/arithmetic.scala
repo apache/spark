@@ -95,8 +95,6 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
   }
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
-
-  override def sql: String = s"$prettyName(${child.sql})"
 }
 
 abstract class BinaryArithmetic extends BinaryOperator {
@@ -319,7 +317,9 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
   }
 }
 
-case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
+case class MaxOf(left: Expression, right: Expression)
+  extends BinaryArithmetic with NonSQLExpression {
+
   // TODO: Remove MaxOf and MinOf, and replace its usage with Greatest and Least.
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
@@ -373,7 +373,9 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
   override def symbol: String = "max"
 }
 
-case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
+case class MinOf(left: Expression, right: Expression)
+  extends BinaryArithmetic with NonSQLExpression {
+
   // TODO: Remove MaxOf and MinOf, and replace its usage with Greatest and Least.
 
   override def inputType: AbstractDataType = TypeCollection.Ordered

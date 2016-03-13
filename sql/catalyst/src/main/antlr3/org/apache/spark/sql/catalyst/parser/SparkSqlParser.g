@@ -26,7 +26,7 @@ ASTLabelType=CommonTree;
 backtrack=false;
 k=3;
 }
-import SelectClauseParser, FromClauseParser, IdentifiersParser, ExpressionParser;
+import SelectClauseParser, FromClauseParser, IdentifiersParser, KeywordParser, ExpressionParser;
 
 tokens {
 TOK_INSERT;
@@ -949,7 +949,7 @@ createTableStatement
          tablePropertiesPrefixed?
          )
       |
-         tableProvider
+         (tableProvider) => tableProvider
          tableOpts?
          (KW_AS selectStatementWithCTE)?
       -> ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?

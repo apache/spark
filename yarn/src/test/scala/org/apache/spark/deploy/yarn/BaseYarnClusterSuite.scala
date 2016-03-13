@@ -34,6 +34,7 @@ import org.scalatest.{BeforeAndAfterAll, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
@@ -136,7 +137,7 @@ abstract class BaseYarnClusterSuite
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map(),
       extraEnv: Map[String, String] = Map()): SparkAppHandle.State = {
-    val master = if (clientMode) "yarn-client" else "yarn-cluster"
+    val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
     val env = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv
 
@@ -148,7 +149,8 @@ abstract class BaseYarnClusterSuite
       launcher.setAppResource(fakeSparkJar.getAbsolutePath())
     }
     launcher.setSparkHome(sys.props("spark.test.home"))
-      .setMaster(master)
+      .setMaster("yarn")
+      .setDeployMode(deployMode)
       .setConf("spark.executor.instances", "1")
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)
@@ -201,7 +203,7 @@ abstract class BaseYarnClusterSuite
       extraClassPath: Seq[String] = Nil,
       extraConf: Map[String, String] = Map()): String = {
     val props = new Properties()
-    props.put("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
+    props.put(SPARK_JARS.key, "local:" + fakeSparkJar.getAbsolutePath())
 
     val testClasspath = new TestClasspathBuilder()
       .buildClassPath(

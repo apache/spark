@@ -18,17 +18,18 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, Row, SQLConf}
+import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchange, ReuseExchange, ShuffleExchange}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-
 
 class PlannerSuite extends SharedSQLContext {
   import testImplicits._
@@ -157,7 +158,7 @@ class PlannerSuite extends SharedSQLContext {
 
       withTempTable("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
-        assert(exp.toString.contains("PushedFilters: [EqualTo(key,15)]"))
+        assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
       }
     }
   }
@@ -212,7 +213,7 @@ class PlannerSuite extends SharedSQLContext {
               |  JOIN tiny ON (small.key = tiny.key)
             """.stripMargin
           ).queryExecution.executedPlan.collect {
-            case exchange: Exchange => exchange
+            case exchange: ShuffleExchange => exchange
           }.length
           assert(numExchanges === 5)
         }
@@ -227,7 +228,7 @@ class PlannerSuite extends SharedSQLContext {
               |  JOIN tiny ON (normal.key = tiny.key)
             """.stripMargin
           ).queryExecution.executedPlan.collect {
-            case exchange: Exchange => exchange
+            case exchange: ShuffleExchange => exchange
           }.length
           assert(numExchanges === 5)
         }
@@ -295,7 +296,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: Exchange => true }.isEmpty) {
+    if (outputPlan.collect { case e: ShuffleExchange => true }.isEmpty) {
       fail(s"Exchange should have been added:\n$outputPlan")
     }
   }
@@ -333,7 +334,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: Exchange => true }.isEmpty) {
+    if (outputPlan.collect { case e: ShuffleExchange => true }.isEmpty) {
       fail(s"Exchange should have been added:\n$outputPlan")
     }
   }
@@ -353,7 +354,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: Exchange => true }.nonEmpty) {
+    if (outputPlan.collect { case e: ShuffleExchange => true }.nonEmpty) {
       fail(s"Exchange should not have been added:\n$outputPlan")
     }
   }
@@ -376,7 +377,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: Exchange => true }.nonEmpty) {
+    if (outputPlan.collect { case e: ShuffleExchange => true }.nonEmpty) {
       fail(s"No Exchanges should have been added:\n$outputPlan")
     }
   }
@@ -435,7 +436,7 @@ class PlannerSuite extends SharedSQLContext {
     val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
     val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
     assert(!childPartitioning.satisfies(distribution))
-    val inputPlan = Exchange(finalPartitioning,
+    val inputPlan = ShuffleExchange(finalPartitioning,
       DummySparkPlan(
         children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
         requiredChildDistribution = Seq(distribution),
@@ -444,7 +445,7 @@ class PlannerSuite extends SharedSQLContext {
 
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: Exchange => true }.size == 2) {
+    if (outputPlan.collect { case e: ShuffleExchange => true }.size == 2) {
       fail(s"Topmost Exchange should have been eliminated:\n$outputPlan")
     }
   }
@@ -455,7 +456,7 @@ class PlannerSuite extends SharedSQLContext {
     val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 8)
     val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
     assert(!childPartitioning.satisfies(distribution))
-    val inputPlan = Exchange(finalPartitioning,
+    val inputPlan = ShuffleExchange(finalPartitioning,
       DummySparkPlan(
         children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
         requiredChildDistribution = Seq(distribution),
@@ -464,12 +465,56 @@ class PlannerSuite extends SharedSQLContext {
 
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: Exchange => true }.size == 1) {
+    if (outputPlan.collect { case e: ShuffleExchange => true }.size == 1) {
       fail(s"Topmost Exchange should not have been eliminated:\n$outputPlan")
     }
   }
 
   // ---------------------------------------------------------------------------------------------
+
+  test("Reuse exchanges") {
+    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
+    assert(!childPartitioning.satisfies(distribution))
+    val shuffle = ShuffleExchange(finalPartitioning,
+      DummySparkPlan(
+        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
+        requiredChildDistribution = Seq(distribution),
+        requiredChildOrdering = Seq(Seq.empty)),
+      None)
+
+    val inputPlan = SortMergeJoin(
+        Literal(1) :: Nil,
+        Literal(1) :: Nil,
+        None,
+        shuffle,
+        shuffle)
+
+    val outputPlan = ReuseExchange(sqlContext).apply(inputPlan)
+    if (outputPlan.collect { case e: ReusedExchange => true }.size != 1) {
+      fail(s"Should re-use the shuffle:\n$outputPlan")
+    }
+    if (outputPlan.collect { case e: ShuffleExchange => true }.size != 1) {
+      fail(s"Should have only one shuffle:\n$outputPlan")
+    }
+
+    // nested exchanges
+    val inputPlan2 = SortMergeJoin(
+      Literal(1) :: Nil,
+      Literal(1) :: Nil,
+      None,
+      ShuffleExchange(finalPartitioning, inputPlan),
+      ShuffleExchange(finalPartitioning, inputPlan))
+
+    val outputPlan2 = ReuseExchange(sqlContext).apply(inputPlan2)
+    if (outputPlan2.collect { case e: ReusedExchange => true }.size != 2) {
+      fail(s"Should re-use the two shuffles:\n$outputPlan2")
+    }
+    if (outputPlan2.collect { case e: ShuffleExchange => true }.size != 2) {
+      fail(s"Should have only two shuffles:\n$outputPlan")
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements

@@ -63,12 +63,6 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.jblas</groupId>
-      <artifactId>jblas</artifactId>
-      <version>${jblas.version}</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.scalanlp</groupId>
       <artifactId>breeze_${scala.binary.version}</artifactId>
       <version>0.11.2</version>

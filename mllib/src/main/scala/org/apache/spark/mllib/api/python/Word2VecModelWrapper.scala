@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.api.python
 
-import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
+import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 

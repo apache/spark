@@ -32,7 +32,7 @@ To get started, follow the steps below to install Mesos and deploy Spark jobs vi
 
 # Installing Mesos
 
-Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} and does not
+Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} or newer and does not
 require any special patches of Mesos.
 
 If you already have a Mesos cluster running, you can skip this Mesos installation step.
@@ -98,10 +98,10 @@ To host on HDFS, use the Hadoop fs put command: `hadoop fs -put spark-{{site.SPA
 
 
 Or if you are using a custom-compiled version of Spark, you will need to create a package using
-the `make-distribution.sh` script included in a Spark source tarball/checkout.
+the `dev/make-distribution.sh` script included in a Spark source tarball/checkout.
 
 1. Download and build Spark using the instructions [here](index.html)
-2. Create a binary package using `make-distribution.sh --tgz`.
+2. Create a binary package using `./dev/make-distribution.sh --tgz`.
 3. Upload archive to http/s3/hdfs
 
 
@@ -188,7 +188,7 @@ overhead, but at the cost of reserving the Mesos resources for the complete dura
 application.
 
 Coarse-grained is the default mode. You can also set `spark.mesos.coarse` property to true
-to turn it on explictly in [SparkConf](configuration.html#spark-properties):
+to turn it on explicitly in [SparkConf](configuration.html#spark-properties):
 
 {% highlight scala %}
 conf.set("spark.mesos.coarse", "true")
@@ -349,8 +349,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.uris</code></td>
   <td>(none)</td>
   <td>
-    A list of URIs to be downloaded to the sandbox when driver or executor is launched by Mesos.
-    This applies to both coarse-grain and fine-grain mode.
+    A comma-separated list of URIs to be downloaded to the sandbox
+    when driver or executor is launched by Mesos.  This applies to
+    both coarse-grained and fine-grained mode.
   </td>
 </tr>
 <tr>
@@ -384,9 +385,25 @@ See the [configuration page](configuration.html) for information on Spark config
       <li>Scalar constraints are matched with "less than equal" semantics i.e. value in the constraint must be less than or equal to the value in the resource offer.</li>
       <li>Range constraints are matched with "contains" semantics i.e. value in the constraint must be within the resource offer's value.</li>
       <li>Set constraints are matched with "subset of" semantics i.e. value in the constraint must be a subset of the resource offer's value.</li>
-      <li>Text constraints are metched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
+      <li>Text constraints are matched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
       <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
     </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.webui.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the Spark Mesos driver webui_url for interacting with the framework.
+    If unset it will point to Spark's internal web UI.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.webui.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the Spark Mesos dispatcher webui_url for interacting with the framework.
+    If unset it will point to Spark's internal web UI.
   </td>
 </tr>
 </table>

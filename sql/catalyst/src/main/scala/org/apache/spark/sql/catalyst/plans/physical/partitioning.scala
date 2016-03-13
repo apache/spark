@@ -76,6 +76,12 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
 }
 
 /**
+  * Represents data where tuples are broadcasted to every node. It is quite common that the
+  * entire set of tuples is transformed into different data structure.
+  */
+case class BroadcastDistribution(mode: BroadcastMode) extends Distribution
+
+/**
  * Describes how an operator's output is split across partitions. The `compatibleWith`,
  * `guarantees`, and `satisfies` methods describe relationships between child partitionings,
  * target partitionings, and [[Distribution]]s. These relations are described more precisely in
@@ -213,7 +219,10 @@ case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning {
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
-  override def satisfies(required: Distribution): Boolean = true
+  override def satisfies(required: Distribution): Boolean = required match {
+    case _: BroadcastDistribution => false
+    case _ => true
+  }
 
   override def compatibleWith(other: Partitioning): Boolean = other.numPartitions == 1
 
@@ -349,5 +358,23 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")
+  }
+}
+
+/**
+ * Represents a partitioning where rows are collected, transformed and broadcasted to each
+ * node in the cluster.
+ */
+case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
+  override val numPartitions: Int = 1
+
+  override def satisfies(required: Distribution): Boolean = required match {
+    case BroadcastDistribution(m) if m == mode => true
+    case _ => false
+  }
+
+  override def compatibleWith(other: Partitioning): Boolean = other match {
+    case BroadcastPartitioning(m) if m == mode => true
+    case _ => false
   }
 }

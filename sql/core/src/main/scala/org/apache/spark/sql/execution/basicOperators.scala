@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.random.PoissonSampler
 
@@ -31,23 +31,34 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  override def usedInputs: AttributeSet = {
+    // only the attributes those are used at least twice should be evaluated before this plan,
+    // otherwise we could defer the evaluation until output attribute is actually used.
+    val usedExprIds = projectList.flatMap(_.collect {
+      case a: Attribute => a.exprId
+    })
+    val usedMoreThanOnce = usedExprIds.groupBy(id => id).filter(_._2.size > 1).keySet
+    references.filter(a => usedMoreThanOnce.contains(a.exprId))
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
     ctx.currentVars = input
-    val output = exprs.map(_.gen(ctx))
+    val resultVars = exprs.map(_.gen(ctx))
+    // Evaluation of non-deterministic expressions can't be deferred.
+    val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
     s"""
-       | ${output.map(_.code).mkString("\n")}
-       |
-       | ${consume(ctx, output)}
+       |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonDeterministicAttrs))}
+       |${consume(ctx, resultVars)}
      """.stripMargin
   }
 
@@ -63,35 +74,77 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 }
 
 
-case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode with CodegenSupport {
-  override def output: Seq[Attribute] = child.output
+case class Filter(condition: Expression, child: SparkPlan)
+  extends UnaryNode with CodegenSupport with PredicateHelper {
+
+  // Split out all the IsNotNulls from condition.
+  private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
+    case IsNotNull(a) if child.output.contains(a) => true
+    case _ => false
+  }
+
+  // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
+  private val notNullAttributes = notNullPreds.flatMap(_.references)
+
+  override def output: Seq[Attribute] = {
+    child.output.map { a =>
+      if (a.nullable && notNullAttributes.contains(a)) {
+        a.withNullability(false)
+      } else {
+        a
+      }
+    }
+  }
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val expr = ExpressionCanonicalizer.execute(
-      BindReferences.bindReference(condition, child.output))
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
+    // filter out the nulls
+    val filterOutNull = notNullAttributes.map { a =>
+      val idx = child.output.indexOf(a)
+      s"if (${input(idx).isNull}) continue;"
+    }.mkString("\n")
+
     ctx.currentVars = input
-    val eval = expr.gen(ctx)
-    val nullCheck = if (expr.nullable) {
-      s"!${eval.isNull} &&"
-    } else {
-      s""
+    val predicates = otherPreds.map { e =>
+      val bound = ExpressionCanonicalizer.execute(
+        BindReferences.bindReference(e, output))
+      val ev = bound.gen(ctx)
+      val nullCheck = if (bound.nullable) {
+        s"${ev.isNull} || "
+      } else {
+        s""
+      }
+      s"""
+         |${ev.code}
+         |if (${nullCheck}!${ev.value}) continue;
+       """.stripMargin
+    }.mkString("\n")
+
+    // Reset the isNull to false for the not-null columns, then the followed operators could
+    // generate better code (remove dead branches).
+    val resultVars = input.zipWithIndex.map { case (ev, i) =>
+      if (notNullAttributes.contains(child.output(i))) {
+        ev.isNull = "false"
+      }
+      ev
     }
     s"""
-       | ${eval.code}
-       | if ($nullCheck ${eval.value}) {
-       |   ${consume(ctx, ctx.currentVars)}
-       | }
+       |$filterOutNull
+       |$predicates
+       |$numOutput.add(1);
+       |${consume(ctx, resultVars)}
      """.stripMargin
   }
 
@@ -154,11 +207,17 @@ case class Range(
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def upstream(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
+  // output attributes should not affect the results
+  override lazy val cleanArgs: Seq[Any] = Seq(start, step, numSlices, numElements)
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
+      .map(i => InternalRow(i)) :: Nil
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
     val initTerm = ctx.freshName("initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
     val partitionEnd = ctx.freshName("partitionEnd")
@@ -204,29 +263,32 @@ case class Range(
         |   } else {
         |     $partitionEnd = end.longValue();
         |   }
+        |
+        |   $numOutput.add(($partitionEnd - $number) / ${step}L);
         | }
        """.stripMargin)
 
+    val input = ctx.freshName("input")
+    // Right now, Range is only used when there is one upstream.
+    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     s"""
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
-      |   if (input.hasNext()) {
-      |     initRange(((InternalRow) input.next()).getInt(0));
+      |   if ($input.hasNext()) {
+      |     initRange(((InternalRow) $input.next()).getInt(0));
       |   } else {
       |     return;
       |   }
       | }
       |
-      | while (!$overflow && $checkEnd) {
+      | while (!$overflow && $checkEnd && !shouldStop()) {
       |  long $value = $number;
       |  $number += ${step}L;
       |  if ($number < $value ^ ${step}L < 0) {
       |    $overflow = true;
       |  }
       |  ${consume(ctx, Seq(ev))}
-      |
-      |  if (shouldStop()) return;
       | }
      """.stripMargin
   }
@@ -336,4 +398,19 @@ case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPl
   def children: Seq[SparkPlan] = child :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = child.execute()
+}
+
+/**
+ * A plan as subquery.
+ *
+ * This is used to generate tree string for SparkScalarSubquery.
+ */
+case class Subquery(name: String, child: SparkPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
 }

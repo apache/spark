@@ -27,7 +27,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{ExplainCommand, SetCommand}
+import org.apache.spark.sql.execution.command.{ExplainCommand, SetCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable, SQLBuilder}
 import org.apache.spark.sql.hive.test.TestHive
@@ -412,21 +412,22 @@ abstract class HiveComparisonTest
                 originalQuery
               } else {
                 numTotalQueries += 1
-                new SQLBuilder(originalQuery.analyzed, TestHive).toSQL.map { sql =>
+                try {
+                  val sql = new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
                   numConvertibleQueries += 1
                   logInfo(
                     s"""
-                       |### Running SQL generation round-trip test {{{
-                       |${originalQuery.analyzed.treeString}
-                       |Original SQL:
-                       |$queryString
-                       |
-                     |Generated SQL:
-                       |$sql
-                       |}}}
+                      |### Running SQL generation round-trip test {{{
+                      |${originalQuery.analyzed.treeString}
+                      |Original SQL:
+                      |$queryString
+                      |
+                      |Generated SQL:
+                      |$sql
+                      |}}}
                    """.stripMargin.trim)
                   new TestHive.QueryExecution(sql)
-                }.getOrElse {
+                } catch { case NonFatal(e) =>
                   logInfo(
                     s"""
                        |### Cannot convert the following logical plan back to SQL {{{
@@ -448,6 +449,7 @@ abstract class HiveComparisonTest
                   |Failed to execute query using catalyst:
                   |Error: ${e.getMessage}
                   |${stackTraceToString(e)}
+                  |$queryString
                   |$query
                   |== HIVE - ${hive.size} row(s) ==
                   |${hive.mkString("\n")}
