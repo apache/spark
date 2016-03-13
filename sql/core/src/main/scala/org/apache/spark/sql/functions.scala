@@ -2565,7 +2565,6 @@ object functions extends LegacyFunctions {
 
   /**
    * Returns true if the array contain the value
-   *
    * @group collection_funcs
    * @since 1.5.0
    */

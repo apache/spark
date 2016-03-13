@@ -41,6 +41,7 @@ object SparkSqlParser extends AbstractSqlParser{
  */
 class SparkSqlAstBuilder extends AstBuilder {
   import AstBuilder._
+  import org.apache.spark.sql.catalyst.parser.ParseUtils._
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -239,11 +240,11 @@ class SparkSqlAstBuilder extends AstBuilder {
       // A key can either be a String or a collection of dot separated elements. We need to treat
       // these differently.
       val key = if (property.key.STRING != null) {
-        unquote(property.key.STRING.getText)
+        unescapeSQLString(property.key.STRING.getText)
       } else {
         property.key.getText
       }
-      val value = Option(property.value).map(t => unquote(t.getText)).getOrElse("")
+      val value = Option(property.value).map(t => unescapeSQLString(t.getText)).getOrElse("")
       key -> value
     }.toMap
   }
