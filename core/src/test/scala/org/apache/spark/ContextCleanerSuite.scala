@@ -577,7 +577,7 @@ class CleanerTester(
     }
   }
 
-  private def uncleanedResourcesToString: String = {
+  private def uncleanedResourcesToString = {
     val s1 = {toBeCleanedRDDIds.synchronized {
       toBeCleanedRDDIds.toSeq.sorted.mkString("[", ", ", "]")}
     }
