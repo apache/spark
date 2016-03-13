@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+import sys
+
+if sys.version > '3':
+    basestring = str
+
 from pyspark import SparkContext
 from pyspark import since
 from pyspark.ml import Estimator, Model, Transformer
