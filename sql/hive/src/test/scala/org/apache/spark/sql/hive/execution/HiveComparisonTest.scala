@@ -449,6 +449,7 @@ abstract class HiveComparisonTest
                   |Failed to execute query using catalyst:
                   |Error: ${e.getMessage}
                   |${stackTraceToString(e)}
+                  |$queryString
                   |$query
                   |== HIVE - ${hive.size} row(s) ==
                   |${hive.mkString("\n")}

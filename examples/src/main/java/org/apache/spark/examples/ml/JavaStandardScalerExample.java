@@ -24,7 +24,8 @@ import org.apache.spark.sql.SQLContext;
 // $example on$
 import org.apache.spark.ml.feature.StandardScaler;
 import org.apache.spark.ml.feature.StandardScalerModel;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 // $example off$
 
 public class JavaStandardScalerExample {
@@ -34,7 +35,7 @@ public class JavaStandardScalerExample {
     SQLContext jsql = new SQLContext(jsc);
 
     // $example on$
-    DataFrame dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     StandardScaler scaler = new StandardScaler()
       .setInputCol("features")
@@ -46,7 +47,7 @@ public class JavaStandardScalerExample {
     StandardScalerModel scalerModel = scaler.fit(dataFrame);
 
     // Normalize each feature to have unit standard deviation.
-    DataFrame scaledData = scalerModel.transform(dataFrame);
+    Dataset<Row> scaledData = scalerModel.transform(dataFrame);
     scaledData.show();
     // $example off$
     jsc.stop();

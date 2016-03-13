@@ -172,7 +172,7 @@ public final class UnsafeInMemorySorter {
     pos++;
   }
 
-  public final class SortedIterator extends UnsafeSorterIterator {
+  public final class SortedIterator extends UnsafeSorterIterator implements Cloneable {
 
     private final int numRecords;
     private int position;

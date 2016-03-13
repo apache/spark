@@ -404,7 +404,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(csvDir)
 
       val compressedFiles = new File(csvDir).listFiles()
-      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+      assert(compressedFiles.exists(_.getName.endsWith(".csv.gz")))
 
       val carsCopy = sqlContext.read
         .format("csv")
@@ -439,7 +439,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .save(csvDir)
 
         val compressedFiles = new File(csvDir).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".gz")))
+        assert(compressedFiles.exists(!_.getName.endsWith(".csv.gz")))
 
         val carsCopy = sqlContext.read
           .format("csv")
@@ -465,5 +465,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(
       df.schema.fields.map(field => field.dataType).deep ==
       Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
+  }
+
+  test("old csv data source name works") {
+    val cars = sqlContext
+      .read
+      .format("com.databricks.spark.csv")
+      .option("header", "false")
+      .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
   }
 }

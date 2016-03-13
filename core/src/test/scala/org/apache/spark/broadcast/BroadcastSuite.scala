@@ -37,7 +37,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
     rdd.map { x =>
       val bm = SparkEnv.get.blockManager
       // Check if broadcast block was fetched
-      val isFound = bm.getLocal(BroadcastBlockId(bid)).isDefined
+      val isFound = bm.getLocalValues(BroadcastBlockId(bid)).isDefined
       (x, isFound)
     }.collect().toSet
   }

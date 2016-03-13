@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Explode, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -33,7 +34,8 @@ class ColumnPruningSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Column pruning", FixedPoint(100),
-      ColumnPruning) :: Nil
+      ColumnPruning,
+      CollapseProject) :: Nil
   }
 
   test("Column pruning for Generate when Generate.join = false") {
@@ -157,6 +159,22 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(Optimize.execute(query), expected)
   }
 
+  test("Eliminate the Project with an empty projectList") {
+    val input = OneRowRelation
+    val expected = Project(Literal(1).as("1") :: Nil, input).analyze
+
+    val query1 =
+      Project(Literal(1).as("1") :: Nil, Project(Literal(1).as("1") :: Nil, input)).analyze
+    comparePlans(Optimize.execute(query1), expected)
+
+    val query2 =
+      Project(Literal(1).as("1") :: Nil, Project(Nil, input)).analyze
+    comparePlans(Optimize.execute(query2), expected)
+
+    // to make sure the top Project will not be removed.
+    comparePlans(Optimize.execute(expected), expected)
+  }
+
   test("column pruning for group") {
     val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
     val originalQuery =
@@ -240,6 +258,68 @@ class ColumnPruningSuite extends PlanTest {
         .select('b).analyze
 
     comparePlans(optimized1, analysis.EliminateSubqueryAliases(correctAnswer1))
+  }
+
+  test("Column pruning on Window with useless aggregate functions") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
+
+    val originalQuery =
+      input.groupBy('a, 'c, 'd)('a, 'c, 'd,
+        WindowExpression(
+          AggregateExpression(Count('b), Complete, isDistinct = false),
+          WindowSpecDefinition( 'a :: Nil,
+            SortOrder('b, Ascending) :: Nil,
+            UnspecifiedFrame)).as('window)).select('a, 'c)
+
+    val correctAnswer = input.select('a, 'c, 'd).groupBy('a, 'c, 'd)('a, 'c).analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Column pruning on Window with selected agg expressions") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
+
+    val originalQuery =
+      input.select('a, 'b, 'c, 'd,
+        WindowExpression(
+          AggregateExpression(Count('b), Complete, isDistinct = false),
+          WindowSpecDefinition( 'a :: Nil,
+            SortOrder('b, Ascending) :: Nil,
+            UnspecifiedFrame)).as('window)).where('window > 1).select('a, 'c)
+
+    val correctAnswer =
+      input.select('a, 'b, 'c)
+        .window(WindowExpression(
+          AggregateExpression(Count('b), Complete, isDistinct = false),
+          WindowSpecDefinition( 'a :: Nil,
+            SortOrder('b, Ascending) :: Nil,
+            UnspecifiedFrame)).as('window) :: Nil,
+          'a :: Nil, 'b.asc :: Nil)
+        .select('a, 'c, 'window).where('window > 1).select('a, 'c).analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Column pruning on Window in select") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
+
+    val originalQuery =
+      input.select('a, 'b, 'c, 'd,
+        WindowExpression(
+          AggregateExpression(Count('b), Complete, isDistinct = false),
+          WindowSpecDefinition( 'a :: Nil,
+            SortOrder('b, Ascending) :: Nil,
+            UnspecifiedFrame)).as('window)).select('a, 'c)
+
+    val correctAnswer = input.select('a, 'c).analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    comparePlans(optimized, correctAnswer)
   }
 
   test("Column pruning on Union") {

@@ -136,7 +136,7 @@ package object debug {
       child.asInstanceOf[CodegenSupport].produce(ctx, this)
     }
 
-    override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
       consume(ctx, input)
     }
   }

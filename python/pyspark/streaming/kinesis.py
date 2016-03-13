@@ -83,7 +83,7 @@ class KinesisUtils(object):
         except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
                 KinesisUtils._printErrorMsg(ssc.sparkContext)
-            raise e
+            raise
         stream = DStream(jstream, ssc, NoOpSerializer())
         return stream.map(lambda v: decoder(v))
 
