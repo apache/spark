@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, DataTypes, NullType}
 
 case class CollectList(child: Expression) extends DeclarativeAggregate {
@@ -54,7 +54,8 @@ case class CollectList(child: Expression) extends DeclarativeAggregate {
 }
 
 // TODO proper code generation for this
-private[sql] case class MergeList(children: Seq[Expression]) extends Expression with CodegenFallback {
+private[sql] case class MergeList(children: Seq[Expression])
+    extends Expression with CodegenFallback {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -82,7 +83,8 @@ private[sql] case class MergeList(children: Seq[Expression]) extends Expression 
 }
 
 // TODO proper code generation for this
-private[sql] case class UpdateList(children: Seq[Expression]) extends Expression with CodegenFallback {
+private[sql] case class UpdateList(children: Seq[Expression])
+    extends Expression with CodegenFallback {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
