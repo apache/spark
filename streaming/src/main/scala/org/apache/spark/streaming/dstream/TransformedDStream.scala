@@ -55,7 +55,7 @@ class TransformedDStream[U: ClassTag] (
   /**
    * Wrap a body of code such that the call site and operation scope
    * information are passed to the RDDs created in this body properly.
-   * This has been overriden to make sure that `displayInnerRDDOps` is always `true`, that is,
+   * This has been overridden to make sure that `displayInnerRDDOps` is always `true`, that is,
    * the inner scopes and callsites of RDDs generated in `DStream.transform` are always
    * displayed in the UI.
    */

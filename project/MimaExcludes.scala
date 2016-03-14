@@ -334,7 +334,7 @@ object MimaExcludes {
         excludePackage("org.apache.spark.sql.columnar"),
         // The shuffle package is considered private.
         excludePackage("org.apache.spark.shuffle"),
-        // The collections utlities are considered pricate.
+        // The collections utilities are considered private.
         excludePackage("org.apache.spark.util.collection")
       ) ++
       MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
@@ -639,7 +639,7 @@ object MimaExcludes {
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
         MimaBuild.excludeSparkPackage("ml"),
-        // SPARK-7910 Adding a method to get the partioner to JavaRDD,
+        // SPARK-7910 Adding a method to get the partitioner to JavaRDD,
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitioner"),
         // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff"),
@@ -657,7 +657,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorEndpoint")
       ) ++ Seq(
-        // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
+        // SPARK-4655 - Making Stage an Abstract class broke binary compatibility even though
         // the stage class is defined as private[spark]
         ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.scheduler.Stage")
       ) ++ Seq(

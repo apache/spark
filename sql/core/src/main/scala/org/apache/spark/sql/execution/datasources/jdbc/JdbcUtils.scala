@@ -70,7 +70,7 @@ object JdbcUtils extends Logging {
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
-    // the database name. Query used to find table exists can be overriden by the dialects.
+    // the database name. Query used to find table exists can be overridden by the dialects.
     Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(table))
       try {
