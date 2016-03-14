@@ -130,7 +130,7 @@ object HashByteArrayBenchmark {
     test(2048 + 31, 42L, 1 << 10, 1 << 11)
 
     /*
-    Running benchmark: Hash byte arrays with length 8127
+    Running benchmark: Hash byte arrays with length 8223
       Running case: Murmur3_x86_32
       Running case: xxHash 64-bit
 
