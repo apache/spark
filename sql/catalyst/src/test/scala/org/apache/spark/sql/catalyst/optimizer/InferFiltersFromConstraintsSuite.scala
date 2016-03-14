@@ -34,10 +34,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  test("filter: filter out nulls in condition") {
+  test("filter: filter out constraints in condition") {
     val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
-    val correctAnswer =
-      testRelation.where(IsNotNull('a) && IsNotNull('b) && 'a === 'b && 'a === 1).analyze
+    val correctAnswer = testRelation
+      .where(IsNotNull('a) && IsNotNull('b) && 'a === 'b && 'a === 1 && 'b === 1).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
@@ -105,6 +105,18 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(t3.where(IsNotNull('b) && 'b > 5), condition = Some("t2.b".attr === "t3.b".attr))
       .join(t4.where(IsNotNull('b) && 'b > 5), condition = Some("t3.b".attr === "t4.b".attr))
       .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("inner join with filter: filter out values on all sides on equi-join keys") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery =
+      x.join(y, Inner, Some("x.a".attr === "y.a".attr)).where("x.a".attr > 5).analyze
+    val correctAnswer = x.where(IsNotNull('a) && 'a.attr > 5)
+      .join(y.where(IsNotNull('a) && 'a.attr > 5), Inner, Some("x.a".attr === "y.a".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }

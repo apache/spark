@@ -621,10 +621,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
   // child constraints.
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
-      // For the Filter operator, we try to generate additional filters by only inferring the
-      // IsNotNull constraints. These IsNotNull filters are then used while generating the
-      // physical plan to quickly short circuit the null checks in the generated code.
-      val newFilters = filter.constraints.filter(_.isInstanceOf[IsNotNull]) --
+      val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
