@@ -663,7 +663,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = parts)
     completeNextResultStageWithSuccess(1, 1)
 
-    // Confirm job finished succesfully
+    // Confirm job finished successfully
     sc.listenerBus.waitUntilEmpty(1000)
     assert(ended === true)
     assert(results === (0 until parts).map { idx => idx -> 42 }.toMap)

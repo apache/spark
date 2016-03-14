@@ -20,8 +20,6 @@ Decision Tree Regression Example.
 """
 from __future__ import print_function
 
-import sys
-
 from pyspark import SparkContext, SQLContext
 # $example on$
 from pyspark.ml import Pipeline

@@ -26,7 +26,6 @@ import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
-import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 import spray.revolver.RevolverPlugin._
 
@@ -146,7 +145,7 @@ object SparkBuild extends PomBuild {
       "org.spark-project" %% "genjavadoc-plugin" % unidocGenjavadocVersion.value cross CrossVersion.full),
     scalacOptions <+= target.map(t => "-P:genjavadoc:out=" + (t / "java")))
 
-  lazy val sharedSettings = graphSettings ++ sparkGenjavadocSettings ++ Seq (
+  lazy val sharedSettings = sparkGenjavadocSettings ++ Seq (
     exportJars in Compile := true,
     exportJars in Test := false,
     javaHome := sys.env.get("JAVA_HOME")
@@ -245,7 +244,7 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ Revolver.settings))
+      ExcludedDependencies.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))

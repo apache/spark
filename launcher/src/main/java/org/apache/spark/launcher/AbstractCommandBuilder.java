@@ -23,6 +23,7 @@ import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -102,7 +103,7 @@ abstract class AbstractCommandBuilder {
     File javaOpts = new File(join(File.separator, getConfDir(), "java-opts"));
     if (javaOpts.isFile()) {
       BufferedReader br = new BufferedReader(new InputStreamReader(
-          new FileInputStream(javaOpts), "UTF-8"));
+          new FileInputStream(javaOpts), StandardCharsets.UTF_8));
       try {
         String line;
         while ((line = br.readLine()) != null) {
@@ -301,7 +302,7 @@ abstract class AbstractCommandBuilder {
       FileInputStream fd = null;
       try {
         fd = new FileInputStream(propsFile);
-        props.load(new InputStreamReader(fd, "UTF-8"));
+        props.load(new InputStreamReader(fd, StandardCharsets.UTF_8));
         for (Map.Entry<Object, Object> e : props.entrySet()) {
           e.setValue(e.getValue().toString().trim());
         }
