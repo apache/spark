@@ -105,7 +105,7 @@ private[csv] object InferSchema {
     def tryParseTimestamp(field: String): DataType = {
       if (dateFormat != null) {
         // This case infers a custom `dataFormat` is set.
-        if ((allCatch opt dateFormat.parse(field)).isDefined){
+        if ((allCatch opt dateFormat.parse(field)).isDefined) {
           TimestampType
         } else {
           tryParseBoolean(field)
