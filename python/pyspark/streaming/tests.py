@@ -1636,7 +1636,13 @@ if __name__ == "__main__":
         jars = "%s,%s,%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, mqtt_assembly_jar,
                                    mqtt_test_jar, kinesis_asl_assembly_jar)
 
-    os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
+    # We need to set userClassPathFirst here because the streaming data source classes are also
+    # loadable from the root classloader (because of SPARK_PREPEND_CLASSES) but their dependencies
+    # are only present in the data source assembly JARs.
+    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([
+        "--conf spark.driver.userClassPathFirst=true",
+        "--jars %s pyspark-shell" % jars,
+    ])
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
                  KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests, MQTTStreamTests,
                  StreamingListenerTests]
