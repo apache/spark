@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 import java.nio.ByteBuffer
 import java.util.{ConcurrentModificationException, EnumSet}
 
@@ -119,6 +119,12 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends
           case e: IOException if isFileAlreadyExistsException(e) =>
             // If "rename" fails, it means some other "HDFSMetadataLog" has committed the batch.
             // So throw an exception to tell the user this is not a valid behavior.
+            throw new ConcurrentModificationException(
+              s"Multiple HDFSMetadataLog are using $path", e)
+          case e: FileNotFoundException =>
+            // Sometimes, "create" will succeed when multiple writers are calling it at the same
+            // time. However, only one writer can call "rename" successfully, others will get
+            // FileNotFoundException because the first writer has removed it.
             throw new ConcurrentModificationException(
               s"Multiple HDFSMetadataLog are using $path", e)
         }
