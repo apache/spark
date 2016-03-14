@@ -27,6 +27,8 @@ import org.apache.spark.sql.SQLContext
 
 object Main extends Logging {
 
+  initializeLogIfNecessary(true)
+
   val conf = new SparkConf()
   val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
   val outputDir = Utils.createTempDir(root = rootDir, namePrefix = "repl")
@@ -50,39 +52,27 @@ object Main extends Logging {
   // Visible for testing
   private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
     interp = _interp
+    val jars = conf.getOption("spark.jars")
+      .map(_.replace(",", File.pathSeparator))
+      .getOrElse("")
     val interpArguments = List(
       "-Yrepl-class-based",
       "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
-      "-classpath", getAddedJars.mkString(File.pathSeparator)
+      "-classpath", jars
     ) ++ args.toList
 
     val settings = new GenericRunnerSettings(scalaOptionError)
     settings.processArguments(interpArguments, true)
 
     if (!hasErrors) {
-      if (getMaster == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
       interp.process(settings) // Repl starts and goes in loop of R.E.P.L
       Option(sparkContext).map(_.stop)
     }
   }
 
-  def getAddedJars: Array[String] = {
-    val envJars = sys.env.get("ADD_JARS")
-    if (envJars.isDefined) {
-      logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
-    }
-    val propJars = sys.props.get("spark.jars").flatMap { p => if (p == "") None else Some(p) }
-    val jars = propJars.orElse(envJars).getOrElse("")
-    Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
-  }
-
   def createSparkContext(): SparkContext = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
-    val jars = getAddedJars
-    val conf = new SparkConf()
-      .setMaster(getMaster)
-      .setJars(jars)
-      .setIfMissing("spark.app.name", "Spark shell")
+    conf.setIfMissing("spark.app.name", "Spark shell")
       // SparkContext will detect this configuration and register it with the RpcEnv's
       // file server, setting spark.repl.class.uri to the actual URI for executors to
       // use. This is sort of ugly but since executors are started as part of SparkContext
@@ -115,12 +105,4 @@ object Main extends Logging {
     sqlContext
   }
 
-  private def getMaster: String = {
-    val master = {
-      val envMaster = sys.env.get("MASTER")
-      val propMaster = sys.props.get("spark.master")
-      propMaster.orElse(envMaster).getOrElse("local[*]")
-    }
-    master
-  }
 }

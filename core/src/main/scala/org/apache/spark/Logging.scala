@@ -43,7 +43,7 @@ private[spark] trait Logging {
   // Method to get or create the logger for this object
   protected def log: Logger = {
     if (log_ == null) {
-      initializeIfNecessary()
+      initializeLogIfNecessary(false)
       log_ = LoggerFactory.getLogger(logName)
     }
     log_
@@ -95,17 +95,17 @@ private[spark] trait Logging {
     log.isTraceEnabled
   }
 
-  private def initializeIfNecessary() {
+  protected def initializeLogIfNecessary(isInterpreter: Boolean): Unit = {
     if (!Logging.initialized) {
       Logging.initLock.synchronized {
         if (!Logging.initialized) {
-          initializeLogging()
+          initializeLogging(isInterpreter)
         }
       }
     }
   }
 
-  private def initializeLogging() {
+  private def initializeLogging(isInterpreter: Boolean): Unit = {
     // Don't use a logger in here, as this is itself occurring during initialization of a logger
     // If Log4j 1.2 is being used, but is not initialized, load a default properties file
     val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
@@ -127,11 +127,11 @@ private[spark] trait Logging {
         }
       }
 
-      if (Utils.isInInterpreter) {
+      if (isInterpreter) {
         // Use the repl's main class to define the default log level when running the shell,
         // overriding the root logger's config if they're different.
         val rootLogger = LogManager.getRootLogger()
-        val replLogger = LogManager.getLogger("org.apache.spark.repl.Main")
+        val replLogger = LogManager.getLogger(logName)
         val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
         if (replLevel != rootLogger.getEffectiveLevel()) {
           System.err.printf("Setting default log level to \"%s\".\n", replLevel)
