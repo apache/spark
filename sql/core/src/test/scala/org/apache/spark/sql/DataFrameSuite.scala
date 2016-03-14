@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 import scala.language.postfixOps
 import scala.util.Random
@@ -25,7 +26,8 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.exchange.{BroadcastExchange, ReusedExchange, ShuffleExchange}
 import org.apache.spark.sql.functions._
@@ -38,23 +40,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
-    // Eager analysis.
-    withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "true") {
-      intercept[Exception] { testData.select('nonExistentName) }
-      intercept[Exception] {
-        testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
-      }
-      intercept[Exception] {
-        testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
-      }
-      intercept[Exception] {
-        testData.groupBy($"abcd").agg(Map("key" -> "sum"))
-      }
+    intercept[Exception] { testData.select('nonExistentName) }
+    intercept[Exception] {
+      testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
     }
-
-    // No more eager analysis once the flag is turned off
-    withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "false") {
-      testData.select('nonExistentName)
+    intercept[Exception] {
+      testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
+    }
+    intercept[Exception] {
+      testData.groupBy($"abcd").agg(Map("key" -> "sum"))
     }
   }
 
@@ -72,7 +66,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(1, 1) :: Nil)
   }
 
-  test("invalid plan toString, debug mode") {
+  ignore("invalid plan toString, debug mode") {
     // Turn on debug mode so we can see invalid query plans.
     import org.apache.spark.sql.execution.debug._
 
@@ -672,8 +666,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("showString: binary") {
     val df = Seq(
-      ("12".getBytes, "ABC.".getBytes),
-      ("34".getBytes, "12346".getBytes)
+      ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
+      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
     ).toDF()
     val expectedAnswer = """+-------+----------------+
                            ||     _1|              _2|
@@ -941,7 +935,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      new DataFrame(sqlContext, OneRowRelation).registerTempTable("one_row")
+      Dataset.newDataFrame(sqlContext, OneRowRelation).registerTempTable("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
@@ -1373,5 +1367,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException](df.registerTempTable("#$@sum"))
     // another invalid table name test as below
     intercept[AnalysisException](df.registerTempTable("table!#"))
+  }
+
+  test("assertAnalyzed shouldn't replace original stack trace") {
+    val e = intercept[AnalysisException] {
+      sqlContext.range(1).select('id as 'a, 'id as 'b).groupBy('a).agg('b)
+    }
+
+    assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
   }
 }

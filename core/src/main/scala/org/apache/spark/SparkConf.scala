@@ -388,7 +388,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getAppId: String = get("spark.app.id")
 
   /** Does the configuration contain a given parameter? */
-  def contains(key: String): Boolean = settings.containsKey(key)
+  def contains(key: String): Boolean = {
+    settings.containsKey(key) ||
+      configsWithAlternatives.get(key).toSeq.flatten.exists { alt => contains(alt.key) }
+  }
 
   /** Copy this object */
   override def clone: SparkConf = {
@@ -653,7 +656,9 @@ private[spark] object SparkConf extends Logging {
     "spark.memory.offHeap.enabled" -> Seq(
       AlternateConfig("spark.unsafe.offHeap", "1.6")),
     "spark.rpc.message.maxSize" -> Seq(
-      AlternateConfig("spark.akka.frameSize", "1.6"))
+      AlternateConfig("spark.akka.frameSize", "1.6")),
+    "spark.yarn.jars" -> Seq(
+      AlternateConfig("spark.yarn.jar", "2.0"))
     )
 
   /**
@@ -715,7 +720,7 @@ private[spark] object SparkConf extends Logging {
     allAlternatives.get(key).foreach { case (newKey, cfg) =>
       logWarning(
         s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-        s"and may be removed in the future. Please use the new key '$newKey' instead.")
+        s"may be removed in the future. Please use the new key '$newKey' instead.")
       return
     }
     if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {

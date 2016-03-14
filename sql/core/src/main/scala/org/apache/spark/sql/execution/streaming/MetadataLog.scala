@@ -39,7 +39,8 @@ trait MetadataLog[T] {
   def get(batchId: Long): Option[T]
 
   /**
-   * Return metadata for batches between startId (inclusive) and endId (inclusive).
+   * Return metadata for batches between startId (inclusive) and endId (inclusive). If `startId` is
+   * `None`, just return all batches before endId (inclusive).
    */
   def get(startId: Option[Long], endId: Long): Array[(Long, T)]
 

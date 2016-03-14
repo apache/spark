@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{NumericType, StringType}
@@ -118,7 +119,7 @@ package object util {
     val writer = new PrintWriter(out)
     t.printStackTrace(writer)
     writer.flush()
-    new String(out.toByteArray)
+    new String(out.toByteArray, StandardCharsets.UTF_8)
   }
 
   def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString

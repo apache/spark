@@ -19,12 +19,12 @@ package org.apache.spark.streaming.flume
 
 import java.net.{InetSocketAddress, ServerSocket}
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import com.google.common.base.Charsets.UTF_8
 import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.apache.commons.lang3.RandomUtils
@@ -65,7 +65,7 @@ private[flume] class FlumeTestUtils {
 
     val inputEvents = input.asScala.map { item =>
       val event = new AvroFlumeEvent
-      event.setBody(ByteBuffer.wrap(item.getBytes(UTF_8)))
+      event.setBody(ByteBuffer.wrap(item.getBytes(StandardCharsets.UTF_8)))
       event.setHeaders(Collections.singletonMap("test", "header"))
       event
     }

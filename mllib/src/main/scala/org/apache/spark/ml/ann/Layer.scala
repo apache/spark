@@ -213,8 +213,8 @@ private[ann] object AffineLayerModel {
    */
   def randomWeights(numIn: Int, numOut: Int, seed: Long = 11L): (BDM[Double], BDV[Double]) = {
     val rand: XORShiftRandom = new XORShiftRandom(seed)
-    val weights = BDM.fill[Double](numOut, numIn){ (rand.nextDouble * 4.8 - 2.4) / numIn }
-    val bias = BDV.fill[Double](numOut){ (rand.nextDouble * 4.8 - 2.4) / numIn }
+    val weights = BDM.fill[Double](numOut, numIn) { (rand.nextDouble * 4.8 - 2.4) / numIn }
+    val bias = BDV.fill[Double](numOut) { (rand.nextDouble * 4.8 - 2.4) / numIn }
     (weights, bias)
   }
 }
@@ -523,13 +523,13 @@ private[ml] object FeedForwardTopology {
   /**
    * Creates a multi-layer perceptron
    * @param layerSizes sizes of layers including input and output size
-   * @param softmax wether to use SoftMax or Sigmoid function for an output layer.
+   * @param softmax whether to use SoftMax or Sigmoid function for an output layer.
    *                Softmax is default
    * @return multilayer perceptron topology
    */
   def multiLayerPerceptron(layerSizes: Array[Int], softmax: Boolean = true): FeedForwardTopology = {
     val layers = new Array[Layer]((layerSizes.length - 1) * 2)
-    for(i <- 0 until layerSizes.length - 1){
+    for(i <- 0 until layerSizes.length - 1) {
       layers(i * 2) = new AffineLayer(layerSizes(i), layerSizes(i + 1))
       layers(i * 2 + 1) =
         if (softmax && i == layerSizes.length - 2) {
@@ -655,7 +655,7 @@ private[ann] object FeedForwardModel {
     val layers = topology.layers
     val layerModels = new Array[LayerModel](layers.length)
     var offset = 0
-    for(i <- 0 until layers.length){
+    for(i <- 0 until layers.length) {
       layerModels(i) = layers(i).getInstance(seed)
       offset += layerModels(i).size
     }

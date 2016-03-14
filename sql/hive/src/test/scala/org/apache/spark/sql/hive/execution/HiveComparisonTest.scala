@@ -143,7 +143,7 @@ abstract class HiveComparisonTest
         0D
       }
 
-      s"""SQLBuiler statistics:
+      s"""SQLBuilder statistics:
          |- Total query number:                $numTotalQueries
          |- Number of convertible queries:     $numConvertibleQueries
          |- Percentage of convertible queries: $percentage%
@@ -449,6 +449,7 @@ abstract class HiveComparisonTest
                   |Failed to execute query using catalyst:
                   |Error: ${e.getMessage}
                   |${stackTraceToString(e)}
+                  |$queryString
                   |$query
                   |== HIVE - ${hive.size} row(s) ==
                   |${hive.mkString("\n")}

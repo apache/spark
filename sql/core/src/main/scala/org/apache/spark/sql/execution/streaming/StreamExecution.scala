@@ -212,7 +212,7 @@ class StreamExecution(
 
         // Construct the batch and send it to the sink.
         val batchOffset = streamProgress.toCompositeOffset(sources)
-        val nextBatch = new Batch(batchOffset, new DataFrame(sqlContext, newPlan))
+        val nextBatch = new Batch(batchOffset, Dataset.newDataFrame(sqlContext, newPlan))
         sink.addBatch(nextBatch)
       }
 
