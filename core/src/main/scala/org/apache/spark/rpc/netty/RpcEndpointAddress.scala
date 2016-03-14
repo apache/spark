@@ -29,7 +29,7 @@ import org.apache.spark.rpc.RpcAddress
  * @param rpcAddress The socket address of the endpint.
  * @param name Name of the endpoint.
  */
-private[netty] case class RpcEndpointAddress(val rpcAddress: RpcAddress, val name: String) {
+private[spark] case class RpcEndpointAddress(val rpcAddress: RpcAddress, val name: String) {
 
   require(name != null, "RpcEndpoint name must be provided.")
 
@@ -44,7 +44,11 @@ private[netty] case class RpcEndpointAddress(val rpcAddress: RpcAddress, val nam
     }
 }
 
-private[netty] object RpcEndpointAddress {
+private[spark] object RpcEndpointAddress {
+
+  def apply(host: String, port: Int, name: String): RpcEndpointAddress = {
+    new RpcEndpointAddress(host, port, name)
+  }
 
   def apply(sparkUrl: String): RpcEndpointAddress = {
     try {
