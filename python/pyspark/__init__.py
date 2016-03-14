@@ -37,6 +37,8 @@ Public classes:
 
 """
 
+import types
+
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
@@ -62,6 +64,20 @@ def since(version):
         f.__doc__ = f.__doc__.rstrip() + "\n\n%s.. versionadded:: %s" % (indent, version)
         return f
     return deco
+
+
+def copy_func(f, name=None):
+    """
+    Returns a function with same code, globals, defaults, closure, and
+    name (or provide a new name).
+    """
+    # See
+    # http://stackoverflow.com/questions/6527633/how-can-i-make-a-deepcopy-of-a-function-in-python
+    fn = types.FunctionType(f.__code__, f.__globals__, name or f.__name__, f.__defaults__,
+        f.__closure__)
+    # in case f was given attrs (note this dict is a shallow copy):
+    fn.__dict__.update(f.__dict__)
+    return fn
 
 
 # for back compatibility

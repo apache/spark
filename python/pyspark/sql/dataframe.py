@@ -26,7 +26,7 @@ if sys.version >= '3':
 else:
     from itertools import imap as map
 
-from pyspark import since
+from pyspark import copy_func, since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -829,8 +829,6 @@ class DataFrame(object):
             raise TypeError("condition should be string or Column")
         return DataFrame(jdf, self.sql_ctx)
 
-    where = filter
-
     @ignore_unicode_prefix
     @since(1.3)
     def groupBy(self, *cols):
@@ -1361,10 +1359,12 @@ class DataFrame(object):
     # Pandas compatibility
     ##########################################################################################
 
-    groupby = groupBy
+    groupby = copy_func(groupBy)
     groupby.__doc__ = ":func:`groupby` is an alias for :func:`groupBy`."
-    drop_duplicates = dropDuplicates
+    drop_duplicates = copy_func(dropDuplicates)
     drop_duplicates.__doc__ = ":func:`drop_duplicates` is an alias for :func:`dropDuplicates`."
+    where = copy_func(filter)
+    where.__doc__ = ":func:`where` is an alias for :func:`filter`."
 
 
 def _to_scala_map(sc, jm):
