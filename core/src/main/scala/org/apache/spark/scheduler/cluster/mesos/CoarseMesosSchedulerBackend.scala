@@ -448,7 +448,12 @@ private[spark] class CoarseMesosSchedulerBackend(
             s"host ${slave.hostname}, port $externalShufflePort for app ${conf.getAppId}")
 
         mesosExternalShuffleClient.get
-          .registerDriverWithShuffleService(slave.hostname, externalShufflePort)
+          .registerDriverWithShuffleService(
+            slave.hostname,
+            externalShufflePort,
+            sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
+              s"${sc.conf.getTimeAsMs("spark.network.timeout", "120s")}ms"),
+            sc.conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
         slave.shuffleRegistered = true
       }
 
@@ -505,6 +510,9 @@ private[spark] class CoarseMesosSchedulerBackend(
         + s"to terminate within $shutdownTimeoutMS ms. This may leave temporary files "
         + "on the mesos nodes.")
     }
+
+    // Close the mesos external shuffle client if used
+    mesosExternalShuffleClient.foreach(_.close())
 
     if (mesosDriver != null) {
       mesosDriver.stop()
