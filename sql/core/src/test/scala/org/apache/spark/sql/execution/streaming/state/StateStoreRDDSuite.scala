@@ -48,8 +48,8 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
               wrapValue(oldValue + 1)
             })
         }
-        store.commitUpdates()
-        store.lastCommittedData().map(unwrapKeyValue)
+        store.commit()
+        store.iterator().map(unwrapKeyValue)
       }
       val opId = 0
       val rdd1 = makeRDD(sc, Seq("a", "b", "a"))

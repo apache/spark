@@ -42,208 +42,182 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     StateStore.clearAll()
   }
 
-  test("startUpdates, update, remove, commitUpdates") {
-    val store = newStore()
+  test("update, remove, commit") {
+    val provider = newStoreProvider()
 
     // Verify state before starting a new set of updates
-    assert(store.latestIterator().isEmpty)
-    assert(!store.hasUncommittedUpdates)
-    intercept[IllegalStateException] {
-      store.lastCommittedData()
-    }
-    intercept[IllegalStateException] {
-      store.update(null, null)
-    }
-    intercept[IllegalStateException] {
-      store.remove(_ => true)
-    }
-    intercept[IllegalStateException] {
-      store.commitUpdates()
-    }
+    assert(provider.latestIterator().isEmpty)
 
-    // Verify states after preparing for updates
-    intercept[IllegalArgumentException] {
-      store.prepareForUpdates(-1)
-    }
-    store.prepareForUpdates(0)
+    val store = provider.getStore(0)
+    assert(!store.hasCommitted)
     intercept[IllegalStateException] {
-      store.lastCommittedData()
+      store.iterator()
     }
     intercept[IllegalStateException] {
-      store.prepareForUpdates(1)
+      store.updates()
     }
-    assert(store.hasUncommittedUpdates)
 
     // Verify state after updating
     update(store, "a", 1)
     intercept[IllegalStateException] {
-      store.lastCommittedData()
+      store.iterator()
     }
-    assert(store.latestIterator().isEmpty)
+    intercept[IllegalStateException] {
+      store.updates()
+    }
+    assert(provider.latestIterator().isEmpty)
 
-    // Make updates and commit
+    // Make updates, commit and then verify state
     update(store, "b", 2)
     update(store, "aa", 3)
     remove(store, _.startsWith("a"))
-    store.commitUpdates()
+    assert(store.commit() === 1)
 
-    // Verify state after committing
-    assert(!store.hasUncommittedUpdates)
-    assert(getData(store) === Set("b" -> 2))
-    assert(fileExists(store, 0, isSnapshot = false))
+    assert(store.hasCommitted)
+    assert(store.iterator() === Set("b" -> 2))
+    assert(store.updates() === Set("b" -> 2))
+    assert(provider.latestIterator() === Set("b" -> 2))
+    assert(fileExists(provider, version = 1, isSnapshot = false))
+    assert(getDataFromFiles(provider) === Set("b" -> 2))
 
     // Trying to get newer versions should fail
     intercept[Exception] {
-      getData(store, 1)
+      provider.getStore(2)
     }
-
     intercept[Exception] {
-      getDataFromFiles(store, 1)
+      getDataFromFiles(provider, 2)
     }
 
-    // Reload store from the directory
-    val reloadedStore = new StateStore(store.id, store.directory)
-    assert(getData(reloadedStore) === Set("b" -> 2))
-
-    // New updates to the reload store with new version, and does not change old version
-    reloadedStore.prepareForUpdates(1)
+    // New updates to the reloaded store with new version, and does not change old version
+    val reloadedStore = new HDFSBackedStateStoreProvider(store.id, provider.directory).getStore(1)
     update(reloadedStore, "c", 4)
-    reloadedStore.commitUpdates()
-    assert(getData(reloadedStore) === Set("b" -> 2, "c" -> 4))
-    assert(getData(reloadedStore, version = 0) === Set("b" -> 2))
-    assert(getData(reloadedStore, version = 1) === Set("b" -> 2, "c" -> 4))
-    assert(fileExists(reloadedStore, 1, isSnapshot = false))
+    assert(reloadedStore.commit() === 2)
+    assert(reloadedStore.iterator() === Set("b" -> 2, "c" -> 4))
+    assert(reloadedStore.updates() === Set("c" -> 4))
+    assert(getDataFromFiles(provider) === Set("b" -> 2, "c" -> 4))
+    assert(getDataFromFiles(provider, version = 1) === Set("b" -> 2))
+    assert(getDataFromFiles(provider, version = 2) === Set("b" -> 2, "c" -> 4))
   }
 
-  test("cancelUpdates") {
-    val store = newStore()
-    store.prepareForUpdates(0)
+  test("cancel") {
+    val provider = newStoreProvider()
+    val store = provider.getStore(0)
     update(store, "a", 1)
-    store.commitUpdates()
-    assert(getData(store) === Set("a" -> 1))
+    store.commit()
+    assert(store.iterator() === Set("a" -> 1))
 
-    // cancelUpdates should not change the data
-    store.prepareForUpdates(1)
-    update(store, "b", 1)
-    store.cancelUpdates()
-    assert(getData(store) === Set("a" -> 1))
-
-    // Calling prepareForUpdates again should cancel previous updates
-    store.prepareForUpdates(1)
-    update(store, "b", 1)
-
-    store.prepareForUpdates(1)
-    update(store, "c", 1)
-    store.commitUpdates()
-    assert(getData(store) === Set("a" -> 1, "c" -> 1))
+    // cancelUpdates should not change the data in the files
+    val store1 = provider.getStore(1)
+    update(store1, "b", 1)
+    store1.cancel()
+    assert(getDataFromFiles(provider) === Set("a" -> 1))
   }
 
-  test("startUpdates with unexpected versions") {
-    val store = newStore()
+  test("getStore with unexpected versions") {
+    val provider = newStoreProvider()
 
     intercept[IllegalArgumentException] {
-      store.prepareForUpdates(-1)
+      provider.getStore(-1)
     }
 
     // Prepare some data in the stoer
-    store.prepareForUpdates(0)
+    val store = provider.getStore(0)
     update(store, "a", 1)
-    store.commitUpdates()
-    assert(getData(store) === Set("a" -> 1))
+    assert(store.commit() === 1)
+    assert(store.iterator() === Set("a" -> 1))
 
     intercept[IllegalStateException] {
-      store.prepareForUpdates(2)
+      provider.getStore(2)
     }
 
     // Update store version with some data
-    store.prepareForUpdates(1)
+    provider.getStore(1)
     update(store, "b", 1)
-    store.commitUpdates()
-    assert(getData(store) === Set("a" -> 1, "b" -> 1))
-
-    assert(getDataFromFiles(store) === Set("a" -> 1, "b" -> 1))
+    assert(store.commit() === 2)
+    assert(store.iterator() === Set("a" -> 1, "b" -> 1))
+    assert(getDataFromFiles(provider) === Set("a" -> 1, "b" -> 1))
 
     // Overwrite the version with other data
-    store.prepareForUpdates(1)
+    provider.getStore(1)
     update(store, "c", 1)
-    store.commitUpdates()
-    assert(getData(store) === Set("a" -> 1, "c" -> 1))
-    assert(getDataFromFiles(store) === Set("a" -> 1, "c" -> 1))
+    assert(store.commit() === 2)
+    assert(store.iterator() === Set("a" -> 1, "c" -> 1))
+    assert(getDataFromFiles(provider) === Set("a" -> 1, "c" -> 1))
   }
 
   test("snapshotting") {
-    val store = newStore(maxDeltaChainForSnapshots = 5)
+    val provider = newStoreProvider(maxDeltaChainForSnapshots = 5)
 
     var currentVersion = -1
     def updateVersionTo(targetVersion: Int): Unit = {
       for (i <- currentVersion + 1 to targetVersion) {
-        store.prepareForUpdates(i)
+        val store = provider.getStore(i - 1)
         update(store, "a", i)
-        store.commitUpdates()
+        store.commit()
+
       }
+      currentVersion = targetVersion
     }
 
     updateVersionTo(2)
-    require(getData(store) === Set("a" -> 2))
-    store.manageFiles()
-    assert(getDataFromFiles(store) === Set("a" -> 2))
+    require(getDataFromFiles(provider) === Set("a" -> 2))
+    provider.manage()               // should not generate snapshot files
+    assert(getDataFromFiles(provider) === Set("a" -> 2))
     for (i <- 0 to 2) {
-      assert(fileExists(store, i, isSnapshot = false))  // all delta files present
-      assert(!fileExists(store, i, isSnapshot = true))  // no snapshot files present
+      assert(fileExists(provider, i, isSnapshot = false))  // all delta files present
+      assert(!fileExists(provider, i, isSnapshot = true))  // no snapshot files present
     }
 
     // After version 6, snapshotting should generate one snapshot file
     updateVersionTo(6)
-    require(getData(store) === Set("a" -> 6), "Store not updated correctly")
-    store.manageFiles()       // do snapshot
-    assert(getData(store) === Set("a" -> 6), "manageFiles() messed up the data")
-    assert(getDataFromFiles(store) === Set("a" -> 6))
+    require(getDataFromFiles(provider) === Set("a" -> 6), "Store not updated correctly")
+    provider.manage()       // should generate snapshot files
+    assert(getDataFromFiles(provider) === Set("a" -> 6), "snapshotting messed up the data")
+    assert(getDataFromFiles(provider) === Set("a" -> 6))
 
-    val snapshotVersion = (0 to 6).find(version => fileExists(store, version, isSnapshot = true))
+    val snapshotVersion = (0 to 6).find(version => fileExists(provider, version, isSnapshot = true))
     assert(snapshotVersion.nonEmpty, "Snapshot file not generated")
 
 
     // After version 20, snapshotting should generate newer snapshot files
     updateVersionTo(20)
-    require(getData(store) === Set("a" -> 20), "Store not updated correctly")
-    store.manageFiles()       // do snapshot
-    assert(getData(store) === Set("a" -> 20), "manageFiles() messed up the data")
-    assert(getDataFromFiles(store) === Set("a" -> 20))
+    require(getDataFromFiles(provider) === Set("a" -> 20), "Store not updated correctly")
+    provider.manage()       // do snapshot
+    assert(getDataFromFiles(provider) === Set("a" -> 20), "snapshotting messed up the data")
+    assert(getDataFromFiles(provider) === Set("a" -> 20))
 
     val latestSnapshotVersion = (0 to 20).filter(version =>
-      fileExists(store, version, isSnapshot = true)).lastOption
+      fileExists(provider, version, isSnapshot = true)).lastOption
     assert(latestSnapshotVersion.nonEmpty, "No snapshot file found")
     assert(latestSnapshotVersion.get > snapshotVersion.get, "Newer snapshot not generated")
 
   }
 
   test("cleaning") {
-    val store = newStore(maxDeltaChainForSnapshots = 5)
+    val provider = newStoreProvider(maxDeltaChainForSnapshots = 5)
 
     for (i <- 0 to 20) {
-      store.prepareForUpdates(i)
+      val store = provider.getStore(i)
       update(store, "a", i)
-      store.commitUpdates()
+      store.commit()
     }
-    require(getData(store) === Set("a" -> 20), "Store not updated correctly")
-    store.manageFiles()     // do cleanup
-    assert(fileExists(store, 0, isSnapshot = false))
+    require(provider.latestIterator() === Set("a" -> 20), "Store not updated correctly")
+    provider.manage()     // do cleanup
+    assert(fileExists(provider, 0, isSnapshot = false))
 
-    assert(getDataFromFiles(store, 20) === Set("a" -> 20))
-    assert(getDataFromFiles(store, 19) === Set("a" -> 19))
+    assert(getDataFromFiles(provider, 20) === Set("a" -> 20))
+    assert(getDataFromFiles(provider, 19) === Set("a" -> 19))
   }
 
-  def getData(store: StateStore, version: Int = -1): Set[(String, Int)] = {
+  def getDataFromFiles(
+      provider: HDFSBackedStateStoreProvider,
+    version: Int = -1): Set[(String, Int)] = {
+    val reloadedProvider = new HDFSBackedStateStoreProvider(provider.id, provider.directory)
     if (version < 0) {
-      store.latestIterator.map(unwrapKeyValue).toSet
+      reloadedProvider.latestIterator.map(unwrapKeyValue).toSet
     } else {
-      store.iterator(version).map(unwrapKeyValue).toSet
+      reloadedProvider.iterator(version).map(unwrapKeyValue).toSet
     }
-
-  }
-
-  def getDataFromFiles(store: StateStore, version: Int = -1): Set[(String, Int)] = {
-    getData(new StateStore(store.id, store.directory), version)
   }
 
   def assertMap(
@@ -254,9 +228,12 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(convertedMap === expectedMap)
   }
 
-  def fileExists(store: StateStore, version: Long, isSnapshot: Boolean): Boolean = {
+  def fileExists(
+      provider: HDFSBackedStateStoreProvider,
+      version: Long,
+      isSnapshot: Boolean): Boolean = {
     val method = PrivateMethod[Path]('baseDir)
-    val basePath = store invokePrivate method()
+    val basePath = provider invokePrivate method()
     val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
     val filePath = new File(basePath.toString, fileName)
     filePath.exists
@@ -273,12 +250,12 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     StateStore invokePrivate method(storeId)
   }
 
-  def newStore(
+  def newStoreProvider(
       opId: Long = Random.nextLong,
       partition: Int = 0,
       maxDeltaChainForSnapshots: Int = 10
-    ): StateStore = {
-    new StateStore(
+    ): HDFSBackedStateStoreProvider = {
+    new HDFSBackedStateStoreProvider(
       StateStoreId(opId, partition),
       Utils.createDirectory(tempDir, Random.nextString(5)).toString,
       maxDeltaChainForSnapshots = maxDeltaChainForSnapshots)
