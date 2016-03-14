@@ -265,6 +265,24 @@ case class Join(
     }
   }
 
+  private def getRightConstraintsForOuter = right.constraints.collect {
+    case constraint: Expression if !constraint.isInstanceOf[IsNotNull] =>
+      val relatedOuputs = constraint.references.filter(right.outputSet.contains)
+      val isNulls = relatedOuputs.map { o =>
+        IsNull(o)
+      }.reduce(And)
+      Or(isNulls, constraint)
+  }
+
+  private def getLeftConstraintsForOuter = left.constraints.collect {
+    case constraint: Expression if !constraint.isInstanceOf[IsNotNull] =>
+      val relatedOuputs = constraint.references.filter(left.outputSet.contains)
+      val isNulls = relatedOuputs.map { o =>
+        IsNull(o)
+      }.reduce(And)
+      Or(isNulls, constraint)
+  }
+
   override protected def validConstraints: Set[Expression] = {
     joinType match {
       case Inner if condition.isDefined =>
@@ -279,11 +297,19 @@ case class Join(
       case LeftSemi =>
         left.constraints
       case LeftOuter =>
-        left.constraints
+        // For left outer join, the constraints of right side are effective if the referred
+        // outputs in right side are not null. Otherwise, the referred outputs are all nulls.
+        val rightConstraints = getRightConstraintsForOuter
+        left.constraints.union(ExpressionSet(rightConstraints))
       case RightOuter =>
-        right.constraints
+        // For right outer join, the constraints of left side are effective if the referred
+        // outputs in left side are not null. Otherwise, the referred outputs are all nulls.
+        val leftConstraints = getLeftConstraintsForOuter
+        right.constraints.union(ExpressionSet(leftConstraints))
       case FullOuter =>
-        Set.empty[Expression]
+        val rightConstraints = getRightConstraintsForOuter
+        val leftConstraints = getLeftConstraintsForOuter
+        ExpressionSet(leftConstraints).union(ExpressionSet(rightConstraints))
     }
   }
 
