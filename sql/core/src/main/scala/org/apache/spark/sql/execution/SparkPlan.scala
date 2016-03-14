@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import java.nio.ByteBuffer
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 
-import org.apache.spark.Logging
-import org.apache.spark.broadcast
+import org.apache.spark.{Logging, SparkEnv, broadcast}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -225,58 +224,44 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     // Packing the UnsafeRows into byte array for faster serialization.
     // The byte arrays are in the following format:
     // [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
+    //
+    // UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
+    // compressed.
     val byteArrayRdd = execute().mapPartitionsInternal { iter =>
-      new Iterator[Array[Byte]] {
-        private var row: UnsafeRow = _
-        override def hasNext: Boolean = row != null || iter.hasNext
-        override def next: Array[Byte] = {
-          var cap = 1 << 20  // 1 MB
-          if (row != null) {
-            // the buffered row could be larger than default buffer size
-            cap = Math.max(cap, 4 + row.getSizeInBytes + 4) // reverse 4 bytes for ending mark (-1).
-          }
-          val buffer = ByteBuffer.allocate(cap)
-          if (row != null) {
-            buffer.putInt(row.getSizeInBytes)
-            row.writeTo(buffer)
-            row = null
-          }
-          while (iter.hasNext) {
-            row = iter.next().asInstanceOf[UnsafeRow]
-            // Reserve last 4 bytes for ending mark
-            if (4 + row.getSizeInBytes + 4 <= buffer.remaining()) {
-              buffer.putInt(row.getSizeInBytes)
-              row.writeTo(buffer)
-              row = null
-            } else {
-              buffer.putInt(-1)
-              return buffer.array()
-            }
-          }
-          buffer.putInt(-1)
-          // copy the used bytes to make it smaller
-          val bytes = new Array[Byte](buffer.limit())
-          System.arraycopy(buffer.array(), 0, bytes, 0, buffer.limit())
-          bytes
-        }
+      val buffer = new Array[Byte](4 << 10)  // 4K
+      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+      val bos = new ByteArrayOutputStream()
+      val out = new DataOutputStream(codec.compressedOutputStream(bos))
+      while (iter.hasNext) {
+        val row = iter.next().asInstanceOf[UnsafeRow]
+        out.writeInt(row.getSizeInBytes)
+        row.writeToStream(out, buffer)
       }
+      out.writeInt(-1)
+      out.flush()
+      out.close()
+      Iterator(bos.toByteArray)
     }
+
     // Collect the byte arrays back to driver, then decode them as UnsafeRows.
     val nFields = schema.length
-    byteArrayRdd.collect().flatMap { bytes =>
-      val buffer = ByteBuffer.wrap(bytes)
-      new Iterator[InternalRow] {
-        private var sizeInBytes = buffer.getInt()
-        override def hasNext: Boolean = sizeInBytes >= 0
-        override def next: InternalRow = {
-          val row = new UnsafeRow(nFields)
-          row.pointTo(buffer.array(), Platform.BYTE_ARRAY_OFFSET + buffer.position(), sizeInBytes)
-          buffer.position(buffer.position() + sizeInBytes)
-          sizeInBytes = buffer.getInt()
-          row
-        }
+    val results = ArrayBuffer[InternalRow]()
+
+    byteArrayRdd.collect().foreach { bytes =>
+      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+      val bis = new ByteArrayInputStream(bytes)
+      val ins = new DataInputStream(codec.compressedInputStream(bis))
+      var sizeOfNextRow = ins.readInt()
+      while (sizeOfNextRow >= 0) {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(nFields)
+        row.pointTo(bs, sizeOfNextRow)
+        results += row
+        sizeOfNextRow = ins.readInt()
       }
     }
+    results.toArray
   }
 
   /**
