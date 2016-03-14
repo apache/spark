@@ -111,46 +111,42 @@ private[ml] class WeightedLeastSquares(
      * correct coefficients. But, for the final result, we need to add zeros to the list of
      * coefficients corresponding to the constant features.
      */
-    val aVarRaw = summary.aVar.values
+    val aVarRaw = summary.aVar.toArray
     // this will keep track of features to keep in the model, and remove
     // features with zero variance.
-    val nzVarIndex = aVarRaw.zipWithIndex.filter(_._1 != 0).map(_._2)
+    val nzVarIndex = aVarRaw.zipWithIndex.filter(_._1 != 0.0).map(_._2)
     val nz = nzVarIndex.length
     // if there are features with zero variance, then ATA is not positive definite, and we need to
     // keep track of that.
-    val singular = summary.k > nz
+    val isSingular = summary.k > nz
     val k = if (fitIntercept) nz + 1 else nz
     val triK = nz * (nz + 1) / 2
 
-    val aVar = if (singular) {
-      for (i <- nzVarIndex) yield aVarRaw(i)
-    } else {
-      aVarRaw
-    }
-    val aBar = if (singular) {
-      val aBarTemp = summary.aBar.values
+    val aVar = for (i <- nzVarIndex) yield aVarRaw(i)
+    val aBar = if (isSingular) {
+      val aBarTemp = summary.aBar.toArray
       for (i <- nzVarIndex) yield aBarTemp(i)
     } else {
-      summary.aBar.values
+      summary.aBar.toArray
     }
-    val abBar = if (singular) {
-      val abBarTemp = summary.abBar.values
+    val abBar = if (isSingular) {
+      val abBarTemp = summary.abBar.toArray
       for (i <- nzVarIndex) yield {abBarTemp(i)}
     } else {
-      summary.abBar.values
+      summary.abBar.toArray
     }
     // NOTE: aaBar represents upper triangular part of A^T.A matrix in column major order.
     // We need to drop columns and rows from A^T.A corresponding to the features which have
     // zero variance. The following logic removes elements from aaBar corresponding to zerp
     // variance which effectively removes columns and rows from A^T.A.
-    val aaBar = if (singular) {
-      val aaBarTemp = summary.aaBar.values
+    val aaBar = if (isSingular) {
+      val aaBarTemp = summary.aaBar.toArray
       (for { col <- 0 until summary.k
              row <- 0 to col
-             if aVarRaw(col) != 0 && aVarRaw(row) != 0 } yield
+             if aVarRaw(col) != 0.0 && aVarRaw(row) != 0.0 } yield
         aaBarTemp(row + col * (col + 1) / 2)).toArray
     } else {
-      summary.aaBar.values
+      summary.aaBar.toArray
     }
 
     // add regularization to diagonals
@@ -161,7 +157,7 @@ private[ml] class WeightedLeastSquares(
       if (standardizeFeatures) {
         lambda *= aVar(j - 2)
       }
-      if (standardizeLabel && bStd != 0) {
+      if (standardizeLabel && bStd != 0.0) {
         lambda /= bStd
       }
       aaBar(i) += lambda
@@ -191,7 +187,7 @@ private[ml] class WeightedLeastSquares(
     val aaInvDiag = (1 to k).map { i =>
       aaInv(i + (i - 1) * i / 2 - 1) / wSum }.toArray
 
-    val (coefficients, diagInvAtWA) = if (singular) {
+    val (coefficients, diagInvAtWA) = if (isSingular) {
       // if there are constant features in the data, we need to add zeros for the coefficients
       // for these features.
       val coefTemp = Array.ofDim[Double](summary.k)
