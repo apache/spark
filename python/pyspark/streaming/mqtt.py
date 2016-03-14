@@ -40,8 +40,9 @@ class MQTTUtils(object):
         """
         try:
             helper = ssc._jvm.org.apache.spark.streaming.mqtt.MQTTUtilsPythonHelper()
-        except:
-            MQTTUtils._printErrorMsg(ssc.sparkContext)
+        except TypeError as e:
+            if str(e) == "'JavaPackage' object is not callable":
+                MQTTUtils._printErrorMsg(ssc.sparkContext)
             raise
 
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)

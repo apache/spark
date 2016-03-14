@@ -75,8 +75,9 @@ class KinesisUtils(object):
         try:
             # Use KinesisUtilsPythonHelper to access Scala's KinesisUtils
             helper = ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
-        except:
-            KinesisUtils._printErrorMsg(ssc.sparkContext)
+        except TypeError as e:
+            if str(e) == "'JavaPackage' object is not callable":
+                KinesisUtils._printErrorMsg(ssc.sparkContext)
             raise
         jstream = helper.createStream(ssc._jssc, kinesisAppName, streamName, endpointUrl,
                                       regionName, initialPositionInStream, jduration, jlevel,

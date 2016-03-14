@@ -112,8 +112,9 @@ class FlumeUtils(object):
     def _get_helper(sc):
         try:
             return sc._jvm.org.apache.spark.streaming.flume.FlumeUtilsPythonHelper()
-        except:
-            FlumeUtils._printErrorMsg(sc)
+        except TypeError as e:
+            if str(e) == "'JavaPackage' object is not callable":
+                FlumeUtils._printErrorMsg(sc)
             raise
 
     @staticmethod
