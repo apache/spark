@@ -93,7 +93,7 @@ case class Expand(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     /*
      * When the projections list looks like:
      *   expr1A, exprB, expr1C
@@ -185,8 +185,10 @@ case class Expand(
 
     val numOutput = metricTerm(ctx, "numOutputRows")
     val i = ctx.freshName("i")
+    // these column have to declared before the loop.
+    val evaluate = evaluateVariables(outputColumns)
     s"""
-       |${outputColumns.map(_.code).mkString("\n").trim}
+       |$evaluate
        |for (int $i = 0; $i < ${projections.length}; $i ++) {
        |  switch ($i) {
        |    ${cases.mkString("\n").trim}

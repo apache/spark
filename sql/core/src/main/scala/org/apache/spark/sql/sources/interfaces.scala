@@ -57,7 +57,7 @@ trait DataSourceRegister {
    * overridden by children to provide a nice alias for the data source. For example:
    *
    * {{{
-   *   override def format(): String = "parquet"
+   *   override def shortName(): String = "parquet"
    * }}}
    *
    * @since 1.5.0
@@ -419,10 +419,12 @@ case class HadoopFsRelation(
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
     location.allFiles().map(_.getPath.toUri.toString).toArray
+
+  override def sizeInBytes: Long = location.allFiles().map(_.getLen).sum
 }
 
 /**
- * Used to read a write data in files to [[InternalRow]] format.
+ * Used to read and write data stored in files to/from the [[InternalRow]] format.
  */
 trait FileFormat {
   /**

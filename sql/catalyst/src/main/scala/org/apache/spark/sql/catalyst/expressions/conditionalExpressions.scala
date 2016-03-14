@@ -86,7 +86,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
  * @param elseValue optional value for the else branch
  */
 case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[Expression] = None)
-  extends Expression {
+  extends Expression with CodegenFallback {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
 
@@ -136,7 +136,16 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     }
   }
 
+  def shouldCodegen: Boolean = {
+    branches.length < CaseWhen.MAX_NUM_CASES_FOR_CODEGEN
+  }
+
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    if (!shouldCodegen) {
+      // Fallback to interpreted mode if there are too many branches, as it may reach the
+      // 64K limit (limit on bytecode size for a single function).
+      return super[CodegenFallback].genCode(ctx, ev)
+    }
     // Generate code that looks like:
     //
     // condA = ...
@@ -204,6 +213,9 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 
 /** Factory methods for CaseWhen. */
 object CaseWhen {
+
+  // The maxium number of switches supported with codegen.
+  val MAX_NUM_CASES_FOR_CODEGEN = 20
 
   def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhen = {
     CaseWhen(branches, Option(elseValue))

@@ -25,6 +25,7 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types._
 
 class OneHotEncoderSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -110,5 +111,33 @@ class OneHotEncoderSuite
       .setOutputCol("myOutputCol")
       .setDropLast(false)
     testDefaultReadWrite(t)
+  }
+
+  test("OneHotEncoder with varying types") {
+    val df = stringIndexed()
+    val dfWithTypes = df
+      .withColumn("shortLabel", df("labelIndex").cast(ShortType))
+      .withColumn("longLabel", df("labelIndex").cast(LongType))
+      .withColumn("intLabel", df("labelIndex").cast(IntegerType))
+      .withColumn("floatLabel", df("labelIndex").cast(FloatType))
+      .withColumn("decimalLabel", df("labelIndex").cast(DecimalType(10, 0)))
+    val cols = Array("labelIndex", "shortLabel", "longLabel", "intLabel",
+      "floatLabel", "decimalLabel")
+    for (col <- cols) {
+      val encoder = new OneHotEncoder()
+        .setInputCol(col)
+        .setOutputCol("labelVec")
+        .setDropLast(false)
+      val encoded = encoder.transform(dfWithTypes)
+
+      val output = encoded.select("id", "labelVec").rdd.map { r =>
+        val vec = r.getAs[Vector](1)
+        (r.getInt(0), vec(0), vec(1), vec(2))
+      }.collect().toSet
+      // a -> 0, b -> 2, c -> 1
+      val expected = Set((0, 1.0, 0.0, 0.0), (1, 0.0, 0.0, 1.0), (2, 0.0, 1.0, 0.0),
+        (3, 1.0, 0.0, 0.0), (4, 1.0, 0.0, 0.0), (5, 0.0, 1.0, 0.0))
+      assert(output === expected)
+    }
   }
 }

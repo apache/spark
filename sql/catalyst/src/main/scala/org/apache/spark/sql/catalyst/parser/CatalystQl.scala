@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.sql.Date
 
+import scala.collection.mutable.ArrayBuffer
+import scala.util.matching.Regex
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
@@ -26,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
@@ -36,12 +38,7 @@ import org.apache.spark.util.random.RandomSampler
  * This class translates SQL to Catalyst [[LogicalPlan]]s or [[Expression]]s.
  */
 private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends ParserInterface {
-  object Token {
-    def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
-      CurrentOrigin.setPosition(node.line, node.positionInLine)
-      node.pattern
-    }
-  }
+  import ParserUtils._
 
   /**
    * The safeParse method allows a user to focus on the parsing/AST transformation logic. This
@@ -81,102 +78,6 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
   /** Creates TableIdentifier for a given SQL string. */
   def parseTableIdentifier(sql: String): TableIdentifier =
     safeParse(sql, ParseDriver.parseTableName(sql, conf))(extractTableIdent)
-
-  def parseDdl(sql: String): Seq[Attribute] = {
-    safeParse(sql, ParseDriver.parseExpression(sql, conf)) { ast =>
-      val Token("TOK_CREATETABLE", children) = ast
-      children
-        .find(_.text == "TOK_TABCOLLIST")
-        .getOrElse(sys.error("No columnList!"))
-        .flatMap(_.children.map(nodeToAttribute))
-    }
-  }
-
-  protected def getClauses(
-      clauseNames: Seq[String],
-      nodeList: Seq[ASTNode]): Seq[Option[ASTNode]] = {
-    var remainingNodes = nodeList
-    val clauses = clauseNames.map { clauseName =>
-      val (matches, nonMatches) = remainingNodes.partition(_.text.toUpperCase == clauseName)
-      remainingNodes = nonMatches ++ (if (matches.nonEmpty) matches.tail else Nil)
-      matches.headOption
-    }
-
-    if (remainingNodes.nonEmpty) {
-      sys.error(
-        s"""Unhandled clauses: ${remainingNodes.map(_.treeString).mkString("\n")}.
-            |You are likely trying to use an unsupported Hive feature."""".stripMargin)
-    }
-    clauses
-  }
-
-  protected def getClause(clauseName: String, nodeList: Seq[ASTNode]): ASTNode =
-    getClauseOption(clauseName, nodeList).getOrElse(sys.error(
-      s"Expected clause $clauseName missing from ${nodeList.map(_.treeString).mkString("\n")}"))
-
-  protected def getClauseOption(clauseName: String, nodeList: Seq[ASTNode]): Option[ASTNode] = {
-    nodeList.filter { case ast: ASTNode => ast.text == clauseName } match {
-      case Seq(oneMatch) => Some(oneMatch)
-      case Seq() => None
-      case _ => sys.error(s"Found multiple instances of clause $clauseName")
-    }
-  }
-
-  protected def nodeToAttribute(node: ASTNode): Attribute = node match {
-    case Token("TOK_TABCOL", Token(colName, Nil) :: dataType :: Nil) =>
-      AttributeReference(colName, nodeToDataType(dataType), nullable = true)()
-    case _ =>
-      noParseRule("Attribute", node)
-  }
-
-  protected def nodeToDataType(node: ASTNode): DataType = node match {
-    case Token("TOK_DECIMAL", precision :: scale :: Nil) =>
-      DecimalType(precision.text.toInt, scale.text.toInt)
-    case Token("TOK_DECIMAL", precision :: Nil) =>
-      DecimalType(precision.text.toInt, 0)
-    case Token("TOK_DECIMAL", Nil) => DecimalType.USER_DEFAULT
-    case Token("TOK_BIGINT", Nil) => LongType
-    case Token("TOK_INT", Nil) => IntegerType
-    case Token("TOK_TINYINT", Nil) => ByteType
-    case Token("TOK_SMALLINT", Nil) => ShortType
-    case Token("TOK_BOOLEAN", Nil) => BooleanType
-    case Token("TOK_STRING", Nil) => StringType
-    case Token("TOK_VARCHAR", Token(_, Nil) :: Nil) => StringType
-    case Token("TOK_CHAR", Token(_, Nil) :: Nil) => StringType
-    case Token("TOK_FLOAT", Nil) => FloatType
-    case Token("TOK_DOUBLE", Nil) => DoubleType
-    case Token("TOK_DATE", Nil) => DateType
-    case Token("TOK_TIMESTAMP", Nil) => TimestampType
-    case Token("TOK_BINARY", Nil) => BinaryType
-    case Token("TOK_LIST", elementType :: Nil) => ArrayType(nodeToDataType(elementType))
-    case Token("TOK_STRUCT", Token("TOK_TABCOLLIST", fields) :: Nil) =>
-      StructType(fields.map(nodeToStructField))
-    case Token("TOK_MAP", keyType :: valueType :: Nil) =>
-      MapType(nodeToDataType(keyType), nodeToDataType(valueType))
-    case _ =>
-      noParseRule("DataType", node)
-  }
-
-  protected def nodeToStructField(node: ASTNode): StructField = node match {
-    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: Nil) =>
-      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true)
-    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: comment :: Nil) =>
-      val meta = new MetadataBuilder().putString("comment", unquoteString(comment.text)).build()
-      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true, meta)
-    case _ =>
-      noParseRule("StructField", node)
-  }
-
-  protected def extractTableIdent(tableNameParts: ASTNode): TableIdentifier = {
-    tableNameParts.children.map {
-      case Token(part, Nil) => cleanIdentifier(part)
-    } match {
-      case Seq(tableOnly) => TableIdentifier(tableOnly)
-      case Seq(databaseName, table) => TableIdentifier(table, Some(databaseName))
-      case other => sys.error("Hive only supports tables names like 'tableName' " +
-        s"or 'databaseName.tableName', found '$other'")
-    }
-  }
 
   /**
    * SELECT MAX(value) FROM src GROUP BY k1, k2, k3 GROUPING SETS((k1, k2), (k2))
@@ -625,41 +526,38 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       noParseRule("Select", node)
   }
 
-  protected val escapedIdentifier = "`(.+)`".r
-  protected val doubleQuotedString = "\"([^\"]+)\"".r
-  protected val singleQuotedString = "'([^']+)'".r
-
-  protected def unquoteString(str: String) = str match {
-    case singleQuotedString(s) => s
-    case doubleQuotedString(s) => s
-    case other => other
+  /**
+   * Flattens the left deep tree with the specified pattern into a list.
+   */
+  private def flattenLeftDeepTree(node: ASTNode, pattern: Regex): Seq[ASTNode] = {
+    val collected = ArrayBuffer[ASTNode]()
+    var rest = node
+    while (rest match {
+      case Token(pattern(), l :: r :: Nil) =>
+        collected += r
+        rest = l
+        true
+      case _ => false
+    }) {
+      // do nothing
+    }
+    collected += rest
+    // keep them in the same order as in SQL
+    collected.reverse
   }
 
-  /** Strips backticks from ident if present */
-  protected def cleanIdentifier(ident: String): String = ident match {
-    case escapedIdentifier(i) => i
-    case plainIdent => plainIdent
+  /**
+   * Creates a balanced tree that has similar number of nodes on left and right.
+   *
+   * This help to reduce the depth of the tree to prevent StackOverflow in analyzer/optimizer.
+   */
+  private def balancedTree(
+      expr: Seq[Expression],
+      f: (Expression, Expression) => Expression): Expression = expr.length match {
+    case 1 => expr.head
+    case 2 => f(expr.head, expr(1))
+    case l => f(balancedTree(expr.slice(0, l / 2), f), balancedTree(expr.slice(l / 2, l), f))
   }
-
-  /* Case insensitive matches */
-  val COUNT = "(?i)COUNT".r
-  val SUM = "(?i)SUM".r
-  val AND = "(?i)AND".r
-  val OR = "(?i)OR".r
-  val NOT = "(?i)NOT".r
-  val TRUE = "(?i)TRUE".r
-  val FALSE = "(?i)FALSE".r
-  val LIKE = "(?i)LIKE".r
-  val RLIKE = "(?i)RLIKE".r
-  val REGEXP = "(?i)REGEXP".r
-  val IN = "(?i)IN".r
-  val DIV = "(?i)DIV".r
-  val BETWEEN = "(?i)BETWEEN".r
-  val WHEN = "(?i)WHEN".r
-  val CASE = "(?i)CASE".r
-
-  val INTEGRAL = "[+-]?\\d+".r
-  val DECIMAL = "[+-]?((\\d+(\\.\\d*)?)|(\\.\\d+))".r
 
   protected def nodeToExpr(node: ASTNode): Expression = node match {
     /* Attribute References */
@@ -773,8 +671,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       }
 
     /* Boolean Logic */
-    case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
-    case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
+    case Token(AND(), left :: right:: Nil) =>
+      balancedTree(flattenLeftDeepTree(node, AND).map(nodeToExpr), And)
+    case Token(OR(), left :: right:: Nil) =>
+      balancedTree(flattenLeftDeepTree(node, OR).map(nodeToExpr), Or)
     case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
     case Token("!", child :: Nil) => Not(nodeToExpr(child))
 
@@ -999,14 +899,18 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     }
 
     val attributes = clauses.collect {
-      case Token(a, Nil) => UnresolvedAttribute(a.toLowerCase)
+      case Token(a, Nil) => UnresolvedAttribute(cleanIdentifier(a.toLowerCase))
     }
 
-    Generate(generator, join = true, outer = outer, Some(alias.toLowerCase), attributes, child)
+    Generate(
+      generator,
+      join = true,
+      outer = outer,
+      Some(cleanIdentifier(alias.toLowerCase)),
+      attributes,
+      child)
   }
 
   protected def nodeToGenerator(node: ASTNode): Generator = noParseRule("Generator", node)
 
-  protected def noParseRule(msg: String, node: ASTNode): Nothing = throw new NotImplementedError(
-    s"[$msg]: No parse rules for ASTNode type: ${node.tokenType}, tree:\n${node.treeString}")
 }

@@ -83,7 +83,7 @@ package object dsl {
     def >= (other: Expression): Predicate = GreaterThanOrEqual(expr, other)
     def === (other: Expression): Predicate = EqualTo(expr, other)
     def <=> (other: Expression): Predicate = EqualNullSafe(expr, other)
-    def !== (other: Expression): Predicate = Not(EqualTo(expr, other))
+    def =!= (other: Expression): Predicate = Not(EqualTo(expr, other))
 
     def in(list: Expression*): Expression = In(expr, list)
 
@@ -267,6 +267,12 @@ package object dsl {
         }
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
+
+      def window(
+          windowExpressions: Seq[NamedExpression],
+          partitionSpec: Seq[Expression],
+          orderSpec: Seq[SortOrder]): LogicalPlan =
+        Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
       def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
 
