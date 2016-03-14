@@ -1362,7 +1362,9 @@ class DataFrame(object):
     ##########################################################################################
 
     groupby = groupBy
+    groupby = ":func:`groupby` is an alias for :func:`groupBy`."
     drop_duplicates = dropDuplicates
+    drop_duplicates.__doc__ = ":func:`drop_duplicates` is an alias for :func:`dropDuplicates`."
 
 
 def _to_scala_map(sc, jm):

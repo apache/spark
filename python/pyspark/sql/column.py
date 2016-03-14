@@ -338,6 +338,7 @@ class Column(object):
         return Column(jc)
 
     astype = cast
+    astype.__doc__ = ":func:`astype` is an alias for :func:`cast`."
 
     @since(1.3)
     def between(self, lowerBound, upperBound):
