@@ -152,7 +152,10 @@ abstract class Expression extends TreeNode[Expression] {
    * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
    * evaluate to the same result.
    */
-   lazy val canonicalized: Expression = Canonicalize.execute(this)
+  lazy val canonicalized: Expression = {
+    val canonicalizedChildred = children.map(_.canonicalized)
+    Canonicalize.execute(withNewChildren(canonicalizedChildred))
+  }
 
   /**
    * Returns true when two expressions will always compute the same result, even if they differ
@@ -161,7 +164,7 @@ abstract class Expression extends TreeNode[Expression] {
    * See [[Canonicalize]] for more details.
    */
   def semanticEquals(other: Expression): Boolean =
-    deterministic && other.deterministic  && canonicalized == other.canonicalized
+    deterministic && other.deterministic && canonicalized == other.canonicalized
 
   /**
    * Returns a `hashCode` for the calculation performed by this expression. Unlike the standard
