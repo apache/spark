@@ -280,24 +280,24 @@ case class Join(
         left.constraints
       case LeftOuter =>
         // For left outer join, the constraints of right side are effective if the referred
-        // outputs in right side are not null.
+        // outputs in right side are not null. Otherwise, the referred outputs are all nulls.
         val rightConstraints = right.constraints.map { constraint =>
           val relatedOuputs = constraint.references.filter(right.outputSet.contains)
-          val notNulls = relatedOuputs.map { o =>
-            IsNotNull(o)
+          val isNulls = relatedOuputs.map { o =>
+            IsNull(o)
           }.reduce(And)
-          And(notNulls, constraint)
+          Or(notNulls, constraint)
         }
         left.constraints.union(ExpressionSet(rightConstraints))
       case RightOuter =>
         // For right outer join, the constraints of left side are effective if the referred
-        // outputs in left side are not null.
+        // outputs in left side are not null. Otherwise, the referred outputs are all nulls.
         val leftConstraints = left.constraints.map { constraint =>
           val relatedOuputs = constraint.references.filter(left.outputSet.contains)
-          val notNulls = relatedOuputs.map { o =>
-            IsNotNull(o)
+          val isNulls = relatedOuputs.map { o =>
+            IsNull(o)
           }.reduce(And)
-          And(notNulls, constraint)
+          Or(notNulls, constraint)
         }
         right.constraints.union(ExpressionSet(leftConstraints))
       case FullOuter =>
