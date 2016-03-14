@@ -17,9 +17,13 @@
 
 package org.apache.spark.streaming.receiver
 
+import scala.collection.mutable.ArrayBuffer
+
 import com.google.common.util.concurrent.{RateLimiter => GuavaRateLimiter}
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.util.Clock
+
 
 /** Provides waitToPush() method to limit the rate at which receivers consume data.
   *
@@ -32,7 +36,7 @@ import org.apache.spark.{Logging, SparkConf}
   *
   * @param conf spark configuration
   */
-private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
+private[receiver] abstract class RateLimiter(conf: SparkConf, clock: Clock) extends Logging {
 
   // treated as an upper limit
   private val maxRateLimit = conf.getLong("spark.streaming.receiver.maxRate", Long.MaxValue)
@@ -57,8 +61,10 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
     if (newRate > 0) {
       if (maxRateLimit > 0) {
         rateLimiter.setRate(newRate.min(maxRateLimit))
+        appendLimitToHistory(newRate.min(maxRateLimit))
       } else {
         rateLimiter.setRate(newRate)
+        appendLimitToHistory(newRate)
       }
     }
 
@@ -67,5 +73,79 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
    */
   private def getInitialRateLimit(): Long = {
     math.min(conf.getLong("spark.streaming.backpressure.initialRate", maxRateLimit), maxRateLimit)
+  }
+
+  private[receiver] case class RateLimitSnapshot(limit: Double, ts: Long)
+
+  private[receiver] val rateLimitHistory: ArrayBuffer[RateLimitSnapshot] =
+    ArrayBuffer(RateLimitSnapshot(getInitialRateLimit().toDouble, -1L))
+
+  /**
+   * Logs the rateLimit change history, so that we can do a sum later.
+   *
+   * @param rate the new rate
+   * @param ts at which time the rate changed
+   */
+  private[receiver] def appendLimitToHistory(rate: Double, ts: Long = clock.getTimeMillis()) {
+    rateLimitHistory.synchronized {
+      rateLimitHistory += RateLimitSnapshot(rate, ts)
+    }
+  }
+
+  private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
+  require(blockIntervalMs > 0, s"'spark.streaming.blockInterval' should be a positive value")
+
+  /**
+   * Calculate the upper bound of how many events can be received in a block interval.
+   * Note this should be called for each block interval once and only once.
+   *
+   * @param ts the ending timestamp of a block interval
+   * @return the upper bound of how many events can be received in a block interval
+   */
+  private[receiver]  def sumHistoryThenTrim(ts: Long = clock.getTimeMillis()): Long = {
+    var sum: Double = 0
+    rateLimitHistory.synchronized {
+      // first add a RateLimitSnapshot
+      // this RateLimitSnapshot will be used as the ending of this block interval and the beginning
+      // of the next block interval
+      rateLimitHistory += RateLimitSnapshot(rateLimitHistory.last.limit, ts)
+
+      // then do a sum
+      for (idx <- 0 until rateLimitHistory.length - 1) {
+        val duration = rateLimitHistory(idx + 1).ts - (if (rateLimitHistory(idx).ts < 0) {
+          rateLimitHistory.last.ts - blockIntervalMs
+        }
+        else {
+          rateLimitHistory(idx).ts
+        })
+        sum += rateLimitHistory(idx).limit * duration
+      }
+
+      // trim the history to the last one
+      rateLimitHistory.trimStart(rateLimitHistory.length - 1)
+    }
+
+    (sum / 1000).ceil.toLong
+  }
+}
+
+private[streaming] object RateLimiterHelper {
+
+  def sumRateLimits(rateLimits: Seq[Option[Long]]): Option[Long] = {
+    if (rateLimits.length == 0 || rateLimits.count(_.isEmpty) > 0) {
+      None
+    }
+    else {
+      val sum = rateLimits.map(_.get).foldLeft(0L) { (x, y) =>
+        val z = x + y
+        // deals with overflow carefully
+        if (z < 0) {
+          Long.MaxValue
+        } else {
+          z
+        }
+      }
+      Some(sum)
+    }
   }
 }

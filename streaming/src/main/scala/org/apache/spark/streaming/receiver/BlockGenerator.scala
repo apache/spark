@@ -54,7 +54,7 @@ private[streaming] trait BlockGeneratorListener {
    * thread, that is not synchronized with any other callbacks. Hence it is okay to do long
    * blocking operation in this callback.
    */
-  def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_])
+  def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_], numRecordsLimit: Long)
 
   /**
    * Called when an error has occurred in the BlockGenerator. Can be called form many places
@@ -78,9 +78,9 @@ private[streaming] class BlockGenerator(
     receiverId: Int,
     conf: SparkConf,
     clock: Clock = new SystemClock()
-  ) extends RateLimiter(conf) with Logging {
+  ) extends RateLimiter(conf, clock) with Logging {
 
-  private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
+  private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any], numRecordsLimit: Long)
 
   /**
    * The BlockGenerator can be in 5 possible states, in the order as follows.
@@ -238,7 +238,8 @@ private[streaming] class BlockGenerator(
           currentBuffer = new ArrayBuffer[Any]
           val blockId = StreamBlockId(receiverId, time - blockIntervalMs)
           listener.onGenerateBlock(blockId)
-          newBlock = new Block(blockId, newBlockBuffer)
+          val numRecordsLimit = sumHistoryThenTrim(clock.getTimeMillis())
+          newBlock = new Block(blockId, newBlockBuffer, numRecordsLimit)
         }
       }
 
@@ -293,7 +294,7 @@ private[streaming] class BlockGenerator(
   }
 
   private def pushBlock(block: Block) {
-    listener.onPushBlock(block.id, block.buffer)
+    listener.onPushBlock(block.id, block.buffer, block.numRecordsLimit)
     logInfo("Pushed block " + block.id)
   }
 }

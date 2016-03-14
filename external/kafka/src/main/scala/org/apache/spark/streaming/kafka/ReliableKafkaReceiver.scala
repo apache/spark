@@ -289,7 +289,8 @@ class ReliableKafkaReceiver[
       rememberBlockOffsets(blockId)
     }
 
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_],
+        numRecordsLimit: Long): Unit = {
       // Store block and commit the blocks offset
       storeBlockAndCommitOffset(blockId, arrayBuffer)
     }

@@ -348,7 +348,8 @@ private[kinesis] class KinesisReceiver[T](
     }
 
     /** Callback method called when a block is ready to be pushed / stored. */
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_],
+        numRecordsLimit: Long): Unit = {
       storeBlockWithRanges(blockId,
         arrayBuffer.asInstanceOf[mutable.ArrayBuffer[T]])
     }
