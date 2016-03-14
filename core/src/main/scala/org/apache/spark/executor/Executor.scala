@@ -124,7 +124,7 @@ private[spark] class Executor(
   private val HEARTBEAT_MAX_FAILURES = conf.getInt("spark.executor.heartbeat.maxFailures", 60)
 
   /**
-   * Count the failure times of heartbeat. It should only be acessed in the heartbeat thread. Each
+   * Count the failure times of heartbeat. It should only be accessed in the heartbeat thread. Each
    * successful heartbeat will reset it to 0.
    */
   private var heartbeatFailures = 0
