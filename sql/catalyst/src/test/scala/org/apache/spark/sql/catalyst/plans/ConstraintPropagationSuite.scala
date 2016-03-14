@@ -209,7 +209,7 @@ class ConstraintPropagationSuite extends SparkFunSuite {
       .analyze.constraints,
       ExpressionSet(Seq(
         Or(IsNull(tr1.resolveQuoted("a", caseInsensitiveResolution).get),
-          tr1.resolveQuoted("a",caseInsensitiveResolution).get > 10),
+          tr1.resolveQuoted("a", caseInsensitiveResolution).get > 10),
         Or(IsNull(tr2.resolveQuoted("d", caseInsensitiveResolution).get),
           tr2.resolveQuoted("d", caseInsensitiveResolution).get < 100))))
   }
