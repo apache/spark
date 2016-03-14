@@ -18,7 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{File, IOException}
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 import scala.collection.JavaConverters._
@@ -371,7 +371,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
         val localFile = new File(localTestDir, (i + 1).toString)
         val hadoopFile = new Path(testDir, (i + 1).toString)
         val tempHadoopFile = new Path(testDir, ".tmp_" + (i + 1).toString)
-        Files.write(input(i) + "\n", localFile, Charset.forName("UTF-8"))
+        Files.write(input(i) + "\n", localFile, StandardCharsets.UTF_8)
         var tries = 0
         var done = false
             while (!done && tries < maxTries) {
