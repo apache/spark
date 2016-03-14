@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
  *
  * @param loadDefaults whether to also load values from Java system properties
  */
-class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
+class SparkConf private[spark] (loadDefaults: Boolean) extends Cloneable with Logging {
 
   import SparkConf._
 
@@ -57,21 +57,32 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   private val settings = new ConcurrentHashMap[String, String]()
 
   if (loadDefaults) {
+    loadFromSystemProperties(false)
+  }
+
+  private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
     // Load any spark.* system properties
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
-      set(key, value)
+      set(key, value, silent)
     }
+    this
   }
 
   /** Set a configuration variable. */
   def set(key: String, value: String): SparkConf = {
+    set(key, value, false)
+  }
+
+  private[spark] def set(key: String, value: String, silent: Boolean): SparkConf = {
     if (key == null) {
       throw new NullPointerException("null key")
     }
     if (value == null) {
       throw new NullPointerException("null value for " + key)
     }
-    logDeprecationWarning(key)
+    if (!silent) {
+      logDeprecationWarning(key)
+    }
     settings.put(key, value)
     this
   }
@@ -395,7 +406,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Copy this object */
   override def clone: SparkConf = {
-    new SparkConf(false).setAll(getAll)
+    val cloned = new SparkConf(false)
+    settings.entrySet().asScala.foreach { e =>
+      cloned.set(e.getKey(), e.getValue(), true)
+    }
+    cloned
   }
 
   /**
