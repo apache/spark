@@ -211,6 +211,7 @@ case class CatalogTablePartition(
  * future once we have a better understanding of how we want to handle skewed columns.
  */
 case class CatalogTable(
+    // TODO: just use TableIdentifier here
     specifiedDatabase: Option[String],
     name: String,
     tableType: CatalogTableType,

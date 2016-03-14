@@ -35,10 +35,11 @@ abstract class SessionCatalog(catalog: ExternalCatalog) {
 
   private[this] val tempFunctions = new ConcurrentHashMap[String, CatalogFunction]
 
-  // --------------------------------------------------------------------------
+  // ----------------------------------------------------------------------------
   // Databases
+  // ----------------------------------------------------------------------------
   // All methods in this category interact directly with the underlying catalog.
-  // --------------------------------------------------------------------------
+  // ----------------------------------------------------------------------------
 
   def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit
 
@@ -54,76 +55,90 @@ abstract class SessionCatalog(catalog: ExternalCatalog) {
 
   def listDatabases(pattern: String): Seq[String]
 
-  // --------------------------------------------------------------------------
+  // ----------------------------------------------------------------------------
   // Tables
-  // --------------------------------------------------------------------------
-
-  // --------------------------------------------------------------------------
-  // Tables: Methods for metastore tables.
-  // Methods in this category are only used for metastore tables, which store
-  // metadata in the underlying catalog.
-  // --------------------------------------------------------------------------
-
-  def createTable(db: String, tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
+  // ----------------------------------------------------------------------------
+  // There are two kinds of tables, temporary tables and metastore tables.
+  // Temporary tables are isolated across sessions and do not belong to any
+  // particular database. Metastore tables can be used across multiple
+  // sessions as their metadata is persisted in the underlying catalog.
+  // ----------------------------------------------------------------------------
 
   /**
-   * Alters a table whose name matches the one specified in `tableDefinition`,
-   * assuming the table exists.
+   * Create a metastore table in the database specified in `tableDefinition`.
+   * If no such table is specified, create it in the current database.
+   */
+  def createTable(
+      currentDb: String,
+      tableDefinition: CatalogTable,
+      ignoreIfExists: Boolean): Unit
+
+  /**
+   * Alter the metadata of an existing metastore table identified by `tableDefinition`.
    *
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  def alterTable(db: String, tableDefinition: CatalogTable): Unit
+  def alterTable(tableDefinition: CatalogTable): Unit
 
   /**
-   * Retrieves the metadata of a table called `table` in the database `db`.
+   * Retrieve the metadata of an existing metastore table.
    */
-  def getTable(db: String, table: String): CatalogTable
-
-  // --------------------------------------------------------------------------
-  // Tables: Methods for metastore tables or temp tables.
-  // --------------------------------------------------------------------------
+  def getTableMetadata(name: TableIdentifier): CatalogTable
 
   /**
-   * Creates a temporary table. If there is already a temporary table having the same name,
-   * the table definition of that table will be updated to the new definition.
+   * Create a temporary table.
+   * If a temporary table with the same name already exists, this throws an exception.
    */
-  // TODO: Should we automatically overwrite the existing temp table?
-  // Postgres and Hive will complain if a temp table is already defined.
-  def createTempTable(tableIdent: TableIdentifier, tableDefinition: LogicalPlan): Unit
+  def createTempTable(name: String, tableDefinition: LogicalPlan): Unit
 
+  /**
+   * Rename a table.
+   *
+   * If a database is specified in `oldName`, this will rename the table in that database.
+   * If no database is specified, this will first attempt to rename a temporary table with
+   * the same name, then, if that does not exist, rename the table in the current database.
+   *
+   * This assumes the database specified in `oldName` matches the one specified in `newName`.
+   */
   def renameTable(
-      specifiedDB: Option[String],
-      currentDB: String,
-      oldName: String,
-      newName: String): Unit
+      currentDb: String,
+      oldName: TableIdentifier,
+      newName: TableIdentifier): Unit
 
   /**
-   * Drops a table. If a database name is not provided, this method will drop the table with
-   * the given name from the temporary table name space as well as the table
-   * in the current database. If a database name is provided, this method only drops the table
-   * with the given name from the given database.
+   * Drop a table.
+   *
+   * If a database is specified in `name`, this will drop the table from that database.
+   * If no database is specified, this will first attempt to drop a temporary table with
+   * the same name, then, if that does not exist, drop the table from the current database.
    */
-  // TODO: When a temp table and a table in the current db have the same name, should we
-  // only drop the temp table when a database is not provided (Postgresql's semantic)?
   def dropTable(
-      tableIdent: TableIdentifier,
-      currentDB: String,
+      currentDb: String,
+      name: TableIdentifier,
       ignoreIfNotExists: Boolean): Unit
 
   /**
-   * Returns a [[LogicalPlan]] representing the requested table. This method is used
-   * when we need to create a query plan for a given table.
+   * Return a [[LogicalPlan]] that represents the given table.
    *
-   * This method is different from `getTable`, which only returns the metadata of the table
-   * in the form of [[CatalogTable]]. The [[LogicalPlan]] returned by this method contains
-   * the metadata of the table in the form of [[CatalogTable]].
+   * If a database is specified in `name`, this will return the table from that database.
+   * If no database is specified, this will first attempt to return a temporary table with
+   * the same name, then, if that does not exist, return the table from the current database.
    */
-  def lookupRelation(tableIdent: TableIdentifier, alias: Option[String] = None): LogicalPlan
+  def lookupRelation(
+      currentDb: String,
+      name: TableIdentifier,
+      alias: Option[String] = None): LogicalPlan
 
-  def listTables(specifiedDB: Option[String], currentDB: String): Seq[String]
+  /**
+   * List all tables in the current database, including temporary tables.
+   */
+  def listTables(currentDb: String): Seq[TableIdentifier]
 
-  def listTables(specifiedDB: Option[String], currentDB: String, pattern: String): Seq[String]
+  /**
+   * List all matching tables in the current database, including temporary tables.
+   */
+  def listTables(currentDb: String, pattern: String): Seq[TableIdentifier]
 
   // --------------------------------------------------------------------------
   // Partitions
