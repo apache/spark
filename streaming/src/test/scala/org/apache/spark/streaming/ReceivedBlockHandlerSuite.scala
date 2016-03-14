@@ -202,13 +202,13 @@ class ReceivedBlockHandlerSuite
     blockManager = createBlockManager(12000, sparkConf)
 
     // there is not enough space to store this block in MEMORY,
-    // But BlockManager will be able to sereliaze this block to WAL
+    // But BlockManager will be able to serialize this block to WAL
     // and hence count returns correct value.
      testRecordcount(false, StorageLevel.MEMORY_ONLY,
       IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
 
     // there is not enough space to store this block in MEMORY,
-    // But BlockManager will be able to sereliaze this block to DISK
+    // But BlockManager will be able to serialize this block to DISK
     // and hence count returns correct value.
     testRecordcount(true, StorageLevel.MEMORY_AND_DISK,
       IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
@@ -272,7 +272,7 @@ class ReceivedBlockHandlerSuite
   }
 
   /**
-   * Test storing of data using different types of Handler, StorageLevle and ReceivedBlocks
+   * Test storing of data using different types of Handler, StorageLevel and ReceivedBlocks
    * and verify the correct record count
    */
   private def testRecordcount(isBlockManagedBasedBlockHandler: Boolean,

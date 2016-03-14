@@ -364,7 +364,7 @@ object MapObjects {
  *                used as input for the `lambdaFunction`. It also carries the element type info.
  * @param lambdaFunction A function that take the `loopVar` as input, and used as lambda function
  *                       to handle collection elements.
- * @param inputData An expression that when evaluted returns a collection object.
+ * @param inputData An expression that when evaluated returns a collection object.
  */
 case class MapObjects private(
     loopVar: LambdaVariable,

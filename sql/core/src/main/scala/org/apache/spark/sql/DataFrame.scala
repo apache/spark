@@ -1762,10 +1762,6 @@ class Dataset[T] private[sql](
    */
   def take(n: Int): Array[T] = head(n)
 
-  def takeRows(n: Int): Array[Row] = withTypedCallback("takeRows", limit(n)) { ds =>
-    ds.collectRows(needCallback = false)
-  }
-
   /**
    * Returns the first `n` rows in the [[DataFrame]] as a list.
    *
@@ -1790,8 +1786,6 @@ class Dataset[T] private[sql](
    */
   def collect(): Array[T] = collect(needCallback = true)
 
-  def collectRows(): Array[Row] = collectRows(needCallback = true)
-
   /**
    * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
    *
@@ -1811,18 +1805,6 @@ class Dataset[T] private[sql](
   private def collect(needCallback: Boolean): Array[T] = {
     def execute(): Array[T] = withNewExecutionId {
       queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
-    }
-
-    if (needCallback) {
-      withCallback("collect", toDF())(_ => execute())
-    } else {
-      execute()
-    }
-  }
-
-  private def collectRows(needCallback: Boolean): Array[Row] = {
-    def execute(): Array[Row] = withNewExecutionId {
-      queryExecution.executedPlan.executeCollectPublic()
     }
 
     if (needCallback) {

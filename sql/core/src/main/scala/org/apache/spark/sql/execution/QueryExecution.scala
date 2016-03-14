@@ -33,7 +33,9 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
   def assertAnalyzed(): Unit = try sqlContext.analyzer.checkAnalysis(analyzed) catch {
     case e: AnalysisException =>
-      throw new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+      val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+      ae.setStackTrace(e.getStackTrace)
+      throw ae
   }
 
   lazy val analyzed: LogicalPlan = sqlContext.analyzer.execute(logical)
