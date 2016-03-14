@@ -632,7 +632,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
         filter
       }
 
-    case join@Join(left, right, joinType, conditionOpt) =>
+    case join @ Join(left, right, joinType, conditionOpt) =>
       val additionalConstraints = join.constraints.filter { c =>
         // Only consider constraints that can be pushed down to either the left or the right child
         c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)} --
@@ -642,7 +642,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
           val newFilters = additionalConstraints -- splitConjunctivePredicates(condition)
           if (newFilters.nonEmpty) Option(And(newFilters.reduce(And), condition)) else None
         case None =>
-          if (additionalConstraints.nonEmpty) Option(additionalConstraints.reduce(And)) else None
+          additionalConstraints.reduceOption(And)
       }
       if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
   }
