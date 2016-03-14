@@ -62,7 +62,9 @@ private[sql] object Dataset {
 
   private[this] val nextDataFrameId = new AtomicLong(0)
 
-  def newDataFrameName: String = s"dataframe_${nextDataFrameId.getAndIncrement()}"
+  val namePrefix: String = "dataframe_"
+
+  def newDataFrameName: String = namePrefix + nextDataFrameId.getAndIncrement()
 }
 
 /**

@@ -53,7 +53,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("dataframe toString") {
     assert(testData.toString === "[key: int, value: string]")
-    assert(testData("key").toString.endsWith("key"))
+    assert(testData("key").toString === "key")
     assert($"test".toString === "test")
   }
 

@@ -133,7 +133,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
-    case func: UnresolvedFunction => UnresolvedAlias(func, Some(usePrettyExpression(func).sql))
+    case func: UnresolvedFunction => UnresolvedAlias(func, Some(presentableExpression(func).sql))
 
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
@@ -141,13 +141,23 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
     } match {
       case ne: NamedExpression => ne
-      case other => Alias(expr, usePrettyExpression(expr).sql)()
+      case other => Alias(expr, presentableExpression(expr).sql)()
     }
 
-    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
+    case expr: Expression => Alias(expr, presentableExpression(expr).sql)()
   }
 
-  override def toString: String = usePrettyExpression(expr).sql
+  override def toString: String = presentableExpression(expr).sql
+
+  private def presentableExpression(expr: Expression): Expression = {
+    usePrettyExpression(expr transform {
+      case u: UnresolvedAttribute if u.nameParts.head.startsWith(Dataset.namePrefix) =>
+        u.copy(nameParts = u.nameParts.drop(1))
+
+      case a: AttributeReference if a.qualifiers.length == 1 &&
+        a.qualifiers.head.startsWith(Dataset.namePrefix) => a.withQualifiers(Nil)
+    })
+  }
 
   override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
