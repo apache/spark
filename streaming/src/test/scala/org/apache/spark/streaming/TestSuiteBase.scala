@@ -56,7 +56,7 @@ private[streaming] class DummyInputDStream(ssc: StreamingContext) extends InputD
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
  * replayable, reliable message queue like Kafka. It requires a sequence as input, and
- * returns the i_th element at the i_th batch unde manual clock.
+ * returns the i_th element at the i_th batch under manual clock.
  */
 class TestInputStream[T: ClassTag](_ssc: StreamingContext, input: Seq[Seq[T]], numPartitions: Int)
   extends InputDStream[T](_ssc) {

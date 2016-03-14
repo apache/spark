@@ -214,7 +214,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 /** Factory methods for CaseWhen. */
 object CaseWhen {
 
-  // The maxium number of switches supported with codegen.
+  // The maximum number of switches supported with codegen.
   val MAX_NUM_CASES_FOR_CODEGEN = 20
 
   def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhen = {

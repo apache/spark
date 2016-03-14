@@ -186,9 +186,9 @@ private[yarn] class ExecutorRunnable(
         else {
           // If no java_opts specified, default to using -XX:+CMSIncrementalMode
           // It might be possible that other modes/config is being done in
-          // spark.executor.extraJavaOptions, so we dont want to mess with it.
-          // In our expts, using (default) throughput collector has severe perf ramnifications in
-          // multi-tennent machines
+          // spark.executor.extraJavaOptions, so we don't want to mess with it.
+          // In our expts, using (default) throughput collector has severe perf ramifications in
+          // multi-tenant machines
           // The options are based on
           // http://www.oracle.com/technetwork/java/gc-tuning-5-138395.html#0.0.0.%20When%20to%20Use
           // %20the%20Concurrent%20Low%20Pause%20Collector|outline

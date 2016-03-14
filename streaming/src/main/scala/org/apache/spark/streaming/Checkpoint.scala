@@ -205,7 +205,7 @@ class CheckpointWriter(
       // also use the latest checkpoint time as the file name, so that we can recovery from the
       // latest checkpoint file.
       //
-      // Note: there is only one thread writting the checkpoint files, so we don't need to worry
+      // Note: there is only one thread writing the checkpoint files, so we don't need to worry
       // about thread-safety.
       val checkpointFile = Checkpoint.checkpointFile(checkpointDir, latestCheckpointTime)
       val backupFile = Checkpoint.checkpointBackupFile(checkpointDir, latestCheckpointTime)

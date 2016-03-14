@@ -229,7 +229,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
 
   test("subgraph") {
     withSpark { sc =>
-      // Create a star graph of 10 veritces.
+      // Create a star graph of 10 vertices.
       val n = 10
       val star = starGraph(sc, n)
       // Take only vertices whose vids are even

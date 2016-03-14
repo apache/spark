@@ -132,7 +132,7 @@ private[kinesis] object KinesisRecordProcessor extends Logging {
    * Retry the given amount of times with a random backoff time (millis) less than the
    *   given maxBackOffMillis
    *
-   * @param expression expression to evalute
+   * @param expression expression to evaluate
    * @param numRetriesLeft number of retries left
    * @param maxBackOffMillis: max millis between retries
    *

@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
- * A physical plan that evalutes a [[PythonUDF]], one partition of tuples at a time.
+ * A physical plan that evaluates a [[PythonUDF]], one partition of tuples at a time.
  *
  * Python evaluation works by sending the necessary (projected) input data via a socket to an
  * external Python process, and combine the result from the Python process with the original row.

@@ -141,7 +141,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    *  And on the input of 1 and 50 we would have a histogram of 1, 0, 1
    *
    * Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
-   * from an O(log n) inseration to O(1) per element. (where n = # buckets) if you set evenBuckets
+   * from an O(log n) insertion to O(1) per element. (where n = # buckets) if you set evenBuckets
    * to true.
    * buckets must be sorted and not contain any duplicates.
    * buckets array must be at least two elements

@@ -1057,7 +1057,7 @@ private[spark] class BlockManager(
               failures += 1
               replicationFailed = true
               peersFailedToReplicateTo += peer
-              if (failures > maxReplicationFailures) { // too many failures in replcating to peers
+              if (failures > maxReplicationFailures) { // too many failures in replicating to peers
                 done = true
               }
           }

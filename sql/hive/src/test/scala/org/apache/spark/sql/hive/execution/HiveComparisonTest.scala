@@ -143,7 +143,7 @@ abstract class HiveComparisonTest
         0D
       }
 
-      s"""SQLBuiler statistics:
+      s"""SQLBuilder statistics:
          |- Total query number:                $numTotalQueries
          |- Number of convertible queries:     $numConvertibleQueries
          |- Percentage of convertible queries: $percentage%

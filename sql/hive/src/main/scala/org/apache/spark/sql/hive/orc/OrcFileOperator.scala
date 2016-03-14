@@ -89,7 +89,7 @@ private[orc] object OrcFileOperator extends Logging {
   }
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
-    // TODO: Check if the paths comming in are already qualified and simplify.
+    // TODO: Check if the paths coming in are already qualified and simplify.
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
     val path = origPath.makeQualified(fs.getUri, fs.getWorkingDirectory)

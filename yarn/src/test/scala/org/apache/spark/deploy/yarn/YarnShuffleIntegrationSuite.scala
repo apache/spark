@@ -78,7 +78,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: ExternalShuffleDriver [result file] [registed exec file]
+        |Usage: ExternalShuffleDriver [result file] [registered exec file]
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)

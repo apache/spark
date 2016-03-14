@@ -126,7 +126,7 @@ class CodegenContext {
    * For expressions that appear more than once, generate additional code to prevent
    * recomputing the value.
    *
-   * For example, consider two exprsesion generated from this SQL statement:
+   * For example, consider two expression generated from this SQL statement:
    *  SELECT (col1 + col2), (col1 + col2) / col3.
    *
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
@@ -140,7 +140,7 @@ class CodegenContext {
   // Foreach expression that is participating in subexpression elimination, the state to use.
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
-  // The collection of sub-exression result resetting methods that need to be called on each row.
+  // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   def declareAddedFunctions(): String = {

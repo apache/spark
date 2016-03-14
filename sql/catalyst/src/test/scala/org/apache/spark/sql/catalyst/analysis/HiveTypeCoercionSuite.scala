@@ -205,7 +205,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
-  test("cast NullType for expresions that implement ExpectsInputTypes") {
+  test("cast NullType for expressions that implement ExpectsInputTypes") {
     import HiveTypeCoercionSuite._
 
     ruleTest(HiveTypeCoercion.ImplicitTypeCasts,

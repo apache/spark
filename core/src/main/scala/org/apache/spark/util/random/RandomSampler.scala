@@ -54,7 +54,7 @@ object RandomSampler {
   /**
    * Default maximum gap-sampling fraction.
    * For sampling fractions <= this value, the gap sampling optimization will be applied.
-   * Above this value, it is assumed that "tradtional" Bernoulli sampling is faster.  The
+   * Above this value, it is assumed that "traditional" Bernoulli sampling is faster.  The
    * optimal value for this will depend on the RNG.  More expensive RNGs will tend to make
    * the optimal value higher.  The most reliable way to determine this value for a new RNG
    * is to experiment.  When tuning for a new RNG, I would expect a value of 0.5 to be close
@@ -319,7 +319,7 @@ class GapSamplingReplacementIterator[T: ClassTag](
   /**
    * Skip elements with replication factor zero (i.e. elements that won't be sampled).
    * Samples 'k' from geometric distribution  P(k) = (1-q)(q)^k, where q = e^(-f), that is
-   * q is the probabililty of Poisson(0; f)
+   * q is the probability of Poisson(0; f)
    */
   private def advance(): Unit = {
     val u = math.max(rng.nextDouble(), epsilon)

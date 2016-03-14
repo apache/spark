@@ -68,7 +68,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
    *
-   * @param queriesAndExpectedAnswers one or more tupes of query + answer
+   * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
       timeout: FiniteDuration,

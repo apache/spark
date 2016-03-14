@@ -250,7 +250,7 @@ class AnalysisSuite extends AnalysisTest {
     assertAnalysisSuccess(plan)
   }
 
-  test("SPARK-8654: different types in inlist but can be converted to a commmon type") {
+  test("SPARK-8654: different types in inlist but can be converted to a common type") {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(1.2345))), "a")() :: Nil,
       LocalRelation()
     )

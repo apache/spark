@@ -245,7 +245,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
         val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
         DropTable(tableName, ifExists.nonEmpty)
 
-      // Support "ANALYZE TABLE tableNmae COMPUTE STATISTICS noscan"
+      // Support "ANALYZE TABLE tableName COMPUTE STATISTICS noscan"
       case Token("TOK_ANALYZE",
         Token("TOK_TAB", Token("TOK_TABNAME", tableNameParts) :: partitionSpec) :: isNoscan) =>
         // Reference:
@@ -535,7 +535,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
           case Token("TOK_STORAGEHANDLER", _) =>
             throw new AnalysisException(
               "CREATE TABLE AS SELECT cannot be used for a non-native table")
-          case _ => // Unsupport features
+          case _ => // Unsupported features
         }
 
         CreateTableAsSelect(tableDesc, nodeToPlan(query), allowExisting.isDefined)

@@ -167,7 +167,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     ): Either[Err, Map[TopicAndPartition, LeaderOffset]] = {
     getLeaderOffsets(topicAndPartitions, before, 1).right.map { r =>
       r.map { kv =>
-        // mapValues isnt serializable, see SI-7005
+        // mapValues isn't serializable, see SI-7005
         kv._1 -> kv._2.head
       }
     }

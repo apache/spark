@@ -1530,7 +1530,7 @@ private[spark] object Utils extends Logging {
     rawMod + (if (rawMod < 0) mod else 0)
   }
 
-  // Handles idiosyncracies with hash (add more as required)
+  // Handles idiosyncrasies with hash (add more as required)
   // This method should be kept in sync with
   // org.apache.spark.network.util.JavaUtils#nonNegativeHash().
   def nonNegativeHash(obj: AnyRef): Int = {
@@ -1600,7 +1600,7 @@ private[spark] object Utils extends Logging {
    * @param f function to be executed. If prepare is not None, the running time of each call to f
    *          must be an order of magnitude longer than one millisecond for accurate timing.
    * @param prepare function to be executed before each call to f. Its running time doesn't count.
-   * @return the total time across all iterations (not couting preparation time)
+   * @return the total time across all iterations (not counting preparation time)
    */
   def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
     if (prepare.isEmpty) {

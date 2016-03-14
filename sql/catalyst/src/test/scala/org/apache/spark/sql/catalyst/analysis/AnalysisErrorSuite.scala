@@ -276,7 +276,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
-    // Since we manually construct the logical plan at here and Sum only accetp
+    // Since we manually construct the logical plan at here and Sum only accept
     // LongType, DoubleType, and DecimalType. We use LongType as the type of a.
     val plan =
       Aggregate(

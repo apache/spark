@@ -351,7 +351,7 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
    *
@@ -383,7 +383,7 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    *
    * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.

@@ -52,7 +52,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
-  // the value of subexpressionEliminationEnabled will be set by the desserializer after the
+  // the value of subexpressionEliminationEnabled will be set by the deserializer after the
   // constructor has run.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.subexpressionEliminationEnabled
@@ -65,7 +65,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   private val prepareCalled = new AtomicBoolean(false)
 
-  /** Overridden make copy also propogates sqlContext to copied plan. */
+  /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     SQLContext.setActive(sqlContext)
     super.makeCopy(newArgs)

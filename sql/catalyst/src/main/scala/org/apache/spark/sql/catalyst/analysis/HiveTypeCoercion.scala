@@ -307,7 +307,7 @@ object HiveTypeCoercion {
       case p @ Equality(left @ TimestampType(), right @ StringType()) =>
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
-      // We should cast all relative timestamp/date/string comparison into string comparisions
+      // We should cast all relative timestamp/date/string comparison into string comparisons
       // This behaves as a user would expect because timestamp strings sort lexicographically.
       // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
       case p @ BinaryComparison(left @ StringType(), right @ DateType()) =>

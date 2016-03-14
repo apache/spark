@@ -523,7 +523,7 @@ private[ml] object FeedForwardTopology {
   /**
    * Creates a multi-layer perceptron
    * @param layerSizes sizes of layers including input and output size
-   * @param softmax wether to use SoftMax or Sigmoid function for an output layer.
+   * @param softmax whether to use SoftMax or Sigmoid function for an output layer.
    *                Softmax is default
    * @return multilayer perceptron topology
    */
