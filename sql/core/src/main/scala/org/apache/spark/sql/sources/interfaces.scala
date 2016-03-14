@@ -57,7 +57,7 @@ trait DataSourceRegister {
    * overridden by children to provide a nice alias for the data source. For example:
    *
    * {{{
-   *   override def format(): String = "parquet"
+   *   override def shortName(): String = "parquet"
    * }}}
    *
    * @since 1.5.0
