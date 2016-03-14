@@ -93,6 +93,10 @@ private[sql] object SparkPlanGraph {
       case "Subquery" if subgraph != null =>
         // Subquery should not be included in WholeStageCodegen
         buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+      case "ReusedExchange" =>
+        // Point to the re-used exchange
+        val node = exchanges(planInfo.children.head)
+        edges += SparkPlanGraphEdge(node.id, parent.id)
       case name =>
         val metrics = planInfo.metrics.map { metric =>
           SQLPlanMetric(metric.name, metric.accumulatorId,
@@ -106,7 +110,7 @@ private[sql] object SparkPlanGraph {
         } else {
           subgraph.nodes += node
         }
-        if (name == "ShuffleExchange" || name == "BroadcastExchange") {
+        if (name.contains("Exchange")) {
           exchanges += planInfo -> node
         }
 
