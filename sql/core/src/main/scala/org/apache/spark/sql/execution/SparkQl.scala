@@ -34,8 +34,21 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
   }
 
   /**
-   * For each node, extract properties in the form of a list ['key1', 'key2', 'key3', 'value']
-   * into a pair (key1.key2.key3, value).
+   * For each node, extract properties in the form of a list
+   * ['key_part1', 'key_part2', 'key_part3', 'value']
+   * into a pair (key_part1.key_part2.key_part3, value).
+   *
+   * Example format:
+   *
+   *   TOK_TABLEPROPERTY
+   *   :- 'k1'
+   *   +- 'v1'
+   *   TOK_TABLEPROPERTY
+   *   :- 'k2'
+   *   +- 'v2'
+   *   TOK_TABLEPROPERTY
+   *   :- 'k3'
+   *   +- 'v3'
    */
   private def extractProps(
       props: Seq[ASTNode],
@@ -101,6 +114,16 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         }
         val props = dbprops.toSeq.flatMap {
           case Token("TOK_DATABASEPROPERTIES", Token("TOK_DBPROPLIST", propList) :: Nil) =>
+            // Example format:
+            //
+            //   TOK_DATABASEPROPERTIES
+            //   +- TOK_DBPROPLIST
+            //      :- TOK_TABLEPROPERTY
+            //      :  :- 'k1'
+            //      :  +- 'v1'
+            //      :- TOK_TABLEPROPERTY
+            //         :- 'k2'
+            //         +- 'v2'
             extractProps(propList, "TOK_TABLEPROPERTY")
           case _ => parseFailed("Invalid CREATE DATABASE command", node)
         }.toMap
@@ -112,16 +135,16 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         // Example format:
         //
         //   TOK_CREATEFUNCTION
-        //     :- db_name
-        //     :- func_name
-        //     :- alias
-        //     +- TOK_RESOURCE_LIST
-        //        :- TOK_RESOURCE_URI
-        //        :  :- TOK_JAR
-        //        :  +- '/path/to/jar'
-        //        +- TOK_RESOURCE_URI
-        //           :- TOK_FILE
-        //           +- 'path/to/file'
+        //   :- db_name
+        //   :- func_name
+        //   :- alias
+        //   +- TOK_RESOURCE_LIST
+        //      :- TOK_RESOURCE_URI
+        //      :  :- TOK_JAR
+        //      :  +- '/path/to/jar'
+        //      +- TOK_RESOURCE_URI
+        //         :- TOK_FILE
+        //         +- 'path/to/file'
         val (funcNameArgs, otherArgs) = args.partition {
           case Token("TOK_RESOURCE_LIST", _) => false
           case Token("TOK_TEMPORARY", _) => false
@@ -139,9 +162,9 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         }
         // Extract other keywords, if they exist
         val Seq(rList, temp) = getClauses(Seq("TOK_RESOURCE_LIST", "TOK_TEMPORARY"), otherArgs)
-        val resourcesMap = rList.toSeq.flatMap {
-          case Token("TOK_RESOURCE_LIST", resources) =>
-            resources.map {
+        val resources: Seq[(String, String)] = rList.toSeq.flatMap {
+          case Token("TOK_RESOURCE_LIST", resList) =>
+            resList.map {
               case Token("TOK_RESOURCE_URI", rType :: Token(rPath, Nil) :: Nil) =>
                 val resourceType = rType match {
                   case Token("TOK_JAR", Nil) => "jar"
@@ -153,8 +176,8 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
               case _ => parseFailed("Invalid CREATE FUNCTION command", node)
             }
           case _ => parseFailed("Invalid CREATE FUNCTION command", node)
-        }.toMap
-        CreateFunction(funcName, alias, resourcesMap, temp.isDefined)(node.source)
+        }
+        CreateFunction(funcName, alias, resources, temp.isDefined)(node.source)
 
       case Token("TOK_ALTERTABLE", alterTableArgs) =>
         AlterTableCommandParser.parse(node)
