@@ -1333,7 +1333,7 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
     maxAttempts = 5
 
     def setUp(self):
-        self._utils = self.ssc._jvm.org.apache.spark.streaming.flume.PollingFlumeTestUtils()
+        self._utils = self.sc._jvm.org.apache.spark.streaming.flume.PollingFlumeTestUtils()
 
     def tearDown(self):
         if self._utils is not None:
