@@ -101,14 +101,6 @@
     <module>sql/hive</module>
     <module>external/docker-integration-tests</module>
     <module>assembly</module>
-    <module>external/twitter</module>
-    <module>external/flume</module>
-    <module>external/flume-sink</module>
-    <module>external/flume-assembly</module>
-    <module>external/akka</module>
-    <module>external/mqtt</module>
-    <module>external/mqtt-assembly</module>
-    <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
@@ -119,8 +111,6 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <akka.group>com.typesafe.akka</akka.group>
-    <akka.version>2.3.11</akka.version>
     <java.version>1.7</java.version>
     <maven.version>3.3.9</maven.version>
     <sbt.project.name>spark</sbt.project.name>
@@ -133,7 +123,6 @@
     <yarn.version>${hadoop.version}</yarn.version>
     <hbase.version>0.98.17-hadoop2</hbase.version>
     <hbase.artifact>hbase</hbase.artifact>
-    <flume.version>1.6.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <curator.version>2.4.0</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
@@ -197,7 +186,6 @@
       during compilation if the dependency is transivite (e.g. "graphx/" depending on "core/" and
       needing Hadoop classes in the classpath to compile).
     -->
-    <flume.deps.scope>compile</flume.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hbase.deps.scope>compile</hbase.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
@@ -510,37 +498,6 @@
         <artifactId>protobuf-java</artifactId>
         <version>${protobuf.version}</version>
         <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>${akka.group}</groupId>
-        <artifactId>akka-actor_${scala.binary.version}</artifactId>
-        <version>${akka.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>${akka.group}</groupId>
-        <artifactId>akka-remote_${scala.binary.version}</artifactId>
-        <version>${akka.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>${akka.group}</groupId>
-        <artifactId>akka-slf4j_${scala.binary.version}</artifactId>
-        <version>${akka.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>${akka.group}</groupId>
-        <artifactId>akka-testkit_${scala.binary.version}</artifactId>
-        <version>${akka.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>${akka.group}</groupId>
-        <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
-        <version>${akka.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>${akka.group}</groupId>
-            <artifactId>akka-actor_${scala.binary.version}</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.mesos</groupId>
@@ -1631,46 +1588,6 @@
         <scope>compile</scope>
       </dependency>
       <dependency>
-        <groupId>org.apache.flume</groupId>
-        <artifactId>flume-ng-core</artifactId>
-        <version>${flume.version}</version>
-        <scope>${flume.deps.scope}</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.flume</groupId>
-            <artifactId>flume-ng-auth</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libthrift</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>servlet-api</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.flume</groupId>
-        <artifactId>flume-ng-sdk</artifactId>
-        <version>${flume.version}</version>
-        <scope>${flume.deps.scope}</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libthrift</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
         <groupId>org.apache.calcite</groupId>
         <artifactId>calcite-core</artifactId>
         <version>${calcite.version}</version>
@@ -2521,9 +2438,6 @@
       maven does not complain when they're provided on the command line for a sub-module
       that does not have them.
     -->
-    <profile>
-      <id>flume-provided</id>
-    </profile>
     <profile>
       <id>hadoop-provided</id>
     </profile>
