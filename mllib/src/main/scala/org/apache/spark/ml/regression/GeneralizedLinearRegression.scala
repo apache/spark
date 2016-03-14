@@ -339,13 +339,12 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     /** The variance of the endogenous variable's mean, given the value mu. */
     def variance(mu: Double): Double
 
-    /**
-     * Deviance of (y, mu) pair.
-     * Deviance is usually defined as twice the loglikelihood ratio.
-     */
+    /** Deviance of (y, mu) pair. */
     def deviance(y: Double, mu: Double, weight: Double): Double
 
-    def aic(predictions: RDD[(Double, Double, Double)], deviance: Double, weightSum: Double): Double
+    /** Akaike's 'An Information Criterion'(AIC) value of the family. */
+    def aic(predictions: RDD[(Double, Double, Double)], deviance: Double,
+            numInstances: Double, weightSum: Double): Double
 
     /** Trim the fitted value so that it will be in valid range. */
     def project(mu: Double): Double = mu
@@ -383,10 +382,13 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       weight * math.pow(y - mu, 2.0)
     }
 
-    override def aic(predictions: RDD[(Double, Double, Double)], deviance: Double, weightSum: Double): Double = {
-      val nobs = predictions.count()
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
       val wt = predictions.map(x => math.log(x._3)).sum()
-      nobs * (math.log(deviance / nobs * 2.0 * 3.141593) + 1.0) + 2.0 - wt
+      numInstances * (math.log(deviance / numInstances * 2.0 * math.Pi) + 1.0) + 2.0 - wt
     }
 
     override def project(mu: Double): Double = {
@@ -419,13 +421,18 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
       val my = 1.0 - y
-      2.0 * weight * (y * math.log(math.max(y, 1.0) / mu) + my * math.log(math.max(my, 1.0) / (1.0 - mu)))
+      2.0 * weight * (y * math.log(math.max(y, 1.0) / mu) +
+        my * math.log(math.max(my, 1.0) / (1.0 - mu)))
     }
 
-    override def aic(predictions: RDD[(Double, Double, Double)], deviance: Double, weightSum: Double): Double = {
-      predictions.map { case (y: Double, mu: Double, weight: Double) =>
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
+      -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
         weight * breeze.stats.distributions.Binomial(1, mu).logProbabilityOf(math.round(y).toInt)
-      }.sum() * (-2.0)
+      }.sum()
     }
 
     override def project(mu: Double): Double = {
@@ -459,10 +466,14 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       2 * weight * (y * math.log(y / mu) - (y - mu))
     }
 
-    override def aic(predictions: RDD[(Double, Double, Double)], deviance: Double, weightSum: Double): Double = {
-      predictions.map { case (y: Double, mu: Double, weight: Double) =>
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
+      -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
         weight * breeze.stats.distributions.Poisson(mu).logProbabilityOf(y.toInt)
-      }.sum() * (-2.0)
+      }.sum()
     }
 
     override def project(mu: Double): Double = {
@@ -497,11 +508,15 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       -2.0 * weight * (math.log(x) - (y - mu)/mu)
     }
 
-    override def aic(predictions: RDD[(Double, Double, Double)], deviance: Double, weightSum: Double): Double = {
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
       val disp = deviance / weightSum
-      predictions.map { case (y: Double, mu: Double, weight: Double) =>
+      -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
         weight * breeze.stats.distributions.Gamma(1.0 / disp, mu * disp).logPdf(y)
-      }.sum() * (-2.0) + 2.0
+      }.sum() + 2.0
     }
 
     override def project(mu: Double): Double = {
@@ -647,6 +662,11 @@ class GeneralizedLinearRegressionModel private[ml] (
 
   private var trainingSummary: Option[GeneralizedLinearRegressionSummary] = None
 
+  /**
+   * Gets R-like summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  @Since("2.0.0")
   def summary: GeneralizedLinearRegressionSummary = trainingSummary match {
     case Some(summ) => summ
     case None =>
@@ -789,32 +809,27 @@ class GeneralizedLinearRegressionSummary private[regression] (
   private lazy val devianceResiduals: DataFrame = {
     val drUDF = udf { (y: Double, mu: Double, weight: Double) =>
       val r = math.sqrt(math.max(family.deviance(y, mu, weight), 0.0))
-      if (y > mu) {
-        r
-      } else {
-        -1.0 * r
-      }
+      if (y > mu) r else -1.0 * r
     }
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
-    predictions.select(drUDF(col(model.getLabelCol), col(predictionCol), w).as("devianceResiduals"))
+    predictions.select(
+      drUDF(col(model.getLabelCol), col(predictionCol), w).as("devianceResiduals"))
   }
 
   private lazy val pearsonResiduals: DataFrame = {
     val prUDF = udf { mu: Double => family.variance(mu) }
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
-    predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol))
-      .multiply(sqrt(w)).divide(sqrt(prUDF(col(model.getPredictionCol)))).as("pearsonResiduals"))
+    predictions.select(col(model.getLabelCol).minus(col(predictionCol))
+      .multiply(sqrt(w)).divide(sqrt(prUDF(col(predictionCol)))).as("pearsonResiduals"))
   }
 
   private lazy val workingResiduals: DataFrame = {
-    val wrUDF = udf { (y: Double, mu: Double) =>
-      (y - mu) * link.deriv(mu)
-    }
+    val wrUDF = udf { (y: Double, mu: Double) => (y - mu) * link.deriv(mu) }
     predictions.select(wrUDF(col(model.getLabelCol), col(predictionCol)).as("workingResiduals"))
   }
 
   private lazy val responseResiduals: DataFrame = {
-    predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol)).as("responseResiduals"))
+    predictions.select(col(model.getLabelCol).minus(col(predictionCol)).as("responseResiduals"))
   }
 
   /**
@@ -829,7 +844,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
       case "working" => workingResiduals
       case "response" => responseResiduals
       case other => throw new UnsupportedOperationException(
-        s"The residuals type $other is not supported by Generialized Linear Regression.")
+        s"The residuals type $other is not supported by Generalized Linear Regression.")
     }
   }
 
@@ -838,15 +853,12 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   lazy val nullDeviance: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
-
     val wtdmu: Double = if (model.getFitIntercept) {
-      val t1 = predictions.select(sum(w.multiply(col(model.getLabelCol)))).first().getDouble(0)
-      val t2 = predictions.select(sum(w)).first().getDouble(0)
-      t1 / t2
+      val agg = predictions.agg(sum(w.multiply(col(model.getLabelCol))), sum(w)).first()
+      agg.getDouble(0) / agg.getDouble(1)
     } else {
       link.unlink(0.0)
     }
-
     predictions.select(col(model.getLabelCol), w).rdd.map {
       case Row(y: Double, weight: Double) =>
         family.deviance(y, wtdmu, weight)
@@ -874,63 +886,48 @@ class GeneralizedLinearRegressionSummary private[regression] (
     model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
     1.0
   } else {
-    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
-    val rss = predictions.select(col(model.getPredictionCol), col(model.getLabelCol), w).rdd.map {
-      case Row(pred: Double, label: Double, weight: Double) =>
-        math.pow(label - pred, 2.0) / family.variance(pred) * weight
-    }.sum()
-
+    val rss = pearsonResiduals.agg(sum(pow(col("pearsonResiduals"), 2.0))).first().getDouble(0)
     rss / degreesOfFreedom
   }
 
-  /** Akaike's "An Information Criterion" for the fitted model */
+  /** Akaike's "An Information Criterion"(AIC) for the fitted model */
   lazy val aic: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     val weightSum = predictions.select(w).agg(sum(w)).first().getAs[Double](0)
-    val t = predictions.select(col(model.getPredictionCol), col(model.getLabelCol), w).rdd.map {
-      case Row(pred: Double, label: Double, weight: Double) =>
+    val t = predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
+      case Row(label: Double, pred: Double, weight: Double) =>
         (label, pred, weight)
     }
-    family.aic(t, deviance, weightSum) + 2 * rank
+    family.aic(t, deviance, numInstances, weightSum) + 2 * rank
   }
 
   /**
    * Standard error of estimated coefficients and intercept.
    */
   lazy val coefficientStandardErrors: Array[Double] = {
-    diagInvAtWA.map(_ * dispersion).map(math.sqrt(_))
+    diagInvAtWA.map(_ * dispersion).map(math.sqrt)
   }
 
   /**
    * T-statistic of estimated coefficients and intercept.
    */
   lazy val tValues: Array[Double] = {
-    if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
-      throw new UnsupportedOperationException(
-        "No t-statistic available for this LinearRegressionModel")
+    val estimate = if (model.getFitIntercept) {
+      Array.concat(model.coefficients.toArray, Array(model.intercept))
     } else {
-      val estimate = if (model.getFitIntercept) {
-        Array.concat(model.coefficients.toArray, Array(model.intercept))
-      } else {
-        model.coefficients.toArray
-      }
-      estimate.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
+      model.coefficients.toArray
     }
+    estimate.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
   }
 
   /**
    * Two-sided p-value of estimated coefficients and intercept.
    */
   lazy val pValues: Array[Double] = {
-    if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
-      throw new UnsupportedOperationException(
-        "No p-value available for this LinearRegressionModel")
+    if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+      tValues.map { x => 2.0 * (1.0 - GD(0.0, 1.0).cdf(math.abs(x))) }
     } else {
-      if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
-        tValues.map { x => 2.0 * (1.0 - GD(0.0, 1.0).cdf(math.abs(x))) }
-      } else {
-        tValues.map { x => 2.0 * (1.0 - StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
-      }
+      tValues.map { x => 2.0 * (1.0 - StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
     }
   }
 }
