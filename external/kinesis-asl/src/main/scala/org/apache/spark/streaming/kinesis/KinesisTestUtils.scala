@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kinesis
 
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -242,7 +243,7 @@ private[kinesis] class SimpleDataGenerator(
     val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
     data.foreach { num =>
       val str = num.toString
-      val data = ByteBuffer.wrap(str.getBytes())
+      val data = ByteBuffer.wrap(str.getBytes(StandardCharsets.UTF_8))
       val putRecordRequest = new PutRecordRequest().withStreamName(streamName)
         .withData(data)
         .withPartitionKey(str)

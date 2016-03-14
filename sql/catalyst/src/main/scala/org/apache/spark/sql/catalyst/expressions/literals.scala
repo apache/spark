@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.json4s.JsonAST._
@@ -109,7 +110,7 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case StringType => Literal("")
-    case BinaryType => Literal("".getBytes)
+    case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)

@@ -21,11 +21,11 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.Unpooled;
@@ -68,7 +68,7 @@ public class JavaUtils {
    * converted back to the same string through {@link #bytesToString(ByteBuffer)}.
    */
   public static ByteBuffer stringToBytes(String s) {
-    return Unpooled.wrappedBuffer(s.getBytes(Charsets.UTF_8)).nioBuffer();
+    return Unpooled.wrappedBuffer(s.getBytes(StandardCharsets.UTF_8)).nioBuffer();
   }
 
   /**
@@ -76,7 +76,7 @@ public class JavaUtils {
    * converted back to the same byte buffer through {@link #stringToBytes(String)}.
    */
   public static String bytesToString(ByteBuffer b) {
-    return Unpooled.wrappedBuffer(b).toString(Charsets.UTF_8);
+    return Unpooled.wrappedBuffer(b).toString(StandardCharsets.UTF_8);
   }
 
   /*

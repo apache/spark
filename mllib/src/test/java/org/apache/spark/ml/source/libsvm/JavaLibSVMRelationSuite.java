@@ -19,8 +19,8 @@ package org.apache.spark.ml.source.libsvm;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
-import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 
 import org.junit.After;
@@ -55,7 +55,7 @@ public class JavaLibSVMRelationSuite {
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
     File file = new File(tempDir, "part-00000");
     String s = "1 1:1.0 3:2.0 5:3.0\n0\n0 2:4.0 4:5.0 6:6.0";
-    Files.write(s, file, Charsets.US_ASCII);
+    Files.write(s, file, StandardCharsets.UTF_8);
     path = tempDir.toURI().toString();
   }
 

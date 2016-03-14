@@ -18,10 +18,10 @@
 package org.apache.spark.deploy
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
@@ -593,7 +593,7 @@ class SparkSubmitSuite
     val tmpDir = Utils.createTempDir()
 
     val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")
-    val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf))
+    val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf), StandardCharsets.UTF_8)
     for ((key, value) <- defaults) writer.write(s"$key $value\n")
 
     writer.close()
@@ -661,7 +661,7 @@ object UserClasspathFirstTest {
     val ccl = Thread.currentThread().getContextClassLoader()
     val resource = ccl.getResourceAsStream("test.resource")
     val bytes = ByteStreams.toByteArray(resource)
-    val contents = new String(bytes, 0, bytes.length, UTF_8)
+    val contents = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     if (contents != "USER") {
       throw new SparkException("Should have read user resource, but instead read: " + contents)
     }

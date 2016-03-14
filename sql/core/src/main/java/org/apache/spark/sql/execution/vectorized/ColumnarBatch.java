@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.NoSuchElementException;
 
 import org.apache.commons.lang.NotImplementedException;
 
@@ -253,6 +254,9 @@ public final class ColumnarBatch {
       public Row next() {
         while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
           ++rowId;
+        }
+        if (rowId >= maxRows) {
+          throw new NoSuchElementException();
         }
         row.rowId = rowId++;
         return row;

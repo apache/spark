@@ -18,6 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.{DataInputStream, DataOutputStream}
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Time, Timestamp}
 
 import scala.collection.JavaConverters._
@@ -109,7 +110,7 @@ private[spark] object SerDe {
     val bytes = new Array[Byte](len)
     in.readFully(bytes)
     assert(bytes(len - 1) == 0)
-    val str = new String(bytes.dropRight(1), "UTF-8")
+    val str = new String(bytes.dropRight(1), StandardCharsets.UTF_8)
     str
   }
 

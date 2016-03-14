@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -167,12 +169,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("misc sha1 function") {
-    val df = Seq(("ABC", "ABC".getBytes)).toDF("a", "b")
+    val df = Seq(("ABC", "ABC".getBytes(StandardCharsets.UTF_8))).toDF("a", "b")
     checkAnswer(
       df.select(sha1($"a"), sha1($"b")),
       Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8", "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8"))
 
-    val dfEmpty = Seq(("", "".getBytes)).toDF("a", "b")
+    val dfEmpty = Seq(("", "".getBytes(StandardCharsets.UTF_8))).toDF("a", "b")
     checkAnswer(
       dfEmpty.selectExpr("sha1(a)", "sha1(b)"),
       Row("da39a3ee5e6b4b0d3255bfef95601890afd80709", "da39a3ee5e6b4b0d3255bfef95601890afd80709"))

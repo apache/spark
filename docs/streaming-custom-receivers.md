@@ -72,7 +72,8 @@ class CustomReceiver(host: String, port: Int)
      socket = new Socket(host, port)
 
      // Until stopped or connection broken continue reading
-     val reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"))
+     val reader = new BufferedReader(
+       new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
      userInput = reader.readLine()
      while(!isStopped && userInput != null) {
        store(userInput)
@@ -135,7 +136,8 @@ public class JavaCustomReceiver extends Receiver<String> {
       // connect to the server
       socket = new Socket(host, port);
 
-      BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+      BufferedReader reader = new BufferedReader(
+        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
 
       // Until stopped or connection broken continue reading
       while (!isStopped() && (userInput = reader.readLine()) != null) {

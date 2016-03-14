@@ -20,6 +20,7 @@ package org.apache.spark.examples.streaming
 
 import java.io.{BufferedReader, InputStreamReader}
 import java.net.Socket
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StorageLevel
@@ -83,7 +84,8 @@ class CustomReceiver(host: String, port: Int)
      logInfo("Connecting to " + host + ":" + port)
      socket = new Socket(host, port)
      logInfo("Connected to " + host + ":" + port)
-     val reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"))
+     val reader = new BufferedReader(
+       new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
      userInput = reader.readLine()
      while(!isStopped && userInput != null) {
        store(userInput)

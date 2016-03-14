@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.mqtt
 
+import java.nio.charset.StandardCharsets
+
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
 import org.eclipse.paho.client.mqttv3.MqttCallback
 import org.eclipse.paho.client.mqttv3.MqttClient
@@ -75,7 +77,7 @@ class MQTTReceiver(
 
       // Handles Mqtt message
       override def messageArrived(topic: String, message: MqttMessage) {
-        store(new String(message.getPayload(), "utf-8"))
+        store(new String(message.getPayload(), StandardCharsets.UTF_8))
       }
 
       override def deliveryComplete(token: IMqttDeliveryToken) {

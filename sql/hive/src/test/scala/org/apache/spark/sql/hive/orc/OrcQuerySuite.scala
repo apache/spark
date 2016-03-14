@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
@@ -73,7 +74,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("Read/write binary data") {
     withOrcFile(BinaryData("test".getBytes("utf8")) :: Nil) { file =>
       val bytes = read.orc(file).head().getAs[Array[Byte]](0)
-      assert(new String(bytes, "utf8") === "test")
+      assert(new String(bytes, StandardCharsets.UTF_8) === "test")
     }
   }
 

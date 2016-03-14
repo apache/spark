@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 import scala.language.postfixOps
 import scala.util.Random
@@ -665,8 +666,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("showString: binary") {
     val df = Seq(
-      ("12".getBytes, "ABC.".getBytes),
-      ("34".getBytes, "12346".getBytes)
+      ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
+      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
     ).toDF()
     val expectedAnswer = """+-------+----------------+
                            ||     _1|              _2|

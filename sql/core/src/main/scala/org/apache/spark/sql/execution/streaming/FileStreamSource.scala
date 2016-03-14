@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Codec
 
-import com.google.common.base.Charsets.UTF_8
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.Logging
@@ -184,7 +184,7 @@ class FileStreamSource(
   private def writeBatch(id: Int, files: Seq[String]): Unit = {
     assert(files.nonEmpty, "create a new batch without any file")
     val output = fs.create(new Path(metadataPath + "/" + id), true)
-    val writer = new PrintWriter(new OutputStreamWriter(output, UTF_8))
+    val writer = new PrintWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8))
     try {
       // scalastyle:off println
       writer.println(FileStreamSource.VERSION)

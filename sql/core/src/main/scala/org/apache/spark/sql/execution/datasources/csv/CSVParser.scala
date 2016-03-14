@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.{ByteArrayOutputStream, OutputStreamWriter, StringReader}
+import java.nio.charset.StandardCharsets
 
 import com.univocity.parsers.csv.{CsvParser, CsvParserSettings, CsvWriter, CsvWriterSettings}
 
@@ -76,7 +77,7 @@ private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
 
   def writeRow(row: Seq[String], includeHeader: Boolean): String = {
     val buffer = new ByteArrayOutputStream()
-    val outputWriter = new OutputStreamWriter(buffer)
+    val outputWriter = new OutputStreamWriter(buffer, StandardCharsets.UTF_8)
     val writer = new CsvWriter(outputWriter, writerSettings)
 
     if (includeHeader) {
