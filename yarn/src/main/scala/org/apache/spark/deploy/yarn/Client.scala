@@ -976,6 +976,11 @@ private[spark] class Client(
             logError(s"Application $appId not found.")
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
           case NonFatal(e) =>
+            if (e.isInstanceOf[InterruptedException]
+              || e.getCause.isInstanceOf[InterruptedException]) {
+              logInfo("The reporter thread is interrupted, we assume app is finished.")
+              return (YarnApplicationState.FINISHED, FinalApplicationStatus.SUCCEEDED)
+            }
             logError(s"Failed to contact YARN for application $appId.", e)
             return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
         }
