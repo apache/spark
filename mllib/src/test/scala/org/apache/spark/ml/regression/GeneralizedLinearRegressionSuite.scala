@@ -725,7 +725,7 @@ class GeneralizedLinearRegressionSuite
        V1            3.3241     1.0184   3.264  0.00110 **
        V2           -1.0818     0.3522  -3.071  0.00213 **
        ---
-       Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+       Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
        (Dispersion parameter for poisson family taken to be 1)
 
