@@ -192,7 +192,8 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
     val status2 = createTaskStatus("1", "s1", TaskState.TASK_RUNNING)
     backend.statusUpdate(driver, status2)
-    verify(externalShuffleClient, times(1)).registerDriverWithShuffleService(anyString, anyInt)
+    verify(externalShuffleClient, times(1))
+      .registerDriverWithShuffleService(anyString, anyInt, anyLong, anyLong)
   }
 
   test("mesos kills an executor when told") {
