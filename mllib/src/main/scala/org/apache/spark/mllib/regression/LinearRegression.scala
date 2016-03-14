@@ -89,6 +89,7 @@ object LinearRegressionModel extends Loader[LinearRegressionModel] {
 class LinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
+    private var regParam: Double,
     private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LinearRegressionModel] with Serializable {
 
@@ -98,6 +99,7 @@ class LinearRegressionWithSGD private[mllib] (
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
+    .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
   /**
@@ -105,7 +107,7 @@ class LinearRegressionWithSGD private[mllib] (
    * numIterations: 100, miniBatchFraction: 1.0}.
    */
   @Since("0.8.0")
-  def this() = this(1.0, 100, 1.0)
+  def this() = this(1.0, 100, 0.0, 1.0)
 
   override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
@@ -141,7 +143,7 @@ object LinearRegressionWithSGD {
       stepSize: Double,
       miniBatchFraction: Double,
       initialWeights: Vector): LinearRegressionModel = {
-    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
+    new LinearRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction)
       .run(input, initialWeights)
   }
 
@@ -163,7 +165,7 @@ object LinearRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double): LinearRegressionModel = {
-    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input)
+    new LinearRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction).run(input)
   }
 
   /**
