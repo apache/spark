@@ -55,20 +55,22 @@ object AlterTableCommandParser {
   /**
    * Extract partition spec from the given [[ASTNode]] as a map, assuming it exists.
    *
-   * Expected format:
-   *   +- TOK_PARTSPEC
-   *      :- TOK_PARTVAL
-   *      :  :- dt
-   *      :  +- '2008-08-08'
-   *      +- TOK_PARTVAL
-   *         :- country
-   *         +- 'us'
+   * Example format:
+   *
+   *   TOK_PARTSPEC
+   *   :- TOK_PARTVAL
+   *   :  :- dt
+   *   :  +- '2008-08-08'
+   *   +- TOK_PARTVAL
+   *      :- country
+   *      +- 'us'
    */
   private def parsePartitionSpec(node: ASTNode): Map[String, String] = {
     node match {
       case Token("TOK_PARTSPEC", partitions) =>
         partitions.map {
           // Note: sometimes there's a "=", "<" or ">" between the key and the value
+          // (e.g. when dropping all partitions with value > than a certain constant)
           case Token("TOK_PARTVAL", ident :: conj :: constant :: Nil) =>
             (cleanAndUnquoteString(ident.text), cleanAndUnquoteString(constant.text))
           case Token("TOK_PARTVAL", ident :: constant :: Nil) =>
@@ -86,15 +88,16 @@ object AlterTableCommandParser {
   /**
    * Extract table properties from the given [[ASTNode]] as a map, assuming it exists.
    *
-   * Expected format:
-   *   +- TOK_TABLEPROPERTIES
-   *      +- TOK_TABLEPROPLIST
-   *         :- TOK_TABLEPROPERTY
-   *         :  :- 'test'
-   *         :  +- 'value'
-   *         +- TOK_TABLEPROPERTY
-   *            :- 'comment'
-   *            +- 'new_comment'
+   * Example format:
+   *
+   *   TOK_TABLEPROPERTIES
+   *   +- TOK_TABLEPROPLIST
+   *      :- TOK_TABLEPROPERTY
+   *      :  :- 'test'
+   *      :  +- 'value'
+   *      +- TOK_TABLEPROPERTY
+   *         :- 'comment'
+   *         +- 'new_comment'
    */
   private def extractTableProps(node: ASTNode): Map[String, String] = {
     node match {
@@ -209,21 +212,21 @@ object AlterTableCommandParser {
           Token("TOK_TABCOLNAME", colNames) :: colValues :: rest) :: Nil) :: _ =>
         // Example format:
         //
-        //   +- TOK_ALTERTABLE_SKEWED
-        //      :- TOK_TABLESKEWED
-        //      :  :- TOK_TABCOLNAME
-        //      :  :  :- dt
-        //      :  :  +- country
-        //      :- TOK_TABCOLVALUE_PAIR
-        //      :  :- TOK_TABCOLVALUES
-        //      :  :  :- TOK_TABCOLVALUE
-        //      :  :  :  :- '2008-08-08'
-        //      :  :  :  +- 'us'
-        //      :  :- TOK_TABCOLVALUES
-        //      :  :  :- TOK_TABCOLVALUE
-        //      :  :  :  :- '2009-09-09'
-        //      :  :  :  +- 'uk'
-        //      +- TOK_STOREASDIR
+        //   TOK_ALTERTABLE_SKEWED
+        //   :- TOK_TABLESKEWED
+        //   :  :- TOK_TABCOLNAME
+        //   :  :  :- dt
+        //   :  :  +- country
+        //   :- TOK_TABCOLVALUE_PAIR
+        //   :  :- TOK_TABCOLVALUES
+        //   :  :  :- TOK_TABCOLVALUE
+        //   :  :  :  :- '2008-08-08'
+        //   :  :  :  +- 'us'
+        //   :  :- TOK_TABCOLVALUES
+        //   :  :  :- TOK_TABCOLVALUE
+        //   :  :  :  :- '2009-09-09'
+        //   :  :  :  +- 'uk'
+        //   +- TOK_STOREASDIR
         val names = colNames.map { n => cleanAndUnquoteString(n.text) }
         val values = colValues match {
           case Token("TOK_TABCOLVALUE", vals) =>
@@ -260,20 +263,20 @@ object AlterTableCommandParser {
       case Token("TOK_ALTERTABLE_SKEWED_LOCATION",
         Token("TOK_SKEWED_LOCATIONS",
         Token("TOK_SKEWED_LOCATION_LIST", locationMaps) :: Nil) :: Nil) :: _ =>
-        // Expected format:
+        // Example format:
         //
-        //   +- TOK_ALTERTABLE_SKEWED_LOCATION
-        //      +- TOK_SKEWED_LOCATIONS
-        //         +- TOK_SKEWED_LOCATION_LIST
-        //            :- TOK_SKEWED_LOCATION_MAP
-        //            :  :- 'col1'
-        //            :  +- 'loc1'
-        //            +- TOK_SKEWED_LOCATION_MAP
-        //               :- TOK_TABCOLVALUES
-        //               :  +- TOK_TABCOLVALUE
-        //               :     :- 'col2'
-        //               :     +- 'col3'
-        //               +- 'loc2'
+        //   TOK_ALTERTABLE_SKEWED_LOCATION
+        //   +- TOK_SKEWED_LOCATIONS
+        //      +- TOK_SKEWED_LOCATION_LIST
+        //         :- TOK_SKEWED_LOCATION_MAP
+        //         :  :- 'col1'
+        //         :  +- 'loc1'
+        //         +- TOK_SKEWED_LOCATION_MAP
+        //            :- TOK_TABCOLVALUES
+        //            :  +- TOK_TABCOLVALUE
+        //            :     :- 'col2'
+        //            :     +- 'col3'
+        //            +- 'loc2'
         val skewedMaps = locationMaps.flatMap {
           case Token("TOK_SKEWED_LOCATION_MAP", col :: loc :: Nil) =>
             col match {
