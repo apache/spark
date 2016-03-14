@@ -1004,10 +1004,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def setUp(self):
         super(KafkaStreamTests, self).setUp()
-
-        kafkaTestUtilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
-            .loadClass("org.apache.spark.streaming.kafka.KafkaTestUtils")
-        self._kafkaTestUtils = kafkaTestUtilsClz.newInstance()
+        self._kafkaTestUtils = self.ssc._jvm.org.apache.spark.streaming.kafka.KafkaTestUtils()
         self._kafkaTestUtils.setup()
 
     def tearDown(self):
@@ -1286,10 +1283,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
 
         import random
         kinesisAppName = ("KinesisStreamTests-%d" % abs(random.randint(0, 10000000)))
-        kinesisTestUtilsClz = \
-            self.sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-                .loadClass("org.apache.spark.streaming.kinesis.KinesisTestUtils")
-        kinesisTestUtils = kinesisTestUtilsClz.newInstance()
+        kinesisTestUtils = self.ssc._jvm.org.apache.spark.streaming.kinesis.KinesisTestUtils()
         try:
             kinesisTestUtils.createStream()
             aWSCredentials = kinesisTestUtils.getAWSCredentials()
