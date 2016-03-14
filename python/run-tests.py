@@ -54,10 +54,27 @@ FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
 
 
-def run_individual_python_test(test_name, pyspark_python):
+def get_spark_dist_classpath():
+    original_working_dir = os.getcwd()
+    os.chdir(SPARK_HOME)
+    cp = subprocess_check_output(
+        ["./build/sbt", "export assembly/managedClasspath"], universal_newlines=True)
+    cp = cp.strip().split("\n")[-1]
+    os.chdir(original_working_dir)
+    return cp
+
+
+def run_individual_python_test(test_name, pyspark_python, spark_dist_classpath):
     env = dict(os.environ)
-    env.update({'SPARK_TESTING': '1', 'PYSPARK_PYTHON': which(pyspark_python),
-                'PYSPARK_DRIVER_PYTHON': which(pyspark_python)})
+    env.update({
+        # Setting SPARK_DIST_CLASSPATH is a simple way to make sure that any child processes
+        # launched by the tests have access to the correct test-time classpath.
+        'SPARK_DIST_CLASSPATH': spark_dist_classpath,
+        'SPARK_TESTING': '1',
+        'SPARK_PREPEND_CLASSES': '1',
+        'PYSPARK_PYTHON': which(pyspark_python),
+        'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
+    })
     LOGGER.debug("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
@@ -175,6 +192,8 @@ def main():
                         priority = 100
                     task_queue.put((priority, (python_exec, test_goal)))
 
+    spark_dist_classpath = get_spark_dist_classpath()
+
     def process_queue(task_queue):
         while True:
             try:
@@ -182,7 +201,7 @@ def main():
             except Queue.Empty:
                 break
             try:
-                run_individual_python_test(test_goal, python_exec)
+                run_individual_python_test(test_goal, python_exec, spark_dist_classpath)
             finally:
                 task_queue.task_done()
 
