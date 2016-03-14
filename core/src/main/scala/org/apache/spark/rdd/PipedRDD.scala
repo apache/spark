@@ -166,7 +166,10 @@ private[spark] class PipedRDD[T: ClassTag](
     // Return an iterator that read lines from the process's stdout
     val lines = Source.fromInputStream(proc.getInputStream).getLines()
     new Iterator[String] {
-      def next(): String = lines.next()
+      def next(): String = {
+        propagateChildThreadException()
+        lines.next()
+      }
 
       private def propagateChildThreadException(): Unit = {
         if (childThreadException.get() != null) {
