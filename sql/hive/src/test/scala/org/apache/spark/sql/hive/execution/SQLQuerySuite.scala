@@ -737,6 +737,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .queryExecution.analyzed
   }
 
+  test("missing sort attribute in script transform") {
+    val data = (1 to 10).map { i => (i, i, i) }
+    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    val e = intercept[AnalysisException] {
+      sql("SELECT TRANSFORM (d1, d2) USING 'cat' AS (a,b) FROM script_trans order by d3")
+    }
+    assert(e.getMessage.contains("cannot resolve '`d3`' given input columns: [a, b]"))
+  }
+
   test("test script transform for stdout") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
