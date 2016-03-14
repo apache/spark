@@ -94,6 +94,12 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case Distinct(p: Project) =>
       projectToSQL(p, isDistinct = true)
 
+    case p @ Project(_, g: Generate) =>
+      generateToSQL(p)
+
+    case g: Generate =>
+      generateToSQL(g)
+
     case p: Project =>
       projectToSQL(p, isDistinct = false)
 
@@ -308,6 +314,65 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     )
   }
 
+  /**
+   *  This function handles the SQL generation for generators.
+   * sample plan :
+   *   +- Project [mycol2#192]
+   *     +- Generate explode(myCol#191), true, false, Some(mytable2), [mycol2#192]
+   *       +- Generate explode(array(array(1, 2, 3))), true, false, Some(mytable), [mycol#191]
+   *         +- MetastoreRelation default, src, None
+   */
+  private def generateToSQL(plan: Generate): String = {
+    val columnAliases = plan.generatorOutput.map(_.sql).mkString(",")
+    val generatorAlias = if (plan.qualifier.isEmpty) "" else plan.qualifier.get
+    val outerClause = if (plan.outer) "OUTER" else ""
+    build(
+      if (plan.child == OneRowRelation) {
+        s"(SELECT 1) ${SQLBuilder.newSubqueryName}"
+      }
+      else {
+        toSQL(plan.child)
+      },
+      "LATERAL VIEW",
+      outerClause,
+      plan.generator.sql,
+      quoteIdentifier(generatorAlias),
+      "AS",
+      columnAliases
+    )
+  }
+
+  private def generateToSQL(plan: Project): String = {
+    val generate = plan.child.asInstanceOf[Generate]
+    assert(generate.join == true || plan.projectList.size == 1)
+    // Generators that appear in projection list will be expressed as LATERAL VIEW.
+    // A qualifier is needed for a LATERAL VIEw.
+    val generatorAlias: String = generate.qualifier.getOrElse(SQLBuilder.newGeneratorName)
+
+    // Qualify the attributes in projection list.
+    val newProjList = plan.projectList.map {
+      case a if generate.generatorOutput.exists(_.semanticEquals(a)) =>
+        a.toAttribute.withQualifiers(Seq(generatorAlias))
+      case o => o
+    }
+
+    // If Generate is missing the qualifier (its in projection list) , add one here.
+    val planToProcess =
+      if (generate.qualifier.isEmpty) {
+        generate.copy(qualifier = Some(generatorAlias))
+      }
+      else {
+        generate
+      }
+
+    build(
+      "SELECT",
+      newProjList.map(a => a.sql).mkString(","),
+      "FROM",
+      toSQL(planToProcess)
+    )
+  }
+
   object Canonicalizer extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] = Seq(
       Batch("Collapse Project", FixedPoint(100),
@@ -360,6 +425,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
         case plan @ Project(_,
           _: SubqueryAlias
+            | _: Generate
             | _: Filter
             | _: Join
             | _: MetastoreRelation
@@ -411,4 +477,8 @@ object SQLBuilder {
   private val nextSubqueryId = new AtomicLong(0)
 
   private def newSubqueryName: String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
+
+  private val nextGeneratorId = new AtomicLong(0)
+
+  private def newGeneratorName: String = s"gen_generator_${nextGeneratorId.getAndIncrement()}"
 }
