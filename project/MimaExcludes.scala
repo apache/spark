@@ -192,7 +192,7 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-12896 Send only accumulator updates to driver, not TaskMetrics
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.Accumulable.this"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.Accumulator.this"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.Accumulator.this"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulator.initialValue")
       ) ++ Seq(
         // SPARK-12692 Scala style: Fix the style violation (Space before "," or ":")
