@@ -377,10 +377,15 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
       input: Seq[ExprCode],
       row: String = null): String = {
 
+    val doCopy = if (ctx.copyResult) {
+      ".copy()"
+    } else {
+      ""
+    }
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         |append($row.copy());
+         |append($row$doCopy);
        """.stripMargin.trim
     } else {
       assert(input != null)
@@ -395,7 +400,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
         s"""
            |$evaluateInputs
            |${code.code.trim}
-           |append(${code.value}.copy());
+           |append(${code.value}$doCopy);
          """.stripMargin.trim
       } else {
         // There is no columns
