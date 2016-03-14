@@ -1144,10 +1144,11 @@ class DAGScheduler(
         null
       }
 
-    // Note: this stage may already have been canceled, in which case this task end event
-    // maybe posted after the stage completed event. There's not much we can do here without
-    // introducing additional complexity in the scheduler to wait for all the task end events
-    // before posting the stage completed event.
+    // The stage may have already finished when we get this event -- eg. maybe it was a 
+    // speculative task. It is important that we send the TaskEnd event in any case, so listeners 
+    // are properly notified and can chose to handle it. For instance, some listeners are
+    // doing their own accounting and if they don't get the task end event they think 
+    // tasks are still running when they really aren't.
     listenerBus.post(SparkListenerTaskEnd(
        stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
 

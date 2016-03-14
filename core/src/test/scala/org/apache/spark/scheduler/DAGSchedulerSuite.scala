@@ -134,7 +134,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     val successfulStages = new HashSet[Int]
     val failedStages = new ArrayBuffer[Int]
     val stageByOrderOfExecution = new ArrayBuffer[Int]
-    var endedTasks = new HashSet[Long]
+    val endedTasks = new HashSet[Long]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
       submittedStageInfos += stageSubmitted.stageInfo
@@ -1018,7 +1018,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // verify the stage is done
     assert(!scheduler.stageIdToStage.contains(0))
 
-    // stage should be complete finish one other Successful task to simulate what can happen
+    // Stage should be complete. Finish one other Successful task to simulate what can happen
     // with a speculative task and make sure the event is sent out
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(3), Success, 42,
