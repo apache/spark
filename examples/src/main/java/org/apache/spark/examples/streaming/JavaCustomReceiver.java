@@ -36,6 +36,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.ConnectException;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.regex.Pattern;
@@ -130,7 +131,8 @@ public class JavaCustomReceiver extends Receiver<String> {
       try {
         // connect to the server
         socket = new Socket(host, port);
-        reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        reader = new BufferedReader(
+            new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         // Until stopped or connection broken continue reading
         while (!isStopped() && (userInput = reader.readLine()) != null) {
           System.out.println("Received data '" + userInput + "'");

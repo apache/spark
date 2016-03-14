@@ -19,13 +19,13 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.net.URL
+import java.nio.charset.StandardCharsets
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
@@ -147,7 +147,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   private def testPySpark(clientMode: Boolean): Unit = {
     val primaryPyFile = new File(tempDir, "test.py")
-    Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
+    Files.write(TEST_PYFILE, primaryPyFile, StandardCharsets.UTF_8)
 
     // When running tests, let's not assume the user has built the assembly module, which also
     // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
@@ -171,7 +171,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         subdir
       }
     val pyModule = new File(moduleDir, "mod1.py")
-    Files.write(TEST_PYMODULE, pyModule, UTF_8)
+    Files.write(TEST_PYMODULE, pyModule, StandardCharsets.UTF_8)
 
     val mod2Archive = TestUtils.createJarWithFiles(Map("mod2.py" -> TEST_PYMODULE), moduleDir)
     val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
@@ -245,7 +245,7 @@ private object YarnClusterDriver extends Logging with Matchers {
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {
-      Files.write(result, status, UTF_8)
+      Files.write(result, status, StandardCharsets.UTF_8)
       sc.stop()
     }
 
@@ -319,14 +319,14 @@ private object YarnClasspathTest extends Logging {
       val ccl = Thread.currentThread().getContextClassLoader()
       val resource = ccl.getResourceAsStream("test.resource")
       val bytes = ByteStreams.toByteArray(resource)
-      result = new String(bytes, 0, bytes.length, UTF_8)
+      result = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     } catch {
       case t: Throwable =>
         error(s"loading test.resource to $resultPath", t)
         // set the exit code if not yet set
         exitCode = 2
     } finally {
-      Files.write(result, new File(resultPath), UTF_8)
+      Files.write(result, new File(resultPath), StandardCharsets.UTF_8)
     }
   }
 
