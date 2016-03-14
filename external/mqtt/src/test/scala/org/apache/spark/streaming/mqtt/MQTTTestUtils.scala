@@ -18,10 +18,10 @@
 package org.apache.spark.streaming.mqtt
 
 import java.net.{ServerSocket, URI}
+import java.nio.charset.StandardCharsets
 
 import scala.language.postfixOps
 
-import com.google.common.base.Charsets.UTF_8
 import org.apache.activemq.broker.{BrokerService, TransportConnector}
 import org.apache.commons.lang3.RandomUtils
 import org.eclipse.paho.client.mqttv3._
@@ -85,7 +85,7 @@ private[mqtt] class MQTTTestUtils extends Logging {
       client.connect()
       if (client.isConnected) {
         val msgTopic = client.getTopic(topic)
-        val message = new MqttMessage(data.getBytes(UTF_8))
+        val message = new MqttMessage(data.getBytes(StandardCharsets.UTF_8))
         message.setQos(1)
         message.setRetained(true)
 

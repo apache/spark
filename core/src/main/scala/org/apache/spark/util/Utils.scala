@@ -22,6 +22,7 @@ import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
@@ -1904,7 +1905,7 @@ private[spark] object Utils extends Logging {
     require(file.exists(), s"Properties file $file does not exist")
     require(file.isFile(), s"Properties file $file is not a normal file")
 
-    val inReader = new InputStreamReader(new FileInputStream(file), "UTF-8")
+    val inReader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)
     try {
       val properties = new Properties()
       properties.load(inReader)
@@ -2344,7 +2345,7 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
 
       def read(): Int = if (iterator.hasNext) iterator.next() else -1
     }
-    val reader = new BufferedReader(new InputStreamReader(input))
+    val reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
     val stringBuilder = new StringBuilder
     var line = reader.readLine()
     while (line != null) {

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.charset.StandardCharsets
+
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
@@ -440,7 +442,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Hex(Literal(100800200404L)), "177828FED4")
     checkEvaluation(Hex(Literal(-100800200404L)), "FFFFFFE887D7012C")
     checkEvaluation(Hex(Literal.create(null, BinaryType)), null)
-    checkEvaluation(Hex(Literal("helloHex".getBytes())), "68656C6C6F486578")
+    checkEvaluation(Hex(Literal("helloHex".getBytes(StandardCharsets.UTF_8))), "68656C6C6F486578")
     // scalastyle:off
     // Turn off scala style for non-ascii chars
     checkEvaluation(Hex(Literal("三重的".getBytes("UTF8"))), "E4B889E9878DE79A84")
@@ -452,7 +454,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("unhex") {
     checkEvaluation(Unhex(Literal.create(null, StringType)), null)
-    checkEvaluation(Unhex(Literal("737472696E67")), "string".getBytes)
+    checkEvaluation(Unhex(Literal("737472696E67")), "string".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Unhex(Literal("")), new Array[Byte](0))
     checkEvaluation(Unhex(Literal("F")), Array[Byte](15))
     checkEvaluation(Unhex(Literal("ff")), Array[Byte](-1))
