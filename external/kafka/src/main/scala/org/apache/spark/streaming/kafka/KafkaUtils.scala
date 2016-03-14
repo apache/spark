@@ -615,7 +615,7 @@ object KafkaUtils {
 /**
  * This is a helper class that wraps the KafkaUtils.createStream() into more
  * Python-friendly class and function so that it can be easily
- * instantiated and called from Python's KafkaUtils (see SPARK-6027).
+ * instantiated and called from Python's KafkaUtils.
  *
  * The zero-arg constructor helps instantiate this class from the Class object
  * classOf[KafkaUtilsPythonHelper].newInstance(), and the createStream()

@@ -1087,9 +1087,9 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           "pyspark.zip not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.9.1-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.9.2-src.zip")
         require(py4jFile.exists(),
-          "py4j-0.9.1-src.zip not found; cannot run pyspark application in YARN mode.")
+          "py4j-0.9.2-src.zip not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
       }
   }
