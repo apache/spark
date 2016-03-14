@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.immutable.IndexedSeq
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -87,15 +85,15 @@ case class Expand(
     }
   }
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     /*
      * When the projections list looks like:
      *   expr1A, exprB, expr1C
@@ -187,8 +185,10 @@ case class Expand(
 
     val numOutput = metricTerm(ctx, "numOutputRows")
     val i = ctx.freshName("i")
+    // these column have to declared before the loop.
+    val evaluate = evaluateVariables(outputColumns)
     s"""
-       |${outputColumns.map(_.code).mkString("\n").trim}
+       |$evaluate
        |for (int $i = 0; $i < ${projections.length}; $i ++) {
        |  switch ($i) {
        |    ${cases.mkString("\n").trim}

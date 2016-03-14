@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ou
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.expressions.Aggregator
 
 /**
  * :: Experimental ::
@@ -65,7 +64,7 @@ class GroupedDataset[K, V] private[sql](
 
   private def groupedData =
     new GroupedData(
-      new DataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
+      Dataset.newDataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
 
   /**
    * Returns a new [[GroupedDataset]] where the type of the key has been mapped to the specified
@@ -87,7 +86,7 @@ class GroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def keys: Dataset[K] = {
-    new Dataset[K](
+    Dataset[K](
       sqlContext,
       Distinct(
         Project(groupingAttributes, logicalPlan)))
@@ -112,7 +111,7 @@ class GroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
-    new Dataset[U](
+    Dataset[U](
       sqlContext,
       MapGroups(
         f,
@@ -224,7 +223,7 @@ class GroupedDataset[K, V] private[sql](
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
    * and code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
-   * TODO: does not handle aggrecations that return nonflat results,
+   * TODO: does not handle aggregations that return nonflat results,
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
@@ -309,7 +308,7 @@ class GroupedDataset[K, V] private[sql](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
     implicit val uEncoder = other.unresolvedVEncoder
-    new Dataset[R](
+    Dataset[R](
       sqlContext,
       CoGroup(
         f,

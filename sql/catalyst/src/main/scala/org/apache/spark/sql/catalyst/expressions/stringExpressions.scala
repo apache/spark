@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.text.DecimalFormat
+import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -938,8 +938,10 @@ case class FormatNumber(x: Expression, d: Expression)
   @transient
   private val pattern: StringBuffer = new StringBuffer()
 
+  // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
+  // as a decimal separator.
   @transient
-  private val numberFormat: DecimalFormat = new DecimalFormat("")
+  private val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     val dValue = dObject.asInstanceOf[Int]
@@ -962,10 +964,9 @@ case class FormatNumber(x: Expression, d: Expression)
           pattern.append("0")
         }
       }
-      val dFormat = new DecimalFormat(pattern.toString)
       lastDValue = dValue
 
-      numberFormat.applyPattern(dFormat.toPattern)
+      numberFormat.applyLocalizedPattern(pattern.toString)
     }
 
     x.dataType match {
@@ -992,6 +993,11 @@ case class FormatNumber(x: Expression, d: Expression)
 
       val sb = classOf[StringBuffer].getName
       val df = classOf[DecimalFormat].getName
+      val dfs = classOf[DecimalFormatSymbols].getName
+      val l = classOf[Locale].getName
+      // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
+      // as a decimal separator.
+      val usLocale = "US"
       val lastDValue = ctx.freshName("lastDValue")
       val pattern = ctx.freshName("pattern")
       val numberFormat = ctx.freshName("numberFormat")
@@ -999,7 +1005,8 @@ case class FormatNumber(x: Expression, d: Expression)
       val dFormat = ctx.freshName("dFormat")
       ctx.addMutableState("int", lastDValue, s"$lastDValue = -100;")
       ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
-      ctx.addMutableState(df, numberFormat, s"""$numberFormat = new $df("");""")
+      ctx.addMutableState(df, numberFormat,
+      s"""$numberFormat = new $df("", new $dfs($l.$usLocale));""")
 
       s"""
         if ($d >= 0) {
@@ -1013,9 +1020,8 @@ case class FormatNumber(x: Expression, d: Expression)
                 $pattern.append("0");
               }
             }
-            $df $dFormat = new $df($pattern.toString());
             $lastDValue = $d;
-            $numberFormat.applyPattern($dFormat.toPattern());
+            $numberFormat.applyLocalizedPattern($pattern.toString());
           }
           ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
         } else {

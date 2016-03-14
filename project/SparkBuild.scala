@@ -26,7 +26,6 @@ import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
-import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 import spray.revolver.RevolverPlugin._
 
@@ -144,7 +143,7 @@ object SparkBuild extends PomBuild {
       "org.spark-project" %% "genjavadoc-plugin" % unidocGenjavadocVersion.value cross CrossVersion.full),
     scalacOptions <+= target.map(t => "-P:genjavadoc:out=" + (t / "java")))
 
-  lazy val sharedSettings = graphSettings ++ sparkGenjavadocSettings ++ Seq (
+  lazy val sharedSettings = sparkGenjavadocSettings ++ Seq (
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
@@ -241,7 +240,7 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ Revolver.settings))
+      ExcludedDependencies.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -384,18 +383,19 @@ object OldDeps {
 
   lazy val project = Project("oldDeps", file("dev"), settings = oldDepsSettings)
 
-  def versionArtifact(id: String): Option[sbt.ModuleID] = {
-    val fullId = id + "_2.11"
-    Some("org.apache.spark" % fullId % "1.2.0")
-  }
-
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.5",
-    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
-      "spark-streaming-flume", "spark-streaming-twitter",
-      "spark-streaming", "spark-mllib", "spark-graphx",
-      "spark-core").map(versionArtifact(_).get intransitive())
+    libraryDependencies := Seq(
+      "spark-streaming-mqtt",
+      "spark-streaming-zeromq",
+      "spark-streaming-flume",
+      "spark-streaming-twitter",
+      "spark-streaming",
+      "spark-mllib",
+      "spark-graphx",
+      "spark-core"
+    ).map(id => "org.apache.spark" % (id + "_2.11") % "1.2.0")
   )
 }
 
@@ -688,7 +688,7 @@ object Unidoc {
       "-noqualifier", "java.lang"
     ),
 
-    // Use GitHub repository for Scaladoc source linke
+    // Use GitHub repository for Scaladoc source links
     unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",
 
     scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(

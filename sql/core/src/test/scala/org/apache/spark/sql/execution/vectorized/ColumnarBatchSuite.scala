@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.vectorized
 
+import java.nio.charset.StandardCharsets
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
@@ -329,18 +331,21 @@ class ColumnarBatchSuite extends SparkFunSuite {
       var idx = 0
 
       val values = ("Hello" :: "abc" :: Nil).toArray
-      column.putByteArray(idx, values(0).getBytes, 0, values(0).getBytes().length)
+      column.putByteArray(idx, values(0).getBytes(StandardCharsets.UTF_8),
+        0, values(0).getBytes(StandardCharsets.UTF_8).length)
       reference += values(0)
       idx += 1
       assert(column.arrayData().elementsAppended == 5)
 
-      column.putByteArray(idx, values(1).getBytes, 0, values(1).getBytes().length)
+      column.putByteArray(idx, values(1).getBytes(StandardCharsets.UTF_8),
+        0, values(1).getBytes(StandardCharsets.UTF_8).length)
       reference += values(1)
       idx += 1
       assert(column.arrayData().elementsAppended == 8)
 
       // Just put llo
-      val offset = column.putByteArray(idx, values(0).getBytes, 2, values(0).getBytes().length - 2)
+      val offset = column.putByteArray(idx, values(0).getBytes(StandardCharsets.UTF_8),
+        2, values(0).getBytes(StandardCharsets.UTF_8).length - 2)
       reference += "llo"
       idx += 1
       assert(column.arrayData().elementsAppended == 11)
@@ -353,14 +358,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       // Put a long string
       val s = "abcdefghijklmnopqrstuvwxyz"
-      column.putByteArray(idx, (s + s).getBytes)
+      column.putByteArray(idx, (s + s).getBytes(StandardCharsets.UTF_8))
       reference += (s + s)
       idx += 1
       assert(column.arrayData().elementsAppended == 11 + (s + s).length)
 
       reference.zipWithIndex.foreach { v =>
         assert(v._1.length == column.getArrayLength(v._2), "MemoryMode=" + memMode)
-        assert(v._1 == ColumnVectorUtils.toString(column.getByteArray(v._2)),
+        assert(v._1 == column.getUTF8String(v._2).toString,
           "MemoryMode" + memMode)
       }
 
@@ -473,7 +478,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       batch.column(0).putInt(0, 1)
       batch.column(1).putDouble(0, 1.1)
       batch.column(2).putNull(0)
-      batch.column(3).putByteArray(0, "Hello".getBytes)
+      batch.column(3).putByteArray(0, "Hello".getBytes(StandardCharsets.UTF_8))
       batch.setNumRows(1)
 
       // Verify the results of the row.
@@ -488,7 +493,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(batch.column(1).getDouble(0) == 1.1)
       assert(batch.column(1).getIsNull(0) == false)
       assert(batch.column(2).getIsNull(0) == true)
-      assert(ColumnVectorUtils.toString(batch.column(3).getByteArray(0)) == "Hello")
+      assert(batch.column(3).getUTF8String(0).toString == "Hello")
 
       // Verify the iterator works correctly.
       val it = batch.rowIterator()
@@ -499,7 +504,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(row.getDouble(1) == 1.1)
       assert(row.isNullAt(1) == false)
       assert(row.isNullAt(2) == true)
-      assert(ColumnVectorUtils.toString(batch.column(3).getByteArray(0)) == "Hello")
+      assert(batch.column(3).getUTF8String(0).toString == "Hello")
       assert(it.hasNext == false)
       assert(it.hasNext == false)
 
@@ -519,17 +524,17 @@ class ColumnarBatchSuite extends SparkFunSuite {
       batch.column(0).putNull(0)
       batch.column(1).putDouble(0, 2.2)
       batch.column(2).putInt(0, 2)
-      batch.column(3).putByteArray(0, "abc".getBytes)
+      batch.column(3).putByteArray(0, "abc".getBytes(StandardCharsets.UTF_8))
 
       batch.column(0).putInt(1, 3)
       batch.column(1).putNull(1)
       batch.column(2).putInt(1, 3)
-      batch.column(3).putByteArray(1, "".getBytes)
+      batch.column(3).putByteArray(1, "".getBytes(StandardCharsets.UTF_8))
 
       batch.column(0).putInt(2, 4)
       batch.column(1).putDouble(2, 4.4)
       batch.column(2).putInt(2, 4)
-      batch.column(3).putByteArray(2, "world".getBytes)
+      batch.column(3).putByteArray(2, "world".getBytes(StandardCharsets.UTF_8))
       batch.setNumRows(3)
 
       def rowEquals(x: InternalRow, y: Row): Unit = {

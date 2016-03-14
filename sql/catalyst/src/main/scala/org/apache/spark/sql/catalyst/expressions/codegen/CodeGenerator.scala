@@ -37,6 +37,8 @@ import org.apache.spark.util.Utils
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
  * @param code The sequence of statements required to evaluate the expression.
+ *             It should be empty string, if `isNull` and `value` are already existed, or no code
+ *             needed to evaluate them (literals).
  * @param isNull A term that holds a boolean value representing whether the expression evaluated
  *                 to null.
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
@@ -124,7 +126,7 @@ class CodegenContext {
    * For expressions that appear more than once, generate additional code to prevent
    * recomputing the value.
    *
-   * For example, consider two exprsesion generated from this SQL statement:
+   * For example, consider two expression generated from this SQL statement:
    *  SELECT (col1 + col2), (col1 + col2) / col3.
    *
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
@@ -138,7 +140,7 @@ class CodegenContext {
   // Foreach expression that is participating in subexpression elimination, the state to use.
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
-  // The collection of sub-exression result resetting methods that need to be called on each row.
+  // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   def declareAddedFunctions(): String = {

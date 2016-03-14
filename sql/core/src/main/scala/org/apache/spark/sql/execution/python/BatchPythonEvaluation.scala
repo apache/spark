@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
- * A physical plan that evalutes a [[PythonUDF]], one partition of tuples at a time.
+ * A physical plan that evaluates a [[PythonUDF]], one partition of tuples at a time.
  *
  * Python evaluation works by sending the necessary (projected) input data via a socket to an
  * external Python process, and combine the result from the Python process with the original row.
@@ -76,13 +76,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
       // Output iterator for results from Python.
       val outputIterator = new PythonRunner(
-        udf.command,
-        udf.envVars,
-        udf.pythonIncludes,
-        udf.pythonExec,
-        udf.pythonVer,
-        udf.broadcastVars,
-        udf.accumulator,
+        udf.func,
         bufferSize,
         reuseWorker
       ).compute(inputIterator, context.partitionId(), context)

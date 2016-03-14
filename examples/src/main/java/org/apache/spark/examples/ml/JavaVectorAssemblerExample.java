@@ -28,7 +28,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.VectorAssembler;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.*;
@@ -52,13 +52,13 @@ public class JavaVectorAssemblerExample {
     });
     Row row = RowFactory.create(0, 18, 1.0, Vectors.dense(0.0, 10.0, 0.5), 1.0);
     JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(row));
-    DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
+    Dataset<Row> dataset = sqlContext.createDataFrame(rdd, schema);
 
     VectorAssembler assembler = new VectorAssembler()
       .setInputCols(new String[]{"hour", "mobile", "userFeatures"})
       .setOutputCol("features");
 
-    DataFrame output = assembler.transform(dataset);
+    Dataset<Row> output = assembler.transform(dataset);
     System.out.println(output.select("features", "clicked").first());
     // $example off$
     jsc.stop();

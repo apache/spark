@@ -24,7 +24,8 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DataTypeParser}
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
@@ -77,7 +78,7 @@ class TypedColumn[-T, U](
  *
  * {{{
  *   df("columnName")            // On a specific DataFrame.
- *   col("columnName")           // A generic column no yet associcated with a DataFrame.
+ *   col("columnName")           // A generic column no yet associated with a DataFrame.
  *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
@@ -256,6 +257,23 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Inequality test.
    * {{{
    *   // Scala:
+   *   df.select( df("colA") =!= df("colB") )
+   *   df.select( !(df("colA") === df("colB")) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.functions.*;
+   *   df.filter( col("colA").notEqual(col("colB")) );
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.0.0
+    */
+  def =!= (other: Any): Column = withExpr{ Not(EqualTo(expr, lit(other).expr)) }
+
+  /**
+   * Inequality test.
+   * {{{
+   *   // Scala:
    *   df.select( df("colA") !== df("colB") )
    *   df.select( !(df("colA") === df("colB")) )
    *
@@ -266,8 +284,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    * @since 1.3.0
-   */
-  def !== (other: Any): Column = withExpr{ Not(EqualTo(expr, lit(other).expr)) }
+    */
+  @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
+  def !== (other: Any): Column = this =!= other
 
   /**
    * Inequality test.

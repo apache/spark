@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.ui
 
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
@@ -444,7 +442,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     }.getOrElse(emptyCell)
     val receiverLastError = receiverInfo.map { info =>
       val msg = s"${info.lastErrorMessage} - ${info.lastError}"
-      if (msg.size > 100) msg.take(97) + "..." else msg
+      if (msg.length > 100) msg.take(97) + "..." else msg
     }.getOrElse(emptyCell)
     val receiverLastErrorTime = receiverInfo.map {
       r => if (r.lastErrorTime < 0) "-" else SparkUIUtils.formatDate(r.lastErrorTime)
@@ -560,7 +558,7 @@ private[ui] class JsCollector {
   def toHtml: Seq[Node] = {
     val js =
       s"""
-         |$$(document).ready(function(){
+         |$$(document).ready(function() {
          |    ${preparedStatements.mkString("\n")}
          |    ${statements.mkString("\n")}
          |});""".stripMargin

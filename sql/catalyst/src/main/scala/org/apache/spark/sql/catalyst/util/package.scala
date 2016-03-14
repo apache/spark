@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{NumericType, StringType}
@@ -104,12 +105,12 @@ package object util {
   }
 
   def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {
-    val maxLeftSize = left.map(_.size).max
+    val maxLeftSize = left.map(_.length).max
     val leftPadded = left ++ Seq.fill(math.max(right.size - left.size, 0))("")
     val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
 
     leftPadded.zip(rightPadded).map {
-      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.size) + 3)) + r
+      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
     }
   }
 
@@ -118,7 +119,7 @@ package object util {
     val writer = new PrintWriter(out)
     t.printStackTrace(writer)
     writer.flush()
-    new String(out.toByteArray)
+    new String(out.toByteArray, StandardCharsets.UTF_8)
   }
 
   def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString

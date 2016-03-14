@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.BoundedPriorityQueue
 
 case class TakeOrderedAndProjectNode(

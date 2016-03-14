@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 import java.net.{URL, URLClassLoader}
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
@@ -40,18 +41,18 @@ import org.apache.hadoop.util.VersionInfo
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
-import org.apache.spark.sql.SQLConf.SQLConfEntry
-import org.apache.spark.sql.SQLConf.SQLConfEntry._
-import org.apache.spark.sql.catalyst.{InternalRow, ParserInterface}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PreInsertCastAndRename, PreWriteCheck, ResolveDataSource}
+import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
+import org.apache.spark.sql.internal.SQLConf.SQLConfEntry
+import org.apache.spark.sql.internal.SQLConf.SQLConfEntry._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -108,6 +109,16 @@ class HiveContext private[hive](
       metaHive = metadataHive.newSession(),
       isRootContext = false)
   }
+
+  @transient
+  protected[sql] override lazy val sessionState = new HiveSessionState(self)
+
+  protected[sql] override def catalog = sessionState.catalog
+
+  // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
+  // but the optimizer can't access the SessionState of metadataHive.
+  sessionState.functionRegistry.registerFunction(
+    "current_database", (e: Seq[Expression]) => new CurrentDatabase(self))
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -441,39 +452,6 @@ class HiveContext private[hive](
     setConf(entry.key, entry.stringConverter(value))
   }
 
-  /* A catalyst metadata catalog that points to the Hive Metastore. */
-  @transient
-  override protected[sql] lazy val catalog =
-    new HiveMetastoreCatalog(metadataHive, this) with OverrideCatalog
-
-  // Note that HiveUDFs will be overridden by functions registered in this context.
-  @transient
-  override protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), this.executionHive)
-
-  // The Hive UDF current_database() is foldable, will be evaluated by optimizer, but the optimizer
-  // can't access the SessionState of metadataHive.
-  functionRegistry.registerFunction(
-    "current_database",
-    (expressions: Seq[Expression]) => new CurrentDatabase(this))
-
-  /* An analyzer that uses the Hive metastore. */
-  @transient
-  override protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, conf) {
-      override val extendedResolutionRules =
-        catalog.ParquetConversions ::
-        catalog.CreateTables ::
-        catalog.PreInsertionCasts ::
-        python.ExtractPythonUDFs ::
-        PreInsertCastAndRename ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
-
-      override val extendedCheckRules = Seq(
-        PreWriteCheck(catalog)
-      )
-    }
-
   /** Overridden by child classes that need to set configuration before the client init. */
   protected def configure(): Map[String, String] = {
     // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
@@ -543,37 +521,6 @@ class HiveContext private[hive](
     c
   }
 
-  protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-  }
-
-  @transient
-  protected[sql] override val sqlParser: ParserInterface = new HiveQl(conf)
-
-  @transient
-  private val hivePlanner = new SparkPlanner(this) with HiveStrategies {
-    val hiveContext = self
-
-    override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
-      DataSourceStrategy,
-      HiveCommandStrategy(self),
-      HiveDDLStrategy,
-      DDLStrategy,
-      SpecialLimits,
-      InMemoryScans,
-      HiveTableScans,
-      DataSinks,
-      Scripts,
-      Aggregation,
-      LeftSemiJoin,
-      EquiJoinSelection,
-      BasicOperators,
-      BroadcastNestedLoop,
-      CartesianProduct,
-      DefaultJoin
-    )
-  }
-
   private def functionOrMacroDDLPattern(command: String) = Pattern.compile(
     ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL).matcher(command)
 
@@ -589,8 +536,14 @@ class HiveContext private[hive](
     }
   }
 
-  @transient
-  override protected[sql] val planner = hivePlanner
+  /**
+   * Executes a SQL query without parsing it, but instead passing it directly to Hive.
+   * This is currently only used for DDLs and will be removed as soon as Spark can parse
+   * all supported Hive DDLs itself.
+   */
+  protected[sql] override def runNativeSql(sqlText: String): Seq[Row] = {
+    runSqlHive(sqlText).map { s => Row(s) }
+  }
 
   /** Extends QueryExecution with hive specific features. */
   protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
@@ -763,7 +716,7 @@ private[hive] object HiveContext {
     case (null, _) => "NULL"
     case (d: Int, DateType) => new DateWritable(d).toString
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
-    case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
+    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) =>
       // Hive strips trailing zeros so use its toString
       HiveDecimal.create(decimal).toString

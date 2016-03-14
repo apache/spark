@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -41,14 +42,14 @@ public class ShuffleInMemorySorterSuite {
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int strLength) {
     final byte[] strBytes = new byte[strLength];
     Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, strLength);
-    return new String(strBytes);
+    return new String(strBytes, StandardCharsets.UTF_8);
   }
 
   @Test
   public void testSortingEmptyInput() {
     final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 100);
     final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
-    assert(!iter.hasNext());
+    Assert.assertFalse(iter.hasNext());
   }
 
   @Test

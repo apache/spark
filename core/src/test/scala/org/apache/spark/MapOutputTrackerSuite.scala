@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.mockito.Matchers.{any, isA}
 import org.mockito.Mockito._
 
-import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
