@@ -19,7 +19,6 @@ package org.apache.spark.launcher;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
@@ -172,21 +171,13 @@ abstract class AbstractCommandBuilder {
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
     }
 
-    // We can't rely on the ENV_SPARK_ASSEMBLY variable to be set. Certain situations, such as
-    // when running unit tests, or user code that embeds Spark and creates a SparkContext
-    // with a local or local-cluster master, will cause this code to be called from an
-    // environment where that env variable is not guaranteed to exist.
-    //
-    // For the testing case, we rely on the test code to set and propagate the test classpath
-    // appropriately.
-    //
-    // For the user code case, we fall back to looking for the Spark assembly under SPARK_HOME.
-    // That duplicates some of the code in the shell scripts that look for the assembly, though.
-    String assembly = getenv(ENV_SPARK_ASSEMBLY);
-    if (assembly == null && !isTesting) {
-      assembly = findAssembly();
+    // Add Spark jars to the classpath. For the testing case, we rely on the test code to set and
+    // propagate the test classpath appropriately. For normal invocation, look for the jars
+    // directory under SPARK_HOME.
+    String jarsDir = findJarsDir(!isTesting);
+    if (jarsDir != null) {
+      addToClassPath(cp, join(File.separator, jarsDir, "*"));
     }
-    addToClassPath(cp, assembly);
 
     // Datanucleus jars must be included on the classpath. Datanucleus jars do not work if only
     // included in the uber jar as plugin.xml metadata is lost. Both sbt and maven will populate
@@ -320,28 +311,25 @@ abstract class AbstractCommandBuilder {
     return props;
   }
 
-  private String findAssembly() {
+  private String findJarsDir(boolean failIfNotFound) {
+    // TODO: change to the correct directory once the assembly build is changed.
     String sparkHome = getSparkHome();
     File libdir;
     if (new File(sparkHome, "RELEASE").isFile()) {
       libdir = new File(sparkHome, "lib");
-      checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-          libdir.getAbsolutePath());
+      checkState(!failIfNotFound || libdir.isDirectory(),
+        "Library directory '%s' does not exist.",
+        libdir.getAbsolutePath());
     } else {
       libdir = new File(sparkHome, String.format("assembly/target/scala-%s", getScalaVersion()));
-    }
-
-    final Pattern re = Pattern.compile("spark-assembly.*hadoop.*\\.jar");
-    FileFilter filter = new FileFilter() {
-      @Override
-      public boolean accept(File file) {
-        return file.isFile() && re.matcher(file.getName()).matches();
+      if (!libdir.isDirectory()) {
+        checkState(!failIfNotFound,
+          "Library directory '%s' does not exist; make sure Spark is built.",
+          libdir.getAbsolutePath());
+        libdir = null;
       }
-    };
-    File[] assemblies = libdir.listFiles(filter);
-    checkState(assemblies != null && assemblies.length > 0, "No assemblies found in '%s'.", libdir);
-    checkState(assemblies.length == 1, "Multiple assemblies found in '%s'.", libdir);
-    return assemblies[0].getAbsolutePath();
+    }
+    return libdir != null ? libdir.getAbsolutePath() : null;
   }
 
   private String getConfDir() {

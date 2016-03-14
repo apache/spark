@@ -30,7 +30,6 @@ class CommandBuilderUtils {
   static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
-  static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
 
   /** The set of known JVM vendors. */
   static enum JavaVendor {
