@@ -74,7 +74,7 @@ class KinesisUtils(object):
 
         try:
             # Use KinesisUtilsPythonHelper to access Scala's KinesisUtils
-            helper = sc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
+            helper = ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
         except:
             KinesisUtils._printErrorMsg(ssc.sparkContext)
             raise
