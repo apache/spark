@@ -47,40 +47,48 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     SparkHadoopUtil.get.newConfiguration(new SparkConf()))
   private var testDir: File = _
   private var testDirPath: Path = _
+  private var backupTestDir: File = _
+  private var backupTestDirPath: Path = _
 
   before {
     testDir = Utils.createTempDir()
+    backupTestDir = Utils.createTempDir("./backup")
     testDir.deleteOnExit()
+    backupTestDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
+    backupTestDirPath = new Path(backupTestDir.getAbsolutePath())
   }
 
   after {
     Utils.deleteRecursively(testDir)
+    Utils.deleteRecursively(backupTestDir)
   }
 
   test("Verify log file exist") {
-    // Verify logging directory exists
-    val conf = getLoggingConf(testDirPath)
-    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
-    eventLogger.start()
+    testLogFile()
+  }
 
-    val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
-    assert(fileSystem.exists(logPath))
-    val logStatus = fileSystem.getFileStatus(logPath)
-    assert(!logStatus.isDirectory)
-
-    // Verify log is renamed after stop()
-    eventLogger.stop()
-    assert(!fileSystem.getFileStatus(new Path(eventLogger.logPath)).isDirectory)
+  test("Verify backup log file exist") {
+    testLogFile(true)
   }
 
   test("Basic event logging") {
     testEventLogging()
   }
 
+  test("Basic event logging with backup") {
+    testEventLogging(true)
+  }
+
   test("Basic event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
-      testEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
+      testEventLogging(false, compressionCodec = Some(CompressionCodec.getShortName(codec)))
+    }
+  }
+
+  test("Basic event logging with backup and compression") {
+    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
+      testEventLogging(true, compressionCodec = Some(CompressionCodec.getShortName(codec)))
     }
   }
 
@@ -88,9 +96,21 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     testApplicationEventLogging()
   }
 
+  test("End-to-end event logging with backup") {
+    testApplicationEventLogging(true)
+  }
+
   test("End-to-end event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
-      testApplicationEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
+      testApplicationEventLogging(false,
+        compressionCodec = Some(CompressionCodec.getShortName(codec)))
+    }
+  }
+
+  test("End-to-end event logging with backup and compression") {
+    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
+      testApplicationEventLogging(false,
+        compressionCodec = Some(CompressionCodec.getShortName(codec)))
     }
   }
 
@@ -129,16 +149,65 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   import EventLoggingListenerSuite._
 
   /**
+   * This verifies that log file(original and backup) exists and
+   * verifies that log file is renamed after stop
+   */
+  private def testLogFile(testBackup: Boolean = false): Unit = {
+    // Verify logging directory exists
+    val conf = getLoggingConf(testDirPath)
+    if (testBackup) {
+      enableLoggingBackup(conf)
+    }
+    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    eventLogger.start()
+
+    val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
+    assert(fileSystem.exists(logPath))
+    val logStatus = fileSystem.getFileStatus(logPath)
+    assert(!logStatus.isDir)
+
+    if (testBackup) {
+      // Verify back up log file is created
+      val backupLogPath = new Path(eventLogger.backupLogPath.get + EventLoggingListener.IN_PROGRESS)
+      assert(fileSystem.exists(backupLogPath))
+      val backupLogStatus = fileSystem.getFileStatus(backupLogPath)
+      assert(!backupLogStatus.isDir)
+    } else {
+      // Verify back up log file is *not* created
+      val unexpectedBackupLogPath = EventLoggingListener.getLogPath(
+        backupTestDirPath.toUri(), "test", None, None)
+      assert(!fileSystem.exists(
+        new Path(unexpectedBackupLogPath + EventLoggingListener.IN_PROGRESS)))
+    }
+
+    // Verify log is renamed after stop()
+    eventLogger.stop()
+    assert(!fileSystem.getFileStatus(new Path(eventLogger.logPath)).isDir)
+    if (testBackup) {
+      assert(!fileSystem.getFileStatus(new Path(eventLogger.backupLogPath.get)).isDir)
+    } else {
+      // Verify back up log file is *not* created
+      val unexpectedBackupLogPath = EventLoggingListener.getLogPath(
+        backupTestDirPath.toUri(), "test", None, None)
+      assert(!fileSystem.exists(new Path(unexpectedBackupLogPath)))
+    }
+  }
+
+  /**
    * Test basic event logging functionality.
    *
    * This creates two simple events, posts them to the EventLoggingListener, and verifies that
    * exactly these two events are logged in the expected file.
    */
   private def testEventLogging(
+      testBackup: Boolean = false,
       compressionCodec: Option[String] = None,
       extraConf: Map[String, String] = Map()) {
     val conf = getLoggingConf(testDirPath, compressionCodec)
     extraConf.foreach { case (k, v) => conf.set(k, v) }
+    if (testBackup) {
+      enableLoggingBackup(conf)
+    }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
     val listenerBus = new LiveListenerBus
@@ -157,29 +226,52 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // Verify file contains exactly the two events logged
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
     try {
-      val lines = readLines(logData)
-      val logStart = SparkListenerLogStart(SPARK_VERSION)
-      assert(lines.size === 3)
-      assert(lines(0).contains("SparkListenerLogStart"))
-      assert(lines(1).contains("SparkListenerApplicationStart"))
-      assert(lines(2).contains("SparkListenerApplicationEnd"))
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(2))) === applicationEnd)
+      verifyStartAndEndEvents(logData, applicationStart, applicationEnd)
     } finally {
       logData.close()
     }
+
+    if (testBackup) {
+      // Verify backup file contains exactly the two events logged
+      val backupLogData = EventLoggingListener.openEventLog(new Path(eventLogger.backupLogPath.get),
+        fileSystem)
+      try {
+        verifyStartAndEndEvents(backupLogData, applicationStart, applicationEnd)
+      } finally {
+        backupLogData.close()
+      }
+    }
+  }
+
+  private def verifyStartAndEndEvents(
+      logData: InputStream,
+      applicationStart: SparkListenerApplicationStart,
+      applicationEnd: SparkListenerApplicationEnd): Unit = {
+    val lines = readLines(logData)
+    val logStart = SparkListenerLogStart(SPARK_VERSION)
+    assert(lines.size === 3)
+    assert(lines(0).contains("SparkListenerLogStart"))
+    assert(lines(1).contains("SparkListenerApplicationStart"))
+    assert(lines(2).contains("SparkListenerApplicationEnd"))
+    assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+    assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationStart)
+    assert(JsonProtocol.sparkEventFromJson(parse(lines(2))) === applicationEnd)
   }
 
   /**
    * Test end-to-end event logging functionality in an application.
    * This runs a simple Spark job and asserts that the expected events are logged when expected.
    */
-  private def testApplicationEventLogging(compressionCodec: Option[String] = None) {
+  private def testApplicationEventLogging(
+      testbackup: Boolean = false,
+      compressionCodec: Option[String] = None) {
     // Set defaultFS to something that would cause an exception, to make sure we don't run
     // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
       .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
+    if (testbackup) {
+      enableLoggingBackup(conf)
+    }
     val sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
@@ -187,6 +279,12 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val expectedLogDir = testDir.toURI()
     assert(eventLogPath === EventLoggingListener.getLogPath(
       expectedLogDir, sc.applicationId, None, compressionCodec.map(CompressionCodec.getShortName)))
+    if (testbackup) {
+      val eventLogBackupPath = eventLogger.backupLogPath.get
+      val expectedBackupLogDir = backupTestDir.toURI
+      assert(eventLogBackupPath === EventLoggingListener.getLogPath(expectedBackupLogDir,
+        sc.applicationId, None, compressionCodec.map(CompressionCodec.getShortName)))
+    }
 
     // Begin listening for events that trigger asserts
     val eventExistenceListener = new EventExistenceListener(eventLogger)
@@ -201,8 +299,19 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
     // Make sure expected events exist in the log file.
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
-    val logStart = SparkListenerLogStart(SPARK_VERSION)
+    verifyExpectedEvents(logData)
+
+    if (testbackup) {
+      // Make sure expected events exist in the backup log file.
+      val backupLogData = EventLoggingListener.openEventLog(
+        new Path(eventLogger.backupLogPath.get), fileSystem)
+      verifyExpectedEvents(backupLogData)
+    }
+  }
+
+  private def verifyExpectedEvents(logData: InputStream): Unit = {
     val lines = readLines(logData)
+    val logStart = SparkListenerLogStart(SPARK_VERSION)
     val eventSet = mutable.Set(
       SparkListenerApplicationStart,
       SparkListenerBlockManagerAdded,
@@ -232,6 +341,11 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   private def readLines(in: InputStream): Seq[String] = {
     Source.fromInputStream(in).getLines().toSeq
+  }
+
+  def enableLoggingBackup(conf: SparkConf): Unit = {
+    conf.set("spark.eventLog.backup.enabled", "true")
+    conf.set("spark.eventLog.backup.dir", backupTestDir.getAbsolutePath)
   }
 
   /**

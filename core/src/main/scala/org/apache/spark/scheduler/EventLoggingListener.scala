@@ -61,9 +61,24 @@ private[spark] class EventLoggingListener(
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
+  private val shouldBackup = sparkConf.getBoolean("spark.eventLog.backup.enabled", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
+  private val logBackupBaseDir: Option[URI] =
+    if (shouldBackup) {
+      val unresolvedDir = sparkConf.get("spark.eventLog.backup.dir",
+        EventLoggingListener.DEFAULT_LOG_BACKUP_DIR).stripSuffix("/")
+      Some(Utils.resolveURI(unresolvedDir))
+    } else {
+      None
+    }
+  private val backupFileSystem: Option[FileSystem] =
+    if (shouldBackup) {
+      Some(Utils.getHadoopFileSystem(logBackupBaseDir.get, hadoopConf))
+    } else {
+      None
+    }
   private val compressionCodec =
     if (shouldCompress) {
       Some(CompressionCodec.createCodec(sparkConf))
@@ -75,9 +90,9 @@ private[spark] class EventLoggingListener(
   }
 
   // Only defined if the file system scheme is not local
-  private var hadoopDataStream: Option[FSDataOutputStream] = None
+  private var hadoopDataStreams: Option[ArrayBuffer[FSDataOutputStream]] = None
 
-  private var writer: Option[PrintWriter] = None
+  private var writers: Option[ArrayBuffer[PrintWriter]] = None
 
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
@@ -85,10 +100,25 @@ private[spark] class EventLoggingListener(
   // Visible for tests only.
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
+  // Visible for tests only.
+  private[scheduler] val backupLogPath: Option[String] =
+    if (shouldBackup) {
+      Some(getLogPath(logBackupBaseDir.get, appId, appAttemptId, compressionCodecName))
+    } else {
+      None
+    }
+
   /**
    * Creates the log file in the configured log directory.
    */
   def start() {
+    createLogFile(fileSystem, logBaseDir, logPath)
+    if (shouldBackup) {
+      createLogFile(backupFileSystem.get, logBackupBaseDir.get, backupLogPath.get)
+    }
+  }
+
+  private def createLogFile(fileSystem: FileSystem, logBaseDir: URI, logPath: String): Unit = {
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
       throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.")
     }
@@ -112,8 +142,11 @@ private[spark] class EventLoggingListener(
       if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         new FileOutputStream(uri.getPath)
       } else {
-        hadoopDataStream = Some(fileSystem.create(path))
-        hadoopDataStream.get
+        if (hadoopDataStreams.isEmpty) {
+          hadoopDataStreams = Some(new ArrayBuffer[FSDataOutputStream]())
+        }
+        hadoopDataStreams.get += fileSystem.create(path)
+        hadoopDataStreams.get.last
       }
 
     try {
@@ -122,7 +155,10 @@ private[spark] class EventLoggingListener(
 
       EventLoggingListener.initEventLog(bstream)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
-      writer = Some(new PrintWriter(bstream))
+      if (writers.isEmpty) {
+        writers = Some(new ArrayBuffer[PrintWriter]())
+      }
+      writers.get += new PrintWriter(bstream)
       logInfo("Logging events to %s".format(logPath))
     } catch {
       case e: Exception =>
@@ -135,11 +171,11 @@ private[spark] class EventLoggingListener(
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
     val eventJson = JsonProtocol.sparkEventToJson(event)
     // scalastyle:off println
-    writer.foreach(_.println(compact(render(eventJson))))
+    writers.foreach(_.foreach(_.println(compact(render(eventJson)))))
     // scalastyle:on println
     if (flushLogger) {
-      writer.foreach(_.flush())
-      hadoopDataStream.foreach(_.hflush())
+      writers.foreach(_.foreach(_.flush()))
+      hadoopDataStreams.foreach(_.foreach(_.hflush()))
     }
     if (testing) {
       loggedEvents += eventJson
@@ -210,7 +246,33 @@ private[spark] class EventLoggingListener(
    * ".inprogress" suffix.
    */
   def stop(): Unit = {
-    writer.foreach(_.close())
+    writers.foreach { writerArray =>
+      var e: Option[Exception] = None
+      writerArray.foreach { writer =>
+        try {
+          writer.close()
+        } catch {
+          case ex: Exception =>
+            if (e.isEmpty) {
+              e = Some(ex)
+            }
+        }
+      }
+      if (e.isDefined) {
+        throw e.get;
+      }
+    }
+
+    try {
+      completeLogFile(fileSystem, logPath)
+    } finally {
+      if (shouldBackup) {
+        completeLogFile(backupFileSystem.get, backupLogPath.get)
+      }
+    }
+  }
+
+  def completeLogFile(fileSystem: FileSystem, logPath: String): Unit = {
 
     val target = new Path(logPath)
     if (fileSystem.exists(target)) {
@@ -239,6 +301,7 @@ private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
+  val DEFAULT_LOG_BACKUP_DIR = "/tmp/spark-events-backup"
 
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 

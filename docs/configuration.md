@@ -502,6 +502,23 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.eventLog.backup.dir</code></td>
+  <td>file:///tmp/spark-events-backup</td>
+  <td>
+    Base directory in which Spark events are copied in real time, if <code>spark.eventLog.
+    backup.enabled</code> is true. In cloud environment, users may want to set this to a cloud
+    storage service like S3 location for issue investigation and performance analysis before
+    and after the cluster is terminated.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.backup.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to back up Spark events, if <code>spark.eventLog.enabled</code> is true.
+  </td>
+</tr>
+<tr>
   <td><code>spark.eventLog.compress</code></td>
   <td>false</td>
   <td>
