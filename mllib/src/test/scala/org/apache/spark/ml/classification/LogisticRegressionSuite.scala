@@ -946,7 +946,10 @@ class LogisticRegressionSuite
     val summary = model.summary.asInstanceOf[BinaryLogisticRegressionSummary]
 
     val strSummary = summary.toString
-    print(strSummary)
+    assert(strSummary.isInstanceOf[String])
+    assert(strSummary.contains("ROC"))
+    assert(strSummary.contains("Precision"))
+    assert(strSummary.contains("F-Measure"))
   }
 }
 

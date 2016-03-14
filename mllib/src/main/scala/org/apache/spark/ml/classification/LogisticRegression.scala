@@ -954,7 +954,7 @@ class BinaryLogisticRegressionSummary private[classification] (
     //Building roc string
     summaryStringBuilder.append(dataFrameToString("ROC",roc,colSep))
     summaryStringBuilder.append(newLine)
-    summaryStringBuilder.append(dataFrameToString("Precesion",pr,colSep))
+    summaryStringBuilder.append(dataFrameToString("Precision",pr,colSep))
     summaryStringBuilder.append(newLine)
     summaryStringBuilder.append(dataFrameToString("F-Measure by threshold",fMeasureByThreshold,colSep))
     summaryStringBuilder.append(newLine)
