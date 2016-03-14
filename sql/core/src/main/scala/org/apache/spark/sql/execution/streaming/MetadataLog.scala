@@ -28,7 +28,7 @@ package org.apache.spark.sql.execution.streaming
 trait MetadataLog[T] {
 
   /**
-   * Store the metadata for the specified batchId. If batchId's metatdata has already been stored,
+   * Store the metadata for the specified batchId. If batchId's metadata has already been stored,
    * this method does nothing.
    */
   def add(batchId: Long, metadata: T): Unit

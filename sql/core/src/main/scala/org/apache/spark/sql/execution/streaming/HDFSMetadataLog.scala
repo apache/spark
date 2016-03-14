@@ -17,31 +17,27 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{DataOutput, EOFException, IOException}
+import java.io.IOException
 import java.nio.ByteBuffer
+import java.util.{ConcurrentModificationException, EnumSet}
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.commons.io.IOUtils
+import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.permission.FsPermission
 
-import org.apache.spark.SparkException
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.util.Utils
 
 /**
  * A [[MetadataLog]] implementation based on HDFS. [[HDFSMetadataLog]] uses the specified `path`
  * as the metadata storage.
  *
- * There should only be one [[HDFSMetadataLog]] using `path` at the same time. [[HDFSMetadataLog]]
- * uses a file ".lock" in the directory to make sure there is always only one user using `path`.
- * When [[HDFSMetadataLog]] is created, it will create a ".lock" file. If this step fails,
- * [[HDFSMetadataLog]] will throw an exception saying there is someone using the same directory.
- * When [[HDFSMetadataLog]] is stopped, it will delete the ".lock" file.
- *
- * However, in extreme case, e.g., power outage, [[HDFSMetadataLog]] won't be able to delete ".lock"
- * file. Then [[HDFSMetadataLog]] cannot be created even if no one is using the `path`. In such
- * case, the user has to delete the lock file in the exception message to restart their application.
+ * When writing a new batch, [[HDFSMetadataLog]] will firstly write to a temp file and then rename
+ * it to the final batch file. If the rename step fails, there must be multiple writers and only
+ * one of them will succeed and the others will fail.
  *
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
@@ -49,12 +45,17 @@ import org.apache.spark.util.Utils
 class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends MetadataLog[T] {
 
   private val metadataPath = new Path(path)
-  private val fs = metadataPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-  if (!fs.exists(metadataPath)) {
-    fs.mkdirs(metadataPath)
-  }
 
-  tryAcquireLock()
+  private val fc =
+    if (metadataPath.toUri.getScheme == null) {
+      FileContext.getFileContext(sqlContext.sparkContext.hadoopConfiguration)
+    } else {
+      FileContext.getFileContext(metadataPath.toUri, sqlContext.sparkContext.hadoopConfiguration)
+    }
+
+  if (!fc.util().exists(metadataPath)) {
+    fc.mkdir(metadataPath, FsPermission.getDirDefault, true)
+  }
 
   /**
    * A `PathFilter` to filter only batch files
@@ -70,71 +71,96 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends
 
   private val serializer = new JavaSerializer(sqlContext.sparkContext.conf).newInstance()
 
-  private def tryAcquireLock(): Unit = {
-    val lockFile = new Path(metadataPath, ".lock")
-    fs.deleteOnExit(lockFile)
-    try {
-      // Must set overwrite to false otherwise HDFS allows multiple clients to create the same file.
-      // When overwrite is false, the latter one will receive FileAlreadyExistsException
-      fs.create(lockFile, false).close()
-    } catch {
-      case e: IOException =>
-        throw new SparkException(s"There are another user using $path. Please check that. " +
-          s"If nobody is using it, please delete ${lockFile}", e)
-    }
-  }
-
   private def batchFile(batchId: Long): Path = {
     new Path(metadataPath, batchId.toString)
   }
 
   override def add(batchId: Long, metadata: T): Unit = {
-    get(batchId).getOrElse {
+    get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written.
       val buffer = serializer.serialize(metadata)
-      val output = try {
-        fs.create(batchFile(batchId))
+      try {
+        writeBatch(batchId, JavaUtils.bufferToArray(buffer))
+        true
       } catch {
         case e: IOException if "java.lang.InterruptedException" == e.getMessage =>
           // create may convert InterruptedException to IOException. Let's convert it back to
           // InterruptedException so that this failure won't crash StreamExecution
           throw new InterruptedException("Creating file is interrupted")
       }
+    }
+  }
+
+  /**
+   * Write a batch to a temp file then rename it to the batch file.
+   *
+   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
+   * valid behavior, we still need to prevent it from destroying the files.
+   */
+  private def writeBatch(batchId: Long, bytes: Array[Byte]): Unit = {
+    // Use nextId to create a temp file
+    var nextId = 0
+    while (true) {
+      val tempPath = new Path(metadataPath, s".${batchId}_$nextId.tmp")
+      fc.deleteOnExit(tempPath)
       try {
-        output.writeInt(buffer.remaining())
-        Utils.writeByteBuffer(buffer, output: DataOutput)
-      } finally {
-        output.close()
+        val output = fc.create(tempPath, EnumSet.of(CreateFlag.CREATE))
+        try {
+          output.write(bytes)
+        } finally {
+          output.close()
+        }
+        try {
+          // Try to commit the batch
+          // It will fail if there is an existing file (someone has committed the batch)
+          fc.rename(tempPath, batchFile(batchId), Options.Rename.NONE)
+          return
+        } catch {
+          case e: IOException if isFileAlreadyExistsException(e) =>
+            // If "rename" fails, it means some other "HDFSMetadataLog" has committed the batch.
+            // So throw an exception to tell the user this is not a valid behavior.
+            throw new ConcurrentModificationException(
+              s"Multiple HDFSMetadataLog are using $path", e)
+        }
+      } catch {
+        case e: IOException if isFileAlreadyExistsException(e) =>
+          // Failed to create "tempPath". There are two cases:
+          // 1. Someone is creating "tempPath" too.
+          // 2. This is a restart. "tempPath" has already been created but not moved to the final
+          // batch file (not committed).
+          //
+          // For both cases, the batch has not yet been committed. So we can retry it.
+          //
+          // Note: there is a potential risk here: if HDFSMetadataLog A is running, people can use
+          // the same metadata path to create "HDFSMetadataLog" and fail A. However, this is not a
+          // big problem because it requires the attacker must have the permission to write the
+          // metadata path. In addition, the old Streaming also have this issue, people can create
+          // malicious checkpoint files to crash a Streaming application too.
+          nextId += 1
       }
     }
   }
 
+  private def isFileAlreadyExistsException(e: IOException): Boolean = {
+    e.isInstanceOf[FileAlreadyExistsException] ||
+      // Old Hadoop versions don't throw FileAlreadyExistsException. Although it's fixed in
+      // HADOOP-9361, we still need to support old Hadoop versions.
+      (e.getMessage != null && e.getMessage.startsWith("File already exists: "))
+  }
+
   override def get(batchId: Long): Option[T] = {
     val batchMetadataFile = batchFile(batchId)
-    if (fs.exists(batchMetadataFile)) {
-      val input = fs.open(batchMetadataFile)
-      try {
-        val size = input.readInt()
-        val bytes = new Array[Byte](size)
-        val readSize = input.read(bytes)
-        if (readSize == size) {
-          Some(serializer.deserialize[T](ByteBuffer.wrap(bytes)))
-        } else {
-          None
-        }
-      } catch {
-        case _: EOFException =>
-          // The file is corrupted, so return None
-          // For other exceptions, we still throw them
-          None
-      }
+    if (fc.util().exists(batchMetadataFile)) {
+      val input = fc.open(batchMetadataFile)
+      val bytes = IOUtils.toByteArray(input)
+      Some(serializer.deserialize[T](ByteBuffer.wrap(bytes)))
     } else {
       None
     }
   }
 
   override def get(startId: Option[Long], endId: Long): Array[(Long, T)] = {
-    val batchIds = fs.listStatus(metadataPath, batchFilesFilter)
+    val batchIds = fc.util().listStatus(metadataPath, batchFilesFilter)
       .map(_.getPath.getName.toLong)
       .filter { batchId =>
       batchId <= endId && (startId.isEmpty || batchId >= startId.get)
@@ -146,7 +172,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends
   }
 
   override def getLatest(): Option[(Long, T)] = {
-    val batchIds = fs.listStatus(metadataPath, batchFilesFilter)
+    val batchIds = fc.util().listStatus(metadataPath, batchFilesFilter)
       .map(_.getPath.getName.toLong)
       .sorted
       .reverse
@@ -160,9 +186,5 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends
   }
 
   override def stop(): Unit = {
-    val lockFile = new Path(metadataPath, ".lock")
-    if (fs.exists(lockFile)) {
-      fs.delete(lockFile, false)
-    }
   }
 }
