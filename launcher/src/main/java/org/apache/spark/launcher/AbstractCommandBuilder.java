@@ -144,7 +144,6 @@ abstract class AbstractCommandBuilder {
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
-      // All projects except assemblies:
       List<String> projects = Arrays.asList(
         "common/network-common",
         "common/network-shuffle",
@@ -154,16 +153,6 @@ abstract class AbstractCommandBuilder {
         "common/unsafe",
         "core",
         "examples",
-        "external/akka",
-        "external/docker-integration-tests",
-        "external/flume",
-        "external/flume-sink",
-        "external/kafka",
-        "external/kinesis-asl",
-        "external/mqtt",
-        "external/spark-ganglia-lgpl",
-        "external/twitter",
-        "external/zeromq",
         "graphx",
         "launcher",
         "mllib",
