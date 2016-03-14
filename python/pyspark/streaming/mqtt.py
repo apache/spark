@@ -38,18 +38,15 @@ class MQTTUtils(object):
         :param storageLevel:  RDD storage level.
         :return: A DStream object
         """
-        jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
-
         try:
-            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-                .loadClass("org.apache.spark.streaming.mqtt.MQTTUtilsPythonHelper")
-            helper = helperClass.newInstance()
-            jstream = helper.createStream(ssc._jssc, brokerUrl, topic, jlevel)
-        except Py4JJavaError as e:
-            if 'ClassNotFoundException' in str(e.java_exception):
+            helper = ssc._jvm.org.apache.spark.streaming.mqtt.MQTTUtilsPythonHelper()
+        except TypeError as e:
+            if str(e) == "'JavaPackage' object is not callable":
                 MQTTUtils._printErrorMsg(ssc.sparkContext)
             raise
 
+        jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
+        jstream = helper.createStream(ssc._jssc, brokerUrl, topic, jlevel)
         return DStream(jstream, ssc, UTF8Deserializer())
 
     @staticmethod
