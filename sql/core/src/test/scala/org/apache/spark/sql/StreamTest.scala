@@ -80,7 +80,7 @@ trait StreamTest extends QueryTest with Timeouts {
   trait StreamMustBeRunning
 
   /**
-   * Adds the given data to the stream.  Subsuquent check answers will block until this data has
+   * Adds the given data to the stream. Subsequent check answers will block until this data has
    * been processed.
    */
   object AddData {
@@ -109,7 +109,7 @@ trait StreamTest extends QueryTest with Timeouts {
 
   /**
    * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
-   * This operation automatically blocks untill all added data has been processed.
+   * This operation automatically blocks until all added data has been processed.
    */
   object CheckAnswer {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {

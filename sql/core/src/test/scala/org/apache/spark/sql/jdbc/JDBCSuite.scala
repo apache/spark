@@ -359,7 +359,7 @@ class JDBCSuite extends SparkFunSuite
       .collect().length === 3)
   }
 
-  test("Partioning on column that might have null values.") {
+  test("Partitioning on column that might have null values.") {
     assert(
       sqlContext.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties)
         .collect().length === 4)
@@ -372,7 +372,7 @@ class JDBCSuite extends SparkFunSuite
         .collect().length === 4)
   }
 
-  test("SELECT * on partitioned table with a nullable partioncolumn") {
+  test("SELECT * on partitioned table with a nullable partition column") {
     assert(sql("SELECT * FROM nullparts").collect().size == 4)
   }
 
