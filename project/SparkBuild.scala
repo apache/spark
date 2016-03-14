@@ -386,6 +386,10 @@ object OldDeps {
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.5",
+    // The resolvers setting for MQTT Repository is needed for mqtt-client 0.4.0
+    // because spark-streaming-mqtt 1.2.0 depends on it.
+    sbt.Keys.resolvers +=
+      "MQTT Repository" at "https://repo.eclipse.org/content/repositories/paho-releases",
     libraryDependencies := Seq(
       "spark-streaming-mqtt",
       "spark-streaming-zeromq",
