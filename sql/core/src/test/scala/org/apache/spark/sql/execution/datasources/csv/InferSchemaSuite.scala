@@ -49,7 +49,7 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(InferSchema.inferField(TimestampType, "FALSE") == BooleanType)
   }
 
-  test("Timestamp field types are inferred correctly via custom data format"){
+  test("Timestamp field types are inferred correctly via custom data format") {
     val dateFormat = new SimpleDateFormat("yyyy-mm")
     assert(
       InferSchema.inferField(TimestampType, "2015-08", dateFormat = dateFormat) == TimestampType)
