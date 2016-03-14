@@ -180,17 +180,20 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       Seconds(10), StorageLevel.MEMORY_ONLY,
       awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
 
-    val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
+    val collected = new mutable.HashSet[Int]
     stream.map { bytes => new String(bytes).toInt }.foreachRDD { rdd =>
-      collected ++= rdd.collect()
-      logInfo("Collected = " + collected.mkString(", "))
+      collected.synchronized {
+        collected ++= rdd.collect()
+        logInfo("Collected = " + collected.mkString(", "))
+      }
     }
     ssc.start()
 
     val testData = 1 to 10
     eventually(timeout(120 seconds), interval(10 second)) {
       testUtils.pushData(testData, aggregateTestData)
-      assert(collected === testData.toSet, "\nData received does not match data sent")
+      assert(collected.synchronized { collected === testData.toSet },
+        "\nData received does not match data sent")
     }
     ssc.stop(stopSparkContext = false)
   }
@@ -205,10 +208,12 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     stream shouldBe a [ReceiverInputDStream[_]]
 
-    val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
+    val collected = new mutable.HashSet[Int]
     stream.foreachRDD { rdd =>
-      collected ++= rdd.collect()
-      logInfo("Collected = " + collected.mkString(", "))
+      collected.synchronized {
+        collected ++= rdd.collect()
+        logInfo("Collected = " + collected.mkString(", "))
+      }
     }
     ssc.start()
 
@@ -216,7 +221,8 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     eventually(timeout(120 seconds), interval(10 second)) {
       testUtils.pushData(testData, aggregateTestData)
       val modData = testData.map(_ + 5)
-      assert(collected === modData.toSet, "\nData received does not match data sent")
+      assert(collected.synchronized { collected === modData.toSet },
+        "\nData received does not match data sent")
     }
     ssc.stop(stopSparkContext = false)
   }
