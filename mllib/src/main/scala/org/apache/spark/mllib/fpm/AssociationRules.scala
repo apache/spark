@@ -58,7 +58,7 @@ class AssociationRules private[fpm] (
   /**
    * Computes the association rules with confidence above [[minConfidence]].
    * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
-   * @return a [[Set[Rule[Item]]] containing the assocation rules.
+   * @return a [[Set[Rule[Item]]] containing the association rules.
    *
    */
   @Since("1.5.0")

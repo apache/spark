@@ -441,7 +441,7 @@ object SQLConf {
   // NOTE:
   //
   //  1. Instead of SQLConf, this option *must be set in Hadoop Configuration*.
-  //  2. This option can be overriden by "spark.sql.parquet.output.committer.class".
+  //  2. This option can be overridden by "spark.sql.parquet.output.committer.class".
   val OUTPUT_COMMITTER_CLASS =
     stringConf("spark.sql.sources.outputCommitterClass", isPublic = false)
 

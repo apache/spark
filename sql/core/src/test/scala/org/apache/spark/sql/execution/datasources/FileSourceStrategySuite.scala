@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.sql.execution.{DataSourceScan, PhysicalRDD}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -230,7 +230,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   /** Plans the query and calls the provided validation function with the planned partitioning. */
   def checkScan(df: DataFrame)(func: Seq[FilePartition] => Unit): Unit = {
     val fileScan = df.queryExecution.executedPlan.collect {
-      case PhysicalRDD(_, scan: FileScanRDD, _, _, _, _) => scan
+      case DataSourceScan(_, scan: FileScanRDD, _, _) => scan
     }.headOption.getOrElse {
       fail(s"No FileScan in query\n${df.queryExecution}")
     }

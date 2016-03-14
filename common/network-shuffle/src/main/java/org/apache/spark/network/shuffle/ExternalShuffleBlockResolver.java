@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
@@ -27,7 +28,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
 import org.fusesource.leveldbjni.JniDBFactory;
@@ -152,7 +152,7 @@ public class ExternalShuffleBlockResolver {
     try {
       if (db != null) {
         byte[] key = dbAppExecKey(fullId);
-        byte[] value = mapper.writeValueAsString(executorInfo).getBytes(Charsets.UTF_8);
+        byte[] value = mapper.writeValueAsString(executorInfo).getBytes(StandardCharsets.UTF_8);
         db.put(key, value);
       }
     } catch (Exception e) {
@@ -350,7 +350,7 @@ public class ExternalShuffleBlockResolver {
     // we stick a common prefix on all the keys so we can find them in the DB
     String appExecJson = mapper.writeValueAsString(appExecId);
     String key = (APP_KEY_PREFIX + ";" + appExecJson);
-    return key.getBytes(Charsets.UTF_8);
+    return key.getBytes(StandardCharsets.UTF_8);
   }
 
   private static AppExecId parseDbAppExecKey(String s) throws IOException {
@@ -368,10 +368,10 @@ public class ExternalShuffleBlockResolver {
     ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors = Maps.newConcurrentMap();
     if (db != null) {
       DBIterator itr = db.iterator();
-      itr.seek(APP_KEY_PREFIX.getBytes(Charsets.UTF_8));
+      itr.seek(APP_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
       while (itr.hasNext()) {
         Map.Entry<byte[], byte[]> e = itr.next();
-        String key = new String(e.getKey(), Charsets.UTF_8);
+        String key = new String(e.getKey(), StandardCharsets.UTF_8);
         if (!key.startsWith(APP_KEY_PREFIX)) {
           break;
         }
@@ -418,7 +418,7 @@ public class ExternalShuffleBlockResolver {
 
   public static class StoreVersion {
 
-    static final byte[] KEY = "StoreVersion".getBytes(Charsets.UTF_8);
+    static final byte[] KEY = "StoreVersion".getBytes(StandardCharsets.UTF_8);
 
     public final int major;
     public final int minor;

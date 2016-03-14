@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{PhysicalRDD, SparkPlan}
+import org.apache.spark.sql.execution.{DataSourceScan, SparkPlan}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -178,13 +178,13 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       }
 
       val scan =
-        PhysicalRDD(
+        DataSourceScan(
           l.output,
           new FileScanRDD(
             files.sqlContext,
             readFile,
             plannedPartitions),
-          "FileScan",
+          files,
           Map("format" -> files.fileFormat.toString))
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
