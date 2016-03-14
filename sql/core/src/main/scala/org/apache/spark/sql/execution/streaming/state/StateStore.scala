@@ -35,84 +35,36 @@ import org.apache.spark.util.{CompletionIterator, RpcUtils, Utils}
 
 case class StateStoreId(operatorId: Long, partitionId: Int)
 
-private[state] object StateStore extends Logging {
-
-  sealed trait StoreUpdate
-  case class ValueUpdated(key: InternalRow, value: InternalRow) extends StoreUpdate
-  case class KeyRemoved(key: InternalRow) extends StoreUpdate
-
-  private val loadedStores = new mutable.HashMap[StateStoreId, StateStore]()
-  private val managementTimer = new Timer("StateStore Timer", true)
-  @volatile private var managementTask: TimerTask = null
-
-  def get(storeId: StateStoreId, directory: String): StateStore = {
-    val store = loadedStores.synchronized {
-      startIfNeeded()
-      loadedStores.getOrElseUpdate(storeId, new StateStore(storeId, directory))
-    }
-    reportActiveInstance(storeId)
-    store
-  }
-
-  def clearAll(): Unit = loadedStores.synchronized {
-    loadedStores.clear()
-    if (managementTask != null) {
-      managementTask.cancel()
-      managementTask = null
-    }
-  }
-
-  private def remove(storeId: StateStoreId): Unit = {
-    loadedStores.remove(storeId)
-  }
-
-  private def reportActiveInstance(storeId: StateStoreId): Unit = {
-    val host = SparkEnv.get.blockManager.blockManagerId.host
-    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-    askCoordinator[Boolean](ReportActiveInstance(storeId, host, executorId))
-  }
-
-  private def verifyIfInstanceActive(storeId: StateStoreId): Boolean = {
-    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-    askCoordinator[Boolean](VerifyIfInstanceActive(storeId, executorId)).getOrElse(false)
-  }
-
-  private def askCoordinator[T: ClassTag](message: StateStoreCoordinatorMessage): Option[T] = {
-    try {
-      val env = SparkEnv.get
-      if (env != null) {
-        val coordinatorRef = RpcUtils.makeDriverRef("StateStoreCoordinator", env.conf, env.rpcEnv)
-        Some(coordinatorRef.askWithRetry[T](message))
-      } else {
-        None
-      }
-    } catch {
-      case NonFatal(e) =>
-        clearAll()
-        None
-    }
-  }
-
-  private def startIfNeeded(): Unit = loadedStores.synchronized {
-    if (managementTask == null) {
-      managementTask = new TimerTask {
-        override def run(): Unit = { manageFiles() }
-      }
-      managementTimer.schedule(managementTask, 10000, 10000)
-    }
-  }
-
-  private def manageFiles(): Unit = {
-    loadedStores.synchronized { loadedStores.values.toSeq }.foreach { store =>
-      try {
-        store.manageFiles()
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Error performing snapshot and cleaning up store ${store.id}")
-      }
-    }
-  }
-}
+/**
+ * A versioned key-value store which can be used to store streaming state data. All data is
+ * backed by a file system. All updates to the store has to be done in sets transactionally, and
+ * each set of updates increments the store's version. These versions can be used to re-execute the
+ * updates (by retries in RDD operations) on the correct version of the store, and regenerate
+ * the store version.
+ *
+ * Usage:
+ * To update the data in the state store, the following order of operations are needed.
+ *
+ * - val store = StateStore.get(operatorId, partitionId) // to get the right store
+ * - store.prepareForUpdates(newVersion) // must be called for doing any update
+ * - store.update(...)
+ * - store.remove(...)
+ * - store.commitUpdates()        // commits all the updates to made with version number
+ * - store.lastCommittedData()    // key-value data after last commit as an iterator
+ * - store.lastCommittedUpdates() // updates made in the last as an iterator
+ *
+ * Concurrency model:
+ * All updates made after prepareForUpdates() are local to the thread. So concurrent attempts
+ * from multiple threads will create multiple sets of updates that need to be committed separately.
+ *
+ * Fault-tolerance model:
+ * - Every set of updates is written to a delta file before committing.
+ * - The state store is responsible for managing, collapsing and cleaning up of delta files.
+ * - Multiple attempts to commit the same version of updates must have the same updates.
+ * - Background management of files ensures that last versions of the store is always recoverable
+ *   to ensure re-executed RDD operations re-apply updates on the correct past version of the
+ *   store.
+ */
 
 private[sql] class StateStore(
     val id: StateStoreId,
@@ -144,26 +96,35 @@ private[sql] class StateStore(
    * are made on the `version - 1` of the store data. If `version` already exists, it will
    * be overwritten when the updates are committed.
    */
-  private[state] def prepareForUpdates(version: Long): Unit = synchronized {
-    require(version >= 0, "Version cannot be less than 0")
+  private[state] def prepareForUpdates(newVersion: Long): Unit = synchronized {
+    require(newVersion >= 0, "Version cannot be less than 0")
     val newMap = new MapType()
-    if (version > 0) {
-      newMap ++= loadMap(version - 1)
+    if (newVersion > 0) {
+      newMap ++= loadMap(newVersion - 1)
     }
-    uncommittedDelta.get.prepare(version, newMap)
+    uncommittedDelta.get.prepare(newVersion, newMap)
   }
 
-  /** Update the value of a key using the value generated by the update function */
+  /**
+   * Update the value of a key using the value generated by the update function.
+   * This can be called only after prepareForUpdates() has been called in the same thread.
+   */
   def update(key: InternalRow, updateFunc: Option[InternalRow] => InternalRow): Unit = {
     uncommittedDelta.get.update(key, updateFunc)
   }
 
-  /** Remove keys that match the following condition */
+  /**
+   * Remove keys that match the following condition.
+   * This can be called only after prepareForUpdates() has been called in the current thread.
+   */
   def remove(condition: InternalRow => Boolean): Unit = {
     uncommittedDelta.get.remove(condition)
   }
 
-  /** Commit all the updates that have been made to the store. */
+  /**
+   * Commit all the updates that have been made to the store.
+   * This can be called only after prepareForUpdates() has been called in the current thread.
+   */
   def commitUpdates(): Unit = {
     uncommittedDelta.get.commit()
   }
@@ -173,14 +134,26 @@ private[sql] class StateStore(
     uncommittedDelta.get.reset()
   }
 
+  /**
+   * Iterator of store data after a set of updates have been committed.
+   * This can be called only after commitUpdates() has been called in the current thread.
+   */
   def lastCommittedData(): Iterator[InternalRow] = {
     uncommittedDelta.get.lastCommittedData()
   }
 
+  /**
+   * Iterator of the updates that have been committed.
+   * This can be called only after commitUpdates() has been called in the current thread.
+   */
   def lastCommittedUpdates(): Iterator[StoreUpdate] = {
     uncommittedDelta.get.lastCommittedUpdates()
   }
 
+
+  /**
+   * Whether there are updates made in the current thread that have not been committed yet.
+   */
   private[state] def hasUncommittedUpdates: Boolean = {
     uncommittedDelta.get.hasUncommittedUpdates
   }
@@ -193,6 +166,7 @@ private[sql] class StateStore(
 
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 
+  /** Class representing all the data related to a set of updates to the store */
   private class UncommittedUpdates {
 
     trait State
@@ -395,6 +369,7 @@ private[sql] class StateStore(
     cleanup()
   }
 
+  /** Perform a snapshot of the store to allow delta files to be consolidated */
   private def doSnapshot(): Unit = {
     try {
       val files = fetchFiles()
@@ -420,6 +395,11 @@ private[sql] class StateStore(
     }
   }
 
+  /**
+   * Clean up old snapshots and delta files that are not needed any more. It ensures that last
+   * few versions of the store can be recovered from the files, so re-executed RDD operations
+   * can re-apply updates on the past versions of the store.
+   */
   private[state] def cleanup(): Unit = {
     try {
       val files = fetchFiles()
@@ -509,6 +489,97 @@ private[sql] class StateStore(
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) {
       throw new IllegalStateException(msg)
+    }
+  }
+}
+
+
+/**
+ * Companion object to [[StateStore]] that provides helper methods to create and retrive stores
+ * by their unique ids.
+ */
+private[state] object StateStore extends Logging {
+
+  sealed trait StoreUpdate
+
+  case class ValueUpdated(key: InternalRow, value: InternalRow) extends StoreUpdate
+
+  case class KeyRemoved(key: InternalRow) extends StoreUpdate
+
+  private val loadedStores = new mutable.HashMap[StateStoreId, StateStore]()
+  private val managementTimer = new Timer("StateStore Timer", true)
+  @volatile private var managementTask: TimerTask = null
+
+  /** Get or create a store associated with the id. */
+  def get(storeId: StateStoreId, directory: String): StateStore = {
+    val store = loadedStores.synchronized {
+      startIfNeeded()
+      loadedStores.getOrElseUpdate(storeId, new StateStore(storeId, directory))
+    }
+    reportActiveInstance(storeId)
+    store
+  }
+
+  def clearAll(): Unit = loadedStores.synchronized {
+    loadedStores.clear()
+    if (managementTask != null) {
+      managementTask.cancel()
+      managementTask = null
+    }
+  }
+
+  private def remove(storeId: StateStoreId): Unit = {
+    loadedStores.remove(storeId)
+  }
+
+  private def reportActiveInstance(storeId: StateStoreId): Unit = {
+    val host = SparkEnv.get.blockManager.blockManagerId.host
+    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+    askCoordinator[Boolean](ReportActiveInstance(storeId, host, executorId))
+  }
+
+  private def verifyIfInstanceActive(storeId: StateStoreId): Boolean = {
+    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+    askCoordinator[Boolean](VerifyIfInstanceActive(storeId, executorId)).getOrElse(false)
+  }
+
+  private def askCoordinator[T: ClassTag](message: StateStoreCoordinatorMessage): Option[T] = {
+    try {
+      val env = SparkEnv.get
+      if (env != null) {
+        val coordinatorRef = RpcUtils.makeDriverRef("StateStoreCoordinator", env.conf, env.rpcEnv)
+        Some(coordinatorRef.askWithRetry[T](message))
+      } else {
+        None
+      }
+    } catch {
+      case NonFatal(e) =>
+        clearAll()
+        None
+    }
+  }
+
+  private def startIfNeeded(): Unit = loadedStores.synchronized {
+    if (managementTask == null) {
+      managementTask = new TimerTask {
+        override def run(): Unit = {
+          manageFiles()
+        }
+      }
+      managementTimer.schedule(managementTask, 10000, 10000)
+    }
+  }
+
+  private def manageFiles(): Unit = {
+    loadedStores.synchronized {
+      loadedStores.values.toSeq
+    }.foreach { store =>
+      try {
+        store.manageFiles()
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Error performing snapshot and cleaning up store ${store.id}")
+      }
     }
   }
 }
