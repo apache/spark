@@ -151,7 +151,7 @@ private[ml] object DecisionTreeModelReadWrite {
   /**
    * Info for a [[Node]]
    *
-   * @param id  Index used for tree reconstruction.  Indices follow an in-order traversal.
+   * @param id  Index used for tree reconstruction.  Indices follow a pre-order traversal.
    * @param impurityStats  Stats array.  Impurity type is stored in metadata.
    * @param gain  Gain, or arbitrary value if leaf node.
    * @param leftChild  Left child index, or arbitrary value if leaf node.
@@ -172,9 +172,9 @@ private[ml] object DecisionTreeModelReadWrite {
     /**
      * Create [[NodeData]] instances for this node and all children.
      *
-     * @param id  Current ID.  IDs are assigned via an in-order traversal.
-     * @return (sequence of nodes in in-order traversal order, largest ID in subtree)
-     *         The nodes are returned in in-order traversal (root first) so that it is easy to
+     * @param id  Current ID.  IDs are assigned via a pre-order traversal.
+     * @return (sequence of nodes in pre-order traversal order, largest ID in subtree)
+     *         The nodes are returned in pre-order traversal (root first) so that it is easy to
      *         get the ID of the subtree's root node.
      */
     def build(node: Node, id: Int): (Seq[NodeData], Int) = node match {
@@ -214,7 +214,7 @@ private[ml] object DecisionTreeModelReadWrite {
       s" but found ${nodes.head.id}")
     assert(nodes.last.id == nodes.length - 1, s"Decision Tree load failed.  Expected largest" +
       s" node ID to be ${nodes.length - 1}, but found ${nodes.last.id}")
-    // We fill `finalNodes` in reverse order.  Since node IDs are assigned via an in-order
+    // We fill `finalNodes` in reverse order.  Since node IDs are assigned via a pre-order
     // traversal, this guarantees that child nodes will be built before parent nodes.
     val finalNodes = new Array[Node](nodes.length)
     nodes.reverseIterator.foreach { case n: NodeData =>
