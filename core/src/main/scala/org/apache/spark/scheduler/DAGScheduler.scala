@@ -1148,13 +1148,13 @@ class DAGScheduler(
         null
       }
 
-    // The success case is dealt with separately below.
-    // TODO: Why post it only for failed tasks in cancelled stages? Clarify semantics here.
-    if (event.reason != Success) {
-      val attemptId = task.stageAttemptId
-      listenerBus.post(SparkListenerTaskEnd(
-        stageId, attemptId, taskType, event.reason, event.taskInfo, taskMetrics))
-    }
+    // The stage may have already finished when we get this event -- eg. maybe it was a
+    // speculative task. It is important that we send the TaskEnd event in any case, so listeners
+    // are properly notified and can chose to handle it. For instance, some listeners are
+    // doing their own accounting and if they don't get the task end event they think
+    // tasks are still running when they really aren't.
+    listenerBus.post(SparkListenerTaskEnd(
+       stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
 
     if (!stageIdToStage.contains(task.stageId)) {
       // Skip all the actions if the stage has been cancelled.
@@ -1164,8 +1164,6 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     event.reason match {
       case Success =>
-        listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
-          event.reason, event.taskInfo, taskMetrics))
         stage.pendingPartitions -= task.partitionId
         task match {
           case rt: ResultTask[_, _] =>
