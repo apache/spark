@@ -50,7 +50,6 @@ private[state] object StateStore extends Logging {
       startIfNeeded()
       loadedStores.getOrElseUpdate(storeId, new StateStore(storeId, directory))
     }
-    println(s"Got state store $storeId")
     reportActiveInstance(storeId)
     store
   }

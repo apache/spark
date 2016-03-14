@@ -47,7 +47,6 @@ class StateStoreRDD[INPUT: ClassTag, OUTPUT: ClassTag](
     var store: StateStore = null
 
     Utils.tryWithSafeFinally {
-      println(s"Getting store for version $newStoreVersion")
       store = StateStore.get(
         StateStoreId(operatorId, partition.index),
         storeDirectory
