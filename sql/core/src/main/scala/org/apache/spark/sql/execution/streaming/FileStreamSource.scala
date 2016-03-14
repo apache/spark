@@ -130,8 +130,4 @@ class FileStreamSource(
       .filterNot(_.getPath.getName.startsWith("_"))
       .map(_.getPath.toUri.toString)
   }
-
-  override def stop(): Unit = {
-    metadataLog.stop()
-  }
 }

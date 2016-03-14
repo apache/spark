@@ -30,48 +30,42 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
   test("basic") {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
-      try {
-        metadataLog.add(0, "batch0")
-        assert(metadataLog.getLatest() === Some(0 -> "batch0"))
-        assert(metadataLog.get(0) === Some("batch0"))
-        assert(metadataLog.getLatest() === Some(0 -> "batch0"))
-        assert(metadataLog.get(None, 0) === Array(0 -> "batch0"))
+      assert(metadataLog.add(0, "batch0"))
+      assert(metadataLog.getLatest() === Some(0 -> "batch0"))
+      assert(metadataLog.get(0) === Some("batch0"))
+      assert(metadataLog.getLatest() === Some(0 -> "batch0"))
+      assert(metadataLog.get(None, 0) === Array(0 -> "batch0"))
 
-        metadataLog.add(1, "batch1")
-        assert(metadataLog.get(0) === Some("batch0"))
-        assert(metadataLog.get(1) === Some("batch1"))
-        assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-        assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+      assert(metadataLog.add(1, "batch1"))
+      assert(metadataLog.get(0) === Some("batch0"))
+      assert(metadataLog.get(1) === Some("batch1"))
+      assert(metadataLog.getLatest() === Some(1 -> "batch1"))
+      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
 
-        // Adding the same batch does nothing
-        metadataLog.add(1, "batch1-duplicated")
-        assert(metadataLog.get(0) === Some("batch0"))
-        assert(metadataLog.get(1) === Some("batch1"))
-        assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-        assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
-      } finally {
-        metadataLog.stop()
-      }
+      // Adding the same batch does nothing
+      metadataLog.add(1, "batch1-duplicated")
+      assert(metadataLog.get(0) === Some("batch0"))
+      assert(metadataLog.get(1) === Some("batch1"))
+      assert(metadataLog.getLatest() === Some(1 -> "batch1"))
+      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
     }
   }
 
   test("restart") {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
-      metadataLog.add(0, "batch0")
-      metadataLog.add(1, "batch1")
+      assert(metadataLog.add(0, "batch0"))
+      assert(metadataLog.add(1, "batch1"))
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.get(1) === Some("batch1"))
       assert(metadataLog.getLatest() === Some(1 -> "batch1"))
       assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
-      metadataLog.stop()
 
       val metadataLog2 = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
       assert(metadataLog2.get(0) === Some("batch0"))
       assert(metadataLog2.get(1) === Some("batch1"))
       assert(metadataLog2.getLatest() === Some(1 -> "batch1"))
       assert(metadataLog2.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
-      metadataLog2.stop()
     }
   }
 
@@ -94,7 +88,6 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
               case e: ConcurrentModificationException =>
               // This is expected since there are multiple writers
             } finally {
-              metadataLog.stop()
               waiter.dismiss()
             }
           }

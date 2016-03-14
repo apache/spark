@@ -75,7 +75,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends
     new Path(metadataPath, batchId.toString)
   }
 
-  override def add(batchId: Long, metadata: T): Unit = {
+  override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written.
       val buffer = serializer.serialize(metadata)
@@ -189,8 +189,5 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends
       }
     }
     None
-  }
-
-  override def stop(): Unit = {
   }
 }

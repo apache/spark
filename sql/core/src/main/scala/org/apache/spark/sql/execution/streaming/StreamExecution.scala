@@ -134,7 +134,6 @@ class StreamExecution(
         logError(s"Query $name terminated with error", e)
     } finally {
       state = TERMINATED
-      sources.foreach(_.stop())
       sqlContext.streams.notifyQueryTermination(StreamExecution.this)
       postEvent(new QueryTerminated(this))
       terminationLatch.countDown()

@@ -28,10 +28,10 @@ package org.apache.spark.sql.execution.streaming
 trait MetadataLog[T] {
 
   /**
-   * Store the metadata for the specified batchId. If batchId's metadata has already been stored,
-   * this method does nothing.
+   * Store the metadata for the specified batchId and return `true` if successful. If the batchId's
+   * metadata has already been stored, this method will return `false`.
    */
-  def add(batchId: Long, metadata: T): Unit
+  def add(batchId: Long, metadata: T): Boolean
 
   /**
    * Return the metadata for the specified batchId if it's stored. Otherwise, return None.
@@ -48,9 +48,4 @@ trait MetadataLog[T] {
    * Return the latest batch Id and its metadata if exist.
    */
   def getLatest(): Option[(Long, T)]
-
-  /**
-   * Stop [[MetadataLog]]. The implementation can use this one to clean up.
-   */
-  def stop(): Unit
 }

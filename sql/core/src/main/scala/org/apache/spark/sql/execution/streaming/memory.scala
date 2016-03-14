@@ -96,8 +96,6 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def toString: String = s"MemoryStream[${output.mkString(",")}]"
-
-  override def stop(): Unit = {}
 }
 
 /**
