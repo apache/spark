@@ -19,6 +19,7 @@ package test.org.apache.spark.sql;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +66,7 @@ public class JavaDataFrameSuite {
   @Test
   public void testExecution() {
     Dataset<Row> df = context.table("testData").filter("key = 1");
-    Assert.assertEquals(1, df.select("key").collectRows()[0].get(0));
+    Assert.assertEquals(1, df.select("key").collectAsList().get(0).get(0));
   }
 
   @Test
@@ -208,8 +209,8 @@ public class JavaDataFrameSuite {
     StructType schema = createStructType(Arrays.asList(createStructField("i", IntegerType, true)));
     List<Row> rows = Arrays.asList(RowFactory.create(0));
     Dataset<Row> df = context.createDataFrame(rows, schema);
-    Row[] result = df.collectRows();
-    Assert.assertEquals(1, result.length);
+    List<Row> result = df.collectAsList();
+    Assert.assertEquals(1, result.size());
   }
 
   @Test
@@ -241,8 +242,8 @@ public class JavaDataFrameSuite {
     Assert.assertEquals("a_b", columnNames[0]);
     Assert.assertEquals("2", columnNames[1]);
     Assert.assertEquals("1", columnNames[2]);
-    Row[] rows = crosstab.collectRows();
-    Arrays.sort(rows, crosstabRowComparator);
+    List<Row> rows = crosstab.collectAsList();
+    Collections.sort(rows, crosstabRowComparator);
     Integer count = 1;
     for (Row row : rows) {
       Assert.assertEquals(row.get(0).toString(), count.toString());
@@ -257,7 +258,7 @@ public class JavaDataFrameSuite {
     Dataset<Row> df = context.table("testData2");
     String[] cols = {"a"};
     Dataset<Row> results = df.stat().freqItems(cols, 0.2);
-    Assert.assertTrue(results.collectRows()[0].getSeq(0).contains(1));
+    Assert.assertTrue(results.collectAsList().get(0).getSeq(0).contains(1));
   }
 
   @Test
@@ -278,27 +279,27 @@ public class JavaDataFrameSuite {
   public void testSampleBy() {
     Dataset<Row> df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     Dataset<Row> sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
-    Row[] actual = sampled.groupBy("key").count().orderBy("key").collectRows();
-    Assert.assertEquals(0, actual[0].getLong(0));
-    Assert.assertTrue(0 <= actual[0].getLong(1) && actual[0].getLong(1) <= 8);
-    Assert.assertEquals(1, actual[1].getLong(0));
-    Assert.assertTrue(2 <= actual[1].getLong(1) && actual[1].getLong(1) <= 13);
+    List<Row> actual = sampled.groupBy("key").count().orderBy("key").collectAsList();
+    Assert.assertEquals(0, actual.get(0).getLong(0));
+    Assert.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);
+    Assert.assertEquals(1, actual.get(1).getLong(0));
+    Assert.assertTrue(2 <= actual.get(1).getLong(1) && actual.get(1).getLong(1) <= 13);
   }
 
   @Test
   public void pivot() {
     Dataset<Row> df = context.table("courseSales");
-    Row[] actual = df.groupBy("year")
+    List<Row> actual = df.groupBy("year")
       .pivot("course", Arrays.<Object>asList("dotNET", "Java"))
-      .agg(sum("earnings")).orderBy("year").collectRows();
+      .agg(sum("earnings")).orderBy("year").collectAsList();
 
-    Assert.assertEquals(2012, actual[0].getInt(0));
-    Assert.assertEquals(15000.0, actual[0].getDouble(1), 0.01);
-    Assert.assertEquals(20000.0, actual[0].getDouble(2), 0.01);
+    Assert.assertEquals(2012, actual.get(0).getInt(0));
+    Assert.assertEquals(15000.0, actual.get(0).getDouble(1), 0.01);
+    Assert.assertEquals(20000.0, actual.get(0).getDouble(2), 0.01);
 
-    Assert.assertEquals(2013, actual[1].getInt(0));
-    Assert.assertEquals(48000.0, actual[1].getDouble(1), 0.01);
-    Assert.assertEquals(30000.0, actual[1].getDouble(2), 0.01);
+    Assert.assertEquals(2013, actual.get(1).getInt(0));
+    Assert.assertEquals(48000.0, actual.get(1).getDouble(1), 0.01);
+    Assert.assertEquals(30000.0, actual.get(1).getDouble(2), 0.01);
   }
 
   @Test

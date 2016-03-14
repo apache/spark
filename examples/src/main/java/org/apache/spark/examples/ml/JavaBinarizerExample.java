@@ -58,7 +58,7 @@ public class JavaBinarizerExample {
       .setThreshold(0.5);
     Dataset<Row> binarizedDataFrame = binarizer.transform(continuousDataFrame);
     Dataset<Row> binarizedFeatures = binarizedDataFrame.select("binarized_feature");
-    for (Row r : binarizedFeatures.collectRows()) {
+    for (Row r : binarizedFeatures.collectAsList()) {
       Double binarized_value = r.getDouble(0);
       System.out.println(binarized_value);
     }
