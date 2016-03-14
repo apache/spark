@@ -158,7 +158,7 @@ private[joins] class UniqueKeyHashedRelation(
 private[execution] object HashedRelation {
 
   def apply(localNode: LocalNode, keyGenerator: Projection): HashedRelation = {
-    apply(localNode.asIterator, keyGenerator)
+    apply(localNode.asIterator.map(_.copy()), keyGenerator)
   }
 
   def apply(
