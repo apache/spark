@@ -1359,12 +1359,14 @@ class DataFrame(object):
     # Pandas compatibility
     ##########################################################################################
 
-    groupby = copy_func(groupBy)
-    groupby.__doc__ = ":func:`groupby` is an alias for :func:`groupBy`."
-    drop_duplicates = copy_func(dropDuplicates)
-    drop_duplicates.__doc__ = ":func:`drop_duplicates` is an alias for :func:`dropDuplicates`."
-    where = copy_func(filter)
-    where.__doc__ = ":func:`where` is an alias for :func:`filter`."
+    groupby = copy_func(groupBy, sinceversion=1.4, \
+        doc=":func:`groupby` is an alias for :func:`groupBy`.")
+
+    drop_duplicates = copy_func(dropDuplicates, sinceversion=1.4, \
+        doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.")
+
+    where = copy_func(filter, sinceversion=1.3, \
+        doc=":func:`where` is an alias for :func:`filter`.")
 
 
 def _to_scala_map(sc, jm):

@@ -337,8 +337,7 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
-    astype = copy_func(cast)
-    astype.__doc__ = ":func:`astype` is an alias for :func:`cast`."
+    astype = copy_func(cast, sinceversion=1.4, doc=":func:`astype` is an alias for :func:`cast`.")
 
     @since(1.3)
     def between(self, lowerBound, upperBound):
