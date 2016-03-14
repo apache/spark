@@ -160,7 +160,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
          |charset "iso-8859-1", delimiter "þ")
       """.stripMargin.replaceAll("\n", " "))
-    //scalastyle:on
+    //scalstyle:on
 
     verifyCars(sqlContext.table("carsTable"), withHeader = true)
   }
