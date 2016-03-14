@@ -46,8 +46,11 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val store = newStore()
 
     // Verify state before starting a new set of updates
-    assert(store.getAll().isEmpty)
+    assert(store.latestIterator().isEmpty)
     assert(!store.hasUncommittedUpdates)
+    intercept[IllegalStateException] {
+      store.lastCommittedData()
+    }
     intercept[IllegalStateException] {
       store.update(null, null)
     }
@@ -58,16 +61,25 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       store.commitUpdates()
     }
 
-    // Verify states after starting updates
+    // Verify states after preparing for updates
+    intercept[IllegalArgumentException] {
+      store.prepareForUpdates(-1)
+    }
     store.prepareForUpdates(0)
     intercept[IllegalStateException] {
-      store.getAll()
+      store.lastCommittedData()
+    }
+    intercept[IllegalStateException] {
+      store.prepareForUpdates(1)
     }
     assert(store.hasUncommittedUpdates)
+
+    // Verify state after updating
     update(store, "a", 1)
     intercept[IllegalStateException] {
-      store.getAll()
+      store.lastCommittedData()
     }
+    assert(store.latestIterator().isEmpty)
 
     // Make updates and commit
     update(store, "b", 2)
@@ -116,9 +128,10 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     store.cancelUpdates()
     assert(getData(store) === Set("a" -> 1))
 
-    // Calling startUpdates again should cancel previous updates
+    // Calling prepareForUpdates again should cancel previous updates
     store.prepareForUpdates(1)
     update(store, "b", 1)
+
     store.prepareForUpdates(1)
     update(store, "c", 1)
     store.commitUpdates()
@@ -222,9 +235,9 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
   def getData(store: StateStore, version: Int = -1): Set[(String, Int)] = {
     if (version < 0) {
-      store.getAll.map(unwrapKeyValue).toSet
+      store.latestIterator.map(unwrapKeyValue).toSet
     } else {
-      store.getAll(version).map(unwrapKeyValue).toSet
+      store.iterator(version).map(unwrapKeyValue).toSet
     }
 
   }
