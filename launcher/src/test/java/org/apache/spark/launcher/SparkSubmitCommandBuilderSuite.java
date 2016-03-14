@@ -282,7 +282,6 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   private SparkSubmitCommandBuilder newCommandBuilder(List<String> args) {
     SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(args);
     builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, System.getProperty("spark.test.home"));
-    builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_ASSEMBLY, "dummy");
     return builder;
   }
 
