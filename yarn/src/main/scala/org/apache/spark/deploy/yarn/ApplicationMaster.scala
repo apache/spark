@@ -127,7 +127,7 @@ private[spark] class ApplicationMaster(
     val signalHandler = new SignalHandler() {
       override def handle(sig: Signal): Unit = {
 
-        logInfo(s"received signal: ${sig.getName}")
+        logInfo(s"RECEIVED SIGNAL ${sig.getNumber}: SIG${sig.getName}")
         finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_SIGNAL)
       }
     }
