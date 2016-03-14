@@ -288,7 +288,7 @@ class ColumnPruningSuite extends PlanTest {
           AggregateExpression(Count('b), Complete, isDistinct = false),
           WindowSpecDefinition( 'a :: Nil,
             SortOrder('b, Ascending) :: Nil,
-            UnspecifiedFrame)).as('window)).select('a, 'c, 'window)
+            UnspecifiedFrame)).as('window)).where('window > 1).select('a, 'c)
 
     val correctAnswer =
       input.select('a, 'b, 'c)
@@ -298,7 +298,7 @@ class ColumnPruningSuite extends PlanTest {
             SortOrder('b, Ascending) :: Nil,
             UnspecifiedFrame)).as('window) :: Nil,
           'a :: Nil, 'b.asc :: Nil)
-        .select('a, 'c, 'window).analyze
+        .select('a, 'c, 'window).where('window > 1).select('a, 'c).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
