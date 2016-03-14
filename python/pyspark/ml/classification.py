@@ -18,7 +18,7 @@
 import warnings
 
 from pyspark import since
-from pyspark.ml.util import keyword_only
+from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import (
@@ -38,7 +38,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel',
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
-                         HasWeightCol, MLReadable, MLWritable):
+                         HasWeightCol, MLWritable, MLReadable):
     """
     Logistic regression.
     Currently, this class only supports binary classification.
@@ -73,13 +73,14 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> lr.save(lr_path)
     >>> lr2 = LogisticRegression.load(lr_path)
     >>> lr2.getMaxIter()
-
+    5
     >>> model_path = temp_path + "/lr_model"
     >>> model.save(model_path)
     >>> model2 = LogisticRegressionModel.load(model_path)
     >>> model.coefficients[0] == model2.coefficients[0]
-
+    True
     >>> model.intercept == model2.intercept
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -594,12 +595,14 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> nb.save(nb_path)
     >>> nb2 = NaiveBayes.load(nb_path)
     >>> nb2.getSmoothing()
-
+    1.0
     >>> model_path = temp_path + "/nb_model"
     >>> model.save(model_path)
     >>> model2 = NaiveBayesModel.load(model_path)
     >>> model.pi == model2.pi
+    True
     >>> model.theta == model2.theta
+    True
 
     .. versionadded:: 1.5.0
     """
@@ -699,7 +702,7 @@ class NaiveBayesModel(JavaModel, MLWritable, MLReadable):
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed, MLWritable, MLReadable):
+                                     HasMaxIter, HasTol, HasSeed):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -729,16 +732,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     |[0.0,0.0]|       0.0|
     +---------+----------+
     ...
-    >>> mlp_path = temp_path + "/mlp"
-    >>> mlp.save(aftsr_path)
-    >>> mlp2 = MultilayerPerceptronClassifier.load(mlp_path)
-    >>> mlp2.getMaxIter()
 
-    >>> model_path = temp_path + "/mlp_model"
-    >>> model.save(model_path)
-    >>> model2 = MultilayerPerceptronClassificationModel.load(model_path)
-    >>> model.weights == model2.weights
-    >>> model.layers == model2.layers
 
     .. versionadded:: 1.6.0
     """
@@ -814,7 +808,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel, MLWritable, MLReadable):
+class MultilayerPerceptronClassificationModel(JavaModel):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
@@ -840,6 +834,7 @@ class MultilayerPerceptronClassificationModel(JavaModel, MLWritable, MLReadable)
 
 if __name__ == "__main__":
     import doctest
+    import pyspark.ml.classification
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
     globs = pyspark.ml.classification.__dict__.copy()
@@ -863,4 +858,3 @@ if __name__ == "__main__":
             pass
     if failure_count:
         exit(-1)
-
