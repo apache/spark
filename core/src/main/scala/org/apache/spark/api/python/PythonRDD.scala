@@ -19,6 +19,7 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
+import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, Collections, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -26,7 +27,6 @@ import scala.collection.mutable
 import scala.language.existentials
 import scala.util.control.NonFatal
 
-import com.google.common.base.Charsets.UTF_8
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{InputFormat, JobConf, OutputFormat}
@@ -165,7 +165,7 @@ private[spark] class PythonRunner(
               val exLength = stream.readInt()
               val obj = new Array[Byte](exLength)
               stream.readFully(obj)
-              throw new PythonException(new String(obj, UTF_8),
+              throw new PythonException(new String(obj, StandardCharsets.UTF_8),
                 writerThread.exception.getOrElse(null))
             case SpecialLengths.END_OF_DATA_SECTION =>
               // We've finished the data section of the output, but we can still
@@ -624,7 +624,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    val bytes = str.getBytes(UTF_8)
+    val bytes = str.getBytes(StandardCharsets.UTF_8)
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)
   }
@@ -817,7 +817,7 @@ private[spark] object PythonRDD extends Logging {
 
 private
 class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
-  override def call(arr: Array[Byte]) : String = new String(arr, UTF_8)
+  override def call(arr: Array[Byte]) : String = new String(arr, StandardCharsets.UTF_8)
 }
 
 /**

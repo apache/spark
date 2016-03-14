@@ -199,11 +199,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     for (String arg : cmd) {
       if (arg.startsWith("-XX:MaxPermSize=")) {
-        if (isDriver) {
-          assertEquals("-XX:MaxPermSize=256m", arg);
-        } else {
-          assertEquals("-XX:MaxPermSize=256m", arg);
-        }
+        assertEquals("-XX:MaxPermSize=256m", arg);
       }
     }
 
