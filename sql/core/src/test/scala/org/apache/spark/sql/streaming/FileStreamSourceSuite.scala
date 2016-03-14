@@ -18,8 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.{ByteArrayInputStream, File, FileNotFoundException, InputStream}
-
-import com.google.common.base.Charsets.UTF_8
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.sql.{AnalysisException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
@@ -392,7 +391,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("readBatch") {
-    def stringToStream(str: String): InputStream = new ByteArrayInputStream(str.getBytes(UTF_8))
+    def stringToStream(str: String): InputStream =
+      new ByteArrayInputStream(str.getBytes(StandardCharsets.UTF_8))
 
     // Invalid metadata
     assert(readBatch(stringToStream("")) === Nil)

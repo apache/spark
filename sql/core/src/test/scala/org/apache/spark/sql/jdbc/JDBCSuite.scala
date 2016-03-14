@@ -26,7 +26,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.sql.execution.DataSourceScan
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
@@ -210,8 +210,8 @@ class JDBCSuite extends SparkFunSuite
       // the plan only has PhysicalRDD to scan JDBCRelation.
       assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen])
       val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen]
-      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.PhysicalRDD])
-      assert(node.child.asInstanceOf[PhysicalRDD].nodeName.contains("JDBCRelation"))
+      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScan])
+      assert(node.child.asInstanceOf[DataSourceScan].nodeName.contains("JDBCRelation"))
       df
     }
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
@@ -359,7 +359,7 @@ class JDBCSuite extends SparkFunSuite
       .collect().length === 3)
   }
 
-  test("Partioning on column that might have null values.") {
+  test("Partitioning on column that might have null values.") {
     assert(
       sqlContext.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties)
         .collect().length === 4)
@@ -372,7 +372,7 @@ class JDBCSuite extends SparkFunSuite
         .collect().length === 4)
   }
 
-  test("SELECT * on partitioned table with a nullable partioncolumn") {
+  test("SELECT * on partitioned table with a nullable partition column") {
     assert(sql("SELECT * FROM nullparts").collect().size == 4)
   }
 

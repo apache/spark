@@ -48,17 +48,15 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
-private[sql] object DataFrame {
-  def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
-    val qe = sqlContext.executePlan(logicalPlan)
-    qe.assertAnalyzed()
-    new Dataset[Row](sqlContext, logicalPlan, RowEncoder(qe.analyzed.schema))
-  }
-}
-
 private[sql] object Dataset {
   def apply[T: Encoder](sqlContext: SQLContext, logicalPlan: LogicalPlan): Dataset[T] = {
     new Dataset(sqlContext, logicalPlan, implicitly[Encoder[T]])
+  }
+
+  def newDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
+    val qe = sqlContext.executePlan(logicalPlan)
+    qe.assertAnalyzed()
+    new Dataset[Row](sqlContext, logicalPlan, RowEncoder(qe.analyzed.schema))
   }
 }
 
@@ -1764,10 +1762,6 @@ class Dataset[T] private[sql](
    */
   def take(n: Int): Array[T] = head(n)
 
-  def takeRows(n: Int): Array[Row] = withTypedCallback("takeRows", limit(n)) { ds =>
-    ds.collectRows(needCallback = false)
-  }
-
   /**
    * Returns the first `n` rows in the [[DataFrame]] as a list.
    *
@@ -1792,8 +1786,6 @@ class Dataset[T] private[sql](
    */
   def collect(): Array[T] = collect(needCallback = true)
 
-  def collectRows(): Array[Row] = collectRows(needCallback = true)
-
   /**
    * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
    *
@@ -1813,18 +1805,6 @@ class Dataset[T] private[sql](
   private def collect(needCallback: Boolean): Array[T] = {
     def execute(): Array[T] = withNewExecutionId {
       queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
-    }
-
-    if (needCallback) {
-      withCallback("collect", toDF())(_ => execute())
-    } else {
-      execute()
-    }
-  }
-
-  private def collectRows(needCallback: Boolean): Array[Row] = {
-    def execute(): Array[Row] = withNewExecutionId {
-      queryExecution.executedPlan.executeCollectPublic()
     }
 
     if (needCallback) {
@@ -2129,7 +2109,7 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
   @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
-    DataFrame(sqlContext, logicalPlan)
+    Dataset.newDataFrame(sqlContext, logicalPlan)
   }
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */

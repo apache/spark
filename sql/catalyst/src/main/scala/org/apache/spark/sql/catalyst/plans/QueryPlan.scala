@@ -32,6 +32,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   protected def getRelevantConstraints(constraints: Set[Expression]): Set[Expression] = {
     constraints
+      .union(inferAdditionalConstraints(constraints))
       .union(constructIsNotNullConstraints(constraints))
       .filter(constraint =>
         constraint.references.nonEmpty && constraint.references.subsetOf(outputSet))
@@ -61,6 +62,26 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case _ =>
         Set.empty[Expression]
     }.foldLeft(Set.empty[Expression])(_ union _.toSet)
+  }
+
+  /**
+   * Infers an additional set of constraints from a given set of equality constraints.
+   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
+   * additional constraint of the form `b = 5`
+   */
+  private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    var inferredConstraints = Set.empty[Expression]
+    constraints.foreach {
+      case eq @ EqualTo(l: Attribute, r: Attribute) =>
+        inferredConstraints ++= (constraints - eq).map(_ transform {
+          case a: Attribute if a.semanticEquals(l) => r
+        })
+        inferredConstraints ++= (constraints - eq).map(_ transform {
+          case a: Attribute if a.semanticEquals(r) => l
+        })
+      case _ => // No inference
+    }
+    inferredConstraints -- constraints
   }
 
   /**
@@ -259,12 +280,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * can do better should override this function.
    */
   def sameResult(plan: PlanType): Boolean = {
-    val canonicalizedLeft = this.canonicalized
-    val canonicalizedRight = plan.canonicalized
-    canonicalizedLeft.getClass == canonicalizedRight.getClass &&
-      canonicalizedLeft.children.size == canonicalizedRight.children.size &&
-      canonicalizedLeft.cleanArgs == canonicalizedRight.cleanArgs &&
-      (canonicalizedLeft.children, canonicalizedRight.children).zipped.forall(_ sameResult _)
+    val left = this.canonicalized
+    val right = plan.canonicalized
+    left.getClass == right.getClass &&
+      left.children.size == right.children.size &&
+      left.cleanArgs == right.cleanArgs &&
+      (left.children, right.children).zipped.forall(_ sameResult _)
   }
 
   /**

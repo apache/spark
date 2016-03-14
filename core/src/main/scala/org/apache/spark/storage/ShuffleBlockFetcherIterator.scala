@@ -70,7 +70,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] var numBlocksToFetch = 0
 
   /**
-   * The number of blocks proccessed by the caller. The iterator is exhausted when
+   * The number of blocks processed by the caller. The iterator is exhausted when
    * [[numBlocksProcessed]] == [[numBlocksToFetch]].
    */
   private[this] var numBlocksProcessed = 0

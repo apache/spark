@@ -339,7 +339,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   test("exceptions") {
     // Make sure we do throw correct exception when users use a relation provider that
-    // only implements the RelationProvier or the SchemaRelationProvider.
+    // only implements the RelationProvider or the SchemaRelationProvider.
     val schemaNotAllowed = intercept[Exception] {
       sql(
         """
