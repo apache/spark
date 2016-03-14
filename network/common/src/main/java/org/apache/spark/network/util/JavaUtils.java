@@ -237,11 +237,11 @@ public class JavaUtils {
       }
 
     } catch (NumberFormatException e) {
-      String timeError = "Size must be specified as bytes (b), " +
+      String byteError = "Size must be specified as bytes (b), " +
         "kibibytes (k), mebibytes (m), gibibytes (g), tebibytes (t), or pebibytes(p). " +
         "E.g. 50b, 100k, or 250m.";
 
-      throw new NumberFormatException(timeError + "\n" + e.getMessage());
+      throw new NumberFormatException(byteError + "\n" + e.getMessage());
     }
   }
 
