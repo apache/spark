@@ -32,14 +32,12 @@ private[clustering] case class TestRow(features: Vector)
 class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   final val k = 5
+  final val initialModel = KMeansSuite.generateKMeansModel(3, k, seed = 14)
   @transient var dataset: DataFrame = _
-  @transient var initialModel: KMeansModel = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     dataset = KMeansSuite.generateKMeansData(sqlContext, 50, 3, k)
-    initialModel = KMeansSuite.generateKMeansModel(3, k)
   }
 
   test("default parameters") {
@@ -118,13 +116,13 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     val kmeans = new KMeans()
       .setK(k)
       .setSeed(1)
-      .setInitialModel(initialModel)
-    val model = kmeans.fit(dataset)
+      .setMaxIter(1000)  // Set a fairly high maxIter to make sure the model is converged.
+    val convergedModel = kmeans.fit(dataset).clusterCenters
 
     // Converged initial model should lead to only a single iteration.
-    val convergedModel = kmeans.setInitialModel(model).fit(dataset).clusterCenters
-    val oneIterationModel = kmeans.setInitialModel(model).setMaxIter(1).fit(dataset).clusterCenters
-    convergedModel.zip(oneIterationModel).foreach { case (center1, center2) =>
+    val oneMoreIterationModel =
+      kmeans.setInitialModel(convergedModel).setMaxIter(1).fit(dataset).clusterCenters
+    convergedModel.zip(oneMoreIterationModel).foreach { case (center1, center2) =>
       assert(center1 ~== center2 absTol 1E-8)
     }
   }
@@ -138,8 +136,9 @@ object KMeansSuite {
     sql.createDataFrame(rdd)
   }
 
-  def generateKMeansModel(dim: Int, k: Int): KMeansModel = {
-    val clusterCenters = (1 to k).map(i => Vectors.dense(Array.fill(dim)(Random.nextDouble)))
+  def generateKMeansModel(dim: Int, k: Int, seed: Int = 42): KMeansModel = {
+    val clusterCenters = (1 to k)
+      .map(i => Vectors.dense(Array.fill(dim)(new Random(seed).nextDouble)))
     new KMeansModel("test model", new MLlibKMeansModel(clusterCenters.toArray))
   }
 
