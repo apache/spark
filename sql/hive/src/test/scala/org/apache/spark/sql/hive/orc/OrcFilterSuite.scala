@@ -46,7 +46,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _)) =>
         maybeRelation = Some(orcRelation)
         filters
-    }.flatten.reduceLeftOption(_ && _)
+    }.flatten.distinct.reduceLeftOption(_ && _)
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
     val (_, selectedFilters) =
