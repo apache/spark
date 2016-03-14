@@ -42,6 +42,7 @@ abstract class LeafMathExpression(c: Double, name: String)
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
+  override def prettyName: String = name
 
   override def eval(input: InternalRow): Any = c
 }
@@ -59,6 +60,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
+  override def prettyName: String = name
 
   protected override def nullSafeEval(input: Any): Any = {
     f(input.asInstanceOf[Double])
@@ -70,8 +72,6 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
   }
-
-  override def sql: String = s"$name(${child.sql})"
 }
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)
@@ -112,6 +112,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
   override def toString: String = s"$name($left, $right)"
+
+  override def prettyName: String = name
 
   override def dataType: DataType = DoubleType
 
@@ -804,14 +806,14 @@ case class Round(child: Expression, scale: Expression)
       case FloatType => // if child eval to NaN or Infinity, just return it.
         if (_scale == 0) {
           s"""
-            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})){
+            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = Math.round(${ce.value});
             }"""
         } else {
           s"""
-            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})){
+            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
@@ -821,14 +823,14 @@ case class Round(child: Expression, scale: Expression)
       case DoubleType => // if child eval to NaN or Infinity, just return it.
         if (_scale == 0) {
           s"""
-            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})){
+            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = Math.round(${ce.value});
             }"""
         } else {
           s"""
-            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})){
+            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).

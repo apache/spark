@@ -20,20 +20,18 @@ package org.apache.spark.deploy.history
 import java.io.{BufferedOutputStream, ByteArrayInputStream, ByteArrayOutputStream, File,
   FileOutputStream, OutputStreamWriter}
 import java.net.URI
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.concurrent.duration._
-import scala.io.Source
 import scala.language.postfixOps
 
-import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Matchers.any
-import org.mockito.Mockito.{doReturn, mock, spy, verify, when}
+import org.mockito.Mockito.{mock, spy, verify}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
@@ -44,8 +42,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
-
-  import FsHistoryProvider._
 
   private var testDir: File = null
 
@@ -324,8 +320,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       var entry = inputStream.getNextEntry
       entry should not be null
       while (entry != null) {
-        val actual = new String(ByteStreams.toByteArray(inputStream), Charsets.UTF_8)
-        val expected = Files.toString(logs.find(_.getName == entry.getName).get, Charsets.UTF_8)
+        val actual = new String(ByteStreams.toByteArray(inputStream), StandardCharsets.UTF_8)
+        val expected =
+          Files.toString(logs.find(_.getName == entry.getName).get, StandardCharsets.UTF_8)
         actual should be (expected)
         totalEntries += 1
         entry = inputStream.getNextEntry
@@ -419,7 +416,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     if (isNewFormat) {
       EventLoggingListener.initEventLog(new FileOutputStream(file))
     }
-    val writer = new OutputStreamWriter(bstream, "UTF-8")
+    val writer = new OutputStreamWriter(bstream, StandardCharsets.UTF_8)
     Utils.tryWithSafeFinally {
       events.foreach(e => writer.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))
     } {

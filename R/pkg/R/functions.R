@@ -536,15 +536,27 @@ setMethod("factorial",
 #'
 #' Aggregate function: returns the first value in a group.
 #'
+#' The function by default returns the first values it sees. It will return the first non-missing
+#' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#'
 #' @rdname first
 #' @name first
 #' @family agg_funcs
 #' @export
-#' @examples \dontrun{first(df$c)}
+#' @examples
+#' \dontrun{
+#' first(df$c)
+#' first(df$c, TRUE)
+#' }
 setMethod("first",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "first", x@jc)
+          signature(x = "characterOrColumn"),
+          function(x, na.rm = FALSE) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              x
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "first", col, na.rm)
             column(jc)
           })
 
@@ -663,15 +675,27 @@ setMethod("kurtosis",
 #'
 #' Aggregate function: returns the last value in a group.
 #'
+#' The function by default returns the last values it sees. It will return the last non-missing
+#' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
+#'
 #' @rdname last
 #' @name last
 #' @family agg_funcs
 #' @export
-#' @examples \dontrun{last(df$c)}
+#' @examples
+#' \dontrun{
+#' last(df$c)
+#' last(df$c, TRUE)
+#' }
 setMethod("last",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "last", x@jc)
+          signature(x = "characterOrColumn"),
+          function(x, na.rm = FALSE) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              x
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "last", col, na.rm)
             column(jc)
           })
 
@@ -1962,7 +1986,7 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
 
 #' shiftLeft
 #'
-#' Shift the the given value numBits left. If the given value is a long value, this function
+#' Shift the given value numBits left. If the given value is a long value, this function
 #' will return a long value else it will return an integer value.
 #'
 #' @family math_funcs
@@ -1980,7 +2004,7 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 
 #' shiftRight
 #'
-#' Shift the the given value numBits right. If the given value is a long value, it will return
+#' Shift the given value numBits right. If the given value is a long value, it will return
 #' a long value else it will return an integer value.
 #'
 #' @family math_funcs
@@ -1998,7 +2022,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
 
 #' shiftRightUnsigned
 #'
-#' Unsigned shift the the given value numBits right. If the given value is a long value,
+#' Unsigned shift the given value numBits right. If the given value is a long value,
 #' it will return a long value else it will return an integer value.
 #'
 #' @family math_funcs

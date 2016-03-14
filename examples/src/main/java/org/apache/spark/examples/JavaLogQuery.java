@@ -28,7 +28,6 @@ import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 
 import java.io.Serializable;
-import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -109,7 +108,7 @@ public final class JavaLogQuery {
     JavaPairRDD<Tuple3<String, String, String>, Stats> extracted = dataSet.mapToPair(new PairFunction<String, Tuple3<String, String, String>, Stats>() {
       @Override
       public Tuple2<Tuple3<String, String, String>, Stats> call(String s) {
-        return new Tuple2<Tuple3<String, String, String>, Stats>(extractKey(s), extractStats(s));
+        return new Tuple2<>(extractKey(s), extractStats(s));
       }
     });
 

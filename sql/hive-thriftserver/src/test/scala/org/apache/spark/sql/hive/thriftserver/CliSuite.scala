@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.Date
 
@@ -67,7 +68,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
    *
-   * @param queriesAndExpectedAnswers one or more tupes of query + answer
+   * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
       timeout: FiniteDuration,
@@ -121,7 +122,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
     val process = new ProcessBuilder(command: _*).start()
 
-    val stdinWriter = new OutputStreamWriter(process.getOutputStream)
+    val stdinWriter = new OutputStreamWriter(process.getOutputStream, StandardCharsets.UTF_8)
     stdinWriter.write(queriesString)
     stdinWriter.flush()
     stdinWriter.close()
@@ -233,5 +234,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "select * from nonexistent_table;"
         -> "Error in query: Table not found: nonexistent_table;"
     )
+  }
+
+  test("SPARK-11624 Spark SQL CLI should set sessionState only once") {
+    runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
+      "" -> "This is a test for Spark-11624")
   }
 }

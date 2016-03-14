@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.collection.mutable
-
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 

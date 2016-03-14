@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.akka
 
+import scala.concurrent.duration._
+
 import akka.actor.{Props, SupervisorStrategy}
 
 import org.apache.spark.SparkFunSuite
@@ -60,5 +62,6 @@ class AkkaUtilsSuite extends SparkFunSuite {
 class TestActor extends ActorReceiver {
   override def receive: Receive = {
     case m: String => store(m)
+    case m => store(m, 10.seconds)
   }
 }

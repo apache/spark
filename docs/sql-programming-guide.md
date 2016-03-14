@@ -760,7 +760,7 @@ JavaRDD<String> people = sc.textFile("examples/src/main/resources/people.txt");
 String schemaString = "name age";
 
 // Generate the schema based on the string of schema
-List<StructField> fields = new ArrayList<StructField>();
+List<StructField> fields = new ArrayList<>();
 for (String fieldName: schemaString.split(" ")) {
   fields.add(DataTypes.createStructField(fieldName, DataTypes.StringType, true));
 }
@@ -1372,7 +1372,7 @@ Hive metastore Parquet table to a Spark SQL Parquet table. The reconciliation ru
 1. The reconciled schema contains exactly those fields defined in Hive metastore schema.
 
    - Any fields that only appear in the Parquet schema are dropped in the reconciled schema.
-   - Any fileds that only appear in the Hive metastore schema are added as nullable field in the
+   - Any fields that only appear in the Hive metastore schema are added as nullable field in the
      reconciled schema.
 
 #### Metadata Refreshing
@@ -1935,7 +1935,7 @@ val jdbcDF = sqlContext.read.format("jdbc").options(
 
 {% highlight java %}
 
-Map<String, String> options = new HashMap<String, String>();
+Map<String, String> options = new HashMap<>();
 options.put("url", "jdbc:postgresql:dbserver");
 options.put("dbtable", "schema.tablename");
 

@@ -19,6 +19,7 @@ package org.apache.spark.deploy
 
 import java.io._
 import java.net.URL
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ListBuffer
@@ -252,7 +253,7 @@ private object FaultToleranceTest extends App with Logging {
     val f = Future {
       try {
         val res = sc.parallelize(0 until 10).collect()
-        assertTrue(res.toList == (0 until 10))
+        assertTrue(res.toList == (0 until 10).toList)
         true
       } catch {
         case e: Exception =>
@@ -348,7 +349,8 @@ private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile
 
   def readState() {
     try {
-      val masterStream = new InputStreamReader(new URL("http://%s:8080/json".format(ip)).openStream)
+      val masterStream = new InputStreamReader(
+        new URL("http://%s:8080/json".format(ip)).openStream, StandardCharsets.UTF_8)
       val json = JsonMethods.parse(masterStream)
 
       val workers = json \ "workers"

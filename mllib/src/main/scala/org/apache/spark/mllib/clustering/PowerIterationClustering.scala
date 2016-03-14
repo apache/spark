@@ -93,7 +93,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
       val assignments = sqlContext.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[PowerIterationClustering.Assignment](assignments.schema)
 
-      val assignmentsRDD = assignments.map {
+      val assignmentsRDD = assignments.rdd.map {
         case Row(id: Long, cluster: Int) => PowerIterationClustering.Assignment(id, cluster)
       }
 

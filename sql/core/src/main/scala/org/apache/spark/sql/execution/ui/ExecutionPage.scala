@@ -114,7 +114,7 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
         {metadata}
       </div>
       {planVisualizationResources}
-      <script>$(function(){{ renderPlanViz(); }})</script>
+      <script>$(function() {{ renderPlanViz(); }})</script>
     </div>
   }
 

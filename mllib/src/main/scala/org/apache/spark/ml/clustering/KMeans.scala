@@ -19,6 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
@@ -129,12 +130,32 @@ class KMeansModel private[ml] (
   @Since("1.6.0")
   def computeCost(dataset: DataFrame): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    val data = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
+    val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
     parentModel.computeCost(data)
   }
 
   @Since("1.6.0")
   override def write: MLWriter = new KMeansModel.KMeansModelWriter(this)
+
+  private var trainingSummary: Option[KMeansSummary] = None
+
+  private[clustering] def setSummary(summary: KMeansSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  @Since("2.0.0")
+  def summary: KMeansSummary = trainingSummary match {
+    case Some(summ) => summ
+    case None =>
+      throw new SparkException(
+        s"No training summary available for the ${this.getClass.getSimpleName}",
+        new NullPointerException())
+  }
 }
 
 @Since("1.6.0")
@@ -239,7 +260,7 @@ class KMeans @Since("1.5.0") (
 
   @Since("1.5.0")
   override def fit(dataset: DataFrame): KMeansModel = {
-    val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
+    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
 
     val algo = new MLlibKMeans()
       .setK($(k))
@@ -249,8 +270,9 @@ class KMeans @Since("1.5.0") (
       .setSeed($(seed))
       .setEpsilon($(tol))
     val parentModel = algo.run(rdd)
-    val model = new KMeansModel(uid, parentModel)
-    copyValues(model)
+    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+    val summary = new KMeansSummary(model.transform(dataset), $(predictionCol), $(featuresCol))
+    model.setSummary(summary)
   }
 
   @Since("1.5.0")
@@ -266,3 +288,22 @@ object KMeans extends DefaultParamsReadable[KMeans] {
   override def load(path: String): KMeans = super.load(path)
 }
 
+class KMeansSummary private[clustering] (
+    @Since("2.0.0") @transient val predictions: DataFrame,
+    @Since("2.0.0") val predictionCol: String,
+    @Since("2.0.0") val featuresCol: String) extends Serializable {
+
+  /**
+   * Cluster centers of the transformed data.
+   */
+  @Since("2.0.0")
+  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
+
+  /**
+   * Size of each cluster.
+   */
+  @Since("2.0.0")
+  lazy val size: Array[Int] = cluster.rdd.map {
+    case Row(clusterIdx: Int) => (clusterIdx, 1)
+  }.reduceByKey(_ + _).collect().sortBy(_._1).map(_._2)
+}

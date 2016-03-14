@@ -95,7 +95,7 @@ final class QuantileDiscretizer(override val uid: String)
     val candidates = QuantileDiscretizer.findSplitCandidates(samples, $(numBuckets) - 1)
     val splits = QuantileDiscretizer.getSplits(candidates)
     val bucketizer = new Bucketizer(uid).setSplits(splits)
-    copyValues(bucketizer)
+    copyValues(bucketizer.setParent(this))
   }
 
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
@@ -103,6 +103,13 @@ final class QuantileDiscretizer(override val uid: String)
 
 @Since("1.6.0")
 object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] with Logging {
+
+  /**
+   * Minimum number of samples required for finding splits, regardless of number of bins.  If
+   * the dataset has fewer rows than this value, the entire dataset will be used.
+   */
+  private[spark] val minSamplesRequired: Int = 10000
+
   /**
    * Sampling from the given dataset to collect quantile statistics.
    */
@@ -110,8 +117,8 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
     val totalSamples = dataset.count()
     require(totalSamples > 0,
       "QuantileDiscretizer requires non-empty input dataset but was given an empty input.")
-    val requiredSamples = math.max(numBins * numBins, 10000)
-    val fraction = math.min(requiredSamples / dataset.count(), 1.0)
+    val requiredSamples = math.max(numBins * numBins, minSamplesRequired)
+    val fraction = math.min(requiredSamples.toDouble / totalSamples, 1.0)
     dataset.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt()).collect()
   }
 
@@ -159,7 +166,7 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
    * needed, and adding a default split value of 0 if no good candidates are found.
    */
   private[feature] def getSplits(candidates: Array[Double]): Array[Double] = {
-    val effectiveValues = if (candidates.size != 0) {
+    val effectiveValues = if (candidates.nonEmpty) {
       if (candidates.head == Double.NegativeInfinity
         && candidates.last == Double.PositiveInfinity) {
         candidates.drop(1).dropRight(1)
@@ -174,7 +181,7 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
       candidates
     }
 
-    if (effectiveValues.size == 0) {
+    if (effectiveValues.isEmpty) {
       Array(Double.NegativeInfinity, 0, Double.PositiveInfinity)
     } else {
       Array(Double.NegativeInfinity) ++ effectiveValues ++ Array(Double.PositiveInfinity)
