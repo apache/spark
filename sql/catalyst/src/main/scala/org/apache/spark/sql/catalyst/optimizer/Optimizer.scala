@@ -71,6 +71,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughAggregate,
       LimitPushDown,
       ColumnPruning,
+      EliminateObjects,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -315,10 +316,6 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
  *   - LeftSemiJoin
  */
 object ColumnPruning extends Rule[LogicalPlan] {
-  private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
-    output1.size == output2.size &&
-      output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
@@ -355,9 +352,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case j @ Join(left, right, LeftSemi, condition) =>
       j.copy(right = prunedChild(right, j.references))
 
-    // Project should not be pushed below Filter. See PushPredicateThroughProject
-    case p @ Project(_, _: Filter) => p
-
     // all the columns will be used to compare, so we can't prune them
     case p @ Project(_, _: SetOperation) => p
     case p @ Project(_, _: Distinct) => p
@@ -383,12 +377,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
       p.copy(child = w.copy(
         windowExpressions = w.windowExpressions.filter(p.references.contains)))
 
-    // Eliminate no-op Window
-    case w: Window if w.windowExpressions.isEmpty => w.child
-
-    // Eliminate no-op Projects
-    case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
-
     // Can't prune the columns on LeafNode
     case p @ Project(_, l: LeafNode) => p
 
@@ -410,6 +398,24 @@ object ColumnPruning extends Rule[LogicalPlan] {
     } else {
       c
     }
+}
+
+/**
+ * Eliminate no-op Project and Window.
+ *
+ * Note: this rule should be executed just after ColumnPruning.
+ */
+object EliminateObjects extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // Eliminate no-op Projects
+    case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
+    // Eliminate no-op Window
+    case w: Window if w.windowExpressions.isEmpty => w.child
+  }
+
+  private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
+    output1.size == output2.size &&
+      output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
 }
 
 /**
