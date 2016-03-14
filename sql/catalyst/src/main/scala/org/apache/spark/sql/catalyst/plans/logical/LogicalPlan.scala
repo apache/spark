@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
+import org.apache.spark.sql.types.ObjectType
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
@@ -283,8 +284,14 @@ abstract class UnaryNode extends LogicalPlan {
   override def statistics: Statistics = {
     // There should be some overhead in Row object, the size should not be zero when there is
     // no columns, this help to prevent divide-by-zero error.
-    val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
-    val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
+    val childRowSize = child.output.map(_.dataType).map {
+      case _: ObjectType => 0
+      case dt => dt.defaultSize
+    }.sum + 8
+    val outputRowSize = output.map(_.dataType).map {
+      case _: ObjectType => 0
+      case dt => dt.defaultSize
+    }.sum + 8
     // Assume there will be the same number of rows as child has.
     var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
     if (sizeInBytes == 0) {
