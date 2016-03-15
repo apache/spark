@@ -50,7 +50,7 @@ private[deploy] class DriverRunner(
   extends Logging {
 
   private var workerThread: Thread = null
-  private val process = new AtomicReference[Process](null)
+  private var process: Process = null
   private var shutdownHook: AnyRef = null
 
   // Timeout to wait for when trying to terminate a driver.
@@ -115,11 +115,11 @@ private[deploy] class DriverRunner(
 
   /** Kill driver process and wait for it to exit. */
   private def killProcess(): Unit = {
-    if (process.get != null) {
+    if (process != null) {
       logInfo("Killing process!")
-      val exitCode = Utils.terminateProcess(process.get, DRIVER_TERMINATE_TIMEOUT_MS)
+      val exitCode = Utils.terminateProcess(process, DRIVER_TERMINATE_TIMEOUT_MS)
       if (exitCode.isEmpty) {
-        logWarning("Failed to terminate process: " + process.get +
+        logWarning("Failed to terminate process: " + process +
             ". This process will likely be orphaned.")
       }
     }
@@ -223,13 +223,13 @@ private[deploy] class DriverRunner(
     while (attemptRun) {
       logInfo("Launch Command: " + command.command.mkString("\"", "\" \"", "\""))
 
-      process.set(command.start())
-      initialize(process.get)
+      process = command.start()
+      initialize(process)
 
       val processStart = clock.getTimeMillis()
 
-      exitCode = process.get.waitFor()
-      process.set(null)
+      exitCode = process.waitFor()
+      process = null
 
       // check if attempting another run
       attemptRun = supervise && exitCode != 0
