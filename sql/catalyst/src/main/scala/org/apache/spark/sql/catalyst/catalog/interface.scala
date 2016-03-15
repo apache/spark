@@ -167,6 +167,7 @@ abstract class ExternalCatalog {
  * @param name name of the function
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
  */
+// TODO: use FunctionIdentifier here.
 case class CatalogFunction(name: String, className: String)
 
 

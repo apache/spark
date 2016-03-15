@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst
 
 /**
- * Identifies a `table` in `database`.  If `database` is not defined, the current database is used.
+ * Identifies a table in a database.
+ * If `database` is not defined, the current database is used.
  */
 private[sql] case class TableIdentifier(table: String, database: Option[String]) {
   def this(table: String) = this(table, None)
@@ -32,4 +33,23 @@ private[sql] case class TableIdentifier(table: String, database: Option[String])
 
 private[sql] object TableIdentifier {
   def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)
+}
+
+/**
+ * Identifies a function in a database.
+ * If `database` is not defined, the current database is used.
+ */
+// TODO: reuse some code with TableIdentifier.
+private[sql] case class FunctionIdentifier(name: String, database: Option[String]) {
+  def this(name: String) = this(name, None)
+
+  override def toString: String = quotedString
+
+  def quotedString: String = database.map(db => s"`$db`.`$name`").getOrElse(s"`$name`")
+
+  def unquotedString: String = database.map(db => s"$db.$name").getOrElse(name)
+}
+
+private[sql] object FunctionIdentifier {
+  def apply(funcName: String): FunctionIdentifier = new FunctionIdentifier(funcName)
 }
