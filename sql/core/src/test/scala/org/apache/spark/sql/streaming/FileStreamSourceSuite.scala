@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{ByteArrayInputStream, File, FileNotFoundException, InputStream}
-import java.nio.charset.StandardCharsets
+import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.FileStreamSource._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -359,60 +357,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     Utils.deleteRecursively(tmp)
   }
 
-  test("fault tolerance with corrupted metadata file") {
-    val src = Utils.createTempDir("streaming.src")
-    assert(new File(src, "_metadata").mkdirs())
-    stringToFile(
-      new File(src, "_metadata/0"),
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
-    stringToFile(new File(src, "_metadata/1"), s"${FileStreamSource.VERSION}\nSTART\n-")
-
-    val textSource = createFileStreamSource("text", src.getCanonicalPath)
-    // the metadata file of batch is corrupted, so currentOffset should be 0
-    assert(textSource.currentOffset === LongOffset(0))
-
-    Utils.deleteRecursively(src)
-  }
-
-  test("fault tolerance with normal metadata file") {
-    val src = Utils.createTempDir("streaming.src")
-    assert(new File(src, "_metadata").mkdirs())
-    stringToFile(
-      new File(src, "_metadata/0"),
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
-    stringToFile(
-      new File(src, "_metadata/1"),
-      s"${FileStreamSource.VERSION}\nSTART\n-/x/y/z\nEND\n")
-
-    val textSource = createFileStreamSource("text", src.getCanonicalPath)
-    assert(textSource.currentOffset === LongOffset(1))
-
-    Utils.deleteRecursively(src)
-  }
-
-  test("readBatch") {
-    def stringToStream(str: String): InputStream =
-      new ByteArrayInputStream(str.getBytes(StandardCharsets.UTF_8))
-
-    // Invalid metadata
-    assert(readBatch(stringToStream("")) === Nil)
-    assert(readBatch(stringToStream(FileStreamSource.VERSION)) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\n")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEN")) === Nil)
-
-    // Valid metadata
-    assert(readBatch(stringToStream(
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEND")) === Seq("/a/b/c"))
-    assert(readBatch(stringToStream(
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEND\n")) === Seq("/a/b/c"))
-    assert(readBatch(stringToStream(
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n"))
-      === Seq("/a/b/c", "/e/f/g"))
-  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQLContext {
