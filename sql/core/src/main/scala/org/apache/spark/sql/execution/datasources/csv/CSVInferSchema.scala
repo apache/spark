@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
+import java.sql.Timestamp
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -117,7 +118,7 @@ private[csv] object CSVInferSchema {
   }
 
   def tryParseTimestamp(field: String): DataType = {
-    if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
+    if ((allCatch opt Timestamp.valueOf(field)).isDefined) {
       TimestampType
     } else {
       tryParseBoolean(field)
