@@ -4,7 +4,7 @@ title: Spark Streaming Custom Receivers
 ---
 
 Spark Streaming can receive streaming data from any arbitrary data source beyond
-the ones for which it has built-in support (that is, beyond Flume, Kafka, Kinesis, files, sockets, etc.).
+the ones for which it has built-in support (that is, beyond Kafka, Kinesis, files, sockets, etc.).
 This requires the developer to implement a *receiver* that is customized for receiving data from
 the concerned data source. This guide walks through the process of implementing a custom receiver
 and using it in a Spark Streaming application. Note that custom receivers can be implemented
