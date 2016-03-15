@@ -1797,14 +1797,14 @@ class Dataset[T] private[sql](
    */
   def collectAsList(): java.util.List[T] = withCallback("collectAsList", toDF()) { _ =>
     withNewExecutionId {
-      val values = queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
+      val values = queryExecution.executedPlan.executeCollect().map(boundTEncoder.fromRow)
       java.util.Arrays.asList(values : _*)
     }
   }
 
   private def collect(needCallback: Boolean): Array[T] = {
     def execute(): Array[T] = withNewExecutionId {
-      queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
+      queryExecution.executedPlan.executeCollect().map(boundTEncoder.fromRow)
     }
 
     if (needCallback) {
