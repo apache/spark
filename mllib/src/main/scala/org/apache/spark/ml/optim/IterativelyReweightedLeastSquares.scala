@@ -107,7 +107,7 @@ private[ml] class IterativelyReweightedLeastSquares(
 
     }
 
-    new IterativelyReweightedLeastSquaresModel(model.coefficients,
-      model.intercept, model.diagInvAtWA, iter)
+    new IterativelyReweightedLeastSquaresModel(
+      model.coefficients, model.intercept, model.diagInvAtWA, iter)
   }
 }

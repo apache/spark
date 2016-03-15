@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import breeze.stats.distributions.{Gaussian => GD, StudentsT}
+import breeze.stats.{distributions => dist}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
@@ -222,8 +222,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val trainingSummary = new GeneralizedLinearRegressionSummary(
         summaryModel.transform(dataset),
         predictionColName,
-        familyObj,
-        linkObj,
         model,
         wlsModel.diagInvAtWA.toArray,
         1)
@@ -244,8 +242,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     val trainingSummary = new GeneralizedLinearRegressionSummary(
       summaryModel.transform(dataset),
       predictionColName,
-      familyObj,
-      linkObj,
       model,
       irlsModel.diagInvAtWA.toArray,
       irlsModel.numIterations)
@@ -342,9 +338,18 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     /** Deviance of (y, mu) pair. */
     def deviance(y: Double, mu: Double, weight: Double): Double
 
-    /** Akaike's 'An Information Criterion'(AIC) value of the family. */
-    def aic(predictions: RDD[(Double, Double, Double)], deviance: Double,
-            numInstances: Double, weightSum: Double): Double
+    /**
+     * Akaike's 'An Information Criterion'(AIC) value of the family.
+     * @param predictions an RDD of (y, mu, weight) of instances
+     * @param deviance the deviance for the fitted model
+     * @param numInstances number of instances in DataFrame predictions
+     * @param weightSum weights sum of instances in DataFrame predictions
+     */
+    def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double
 
     /** Trim the fitted value so that it will be in valid range. */
     def project(mu: Double): Double = mu
@@ -379,7 +384,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def variance(mu: Double): Double = 1.0
 
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      weight * math.pow(y - mu, 2.0)
+      weight * (y - mu) * (y - mu)
     }
 
     override def aic(
@@ -431,7 +436,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         numInstances: Double,
         weightSum: Double): Double = {
       -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
-        weight * breeze.stats.distributions.Binomial(1, mu).logProbabilityOf(math.round(y).toInt)
+        weight * dist.Binomial(1, mu).logProbabilityOf(math.round(y).toInt)
       }.sum()
     }
 
@@ -463,7 +468,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def variance(mu: Double): Double = mu
 
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      2 * weight * (y * math.log(y / mu) - (y - mu))
+      2.0 * weight * (y * math.log(y / mu) - (y - mu))
     }
 
     override def aic(
@@ -472,7 +477,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         numInstances: Double,
         weightSum: Double): Double = {
       -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
-        weight * breeze.stats.distributions.Poisson(mu).logProbabilityOf(y.toInt)
+        weight * dist.Poisson(mu).logProbabilityOf(y.toInt)
       }.sum()
     }
 
@@ -501,11 +506,10 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       y
     }
 
-    override def variance(mu: Double): Double = math.pow(mu, 2.0)
+    override def variance(mu: Double): Double = mu * mu
 
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      val x = if (y == 0.0) 1.0 else y / mu
-      -2.0 * weight * (math.log(x) - (y - mu)/mu)
+      -2.0 * weight * (math.log(y / mu) - (y - mu)/mu)
     }
 
     override def aic(
@@ -515,7 +519,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         weightSum: Double): Double = {
       val disp = deviance / weightSum
       -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
-        weight * breeze.stats.distributions.Gamma(1.0 / disp, mu * disp).logPdf(y)
+        weight * dist.Gamma(1.0 / disp, mu * disp).logPdf(y)
       }.sum() + 2.0
     }
 
@@ -606,11 +610,13 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[ml] object Probit extends Link("probit") {
 
-    override def link(mu: Double): Double = GD(0.0, 1.0).icdf(mu)
+    override def link(mu: Double): Double = dist.Gaussian(0.0, 1.0).icdf(mu)
 
-    override def deriv(mu: Double): Double = 1.0 / GD(0.0, 1.0).pdf(GD(0.0, 1.0).icdf(mu))
+    override def deriv(mu: Double): Double = {
+      1.0 / dist.Gaussian(0.0, 1.0).pdf(dist.Gaussian(0.0, 1.0).icdf(mu))
+    }
 
-    override def unlink(eta: Double): Double = GD(0.0, 1.0).cdf(eta)
+    override def unlink(eta: Double): Double = dist.Gaussian(0.0, 1.0).cdf(eta)
   }
 
   private[ml] object CLogLog extends Link("cloglog") {
@@ -628,7 +634,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def deriv(mu: Double): Double = 1.0 / (2.0 * math.sqrt(mu))
 
-    override def unlink(eta: Double): Double = math.pow(eta, 2.0)
+    override def unlink(eta: Double): Double = eta * eta
   }
 }
 
@@ -667,12 +673,10 @@ class GeneralizedLinearRegressionModel private[ml] (
    * thrown if `trainingSummary == None`.
    */
   @Since("2.0.0")
-  def summary: GeneralizedLinearRegressionSummary = trainingSummary match {
-    case Some(summ) => summ
-    case None =>
-      throw new SparkException(
-        "No training summary available for this GeneralizedLinearRegressionModel",
-        new NullPointerException())
+  def summary: GeneralizedLinearRegressionSummary = trainingSummary.getOrElse {
+    throw new SparkException(
+      "No training summary available for this GeneralizedLinearRegressionModel",
+      new RuntimeException())
   }
 
   private[regression] def setSummary(summary: GeneralizedLinearRegressionSummary): this.type = {
@@ -685,8 +689,8 @@ class GeneralizedLinearRegressionModel private[ml] (
    * otherwise generates a new column and sets it as the prediction column on a new copy
    * of the current model.
    */
-  private[regression] def findSummaryModelAndPredictionCol(): (
-    GeneralizedLinearRegressionModel, String) = {
+  private[regression] def findSummaryModelAndPredictionCol()
+    : (GeneralizedLinearRegressionModel, String) = {
     $(predictionCol) match {
       case "" =>
         val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
@@ -762,8 +766,6 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
  *
  * @param predictions predictions outputted by the model's `transform` method
  * @param predictionCol field in "predictions" which gives the prediction value of each instance
- * @param family the family object of the model
- * @param link the link object of the model
  * @param model the model that should be summarized
  * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
  * @param numIterations number of iterations
@@ -773,13 +775,18 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
 class GeneralizedLinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
     val predictionCol: String,
-    val family: GeneralizedLinearRegression.Family,
-    val link: GeneralizedLinearRegression.Link,
     val model: GeneralizedLinearRegressionModel,
     private val diagInvAtWA: Array[Double],
     val numIterations: Int) extends Serializable {
 
   import GeneralizedLinearRegression._
+
+  lazy val family = Family.fromName(model.getFamily)
+  lazy val link = if (model.isDefined(model.getParam("link"))) {
+    Link.fromName(model.getLink)
+  } else {
+    family.defaultLink
+  }
 
   /** Number of instances in DataFrame predictions */
   lazy val numInstances: Long = predictions.count()
@@ -893,7 +900,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /** Akaike's "An Information Criterion"(AIC) for the fitted model */
   lazy val aic: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
-    val weightSum = predictions.select(w).agg(sum(w)).first().getAs[Double](0)
+    val weightSum = predictions.select(w).agg(sum(w)).first().getDouble(0)
     val t = predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
       case Row(label: Double, pred: Double, weight: Double) =>
         (label, pred, weight)
@@ -925,9 +932,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   lazy val pValues: Array[Double] = {
     if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
-      tValues.map { x => 2.0 * (1.0 - GD(0.0, 1.0).cdf(math.abs(x))) }
+      tValues.map { x => 2.0 * (1.0 - dist.Gaussian(0.0, 1.0).cdf(math.abs(x))) }
     } else {
-      tValues.map { x => 2.0 * (1.0 - StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
+      tValues.map { x => 2.0 * (1.0 - dist.StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
     }
   }
 }
