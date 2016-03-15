@@ -154,7 +154,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           s"${quoteIdentifier(database)}.${quoteIdentifier(table)}"
         // Parentheses is not used for persisted data source relations
         // e.g., select x.c1 from (t1) as x inner join (t1) as y on x.c1 = y.c1
-        case SubqueryAlias(_, _: LogicalRelation | _: MetastoreRelation) =>
+        case SubqueryAlias(_, _: LogicalRelation | _: MetastoreRelation, _) =>
           build(toSQL(p.child), "AS", p.alias)
         case _ =>
           build("(" + toSQL(p.child) + ")", "AS", p.alias)

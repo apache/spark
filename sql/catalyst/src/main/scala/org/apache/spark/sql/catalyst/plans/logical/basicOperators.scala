@@ -612,9 +612,16 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
-case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
-
-  override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+case class SubqueryAlias(alias: String, child: LogicalPlan, databaseName: Option[String] = None)
+  extends UnaryNode {
+  override def output: Seq[Attribute] = child.output.map(
+    _.withQualifiers {
+      if (databaseName.isDefined) {
+        databaseName.get :: alias :: Nil
+      } else {
+        alias :: Nil
+      }
+    })
 }
 
 /**

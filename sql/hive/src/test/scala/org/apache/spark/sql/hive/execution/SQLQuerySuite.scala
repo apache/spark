@@ -1776,4 +1776,57 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json, 'hello' as str) test
       """.stripMargin), Row("value1", "12", BigDecimal("3.14"), "hello"))
   }
+
+  test("test attribute with full qualifiers: db.table.field") {
+    sql("create database db1")
+    sql("use db1")
+    sqlContext.read.json(
+      sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).write.saveAsTable("db1.tmp")
+    sqlContext.sql("create table test1 as select * from db1.tmp")
+    sql("create database db2")
+    sql("use db2")
+    sqlContext.read.json(
+      sparkContext.makeRDD("""{"a": {"b": 2}}""" :: Nil)).write.saveAsTable("db2.tmp")
+    sqlContext.sql("create table test1 as select * from db2.tmp")
+
+    // Validate table created by dataframe API
+    checkAnswer(sql("SELECT db1.tmp.a.b, db2.tmp.a.b from db1.tmp, db2.tmp"), Row(1, 2) :: Nil)
+    checkAnswer(sql("SELECT tmp.a.b from db1.tmp"), Row(1) :: Nil)
+    checkAnswer(sql("SELECT a.b from db1.tmp"), Row(1) :: Nil)
+    checkAnswer(sql("SELECT a.b from tmp"), Row(2) :: Nil)
+
+    // Validate hive table
+    checkAnswer(sql("SELECT a.b from test1"), Row(2) :: Nil)
+    checkAnswer(sql("SELECT test1.a.b from db1.test1"), Row(1) :: Nil)
+    checkAnswer(sql("SELECT db1.test1.a.b from db1.test1"), Row(1) :: Nil)
+    checkAnswer(sql(
+      """SELECT db1.test1.a.b, db2.test1.a.b from db1.test1
+        |left outer join db2.test1 on (db1.test1.a = db2.test1.a)""".stripMargin),
+      Row(1, null) :: Nil)
+    // Test alias
+    checkAnswer(sql(
+      """SELECT t1.a.b, t2.a.b from db1.test1 as t1
+        |left outer join db2.test1 as t2 on (t1.a = t2.a)""".stripMargin),
+      Row(1, null) :: Nil)
+
+    // Special cases
+    sql("create database a")
+    sql("use a")
+    sqlContext.read.json(
+      sparkContext.makeRDD("""{"b": {"c": 1}}""" :: Nil)).write.saveAsTable("a.a")
+    sqlContext.read.json(
+      sparkContext.makeRDD("""{"c": 2}""" :: Nil)).write.saveAsTable("a.b")
+    checkAnswer(sql("select a.b.c from a, b"), Row(2) :: Nil)
+    checkAnswer(sql("select a.b from a, b"), Row(Row(1)) :: Nil)
+
+    sql("drop table db1.test1")
+    sql("drop table db1.tmp")
+    sql("drop table db2.test1")
+    sql("drop table db2.tmp")
+    sql("drop database db1")
+    sql("drop database db2")
+    sql("drop table a.a")
+    sql("drop table a.b")
+    sql("drop database a")
+  }
 }
