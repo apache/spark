@@ -45,7 +45,7 @@ private[sql] case class TableIdentifier(
 }
 
 private[sql] object TableIdentifier {
-  def apply(tableName: String): TableIdentifier = TableIdentifier(tableName)
+  def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)
 }
 
 
