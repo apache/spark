@@ -403,24 +403,34 @@ class DAGScheduler(
     parents.toList
   }
 
-  /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
-  private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
+  /**
+   * Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet,
+   * in topological order to ensure building ancestor stages first.
+   */
+  private def getAncestorShuffleDependencies(rdd: RDD[_]): List[ShuffleDependency[_, _, _]] = {
     val parents = new Stack[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
     def visit(r: RDD[_]) {
-      if (!visited(r)) {
+      val deps = r.dependencies.filter {
+        case shufDep: ShuffleDependency[_, _, _] =>
+          !shuffleToMapStage.contains(shufDep.shuffleId)
+        case _ => true
+      }
+      if (deps.forall(dep => visited(dep.rdd))) {
         visited += r
-        for (dep <- r.dependencies) {
+        for (dep <- deps) {
           dep match {
             case shufDep: ShuffleDependency[_, _, _] =>
-              if (!shuffleToMapStage.contains(shufDep.shuffleId)) {
-                parents.push(shufDep)
-              }
+              parents.push(shufDep)
             case _ =>
           }
+        }
+      } else {
+        waitingForVisit.push(r)
+        for (dep <- deps) {
           waitingForVisit.push(dep.rdd)
         }
       }
@@ -430,7 +440,7 @@ class DAGScheduler(
     while (waitingForVisit.nonEmpty) {
       visit(waitingForVisit.pop())
     }
-    parents
+    parents.toList.reverse
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
