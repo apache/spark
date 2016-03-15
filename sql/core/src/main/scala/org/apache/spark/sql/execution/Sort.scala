@@ -132,6 +132,10 @@ case class Sort(
         | }
       """.stripMargin.trim)
 
+    // The child could change `copyResult` to true, but we had already consumed all the rows,
+    // so `copyResult` should be reset to `false`.
+    ctx.copyResult = false
+
     val outputRow = ctx.freshName("outputRow")
     val dataSize = metricTerm(ctx, "dataSize")
     val spillSize = metricTerm(ctx, "spillSize")
