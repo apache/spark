@@ -1725,7 +1725,7 @@ private[spark] object Utils extends Logging {
   def terminateProcess(process: Process, timeoutMs: Long): Option[Int] = {
     try {
       // Java8 added a new API which will more forcibly kill the process. Use that if available.
-      val destroyMethod = process.getClass().getMethod("destroyForcibly");
+      val destroyMethod = process.getClass().getMethod("destroyForcibly")
       destroyMethod.setAccessible(true)
       destroyMethod.invoke(process)
     } catch {
