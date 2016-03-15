@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.util.VersionInfo
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.hive.client.{HiveClient, IsolatedClientLoader}
 import org.apache.spark.util.Utils
-
 
 /**
  * Test suite for the [[HiveCatalog]].
@@ -32,7 +32,8 @@ class HiveCatalogSuite extends CatalogTestCases {
   private val client: HiveClient = {
     IsolatedClientLoader.forVersion(
       hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
-      hadoopVersion = VersionInfo.getVersion).createClient()
+      hadoopVersion = VersionInfo.getVersion,
+      sparkConf = new SparkConf()).createClient()
   }
 
   protected override val tableInputFormat: String =
@@ -44,6 +45,6 @@ class HiveCatalogSuite extends CatalogTestCases {
 
   protected override def resetState(): Unit = client.reset()
 
-  protected override def newEmptyCatalog(): Catalog = new HiveCatalog(client)
+  protected override def newEmptyCatalog(): ExternalCatalog = new HiveCatalog(client)
 
 }

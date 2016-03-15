@@ -268,4 +268,9 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSqlGeneration("SELECT input_file_name()")
     checkSqlGeneration("SELECT monotonically_increasing_id()")
   }
+
+  test("subquery") {
+    checkSqlGeneration("SELECT 1 + (SELECT 2)")
+    checkSqlGeneration("SELECT 1 + (SELECT 2 + (SELECT 3 as a))")
+  }
 }

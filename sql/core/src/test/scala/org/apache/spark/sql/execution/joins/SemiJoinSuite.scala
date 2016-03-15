@@ -76,7 +76,7 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
       extractJoinParts().foreach { case (joinType, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(left.sqlContext).apply(
+            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
               LeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition)),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
@@ -92,15 +92,6 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
-      }
-    }
-
-    test(s"$testName using LeftSemiJoinBNL") {
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          LeftSemiJoinBNL(left, right, Some(condition)),
-          expectedAnswer.map(Row.fromTuple),
-          sortAnswers = true)
       }
     }
 

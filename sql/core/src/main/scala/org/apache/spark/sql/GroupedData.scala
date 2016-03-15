@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.NumericType
 
 /**
  * :: Experimental ::
- * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
+ * A set of methods for aggregations on a [[DataFrame]], created by [[Dataset.groupBy]].
  *
  * The main method is the agg function, which has multiple variants. This class also contains
  * convenience some first order statistics such as mean, sum for convenience.
@@ -55,17 +55,17 @@ class GroupedData protected[sql](
 
     groupType match {
       case GroupedData.GroupByType =>
-        DataFrame(
+        Dataset.newDataFrame(
           df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case GroupedData.RollupType =>
-        DataFrame(
+        Dataset.newDataFrame(
           df.sqlContext, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.CubeType =>
-        DataFrame(
+        Dataset.newDataFrame(
           df.sqlContext, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
-        DataFrame(
+        Dataset.newDataFrame(
           df.sqlContext, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
     }
   }

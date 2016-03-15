@@ -25,14 +25,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.attribute.Attribute;
 import org.apache.spark.ml.attribute.AttributeGroup;
 import org.apache.spark.ml.attribute.NumericAttribute;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -69,16 +68,17 @@ public class JavaVectorSlicerSuite {
       RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
     );
 
-    DataFrame dataset = jsql.createDataFrame(data, (new StructType()).add(group.toStructField()));
+    Dataset<Row> dataset =
+        jsql.createDataFrame(data, (new StructType()).add(group.toStructField()));
 
     VectorSlicer vectorSlicer = new VectorSlicer()
       .setInputCol("userFeatures").setOutputCol("features");
 
     vectorSlicer.setIndices(new int[]{1}).setNames(new String[]{"f3"});
 
-    DataFrame output = vectorSlicer.transform(dataset);
+    Dataset<Row> output = vectorSlicer.transform(dataset);
 
-    for (Row r : output.select("userFeatures", "features").take(2)) {
+    for (Row r : output.select("userFeatures", "features").takeAsList(2)) {
       Vector features = r.getAs(1);
       Assert.assertEquals(features.size(), 2);
     }

@@ -67,7 +67,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
              |
              |# Resolved query plan:
              |${df.queryExecution.analyzed.treeString}
-           """.stripMargin)
+           """.stripMargin, e)
     }
 
     try {
@@ -84,8 +84,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
            |
            |# Resolved query plan:
            |${df.queryExecution.analyzed.treeString}
-         """.stripMargin,
-        cause)
+         """.stripMargin, cause)
     }
   }
 
@@ -139,7 +138,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       """.stripMargin)
   }
 
-
   test("intersect") {
     checkHiveQl("SELECT * FROM t0 INTERSECT SELECT * FROM t0")
   }
@@ -177,6 +175,149 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT DISTINCT id FROM parquet_t0")
   }
 
+  test("rollup/cube #1") {
+    // Original logical plan:
+    //   Aggregate [(key#17L % cast(5 as bigint))#47L,grouping__id#46],
+    //             [(count(1),mode=Complete,isDistinct=false) AS cnt#43L,
+    //              (key#17L % cast(5 as bigint))#47L AS _c1#45L,
+    //              grouping__id#46 AS _c2#44]
+    //   +- Expand [List(key#17L, value#18, (key#17L % cast(5 as bigint))#47L, 0),
+    //              List(key#17L, value#18, null, 1)],
+    //             [key#17L,value#18,(key#17L % cast(5 as bigint))#47L,grouping__id#46]
+    //      +- Project [key#17L,
+    //                  value#18,
+    //                  (key#17L % cast(5 as bigint)) AS (key#17L % cast(5 as bigint))#47L]
+    //         +- Subquery t1
+    //            +- Relation[key#17L,value#18] ParquetRelation
+    // Converted SQL:
+    //   SELECT count( 1) AS `cnt`,
+    //          (`t1`.`key` % CAST(5 AS BIGINT)),
+    //          grouping_id() AS `_c2`
+    //   FROM `default`.`t1`
+    //   GROUP BY (`t1`.`key` % CAST(5 AS BIGINT))
+    //   GROUPING SETS (((`t1`.`key` % CAST(5 AS BIGINT))), ())
+    checkHiveQl(
+      "SELECT count(*) as cnt, key%5, grouping_id() FROM parquet_t1 GROUP BY key % 5 WITH ROLLUP")
+    checkHiveQl(
+      "SELECT count(*) as cnt, key%5, grouping_id() FROM parquet_t1 GROUP BY key % 5 WITH CUBE")
+  }
+
+  test("rollup/cube #2") {
+    checkHiveQl("SELECT key, value, count(value) FROM parquet_t1 GROUP BY key, value WITH ROLLUP")
+    checkHiveQl("SELECT key, value, count(value) FROM parquet_t1 GROUP BY key, value WITH CUBE")
+  }
+
+  test("rollup/cube #3") {
+    checkHiveQl(
+      "SELECT key, count(value), grouping_id() FROM parquet_t1 GROUP BY key, value WITH ROLLUP")
+    checkHiveQl(
+      "SELECT key, count(value), grouping_id() FROM parquet_t1 GROUP BY key, value WITH CUBE")
+  }
+
+  test("rollup/cube #4") {
+    checkHiveQl(
+      s"""
+        |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM parquet_t1
+        |GROUP BY key % 5, key - 5 WITH ROLLUP
+      """.stripMargin)
+    checkHiveQl(
+      s"""
+        |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM parquet_t1
+        |GROUP BY key % 5, key - 5 WITH CUBE
+      """.stripMargin)
+  }
+
+  test("rollup/cube #5") {
+    checkHiveQl(
+      s"""
+        |SELECT count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id(key % 5, key - 5) AS k3
+        |FROM (SELECT key, key%2, key - 5 FROM parquet_t1) t GROUP BY key%5, key-5
+        |WITH ROLLUP
+      """.stripMargin)
+    checkHiveQl(
+      s"""
+        |SELECT count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id(key % 5, key - 5) AS k3
+        |FROM (SELECT key, key % 2, key - 5 FROM parquet_t1) t GROUP BY key % 5, key - 5
+        |WITH CUBE
+      """.stripMargin)
+  }
+
+  test("rollup/cube #6") {
+    checkHiveQl("SELECT a, b, sum(c) FROM parquet_t2 GROUP BY ROLLUP(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(c) FROM parquet_t2 GROUP BY CUBE(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(a) FROM parquet_t2 GROUP BY ROLLUP(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(a) FROM parquet_t2 GROUP BY CUBE(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a + b, b, sum(a - b) FROM parquet_t2 GROUP BY a + b, b WITH ROLLUP")
+    checkHiveQl("SELECT a + b, b, sum(a - b) FROM parquet_t2 GROUP BY a + b, b WITH CUBE")
+  }
+
+  test("rollup/cube #7") {
+    checkHiveQl("SELECT a, b, grouping_id(a, b) FROM parquet_t2 GROUP BY cube(a, b)")
+    checkHiveQl("SELECT a, b, grouping(b) FROM parquet_t2 GROUP BY cube(a, b)")
+    checkHiveQl("SELECT a, b, grouping(a) FROM parquet_t2 GROUP BY cube(a, b)")
+  }
+
+  test("rollup/cube #8") {
+    // grouping_id() is part of another expression
+    checkHiveQl(
+      s"""
+         |SELECT hkey AS k1, value - 5 AS k2, hash(grouping_id()) AS hgid
+         |FROM (SELECT hash(key) as hkey, key as value FROM parquet_t1) t GROUP BY hkey, value-5
+         |WITH ROLLUP
+      """.stripMargin)
+    checkHiveQl(
+      s"""
+         |SELECT hkey AS k1, value - 5 AS k2, hash(grouping_id()) AS hgid
+         |FROM (SELECT hash(key) as hkey, key as value FROM parquet_t1) t GROUP BY hkey, value-5
+         |WITH CUBE
+      """.stripMargin)
+  }
+
+  test("rollup/cube #9") {
+    // self join is used as the child node of ROLLUP/CUBE with replaced quantifiers
+    checkHiveQl(
+      s"""
+         |SELECT t.key - 5, cnt, SUM(cnt)
+         |FROM (SELECT x.key, COUNT(*) as cnt
+         |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key GROUP BY x.key) t
+         |GROUP BY cnt, t.key - 5
+         |WITH ROLLUP
+      """.stripMargin)
+    checkHiveQl(
+      s"""
+         |SELECT t.key - 5, cnt, SUM(cnt)
+         |FROM (SELECT x.key, COUNT(*) as cnt
+         |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key GROUP BY x.key) t
+         |GROUP BY cnt, t.key - 5
+         |WITH CUBE
+      """.stripMargin)
+  }
+
+  test("grouping sets #1") {
+    checkHiveQl(
+      s"""
+         |SELECT count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id() AS k3
+         |FROM (SELECT key, key % 2, key - 5 FROM parquet_t1) t GROUP BY key % 5, key - 5
+         |GROUPING SETS (key % 5, key - 5)
+      """.stripMargin)
+  }
+
+  test("grouping sets #2") {
+    checkHiveQl(
+      "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (a, b) ORDER BY a, b")
+    checkHiveQl(
+      "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (a) ORDER BY a, b")
+    checkHiveQl(
+      "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (b) ORDER BY a, b")
+    checkHiveQl(
+      "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (()) ORDER BY a, b")
+    checkHiveQl(
+      s"""
+         |SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b
+         |GROUPING SETS ((), (a), (a, b)) ORDER BY a, b
+      """.stripMargin)
+  }
+
   test("cluster by") {
     checkHiveQl("SELECT id FROM parquet_t0 CLUSTER BY id")
   }
@@ -187,6 +328,10 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   test("distribute by with sort by") {
     checkHiveQl("SELECT id FROM parquet_t0 DISTRIBUTE BY id SORT BY id")
+  }
+
+  test("SPARK-13720: sort by after having") {
+    checkHiveQl("SELECT COUNT(value) FROM parquet_t1 GROUP BY key HAVING MAX(key) > 0 SORT BY key")
   }
 
   test("distinct aggregation") {
@@ -224,9 +369,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT * FROM parquet_t0 TABLESAMPLE(0.1 PERCENT) WHERE 1=0")
   }
 
-  // TODO Enable this
-  // Query plans transformed by DistinctAggregationRewriter are not recognized yet
-  ignore("multi-distinct columns") {
+  test("multi-distinct columns") {
     checkHiveQl("SELECT a, COUNT(DISTINCT b), COUNT(DISTINCT c), SUM(d) FROM parquet_t2 GROUP BY a")
   }
 
@@ -301,5 +444,110 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       """.stripMargin,
       "f1", "b[0].f1", "f1", "c[foo]", "d[0]"
     )
+  }
+
+  test("window basic") {
+    checkHiveQl("SELECT MAX(value) OVER (PARTITION BY key % 3) FROM parquet_t1")
+    checkHiveQl(
+      """
+         |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+         |FROM parquet_t1 ORDER BY key
+      """.stripMargin)
+    checkHiveQl(
+      """
+         |SELECT value, MAX(key + 1) OVER (PARTITION BY key % 5 ORDER BY key % 7) AS max
+         |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("multiple window functions in one expression") {
+    checkHiveQl(
+      """
+        |SELECT
+        |  MAX(key) OVER (ORDER BY key DESC, value) / MIN(key) OVER (PARTITION BY key % 3)
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("regular expressions and window functions in one expression") {
+    checkHiveQl("SELECT MAX(key) OVER (PARTITION BY key % 3) + key FROM parquet_t1")
+  }
+
+  test("aggregate functions and window functions in one expression") {
+    checkHiveQl("SELECT MAX(c) + COUNT(a) OVER () FROM parquet_t2 GROUP BY a, b")
+  }
+
+  test("window with different window specification") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |DENSE_RANK() OVER (ORDER BY key, value) AS dr,
+         |MAX(value) OVER (PARTITION BY key ORDER BY key ASC) AS max
+         |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("window with the same window specification with aggregate + having") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key DESC) AS max
+         |FROM parquet_t1 GROUP BY key, value HAVING key > 5
+      """.stripMargin)
+  }
+
+  test("window with the same window specification with aggregate functions") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key) AS max
+         |FROM parquet_t1 GROUP BY key, value
+      """.stripMargin)
+  }
+
+  test("window with the same window specification with aggregate") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |DENSE_RANK() OVER (DISTRIBUTE BY key SORT BY key, value) AS dr,
+         |COUNT(key)
+         |FROM parquet_t1 GROUP BY key, value
+      """.stripMargin)
+  }
+
+  test("window with the same window specification without aggregate and filter") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |DENSE_RANK() OVER (DISTRIBUTE BY key SORT BY key, value) AS dr,
+         |COUNT(key) OVER(DISTRIBUTE BY key SORT BY key, value) AS ca
+         |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("window clause") {
+    checkHiveQl(
+      """
+         |SELECT key, MAX(value) OVER w1 AS MAX, MIN(value) OVER w2 AS min
+         |FROM parquet_t1
+         |WINDOW w1 AS (PARTITION BY key % 5 ORDER BY key), w2 AS (PARTITION BY key % 6)
+      """.stripMargin)
+  }
+
+  test("special window functions") {
+    checkHiveQl(
+      """
+        |SELECT
+        |  RANK() OVER w,
+        |  PERCENT_RANK() OVER w,
+        |  DENSE_RANK() OVER w,
+        |  ROW_NUMBER() OVER w,
+        |  NTILE(10) OVER w,
+        |  CUME_DIST() OVER w,
+        |  LAG(key, 2) OVER w,
+        |  LEAD(key, 2) OVER w
+        |FROM parquet_t1
+        |WINDOW w AS (PARTITION BY key % 5 ORDER BY key)
+      """.stripMargin)
   }
 }

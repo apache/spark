@@ -52,7 +52,8 @@ object LDASuite {
     "checkpointInterval" -> 30,
     "learningOffset" -> 1023.0,
     "learningDecay" -> 0.52,
-    "subsamplingRate" -> 0.051
+    "subsamplingRate" -> 0.051,
+    "docConcentration" -> Array(2.0)
   )
 }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io._
+import java.nio.charset.StandardCharsets
 import java.util.Properties
 import javax.annotation.Nullable
 
@@ -113,7 +114,7 @@ case class ScriptTransformation(
         ioschema.initOutputSerDe(output).getOrElse((null, null))
       }
 
-      val reader = new BufferedReader(new InputStreamReader(inputStream))
+      val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
       val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
         var curLine: String = null
         val scriptOutputStream = new DataInputStream(inputStream)

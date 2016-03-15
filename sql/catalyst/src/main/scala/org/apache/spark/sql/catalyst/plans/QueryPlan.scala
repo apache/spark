@@ -18,11 +18,10 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
-abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
+abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
   def output: Seq[Attribute]
@@ -33,6 +32,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    */
   protected def getRelevantConstraints(constraints: Set[Expression]): Set[Expression] = {
     constraints
+      .union(inferAdditionalConstraints(constraints))
       .union(constructIsNotNullConstraints(constraints))
       .filter(constraint =>
         constraint.references.nonEmpty && constraint.references.subsetOf(outputSet))
@@ -57,9 +57,31 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
         Set(IsNotNull(l), IsNotNull(r))
       case LessThanOrEqual(l, r) =>
         Set(IsNotNull(l), IsNotNull(r))
+      case Not(EqualTo(l, r)) =>
+        Set(IsNotNull(l), IsNotNull(r))
       case _ =>
         Set.empty[Expression]
     }.foldLeft(Set.empty[Expression])(_ union _.toSet)
+  }
+
+  /**
+   * Infers an additional set of constraints from a given set of equality constraints.
+   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
+   * additional constraint of the form `b = 5`
+   */
+  private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    var inferredConstraints = Set.empty[Expression]
+    constraints.foreach {
+      case eq @ EqualTo(l: Attribute, r: Attribute) =>
+        inferredConstraints ++= (constraints - eq).map(_ transform {
+          case a: Attribute if a.semanticEquals(l) => r
+        })
+        inferredConstraints ++= (constraints - eq).map(_ transform {
+          case a: Attribute if a.semanticEquals(r) => l
+        })
+      case _ => // No inference
+    }
+    inferredConstraints -- constraints
   }
 
   /**
@@ -195,7 +217,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   }
 
   /** Returns all of the expressions present in this query plan operator. */
-  def expressions: Seq[Expression] = {
+  final def expressions: Seq[Expression] = {
     // Recursively find all expressions from a traversable.
     def seqToExpressions(seq: Traversable[Any]): Traversable[Expression] = seq.flatMap {
       case e: Expression => e :: Nil
@@ -230,8 +252,73 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
   override def simpleString: String = statePrefix + super.simpleString
 
-  override def treeChildren: Seq[PlanType] = {
-    val subqueries = expressions.flatMap(_.collect {case e: SubqueryExpression => e})
-    children ++ subqueries.map(e => e.plan.asInstanceOf[PlanType])
+  /**
+   * All the subqueries of current plan.
+   */
+  def subqueries: Seq[PlanType] = {
+    expressions.flatMap(_.collect {case e: SubqueryExpression => e.plan.asInstanceOf[PlanType]})
+  }
+
+  override def innerChildren: Seq[PlanType] = subqueries
+
+  /**
+   * Canonicalized copy of this query plan.
+   */
+  protected lazy val canonicalized: PlanType = this
+
+  /**
+   * Returns true when the given query plan will return the same results as this query plan.
+   *
+   * Since its likely undecidable to generally determine if two given plans will produce the same
+   * results, it is okay for this function to return false, even if the results are actually
+   * the same.  Such behavior will not affect correctness, only the application of performance
+   * enhancements like caching.  However, it is not acceptable to return true if the results could
+   * possibly be different.
+   *
+   * By default this function performs a modified version of equality that is tolerant of cosmetic
+   * differences like attribute naming and or expression id differences. Operators that
+   * can do better should override this function.
+   */
+  def sameResult(plan: PlanType): Boolean = {
+    val left = this.canonicalized
+    val right = plan.canonicalized
+    left.getClass == right.getClass &&
+      left.children.size == right.children.size &&
+      left.cleanArgs == right.cleanArgs &&
+      (left.children, right.children).zipped.forall(_ sameResult _)
+  }
+
+  /**
+   * All the attributes that are used for this plan.
+   */
+  lazy val allAttributes: Seq[Attribute] = children.flatMap(_.output)
+
+  private def cleanExpression(e: Expression): Expression = e match {
+    case a: Alias =>
+      // As the root of the expression, Alias will always take an arbitrary exprId, we need
+      // to erase that for equality testing.
+      val cleanedExprId =
+        Alias(a.child, a.name)(ExprId(-1), a.qualifiers, isGenerated = a.isGenerated)
+      BindReferences.bindReference(cleanedExprId, allAttributes, allowFailures = true)
+    case other =>
+      BindReferences.bindReference(other, allAttributes, allowFailures = true)
+  }
+
+  /** Args that have cleaned such that differences in expression id should not affect equality */
+  protected lazy val cleanArgs: Seq[Any] = {
+    def cleanArg(arg: Any): Any = arg match {
+      case e: Expression => cleanExpression(e).canonicalized
+      case other => other
+    }
+
+    productIterator.map {
+      // Children are checked using sameResult above.
+      case tn: TreeNode[_] if containsChild(tn) => null
+      case e: Expression => cleanArg(e)
+      case s: Option[_] => s.map(cleanArg)
+      case s: Seq[_] => s.map(cleanArg)
+      case m: Map[_, _] => m.mapValues(cleanArg)
+      case other => other
+    }.toSeq
   }
 }

@@ -44,6 +44,8 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
@@ -63,7 +65,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   override def isYarnMode(): Boolean = { true }
 
   // Return an appropriate (subclass) of Configuration. Creating a config initializes some Hadoop
-  // subsystems. Always create a new config, dont reuse yarnConf.
+  // subsystems. Always create a new config, don't reuse yarnConf.
   override def newConfiguration(conf: SparkConf): Configuration =
     new YarnConfiguration(super.newConfiguration(conf))
 
@@ -97,10 +99,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
    * Get the list of namenodes the user may access.
    */
   def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
-    sparkConf.get("spark.yarn.access.namenodes", "")
-      .split(",")
-      .map(_.trim())
-      .filter(!_.isEmpty)
+    sparkConf.get(NAMENODES_TO_ACCESS)
       .map(new Path(_))
       .toSet
   }
@@ -218,7 +217,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     // the hive configuration class is a subclass of Hadoop Configuration, so can be cast down
     // to a Configuration and used without reflection
     val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
-    // using the (Configuration, Class) constructor allows the current configuratin to be included
+    // using the (Configuration, Class) constructor allows the current configuration to be included
     // in the hive config.
     val ctor = hiveConfClass.getDeclaredConstructor(classOf[Configuration],
       classOf[Object].getClass)
@@ -335,7 +334,7 @@ object YarnSparkHadoopUtil {
   // the common cases. Memory overhead tends to grow with container size.
 
   val MEMORY_OVERHEAD_FACTOR = 0.10
-  val MEMORY_OVERHEAD_MIN = 384
+  val MEMORY_OVERHEAD_MIN = 384L
 
   val ANY_HOST = "*"
 
@@ -503,16 +502,15 @@ object YarnSparkHadoopUtil {
   /**
    * Getting the initial target number of executors depends on whether dynamic allocation is
    * enabled.
-   * If not using dynamic allocation it gets the number of executors reqeusted by the user.
+   * If not using dynamic allocation it gets the number of executors requested by the user.
    */
   def getInitialTargetExecutorNumber(
       conf: SparkConf,
       numExecutors: Int = DEFAULT_NUMBER_EXECUTORS): Int = {
     if (Utils.isDynamicAllocationEnabled(conf)) {
-      val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
-      val initialNumExecutors =
-        conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
-      val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", Int.MaxValue)
+      val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
+      val initialNumExecutors = conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS)
+      val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
       require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
         s"initial executor number $initialNumExecutors must between min executor number" +
           s"$minNumExecutors and max executor number $maxNumExecutors")
@@ -522,7 +520,7 @@ object YarnSparkHadoopUtil {
       val targetNumExecutors =
         sys.env.get("SPARK_EXECUTOR_INSTANCES").map(_.toInt).getOrElse(numExecutors)
       // System property can override environment variable.
-      conf.getInt("spark.executor.instances", targetNumExecutors)
+      conf.get(EXECUTOR_INSTANCES).getOrElse(targetNumExecutors)
     }
   }
 }

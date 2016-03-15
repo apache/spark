@@ -43,6 +43,7 @@ class JoinOptimizationSuite extends PlanTest {
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
         ColumnPruning,
+        EliminateOperators,
         CollapseProject) :: Nil
 
   }
@@ -105,11 +106,10 @@ class JoinOptimizationSuite extends PlanTest {
     val optimized = Optimize.execute(query)
 
     val expected =
-      Project(Seq($"x.key", $"y.key"),
-        Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input)),
-          BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
-          Inner, None)).analyze
+      Join(
+        Project(Seq($"x.key"), SubqueryAlias("x", input)),
+        BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
+        Inner, None).analyze
 
     comparePlans(optimized, expected)
 

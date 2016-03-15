@@ -70,7 +70,7 @@ class ExpressionSetSuite extends SparkFunSuite {
   // Not commutative
   setTest(2, aUpper - bUpper, bUpper - aUpper)
 
-  // Reversable
+  // Reversible
   setTest(1, aUpper > bUpper, bUpper < aUpper)
   setTest(1, aUpper >= bUpper, bUpper <= aUpper)
 

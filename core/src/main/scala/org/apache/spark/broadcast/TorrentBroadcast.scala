@@ -74,7 +74,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     } else {
       None
     }
-    // Note: use getSizeAsKb (not bytes) to maintain compatiblity if no units are provided
+    // Note: use getSizeAsKb (not bytes) to maintain compatibility if no units are provided
     blockSize = conf.getSizeAsKb("spark.broadcast.blockSize", "4m").toInt * 1024
   }
   setConf(SparkEnv.get.conf)
@@ -99,18 +99,14 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     // Store a copy of the broadcast variable in the driver so that tasks run on the driver
     // do not create a duplicate copy of the broadcast variable's value.
     val blockManager = SparkEnv.get.blockManager
-    if (blockManager.putSingle(broadcastId, value, MEMORY_AND_DISK, tellMaster = false)) {
-      blockManager.releaseLock(broadcastId)
-    } else {
+    if (!blockManager.putSingle(broadcastId, value, MEMORY_AND_DISK, tellMaster = false)) {
       throw new SparkException(s"Failed to store $broadcastId in BlockManager")
     }
     val blocks =
       TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
     blocks.zipWithIndex.foreach { case (block, i) =>
       val pieceId = BroadcastBlockId(id, "piece" + i)
-      if (blockManager.putBytes(pieceId, block, MEMORY_AND_DISK_SER, tellMaster = true)) {
-        blockManager.releaseLock(pieceId)
-      } else {
+      if (!blockManager.putBytes(pieceId, block, MEMORY_AND_DISK_SER, tellMaster = true)) {
         throw new SparkException(s"Failed to store $pieceId of $broadcastId in local BlockManager")
       }
     }
@@ -130,22 +126,24 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       // First try getLocalBytes because there is a chance that previous attempts to fetch the
       // broadcast blocks have already fetched some of the blocks. In that case, some blocks
       // would be available locally (on this executor).
-      def getLocal: Option[ByteBuffer] = bm.getLocalBytes(pieceId)
-      def getRemote: Option[ByteBuffer] = bm.getRemoteBytes(pieceId).map { block =>
-        // If we found the block from remote executors/driver's BlockManager, put the block
-        // in this executor's BlockManager.
-        if (!bm.putBytes(pieceId, block, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)) {
-          throw new SparkException(
-            s"Failed to store $pieceId of $broadcastId in local BlockManager")
-        }
-        block
+      bm.getLocalBytes(pieceId) match {
+        case Some(block) =>
+          blocks(pid) = block
+          releaseLock(pieceId)
+        case None =>
+          bm.getRemoteBytes(pieceId) match {
+            case Some(b) =>
+              // We found the block from remote executors/driver's BlockManager, so put the block
+              // in this executor's BlockManager.
+              if (!bm.putBytes(pieceId, b, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)) {
+                throw new SparkException(
+                  s"Failed to store $pieceId of $broadcastId in local BlockManager")
+              }
+              blocks(pid) = b
+            case None =>
+              throw new SparkException(s"Failed to get $pieceId of $broadcastId")
+          }
       }
-      val block: ByteBuffer = getLocal.orElse(getRemote).getOrElse(
-        throw new SparkException(s"Failed to get $pieceId of $broadcastId"))
-      // At this point we are guaranteed to hold a read lock, since we either got the block locally
-      // or stored the remotely-fetched block and automatically downgraded the write lock.
-      blocks(pid) = block
-      releaseLock(pieceId)
     }
     blocks
   }
@@ -175,7 +173,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     TorrentBroadcast.synchronized {
       setConf(SparkEnv.get.conf)
       val blockManager = SparkEnv.get.blockManager
-      blockManager.getLocal(broadcastId).map(_.data.next()) match {
+      blockManager.getLocalValues(broadcastId).map(_.data.next()) match {
         case Some(x) =>
           releaseLock(broadcastId)
           x.asInstanceOf[T]
@@ -191,9 +189,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
           // Store the merged copy in BlockManager so other tasks on this executor don't
           // need to re-fetch it.
           val storageLevel = StorageLevel.MEMORY_AND_DISK
-          if (blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
-            releaseLock(broadcastId)
-          } else {
+          if (!blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
             throw new SparkException(s"Failed to store $broadcastId in BlockManager")
           }
           obj
