@@ -111,9 +111,9 @@ private[csv] object CSVInferSchema {
   private def tryParseDouble(field: String): DataType = {
     val doubleTry = allCatch opt field.toDouble
     // If `doubleTry` is successful, then it should be successful
-    // for casting to `BigDecimal`. So, it does not handle the case that it fails
+    // to cast this to `BigDecimal`. So, it does not handle the case that it fails
     // to cast to `BigDecimal` below. Also, it is okay to make this `String`
-    // and then make a `BigDecimal`. Otherwise, this leads to precision loss.
+    // and then make it a `BigDecimal`. Otherwise, this leads to precision loss.
     // For example,
     //   Option(new BigDecimal("1.23112331231231231231E13")) becomes Some(12311233123123.1231231)
     //   but Option(new BigDecimal(1.23112331231231231231E13)) becomes
