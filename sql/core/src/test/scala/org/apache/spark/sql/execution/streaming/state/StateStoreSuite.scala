@@ -262,6 +262,35 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(getDataFromFiles(provider, 19) === Set("a" -> 19))
   }
 
+  test("StateStore.get") {
+    val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    val storeId = StateStoreId(0, 0)
+
+    // Verify that trying to get incorrect versions throw errors
+    intercept[IllegalArgumentException] {
+      StateStore.get(storeId, dir, -1)
+    }
+    intercept[IllegalStateException] {
+      StateStore.get(storeId, dir, 1)
+    }
+
+    // Increase version of the store
+    val store0 = StateStore.get(storeId, dir, 0)
+    assert(store0.version === 0)
+    update(store0, "a", 1)
+    store0.commit()
+
+    assert(StateStore.get(storeId, dir, 1).version == 1)
+    assert(StateStore.get(storeId, dir, 0).version == 0)
+
+    // Verify that you can remove the store and still reload and use it
+    StateStore.remove(storeId)
+    val store1 = StateStore.get(storeId, dir, 1)
+    update(store1, "a", 2)
+    assert(store1.commit() === 2)
+    assert(unwrapToSet(store1.iterator()) === Set("a" -> 2))
+  }
+
   def getDataFromFiles(
       provider: HDFSBackedStateStoreProvider,
     version: Int = -1): Set[(String, Int)] = {

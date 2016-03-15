@@ -112,6 +112,7 @@ private[state] object StateStore extends Logging {
 
   /** Get or create a store associated with the id. */
   def get(storeId: StateStoreId, directory: String, version: Long): StateStore = {
+    require(version >= 0)
     val storeProvider = loadedProviders.synchronized {
       startIfNeeded()
       val provider = loadedProviders.getOrElseUpdate(
@@ -120,6 +121,10 @@ private[state] object StateStore extends Logging {
       provider
     }
     storeProvider.getStore(version)
+  }
+
+  def remove(storeId: StateStoreId): Unit = loadedProviders.synchronized {
+    loadedProviders.remove(storeId)
   }
 
   /** Unload and stop all state store provider */
@@ -137,7 +142,14 @@ private[state] object StateStore extends Logging {
       managementTask = new TimerTask {
         override def run(): Unit = { manageAll() }
       }
-      val periodMs = MANAGEMENT_TASK_INTERVAL_SECS * 1000
+      val periodMs = Option(SparkEnv.get).map(_.conf) match {
+        case Some(conf) =>
+          conf.getTimeAsMs(
+            "spark.sql.streaming.stateStore.managementInterval",
+            s"${MANAGEMENT_TASK_INTERVAL_SECS}s")
+        case None =>
+          MANAGEMENT_TASK_INTERVAL_SECS * 1000
+      }
       managementTimer.schedule(managementTask, periodMs, periodMs)
       logInfo("StateStore started")
     }
@@ -163,28 +175,25 @@ private[state] object StateStore extends Logging {
     }
   }
 
-  private def remove(storeId: StateStoreId): Unit = loadedProviders.synchronized {
-    loadedProviders.remove(storeId)
-  }
-
   private def reportActiveInstance(storeId: StateStoreId): Unit = {
-    val host = SparkEnv.get.blockManager.blockManagerId.host
-    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-    askCoordinator(ReportActiveInstance(storeId, host, executorId))
+    try {
+      val host = SparkEnv.get.blockManager.blockManagerId.host
+      val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+      StateStoreCoordinator.ask(ReportActiveInstance(storeId, host, executorId))
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Error reporting active instance of $storeId")
+    }
   }
 
   private def verifyIfInstanceActive(storeId: StateStoreId): Boolean = {
-    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-    askCoordinator(VerifyIfInstanceActive(storeId, executorId)).getOrElse(false)
-  }
-
-  private def askCoordinator(message: StateStoreCoordinatorMessage): Option[Boolean] = {
     try {
-      StateStoreCoordinator.ask(message)
+      val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+      StateStoreCoordinator.ask(VerifyIfInstanceActive(storeId, executorId)).getOrElse(false)
     } catch {
       case NonFatal(e) =>
-        logWarning("Error communicating")
-        None
+        logWarning(s"Error verifying active instance of $storeId")
+        false
     }
   }
 }

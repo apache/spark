@@ -61,7 +61,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       assert(coordinator.verifyIfInstanceActive(id2, exec) === true)
       assert(coordinator.verifyIfInstanceActive(id3, exec) === true)
 
-      coordinator.makeInstancesInactive(Set(0))
+      coordinator.deactivateInstances(Set(0))
 
       assert(coordinator.verifyIfInstanceActive(id1, exec) === false)
       assert(coordinator.verifyIfInstanceActive(id2, exec) === true)
@@ -73,7 +73,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           Some(ExecutorCacheTaskLocation(host, exec).toString))
       assert(coordinator.getLocation(id3) === None)
 
-      coordinator.makeInstancesInactive(Set(1))
+      coordinator.deactivateInstances(Set(1))
       assert(coordinator.verifyIfInstanceActive(id2, exec) === false)
       assert(coordinator.getLocation(id2) === None)
     }

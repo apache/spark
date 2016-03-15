@@ -18,32 +18,35 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import scala.collection.mutable
-import scala.reflect.ClassTag
 
-import org.apache.spark.util.RpcUtils
 import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.util.RpcUtils
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinator.StateStoreCoordinatorEndpoint
 
+/** Trait representing all messages to [[StateStoreCoordinator]] */
 private sealed trait StateStoreCoordinatorMessage extends Serializable
+
 private case class ReportActiveInstance(storeId: StateStoreId, host: String, executorId: String)
   extends StateStoreCoordinatorMessage
 private case class VerifyIfInstanceActive(storeId: StateStoreId, executorId: String)
   extends StateStoreCoordinatorMessage
 private object StopCoordinator extends StateStoreCoordinatorMessage
 
-
+/** Class for coordinating instances of [[StateStore]]s loaded in the cluster */
 class StateStoreCoordinator(rpcEnv: RpcEnv) {
   private val coordinatorRef = rpcEnv.setupEndpoint(
     StateStoreCoordinator.endpointName, new StateStoreCoordinatorEndpoint(rpcEnv, this))
   private val instances = new mutable.HashMap[StateStoreId, ExecutorCacheTaskLocation]
 
+  /** Report active instance of a state store in an executor */
   def reportActiveInstance(storeId: StateStoreId, host: String, executorId: String): Boolean = {
     instances.synchronized { instances.put(storeId, ExecutorCacheTaskLocation(host, executorId)) }
     true
   }
 
+  /** Verify whether the given executor has the active instance of a state store */
   def verifyIfInstanceActive(storeId: StateStoreId, executorId: String): Boolean = {
     instances.synchronized {
       instances.get(storeId) match {
@@ -53,11 +56,13 @@ class StateStoreCoordinator(rpcEnv: RpcEnv) {
     }
   }
 
+  /** Get the location of the state store */
   def getLocation(storeId: StateStoreId): Option[String] = {
     instances.synchronized { instances.get(storeId).map(_.toString) }
   }
 
-  def makeInstancesInactive(operatorIds: Set[Long]): Unit = {
+  /** Deactivate instances related to a set of operator */
+  def deactivateInstances(operatorIds: Set[Long]): Unit = {
     instances.synchronized {
       val storeIdsToRemove =
         instances.keys.filter(id => operatorIds.contains(id.operatorId)).toSeq
