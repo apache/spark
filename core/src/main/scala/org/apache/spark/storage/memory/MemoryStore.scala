@@ -29,7 +29,11 @@ import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 
-private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
+private sealed trait MemoryEntry {
+  val size: Long
+}
+private case class DeserializedMemoryEntry(value: Array[Any], size: Long) extends MemoryEntry
+private case class SerializedMemoryEntry(buffer: ByteBuffer, size: Long) extends MemoryEntry
 
 /**
  * Stores blocks in memory, either as Arrays of deserialized Java objects or as
@@ -97,7 +101,7 @@ private[spark] class MemoryStore(
       // Work on a duplicate - since the original input might be used elsewhere.
       val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
       assert(bytes.limit == size)
-      val entry = new MemoryEntry(bytes, size, deserialized = false)
+      val entry = new SerializedMemoryEntry(bytes, size)
       entries.synchronized {
         entries.put(blockId, entry)
       }
@@ -183,10 +187,10 @@ private[spark] class MemoryStore(
       val arrayValues = vector.toArray
       vector = null
       val entry = if (level.deserialized) {
-        new MemoryEntry(arrayValues, SizeEstimator.estimate(arrayValues), deserialized = true)
+        new DeserializedMemoryEntry(arrayValues, SizeEstimator.estimate(arrayValues))
       } else {
         val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-        new MemoryEntry(bytes, bytes.limit, deserialized = false)
+        new SerializedMemoryEntry(bytes, bytes.limit)
       }
       val size = entry.size
       def transferUnrollToStorage(amount: Long): Unit = {
@@ -241,26 +245,22 @@ private[spark] class MemoryStore(
   }
 
   def getBytes(blockId: BlockId): Option[ByteBuffer] = {
-    val entry = entries.synchronized {
-      entries.get(blockId)
-    }
-    if (entry == null) {
-      None
-    } else {
-      require(!entry.deserialized, "should only call getBytes on blocks stored in serialized form")
-      Some(entry.value.asInstanceOf[ByteBuffer].duplicate()) // Doesn't actually copy the data
+    val entry = entries.synchronized { entries.get(blockId) }
+    entry match {
+      case null => None
+      case e: DeserializedMemoryEntry =>
+        throw new IllegalArgumentException("should only call getBytes on serialized blocks")
+      case SerializedMemoryEntry(bytes, _) => Some(bytes.duplicate()) // Doesn't actually copy data
     }
   }
 
   def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    val entry = entries.synchronized {
-      entries.get(blockId)
-    }
-    if (entry == null) {
-      None
-    } else {
-      require(entry.deserialized, "should only call getValues on deserialized blocks")
-      Some(entry.value.asInstanceOf[Array[Any]].iterator)
+    val entry = entries.synchronized { entries.get(blockId) }
+    entry match {
+      case null => None
+      case e: SerializedMemoryEntry =>
+        throw new IllegalArgumentException("should only call getValues on deserialized blocks")
+      case DeserializedMemoryEntry(values, _) => Some(values.iterator)
     }
   }
 
