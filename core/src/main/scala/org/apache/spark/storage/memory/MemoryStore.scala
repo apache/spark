@@ -17,7 +17,6 @@
 
 package org.apache.spark.storage.memory
 
-import java.nio.ByteBuffer
 import java.util.LinkedHashMap
 
 import scala.collection.mutable
@@ -28,12 +27,13 @@ import org.apache.spark.memory.MemoryManager
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 private sealed trait MemoryEntry {
   val size: Long
 }
 private case class DeserializedMemoryEntry(value: Array[Any], size: Long) extends MemoryEntry
-private case class SerializedMemoryEntry(buffer: ByteBuffer, size: Long) extends MemoryEntry
+private case class SerializedMemoryEntry(buffer: ChunkedByteBuffer, size: Long) extends MemoryEntry
 
 /**
  * Stores blocks in memory, either as Arrays of deserialized Java objects or as
@@ -94,12 +94,11 @@ private[spark] class MemoryStore(
    *
    * @return true if the put() succeeded, false otherwise.
    */
-  def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): Boolean = {
+  def putBytes(blockId: BlockId, size: Long, _bytes: () => ChunkedByteBuffer): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     if (memoryManager.acquireStorageMemory(blockId, size)) {
       // We acquired enough memory for the block, so go ahead and put it
-      // Work on a duplicate - since the original input might be used elsewhere.
-      val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
+      val bytes = _bytes()
       assert(bytes.limit == size)
       val entry = new SerializedMemoryEntry(bytes, size)
       entries.synchronized {
@@ -189,7 +188,7 @@ private[spark] class MemoryStore(
       val entry = if (level.deserialized) {
         new DeserializedMemoryEntry(arrayValues, SizeEstimator.estimate(arrayValues))
       } else {
-        val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
+        val bytes = new ChunkedByteBuffer(blockManager.dataSerialize(blockId, arrayValues.iterator))
         new SerializedMemoryEntry(bytes, bytes.limit)
       }
       val size = entry.size
@@ -244,13 +243,13 @@ private[spark] class MemoryStore(
     }
   }
 
-  def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
     val entry = entries.synchronized { entries.get(blockId) }
     entry match {
       case null => None
       case e: DeserializedMemoryEntry =>
         throw new IllegalArgumentException("should only call getBytes on serialized blocks")
-      case SerializedMemoryEntry(bytes, _) => Some(bytes.duplicate()) // Doesn't actually copy data
+      case SerializedMemoryEntry(bytes, _) => Some(bytes)
     }
   }
 
@@ -341,10 +340,9 @@ private[spark] class MemoryStore(
           // blocks and removing entries. However the check is still here for
           // future safety.
           if (entry != null) {
-            val data = if (entry.deserialized) {
-              Left(entry.value.asInstanceOf[Array[Any]])
-            } else {
-              Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
+            val data = entry match {
+              case DeserializedMemoryEntry(values, _) => Left(values)
+              case SerializedMemoryEntry(buffer, _) => Right(buffer)
             }
             val newEffectiveStorageLevel = blockManager.dropFromMemory(blockId, () => data)
             if (newEffectiveStorageLevel.isValid) {

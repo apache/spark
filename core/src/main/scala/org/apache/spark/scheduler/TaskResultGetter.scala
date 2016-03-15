@@ -81,8 +81,9 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                   taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
                 return
               }
+              // TODO(josh): assumption that there is only one chunk here is a hack
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
-                serializedTaskResult.get)
+                serializedTaskResult.get.getChunks().head)
               sparkEnv.blockManager.master.removeBlock(blockId)
               (deserializedResult, size)
           }
