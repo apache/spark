@@ -915,6 +915,7 @@ class BinaryLogisticRegressionSummary private[classification] (
   /**
    * Returns a string representation for the fields : [[roc]] , [[pr]]
    * and [[fMeasureByThreshold]]
+   * //TODO add more fields in toString method
    */
   @Since("1.6.0")
   override def toString: String = {
@@ -943,15 +944,15 @@ class BinaryLogisticRegressionSummary private[classification] (
           }
 
           rowStringBuilder.append(sep)
-          rowStringBuilder.toString()
+          rowStringBuilder.toString
         })
         dataFrameStringBuilder.append(rowStringBuilder.toString.trim)
         dataFrameStringBuilder.append(newLine)
       })
       dataFrameStringBuilder.toString
     }
-    val summaryStringBuilder = new StringBuilder()
-
+    val summaryStringBuilder = new StringBuilder
+    //TODO Dynamic adjustment for separator based on col width (if needed)
     val colSep = "\t"
     summaryStringBuilder.append(dataFrameToString("ROC", roc, colSep))
     summaryStringBuilder.append(newLine)
