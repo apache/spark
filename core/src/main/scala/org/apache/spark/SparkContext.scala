@@ -1278,8 +1278,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     assertNotStopped()
-    require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass), "Can not directly " +
-      "broadcast RDDs; instead, call collect() and broadcast the result.")
+    require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
+      "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
