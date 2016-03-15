@@ -96,6 +96,9 @@ object CSVRelation extends Logging {
           while (subIndex < safeRequiredIndices.length) {
             index = safeRequiredIndices(subIndex)
             val field = schemaFields(index)
+            // It anyway needs to try to parse since it decides if this row is malformed
+            // or not after trying to cast in `DROPMALFORMED` mode even if the casted
+            // value is not stored in the row.
             val value = CSVTypeCast.castTo(
               indexSafeTokens(index),
               field.dataType,
