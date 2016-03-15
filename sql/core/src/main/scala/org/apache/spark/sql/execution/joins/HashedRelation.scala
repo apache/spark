@@ -156,6 +156,11 @@ private[joins] class UniqueKeyHashedRelation(
 
 private[execution] object HashedRelation {
 
+  /**
+   * Create a HashedRelation from an Iterator of InternalRow.
+   *
+   * Note: The caller should make sure that these InternalRow are different objects.
+   */
   def apply(
       input: Iterator[InternalRow],
       keyGenerator: Projection,
@@ -188,7 +193,7 @@ private[execution] object HashedRelation {
           keyIsUnique = false
           existingMatchList
         }
-        matchList += currentRow.copy()
+        matchList += currentRow
       }
     }
 
@@ -438,7 +443,7 @@ private[joins] object UnsafeHashedRelation {
         } else {
           existingMatchList
         }
-        matchList += unsafeRow.copy()
+        matchList += unsafeRow
       }
     }
 
@@ -622,7 +627,7 @@ private[joins] object LongHashedRelation {
           keyIsUnique = false
           existingMatchList
         }
-        matchList += unsafeRow.copy()
+        matchList += unsafeRow
       }
     }
 
