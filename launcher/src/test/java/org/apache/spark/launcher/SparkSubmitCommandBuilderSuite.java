@@ -151,6 +151,24 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertEquals("arg1", cmd.get(cmd.size() - 1));
   }
 
+  @Test
+  public void testExamplesRunner() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+      SparkSubmitCommandBuilder.RUN_EXAMPLE,
+      parser.MASTER + "=foo",
+      parser.DEPLOY_MODE + "=bar",
+      "SparkPi",
+      "42");
+
+    Map<String, String> env = new HashMap<String, String>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+    assertEquals("foo", findArgValue(cmd, parser.MASTER));
+    assertEquals("bar", findArgValue(cmd, parser.DEPLOY_MODE));
+    assertEquals(SparkSubmitCommandBuilder.EXAMPLE_CLASS_PREFIX + "SparkPi",
+      findArgValue(cmd, parser.CLASS));
+    assertEquals("42", cmd.get(cmd.size() - 1));
+  }
+
   private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {
     String deployMode = isDriver ? "client" : "cluster";
 

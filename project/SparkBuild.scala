@@ -55,9 +55,11 @@ object BuildCommons {
     Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
-    Seq("assembly", "examples", "network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
+  val assemblyProjects@Seq(assembly, networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
+    Seq("assembly", "network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
+
+  val copyJarsProjects@Seq(examples) = Seq("examples").map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
   // Root project.
@@ -142,6 +144,8 @@ object SparkBuild extends PomBuild {
     scalacOptions <+= target.map(t => "-P:genjavadoc:out=" + (t / "java")))
 
   lazy val sharedSettings = sparkGenjavadocSettings ++ Seq (
+    exportJars in Compile := true,
+    exportJars in Test := false,
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
@@ -236,7 +240,7 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
       ExcludedDependencies.settings))
 
@@ -254,6 +258,9 @@ object SparkBuild extends PomBuild {
 
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
+
+  /* Set up tasks to copy dependencies during packaging. */
+  copyJarsProjects.foreach(enable(CopyDependencies.settings))
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -684,6 +691,34 @@ object Unidoc {
       }
     )
   )
+}
+
+object CopyDependencies {
+
+  val copyDeps = TaskKey[Unit]("copyDeps", "Copies needed dependencies to the build directory.")
+  val destPath = (crossTarget in Compile) / "jars"
+
+  lazy val settings = Seq(
+    copyDeps := {
+      val dest = destPath.value
+      if (!dest.isDirectory() && !dest.mkdirs()) {
+        throw new IOException("Failed to create jars directory.")
+      }
+
+      (dependencyClasspath in Compile).value.map(_.data)
+        .filter { jar => jar.isFile() }
+        .foreach { jar =>
+          val destJar = new File(dest, jar.getName())
+          if (destJar.isFile()) {
+            destJar.delete()
+          }
+          Files.copy(jar.toPath(), destJar.toPath())
+        }
+    },
+    crossTarget in (Compile, packageBin) := destPath.value,
+    packageBin in Compile <<= (packageBin in Compile).dependsOn(copyDeps)
+  )
+
 }
 
 object Java8TestSettings {
