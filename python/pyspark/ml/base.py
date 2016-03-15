@@ -26,6 +26,7 @@ from pyspark.mllib.common import inherit_doc
 class Estimator(Params):
     """
     Abstract class for estimators that fit models to data.
+
     .. versionadded:: 1.3.0
     """
 
@@ -34,10 +35,9 @@ class Estimator(Params):
     @abstractmethod
     def _fit(self, dataset):
         """
-        Fits a model to the input dataset. This is called by the
-        default implementation of fit.
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
+        Fits a model to the input dataset. This is called by the default implementation of fit.
+
+        :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`
         :returns: fitted model
         """
         raise NotImplementedError()
@@ -46,12 +46,11 @@ class Estimator(Params):
     def fit(self, dataset, params=None):
         """
         Fits a model to the input dataset with optional parameters.
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :param params: an optional param map that overrides embedded
-                       params. If a list/tuple of param maps is given,
-                       this calls fit on each param map and returns a
-                       list of models.
+
+        :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`
+        :param params: an optional param map that overrides embedded params. If a list/tuple of
+                       param maps is given, this calls fit on each param map and returns a list of
+                       models.
         :returns: fitted model(s)
         """
         if params is None:
@@ -71,8 +70,8 @@ class Estimator(Params):
 @inherit_doc
 class Transformer(Params):
     """
-    Abstract class for transformers that transform one dataset into
-    another.
+    Abstract class for transformers that transform one dataset into another.
+
     .. versionadded:: 1.3.0
     """
 
@@ -82,8 +81,8 @@ class Transformer(Params):
     def _transform(self, dataset):
         """
         Transforms the input dataset.
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
+
+        :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`
         :returns: transformed dataset
         """
         raise NotImplementedError()
@@ -92,27 +91,27 @@ class Transformer(Params):
     def transform(self, dataset, params=None):
         """
         Transforms the input dataset with optional parameters.
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :param params: an optional param map that overrides embedded
-                       params.
+
+        :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`
+        :param params: an optional param map that overrides embedded params.
         :returns: transformed dataset
         """
         if params is None:
             params = dict()
         if isinstance(params, dict):
             if params:
-                return self.copy(params,)._transform(dataset)
+                return self.copy(params)._transform(dataset)
             else:
                 return self._transform(dataset)
         else:
-            raise ValueError("Params must be either a param map but got %s." % type(params))
+            raise ValueError("Params must be a param map but got %s." % type(params))
 
 
 @inherit_doc
 class Model(Transformer):
     """
     Abstract class for models that are fitted by estimators.
+
     .. versionadded:: 1.4.0
     """
 
