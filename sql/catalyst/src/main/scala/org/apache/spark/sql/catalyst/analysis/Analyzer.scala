@@ -87,7 +87,7 @@ class Analyzer(
       ResolveSubquery ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
-      ResolveNaturalJoin ::
+      ResolveNaturalAndUsingJoin ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -1329,18 +1329,17 @@ class Analyzer(
   }
 
   /**
-   * Removes natural joins by calculating output columns based on output from two sides,
-   * Then apply a Project on a normal Join to eliminate natural join.
+   * Removes natural or using joins by calculating output columns based on output from two sides,
+   * Then apply a Project on a normal Join to eliminate natural or using join.
    */
-  object ResolveNaturalJoin extends Rule[LogicalPlan] {
+  object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case j @ Join(left, right, UsingJoin(joinType, usingCols), condition)
-        if left.resolved && right.resolved =>
+          if left.resolved && right.resolved && j.duplicateResolved =>
         // Resolve the column names referenced in using clause from both the legs of join.
         val lCols = usingCols.flatMap(col => left.resolveQuoted(col.name, resolver))
         val rCols = usingCols.flatMap(col => right.resolveQuoted(col.name, resolver))
-        if ((lCols.length == usingCols.length) && (rCols.length == usingCols.length))
-        {
+        if ((lCols.length == usingCols.length) && (rCols.length == usingCols.length)) {
           val joinNames = lCols.map(exp => exp.name)
           commonNaturalJoinProcessing(left, right, joinType, joinNames, None)
         } else {

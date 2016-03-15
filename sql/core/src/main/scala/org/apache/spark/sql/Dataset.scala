@@ -487,7 +487,7 @@ class Dataset[T] private[sql](
         UsingJoin(JoinType(joinType), usingColumns.map(UnresolvedAttribute(_))),
         None)
     }
-   }
+  }
 
   /**
    * Inner join with another [[DataFrame]], using the given join expression.
