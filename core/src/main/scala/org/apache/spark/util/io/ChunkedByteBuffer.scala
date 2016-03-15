@@ -27,22 +27,20 @@ import io.netty.buffer.{ByteBuf, Unpooled}
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.storage.BlockManager
 
-private[spark] class ChunkedByteBuffer(_chunks: Array[ByteBuffer]) {
+private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
+  require(chunks != null, "chunks must not be null")
+  require(chunks.nonEmpty, "Cannot create a ChunkedByteBuffer with no chunks")
+  require(chunks.forall(_.limit() > 0), "chunks must be non-empty")
+  require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
-  require(_chunks.nonEmpty, "Cannot create a ChunkedByteBuffer with no chunks")
-  require(_chunks.forall(_.limit() > 0), "chunks must be non-empty")
+  val limit: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
 
   def this(byteBuffer: ByteBuffer) = {
     this(Array(byteBuffer))
   }
 
-  private[this] val chunks: Array[ByteBuffer] = {
-    _chunks.map(_.duplicate().rewind().asInstanceOf[ByteBuffer])  // doesn't actually copy bytes
-  }
-
-  val limit: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
-
   def writeFully(channel: WritableByteChannel): Unit = {
+    assertNotDisposed()
     for (bytes <- getChunks()) {
       while (bytes.remaining > 0) {
         channel.write(bytes)
@@ -50,9 +48,13 @@ private[spark] class ChunkedByteBuffer(_chunks: Array[ByteBuffer]) {
     }
   }
 
-  def toNetty: ByteBuf = Unpooled.wrappedBuffer(getChunks(): _*)
+  def toNetty: ByteBuf = {
+    assertNotDisposed()
+    Unpooled.wrappedBuffer(getChunks(): _*)
+  }
 
   def toArray: Array[Byte] = {
+    assertNotDisposed()
     if (limit >= Integer.MAX_VALUE) {
       throw new UnsupportedOperationException(
         s"cannot call toArray because buffer size ($limit bytes) exceeds maximum array size")
@@ -63,39 +65,55 @@ private[spark] class ChunkedByteBuffer(_chunks: Array[ByteBuffer]) {
     byteChannel.getData
   }
 
-  def toInputStream(dispose: Boolean): InputStream = new ChunkedByteBufferInputStream(this, dispose)
+  def toInputStream: InputStream = {
+    assertNotDisposed()
+    new ChunkedByteBufferInputStream(getChunks().iterator)
+  }
 
-  def getChunks(): Array[ByteBuffer] = chunks.map(_.duplicate())
+  def toDestructiveInputStream: InputStream = {
+    val is = new ChunkedByteBufferInputStream(chunks.iterator)
+    chunks = null
+    is
+  }
+
+  def getChunks(): Array[ByteBuffer] = {
+    assertNotDisposed()
+    chunks.map(_.duplicate())
+  }
 
   def copy(): ChunkedByteBuffer = {
+    assertNotDisposed()
     val copiedChunks = getChunks().map { chunk =>
-      // TODO: accept an allocator in this copy method, etc.
+      // TODO: accept an allocator in this copy method to integrate with mem. accounting systems
       val newChunk = ByteBuffer.allocate(chunk.limit())
       newChunk.put(chunk)
+      newChunk.flip()
+      newChunk
     }
     new ChunkedByteBuffer(copiedChunks)
   }
 
   def dispose(): Unit = {
+    assertNotDisposed()
     chunks.foreach(BlockManager.dispose)
+    chunks = null
+  }
+
+  private def assertNotDisposed(): Unit = {
+    if (chunks == null) {
+      throw new IllegalStateException("Cannot call methods on a disposed ChunkedByteBuffer")
+    }
   }
 }
 
+private class ChunkedByteBufferInputStream(chunks: Iterator[ByteBuffer]) extends InputStream {
 
-// TODO(josh): implement dispose
-
-private class ChunkedByteBufferInputStream(
-    chunkedBuffer: ChunkedByteBuffer,
-    dispose: Boolean = false) extends InputStream {
-
-  private[this] val chunksIterator: Iterator[ByteBuffer] = chunkedBuffer.getChunks().iterator
-  private[this] var currentChunk: ByteBuffer = chunksIterator.next()
-  assert(currentChunk.position() == 0)
+  private[this] var currentChunk: ByteBuffer = chunks.next()
 
   override def available(): Int = {
-    while (!currentChunk.hasRemaining && chunksIterator.hasNext) {
-      currentChunk = chunksIterator.next()
-      assert(currentChunk.position() == 0)
+    while (!currentChunk.hasRemaining && chunks.hasNext) {
+      BlockManager.dispose(currentChunk)
+      currentChunk = chunks.next()
     }
     currentChunk.remaining()
   }
@@ -111,13 +129,15 @@ private class ChunkedByteBufferInputStream(
 //  }
 
   override def read(): Int = {
-    if (!currentChunk.hasRemaining && chunksIterator.hasNext) {
-      currentChunk = chunksIterator.next()
-      assert(currentChunk.position() == 0)
+    if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
+      BlockManager.dispose(currentChunk)
+      currentChunk = chunks.next()
     }
-    if (currentChunk.hasRemaining) {
+    if (currentChunk != null && currentChunk.hasRemaining) {
       UnsignedBytes.toInt(currentChunk.get())
     } else {
+      BlockManager.dispose(currentChunk)
+      currentChunk = null
       -1
     }
   }
@@ -128,6 +148,13 @@ private class ChunkedByteBufferInputStream(
 //  override def read(b: Array[Byte], off: Int, len: Int): Int = super.read(b, off, len)
 
   override def close(): Unit = {
+    if (currentChunk != null) {
+      BlockManager.dispose(currentChunk)
+      while (chunks.hasNext) {
+        currentChunk = chunks.next()
+        BlockManager.dispose(currentChunk)
+      }
+    }
     currentChunk = null
   }
 }

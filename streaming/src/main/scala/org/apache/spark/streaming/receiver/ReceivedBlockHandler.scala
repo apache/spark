@@ -85,7 +85,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
         putResult
       case ByteBufferBlock(byteBuffer) =>
         blockManager.putBytes(
-          blockId, new ChunkedByteBuffer(byteBuffer), storageLevel, tellMaster = true)
+          blockId, new ChunkedByteBuffer(byteBuffer.duplicate()), storageLevel, tellMaster = true)
       case o =>
         throw new SparkException(
           s"Could not store $blockId to block manager, unexpected block type ${o.getClass.getName}")
@@ -187,7 +187,10 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     // Store the block in block manager
     val storeInBlockManagerFuture = Future {
       val putSucceeded = blockManager.putBytes(
-        blockId, new ChunkedByteBuffer(serializedBlock), effectiveStorageLevel, tellMaster = true)
+        blockId,
+        new ChunkedByteBuffer(serializedBlock.duplicate()),
+        effectiveStorageLevel,
+        tellMaster = true)
       if (!putSucceeded) {
         throw new SparkException(
           s"Could not store $blockId to block manager with storage level $storageLevel")

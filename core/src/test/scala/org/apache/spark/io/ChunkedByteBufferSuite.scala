@@ -39,30 +39,6 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     }
   }
 
-  test("constructor duplicates chunks") {
-    val byteBuffer = ByteBuffer.allocate(8)
-    byteBuffer.limit(4)
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array(byteBuffer))
-    assert(chunkedByteBuffer.limit === 4)
-    assert(chunkedByteBuffer.getChunks().head.limit() === 4)
-    // Changing the original ByteBuffer's position and limit does not affect the ChunkedByteBuffer:
-    byteBuffer.limit(8)
-    byteBuffer.position(4)
-    assert(chunkedByteBuffer.limit === 4)
-    assert(chunkedByteBuffer.getChunks().head.limit() === 4)
-    assert(chunkedByteBuffer.getChunks().head.position() === 0)
-  }
-
-  test("constructor rewinds chunks") {
-    val byteBuffer = ByteBuffer.allocate(8)
-    byteBuffer.get()
-    byteBuffer.get()
-    assert(byteBuffer.position() === 2)
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array(byteBuffer))
-    assert(chunkedByteBuffer.limit === 8)
-    assert(chunkedByteBuffer.getChunks().head.position() === 0)
-  }
-
   test("getChunks() duplicates chunks") {
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(8)))
     chunkedByteBuffer.getChunks().head.position(4)
