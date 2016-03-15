@@ -123,40 +123,44 @@ private[spark] class PipedRDD[T: ClassTag](
     val childThreadException = new AtomicReference[Throwable](null)
 
     // Start a thread to print the process's stderr to ours
-    new Thread("stderr reader for " + command) {
-      override def run() {
-        for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
-          // scalastyle:off println
-          System.err.println(line)
-          // scalastyle:on println
+    new Thread(s"stderr reader for $command") {
+      override def run(): Unit = {
+        val err = proc.getErrorStream
+        try {
+          for (line <- Source.fromInputStream(err).getLines) {
+            // scalastyle:off println
+            System.err.println(line)
+            // scalastyle:on println
+          }
+        } catch {
+          case t: Throwable => childThreadException.set(t)
+        } finally {
+          err.close()
         }
       }
     }.start()
 
     // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for " + command) {
-      override def run() {
+    new Thread(s"stdin writer for $command") {
+      override def run(): Unit = {
+        TaskContext.setTaskContext(context)
         val out = new PrintWriter(proc.getOutputStream)
-
         try {
-          TaskContext.setTaskContext(context)
-
           // scalastyle:off println
           // input the pipe context firstly
           if (printPipeContext != null) {
-            printPipeContext(out.println(_))
+            printPipeContext(out.println)
           }
           for (elem <- firstParent[T].iterator(split, context)) {
             if (printRDDElement != null) {
-              printRDDElement(elem, out.println(_))
+              printRDDElement(elem, out.println)
             } else {
               out.println(elem)
             }
           }
           // scalastyle:on println
         } catch {
-          case NonFatal(e) =>
-            childThreadException.set(e)
+          case t: Throwable => childThreadException.set(t)
         } finally {
           out.close()
         }
@@ -167,38 +171,44 @@ private[spark] class PipedRDD[T: ClassTag](
     val lines = Source.fromInputStream(proc.getInputStream).getLines()
     new Iterator[String] {
       def next(): String = {
-        propagateChildThreadException()
+        if (!hasNext()) {
+          throw new NoSuchElementException()
+        }
         lines.next()
       }
 
-      private def propagateChildThreadException(): Unit = {
-        if (childThreadException.get() != null) {
-          proc.destroy()
-          throw childThreadException.get()
-        }
-      }
-
-      def hasNext: Boolean = {
+      def hasNext(): Boolean = {
         val result = if (lines.hasNext) {
           true
         } else {
           val exitStatus = proc.waitFor()
+          cleanup()
           if (exitStatus != 0) {
-            throw new Exception("Subprocess exited with status " + exitStatus)
+            throw new IllegalStateException(s"Subprocess exited with status $exitStatus")
           }
-
-          // cleanup task working directory if used
-          if (workInTaskDirectory) {
-            scala.util.control.Exception.ignoring(classOf[IOException]) {
-              Utils.deleteRecursively(new File(taskDirectory))
-            }
-            logDebug("Removed task working directory " + taskDirectory)
-          }
-
           false
         }
-        propagateChildThreadException()
+        propagateChildException()
         result
+      }
+
+      private def cleanup(): Unit = {
+        // cleanup task working directory if used
+        if (workInTaskDirectory) {
+          scala.util.control.Exception.ignoring(classOf[IOException]) {
+            Utils.deleteRecursively(new File(taskDirectory))
+          }
+          logDebug(s"Removed task working directory $taskDirectory")
+        }
+      }
+
+      private def propagateChildException(): Unit = {
+        val t = childThreadException.get()
+        if (t != null) {
+          proc.destroy()
+          cleanup()
+          throw t
+        }
       }
     }
   }
