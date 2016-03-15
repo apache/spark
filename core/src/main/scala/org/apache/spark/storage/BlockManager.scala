@@ -59,7 +59,7 @@ private[spark] class BlockManager(
     executorId: String,
     rpcEnv: RpcEnv,
     val master: BlockManagerMaster,
-    defaultSerializer: Serializer,
+    val defaultSerializer: Serializer,
     val conf: SparkConf,
     memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
@@ -898,16 +898,16 @@ private[spark] class BlockManager(
           memoryStore.putIteratorAsBytes(blockId, iterator()) match {
             case Right(s) =>
               size = s
-            case Left(iter) =>
+            case Left(partiallySerializedValues) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
                 logWarning(s"Persisting block $blockId to disk instead.")
                 diskStore.put(blockId) { fileOutputStream =>
-                  dataSerializeStream(blockId, fileOutputStream, iter)
+                  partiallySerializedValues.finishWriting(fileOutputStream)
                 }
                 size = diskStore.getSize(blockId)
               } else {
-                iteratorFromFailedMemoryStorePut = Some(iter)
+                iteratorFromFailedMemoryStorePut = Some(partiallySerializedValues.valuesIterator)
               }
           }
         }
