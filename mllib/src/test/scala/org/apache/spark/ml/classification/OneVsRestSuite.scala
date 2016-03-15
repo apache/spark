@@ -226,28 +226,16 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("should support all NumericType labels") {
-    val df = sqlContext.createDataFrame(Seq(
-      (0, Vectors.dense(0, 2, 3)),
-      (1, Vectors.dense(0, 3, 1)),
-      (0, Vectors.dense(0, 2, 2)),
-      (1, Vectors.dense(0, 3, 9)),
-      (2, Vectors.dense(0, 2, 6))
-    )).toDF("label", "features")
-
-    val types =
-      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-
-    var dfWithTypes = df
-    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val ovr = new OneVsRest()
       .setClassifier(new LogisticRegression)
       .setFeaturesCol("features")
 
-    val expected = ovr.setLabelCol(DoubleType.toString).fit(dfWithTypes)
+    val expected = ovr.setLabelCol("label").fit(dfs(DoubleType))
     val expectedModels = expected.models.map(m => m.asInstanceOf[LogisticRegressionModel])
-    types.filter(_ != DoubleType).foreach { t =>
-      val actual = ovr.setLabelCol(t.toString).fit(dfWithTypes)
+    dfs.keys.filter(_ != DoubleType).foreach { t =>
+      val actual = ovr.setLabelCol("label").fit(dfs(t))
       val actualModels = actual.models.map(m => m.asInstanceOf[LogisticRegressionModel])
       assert(expectedModels.length === actualModels.length)
       expectedModels.zip(actualModels).foreach { case (e, a) =>
@@ -258,13 +246,8 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
-      ("0", Vectors.dense(0, 2, 3)),
-      ("1", Vectors.dense(0, 3, 1)),
-      ("0", Vectors.dense(0, 2, 2)),
-      ("1", Vectors.dense(0, 3, 9)),
-      ("2", Vectors.dense(0, 2, 6))
-    )).toDF("label", "features")
+    val dfWithStringLabels =
+      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
 
     val ovr = new OneVsRest()
       .setClassifier(new LogisticRegression)

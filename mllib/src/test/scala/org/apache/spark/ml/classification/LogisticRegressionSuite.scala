@@ -937,38 +937,21 @@ class LogisticRegressionSuite
   }
 
   test("should support all NumericType labels") {
-    val df = sqlContext.createDataFrame(Seq(
-      (0, Vectors.dense(0, 2, 3)),
-      (1, Vectors.dense(0, 3, 1)),
-      (0, Vectors.dense(0, 2, 2)),
-      (1, Vectors.dense(0, 3, 9)),
-      (0, Vectors.dense(0, 2, 6))
-    )).toDF("label", "features")
-
-    val types =
-      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-
-    var dfWithTypes = df
-    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val lr = new LogisticRegression().setFeaturesCol("features")
 
-    val expected = lr.setLabelCol(DoubleType.toString).fit(dfWithTypes)
-    types.filter(_ != DoubleType).foreach { t =>
-      val actual = lr.setLabelCol(t.toString).fit(dfWithTypes)
+    val expected = lr.setLabelCol("label").fit(dfs(DoubleType))
+    dfs.keys.filter(_ != DoubleType).foreach { t =>
+      val actual = lr.setLabelCol("label").fit(dfs(t))
       assert(expected.intercept === actual.intercept)
       assert(expected.coefficients.toArray === actual.coefficients.toArray)
     }
   }
 
   test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
-      ("0", Vectors.dense(0, 2, 3)),
-      ("1", Vectors.dense(0, 3, 1)),
-      ("0", Vectors.dense(0, 2, 2)),
-      ("1", Vectors.dense(0, 3, 9)),
-      ("0", Vectors.dense(0, 2, 6))
-    )).toDF("label", "features")
+    val dfWithStringLabels =
+      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
 
     val lr = new LogisticRegression()
       .setLabelCol("label")

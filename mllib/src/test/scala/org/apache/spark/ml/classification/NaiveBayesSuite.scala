@@ -21,7 +21,7 @@ import breeze.linalg.{Vector => BV}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{MLTestingUtils, DefaultReadWriteTest}
 import org.apache.spark.mllib.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.mllib.classification.NaiveBayesSuite._
 import org.apache.spark.mllib.linalg._
@@ -188,38 +188,21 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   }
 
   test("should support all NumericType labels") {
-    val df = sqlContext.createDataFrame(Seq(
-      (0, Vectors.dense(0, 2, 3)),
-      (1, Vectors.dense(0, 3, 1)),
-      (0, Vectors.dense(0, 2, 2)),
-      (1, Vectors.dense(0, 3, 9)),
-      (0, Vectors.dense(0, 2, 6))
-    )).toDF("label", "features")
-
-    val types =
-      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-
-    var dfWithTypes = df
-    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val nb = new NaiveBayes().setFeaturesCol("features")
 
-    val expected = nb.setLabelCol(DoubleType.toString).fit(dfWithTypes)
-    types.filter(_ != DoubleType).foreach { t =>
-      val actual = nb.setLabelCol(t.toString).fit(dfWithTypes)
+    val expected = nb.setLabelCol("label").fit(dfs(DoubleType))
+    dfs.keys.filter(_ != DoubleType).foreach { t =>
+      val actual = nb.setLabelCol("label").fit(dfs(t))
       assert(expected.pi === actual.pi)
       assert(expected.theta === actual.theta)
     }
   }
 
   test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
-      ("0", Vectors.dense(0, 2, 3)),
-      ("1", Vectors.dense(0, 3, 1)),
-      ("0", Vectors.dense(0, 2, 2)),
-      ("1", Vectors.dense(0, 3, 9)),
-      ("0", Vectors.dense(0, 2, 6))
-    )).toDF("label", "features")
+    val dfWithStringLabels =
+      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
 
     val nb = new NaiveBayes()
       .setLabelCol("label")
