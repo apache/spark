@@ -94,7 +94,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      inputFiles: Array[FileStatus],
+      inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
     verifySchema(dataSchema)

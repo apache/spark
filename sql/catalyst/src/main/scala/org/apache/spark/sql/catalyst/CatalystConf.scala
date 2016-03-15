@@ -17,8 +17,22 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.analysis._
+
 private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
+
+  /**
+   * Returns the [[Resolver]] for the current configuration, which can be used to determin if two
+   * identifiers are equal.
+   */
+  def resolver: Resolver = {
+    if (caseSensitiveAnalysis) {
+      caseSensitiveResolution
+    } else {
+      caseInsensitiveResolution
+    }
+  }
 }
 
 /**

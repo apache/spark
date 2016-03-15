@@ -41,11 +41,11 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.{datasources, FileRelation}
-import org.apache.spark.sql.execution.datasources.{Partition => ParquetPartition, _}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
-import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.{HadoopFsRelation, HDFSFileCatalog}
 import org.apache.spark.sql.types._
 
 private[hive] case class HiveSerDe(
@@ -469,7 +469,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
             parquetRelation.location.paths.map(_.toString).toSet == pathsInMetastore.toSet &&
             logical.schema.sameType(metastoreSchema) &&
             parquetRelation.partitionSpec == partitionSpecInMetastore.getOrElse {
-              PartitionSpec(StructType(Nil), Array.empty[datasources.Partition])
+              PartitionSpec(StructType(Nil), Array.empty[datasources.PartitionDirectory])
             }
 
           if (useCached) {
@@ -499,7 +499,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         val values = InternalRow.fromSeq(p.getValues.asScala.zip(partitionColumnDataTypes).map {
           case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
         })
-        ParquetPartition(values, location)
+        PartitionDirectory(values, location)
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
 
@@ -753,7 +753,7 @@ class MetaStoreFileCatalog(
     hive: HiveContext,
     paths: Seq[Path],
     partitionSpecFromHive: PartitionSpec)
-  extends HDFSFileCatalog(hive, Map.empty, paths) {
+  extends HDFSFileCatalog(hive, Map.empty, paths, Some(partitionSpecFromHive.partitionColumns)) {
 
 
   override def getStatus(path: Path): Array[FileStatus] = {
@@ -761,7 +761,7 @@ class MetaStoreFileCatalog(
     fs.listStatus(path)
   }
 
-  override def partitionSpec(schema: Option[StructType]): PartitionSpec = partitionSpecFromHive
+  override def partitionSpec(): PartitionSpec = partitionSpecFromHive
 }
 
 /**

@@ -150,7 +150,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      inputFiles: Array[FileStatus],
+      inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
     // TODO: This does not handle cases where column pruning has been performed.

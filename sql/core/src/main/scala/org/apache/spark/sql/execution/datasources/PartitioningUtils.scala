@@ -32,17 +32,23 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
 
-object Partition {
-  def apply(values: InternalRow, path: String): Partition =
+object PartitionDirectory {
+  def apply(values: InternalRow, path: String): PartitionDirectory =
     apply(values, new Path(path))
 }
 
-private[sql] case class Partition(values: InternalRow, path: Path)
+/**
+ * Holds a directory in a partitioned collection of files as well as as the partition values
+ * in the form of a Row.  Before scanning, the files at `path` need to be enumerated.
+ */
+private[sql] case class PartitionDirectory(values: InternalRow, path: Path)
 
-private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: Seq[Partition])
+private[sql] case class PartitionSpec(
+    partitionColumns: StructType,
+    partitions: Seq[PartitionDirectory])
 
 private[sql] object PartitionSpec {
-  val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[Partition])
+  val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[PartitionDirectory])
 }
 
 private[sql] object PartitioningUtils {
@@ -133,7 +139,7 @@ private[sql] object PartitioningUtils {
       // Finally, we create `Partition`s based on paths and resolved partition values.
       val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
         case (PartitionValues(_, literals), (path, _)) =>
-          Partition(InternalRow.fromSeq(literals.map(_.value)), path)
+          PartitionDirectory(InternalRow.fromSeq(literals.map(_.value)), path)
       }
 
       PartitionSpec(StructType(fields), partitions)

@@ -52,7 +52,7 @@ object CSVRelation extends Logging {
       tokenizedRDD: RDD[Array[String]],
       schema: StructType,
       requiredColumns: Array[String],
-      inputs: Array[FileStatus],
+      inputs: Seq[FileStatus],
       sqlContext: SQLContext,
       params: CSVOptions): RDD[Row] = {
 

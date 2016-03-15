@@ -151,7 +151,7 @@ private[sql] case class DataSourceScan(
   override val outputPartitioning = {
     val bucketSpec = relation match {
       // TODO: this should be closer to bucket planning.
-      case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled() => r.bucketSpec
+      case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled => r.bucketSpec
       case _ => None
     }
 

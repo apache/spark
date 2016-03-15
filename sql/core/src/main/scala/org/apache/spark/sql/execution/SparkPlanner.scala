@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 
 class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
   val sparkContext: SparkContext = sqlContext.sparkContext
@@ -29,6 +29,7 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
 
   def strategies: Seq[Strategy] =
     sqlContext.experimental.extraStrategies ++ (
+      FileSourceStrategy ::
       DataSourceStrategy ::
       DDLStrategy ::
       SpecialLimits ::
