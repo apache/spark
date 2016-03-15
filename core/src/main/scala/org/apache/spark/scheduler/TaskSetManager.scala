@@ -549,7 +549,7 @@ private[spark] class TaskSetManager(
         // be scheduled at a particular locality level, there is no point in waiting
         // for the locality wait timeout (SPARK-4939).
         lastLaunchTime = curTime
-	currentLocalityIndex += 1
+        currentLocalityIndex += 1
         logDebug(s"No tasks for locality level ${myLocalityLevels(previousLocalityIndex)}, " +
           s"so moving to locality level ${myLocalityLevels(currentLocalityIndex)}")
       } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
