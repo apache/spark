@@ -24,10 +24,10 @@ import org.apache.thrift.TException
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchItemException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.catalyst.TableIdentifier
 
 
 /**
