@@ -120,38 +120,21 @@ class DecisionTreeRegressorSuite
   }
 
   test("should support all NumericType labels") {
-    val df = sqlContext.createDataFrame(Seq(
-      (0, Vectors.dense(0, 2, 3)),
-      (1, Vectors.dense(0, 3, 1)),
-      (0, Vectors.dense(0, 2, 2)),
-      (1, Vectors.dense(0, 3, 9)),
-      (0, Vectors.dense(0, 2, 6))
-    )).toDF("label", "features")
-
-    val types =
-      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-
-    var dfWithTypes = df
-    types.foreach(t => dfWithTypes = dfWithTypes.withColumn(t.toString, df("label").cast(t)))
+    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val dt = new DecisionTreeRegressor().setFeaturesCol("features")
 
-    val expected = dt.setLabelCol(DoubleType.toString)
-      .fit(TreeTests.setMetadata(dfWithTypes, 2, DoubleType.toString))
-    types.filter(_ != DoubleType).foreach { t =>
+    val expected = dt.setLabelCol("label")
+      .fit(TreeTests.setMetadata(dfs(DoubleType), 2, "label"))
+    dfs.keys.filter(_ != DoubleType).foreach { t =>
       TreeTests.checkEqual(expected,
-        dt.setLabelCol(t.toString).fit(TreeTests.setMetadata(dfWithTypes, 2, t.toString)))
+        dt.setLabelCol("label").fit(TreeTests.setMetadata(dfs(t), 2, "label")))
     }
   }
 
   test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
-      ("0", Vectors.dense(0, 2, 3)),
-      ("1", Vectors.dense(0, 3, 1)),
-      ("0", Vectors.dense(0, 2, 2)),
-      ("1", Vectors.dense(0, 3, 9)),
-      ("0", Vectors.dense(0, 2, 6))
-    )).toDF("label", "features"), 2, "label")
+    val dfWithStringLabels =
+      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
 
     val dt = new DecisionTreeRegressor()
       .setLabelCol("label")
