@@ -62,13 +62,9 @@ def _stages_py2java(py_stages):
 
 
 @inherit_doc
-class PipelineMLWriter(JavaMLWriter, JavaWrapper):
+class _PipelineMLWriter(JavaMLWriter, JavaWrapper):
     """
-    .. note:: Experimental
-
     Pipeline utility class that can save ML instances through their Scala implementation.
-
-    .. versionadded:: 2.0.0
     """
 
     def __init__(self, instance):
@@ -80,13 +76,9 @@ class PipelineMLWriter(JavaMLWriter, JavaWrapper):
 
 
 @inherit_doc
-class PipelineMLReader(JavaMLReader):
+class _PipelineMLReader(JavaMLReader):
     """
-    .. note:: Experimental
-
     Utility class that can load Pipeline instances through their Scala implementation.
-
-    .. versionadded:: 2.0.0
     """
 
     def load(self, path):
@@ -265,7 +257,7 @@ class Pipeline(Estimator):
     @since("2.0.0")
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
-        return PipelineMLWriter(self)
+        return _PipelineMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -276,7 +268,7 @@ class Pipeline(Estimator):
     @since("2.0.0")
     def read(cls):
         """Returns an JavaMLReader instance for this class."""
-        return PipelineMLReader(cls)
+        return _PipelineMLReader(cls)
 
     @classmethod
     @since("2.0.0")
