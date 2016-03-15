@@ -40,14 +40,14 @@ private[sql] object TableIdentifier {
  * If `database` is not defined, the current database is used.
  */
 // TODO: reuse some code with TableIdentifier.
-private[sql] case class FunctionIdentifier(name: String, database: Option[String]) {
+private[sql] case class FunctionIdentifier(funcName: String, database: Option[String]) {
   def this(name: String) = this(name, None)
 
   override def toString: String = quotedString
 
-  def quotedString: String = database.map(db => s"`$db`.`$name`").getOrElse(s"`$name`")
+  def quotedString: String = database.map(db => s"`$db`.`$funcName`").getOrElse(s"`$funcName`")
 
-  def unquotedString: String = database.map(db => s"$db.$name").getOrElse(name)
+  def unquotedString: String = database.map(db => s"$db.$funcName").getOrElse(funcName)
 }
 
 private[sql] object FunctionIdentifier {

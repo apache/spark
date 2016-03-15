@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.catalog
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 
 
 /**
@@ -294,10 +294,10 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
-    if (existsFunction(db, func.name)) {
+    if (existsFunction(db, func.name.funcName)) {
       throw new AnalysisException(s"Function $func already exists in $db database")
     } else {
-      catalog(db).functions.put(func.name, func)
+      catalog(db).functions.put(func.name.funcName, func)
     }
   }
 
@@ -308,14 +308,14 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = synchronized {
     requireFunctionExists(db, oldName)
-    val newFunc = getFunction(db, oldName).copy(name = newName)
+    val newFunc = getFunction(db, oldName).copy(name = FunctionIdentifier(newName, Some(db)))
     catalog(db).functions.remove(oldName)
     catalog(db).functions.put(newName, newFunc)
   }
 
   override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = synchronized {
-    requireFunctionExists(db, funcDefinition.name)
-    catalog(db).functions.put(funcDefinition.name, funcDefinition)
+    requireFunctionExists(db, funcDefinition.name.funcName)
+    catalog(db).functions.put(funcDefinition.name.funcName, funcDefinition)
   }
 
   override def getFunction(db: String, funcName: String): CatalogFunction = synchronized {

@@ -21,7 +21,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 
 
 /**
@@ -82,7 +82,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     catalog
   }
 
-  private def newFunc(): CatalogFunction = CatalogFunction("funcname", funcClass)
+  private def newFunc(): CatalogFunction = newFunc("funcName")
 
   private def newDb(name: String): CatalogDatabase = {
     CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)
@@ -97,7 +97,9 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
       partitionColumns = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string")))
   }
 
-  private def newFunc(name: String): CatalogFunction = CatalogFunction(name, funcClass)
+  private def newFunc(name: String): CatalogFunction = {
+    CatalogFunction(FunctionIdentifier(name, database = None), funcClass)
+  }
 
   /**
    * Whether the catalog's table partitions equal the ones given.
@@ -498,7 +500,8 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
 
   test("get function") {
     val catalog = newBasicCatalog()
-    assert(catalog.getFunction("db2", "func1") == newFunc("func1"))
+    assert(catalog.getFunction("db2", "func1") ==
+      CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass))
     intercept[AnalysisException] {
       catalog.getFunction("db2", "does_not_exist")
     }
@@ -517,7 +520,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     assert(catalog.getFunction("db2", "func1").className == funcClass)
     catalog.renameFunction("db2", "func1", newName)
     intercept[AnalysisException] { catalog.getFunction("db2", "func1") }
-    assert(catalog.getFunction("db2", newName).name == newName)
+    assert(catalog.getFunction("db2", newName).name.funcName == newName)
     assert(catalog.getFunction("db2", newName).className == funcClass)
     intercept[AnalysisException] { catalog.renameFunction("db2", "does_not_exist", "me") }
   }
