@@ -111,9 +111,9 @@ private[csv] object CSVInferSchema {
   private def tryParseDouble(field: String): DataType = {
     val doubleTry = allCatch opt field.toDouble
     // If `doubleTry` is successful, then it should be successful
-    // for casting to `BigDecimal`. So, we do not handle the case it fails
+    // for casting to `BigDecimal`. So, it does not handle the case that it fails
     // to cast to `BigDecimal` below. Also, it is okay to make this `String`
-    // and then make a `BigDecimal`. Otherwise, this loses some values.
+    // and then make a `BigDecimal`. Otherwise, this leads to precision loss.
     // For example,
     //   Option(new BigDecimal("1.23112331231231231231E13")) becomes Some(12311233123123.1231231)
     //   but Option(new BigDecimal(1.23112331231231231231E13)) becomes
@@ -121,7 +121,7 @@ private[csv] object CSVInferSchema {
     val roundtripTry = doubleTry.map(double => new BigDecimal(double.toString))
     val decimalTryOther = allCatch opt new BigDecimal(field)
     // This compares two `BigDecimal` but one of them is casted back from double.
-    // So, if the roundtrip loses some values, then this means casting to double
+    // So, if the roundtrip leads to precision loss, then this means casting to double
     // loses some values.
     if (roundtripTry == decimalTryOther && doubleTry.isDefined) {
       DoubleType
