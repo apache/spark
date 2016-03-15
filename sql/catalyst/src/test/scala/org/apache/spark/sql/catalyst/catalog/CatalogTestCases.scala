@@ -78,7 +78,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     catalog.createTable("db2", newTable("tbl1", "db2"), ignoreIfExists = false)
     catalog.createTable("db2", newTable("tbl2", "db2"), ignoreIfExists = false)
     catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
-    catalog.createFunction("db2", newFunc("func1"))
+    catalog.createFunction("db2", newFunc("func1", Some("db2")))
     catalog
   }
 
@@ -97,8 +97,8 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
       partitionColumns = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string")))
   }
 
-  private def newFunc(name: String): CatalogFunction = {
-    CatalogFunction(FunctionIdentifier(name, database = None), funcClass)
+  private def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
+    CatalogFunction(FunctionIdentifier(name, database), funcClass)
   }
 
   /**
