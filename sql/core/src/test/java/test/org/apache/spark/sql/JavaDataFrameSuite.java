@@ -316,14 +316,14 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testTextLoad() {
-    Dataset<Row> df1 = context.read().text(
+    Dataset<String> ds1 = context.read().text(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
-    Assert.assertEquals(4L, df1.count());
+    Assert.assertEquals(4L, ds1.count());
 
-    Dataset<Row> df2 = context.read().text(
+    Dataset<String> ds2 = context.read().text(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
       Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
-    Assert.assertEquals(5L, df2.count());
+    Assert.assertEquals(5L, ds2.count());
   }
 
   @Test
