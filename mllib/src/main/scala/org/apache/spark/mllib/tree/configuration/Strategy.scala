@@ -133,7 +133,7 @@ class Strategy @Since("1.3.0") (
    * Check validity of parameters.
    * Throws exception if invalid.
    */
-  private[tree] def assertValid(): Unit = {
+  private[spark] def assertValid(): Unit = {
     algo match {
       case Classification =>
         require(numClasses >= 2,
