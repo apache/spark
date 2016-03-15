@@ -64,11 +64,13 @@ abstract class SessionCatalog(catalog: ExternalCatalog) {
   // sessions as their metadata is persisted in the underlying catalog.
   // ----------------------------------------------------------------------------
 
-  // Methods that interact with metastore tables only.
+  // ----------------------------------------------------
+  // | Methods that interact with metastore tables only |
+  // ----------------------------------------------------
 
   /**
    * Create a metastore table in the database specified in `tableDefinition`.
-   * If no such table is specified, create it in the current database.
+   * If no such database is specified, create it in the current database.
    */
   def createTable(
       currentDb: String,
@@ -78,17 +80,23 @@ abstract class SessionCatalog(catalog: ExternalCatalog) {
   /**
    * Alter the metadata of an existing metastore table identified by `tableDefinition`.
    *
+   * If no database is specified in `tableDefinition`, assume the table is in the
+   * current database.
+   *
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  def alterTable(tableDefinition: CatalogTable): Unit
+  def alterTable(currentDb: String, tableDefinition: CatalogTable): Unit
 
   /**
    * Retrieve the metadata of an existing metastore table.
+   * If no database is specified, assume the table is in the current database.
    */
-  def getTable(name: TableIdentifier): CatalogTable
+  def getTable(currentDb: String, name: TableIdentifier): CatalogTable
 
-  // Methods that interact with temporary tables and metastore tables.
+  // -------------------------------------------------------------
+  // | Methods that interact with temporary and metastore tables |
+  // -------------------------------------------------------------
 
   /**
    * Create a temporary table.
@@ -208,7 +216,9 @@ abstract class SessionCatalog(catalog: ExternalCatalog) {
   // their metadata is persisted in the underlying catalog.
   // ----------------------------------------------------------------------------
 
-  // Methods that interact with metastore functions only.
+  // -------------------------------------------------------
+  // | Methods that interact with metastore functions only |
+  // -------------------------------------------------------
 
   def createFunction(currentDb: String, funcDefinition: CatalogFunction): Unit
 
@@ -223,7 +233,9 @@ abstract class SessionCatalog(catalog: ExternalCatalog) {
    */
   def alterFunction(currentDb: String, funcDefinition: CatalogFunction): Unit
 
-  // Methods that interact with temporary functions and metastore functions.
+  // ----------------------------------------------------------------
+  // | Methods that interact with temporary and metastore functions |
+  // ----------------------------------------------------------------
 
   def createTempFunction(funcDefinition: CatalogFunction): Unit
 
