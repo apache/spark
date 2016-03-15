@@ -952,7 +952,7 @@ class BinaryLogisticRegressionSummary private[classification] (
       dataFrameStringBuilder.toString
     }
     val summaryStringBuilder = new StringBuilder
-    //TODO Dynamic adjustment for separator based on col width (if needed)
+    // TODO Dynamic adjustment for separator based on col width (if needed)
     val colSep = "\t"
     summaryStringBuilder.append(dataFrameToString("ROC", roc, colSep))
     summaryStringBuilder.append(newLine)
