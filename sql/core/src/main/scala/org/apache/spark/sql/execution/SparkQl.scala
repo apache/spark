@@ -271,15 +271,14 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
                   // issue.
                   val tableIdent = TableIdentifier(
                     cleanIdentifier(tableName), Some(cleanIdentifier(dbName)))
-                  datasources.DescribeCommand(
-                    UnresolvedRelation(tableIdent, None), isExtended = extended.isDefined)
+                  datasources.DescribeCommand(tableIdent, isExtended = extended.isDefined)
                 case Token(dbName, Nil) :: Token(tableName, Nil) :: Token(colName, Nil) :: Nil =>
                   // It is describing a column with the format like "describe db.table column".
                   nodeToDescribeFallback(node)
                 case tableName :: Nil =>
                   // It is describing a table with the format like "describe table".
                   datasources.DescribeCommand(
-                    UnresolvedRelation(TableIdentifier(cleanIdentifier(tableName.text)), None),
+                    TableIdentifier(cleanIdentifier(tableName.text)),
                     isExtended = extended.isDefined)
                 case _ =>
                   nodeToDescribeFallback(node)
