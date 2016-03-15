@@ -92,6 +92,11 @@ trait StateStoreProvider {
   def manage(): Unit = { }
 }
 
+sealed trait StoreUpdate
+case class ValueAdded(key: InternalRow, value: InternalRow) extends StoreUpdate
+case class ValueUpdated(key: InternalRow, value: InternalRow) extends StoreUpdate
+case class KeyRemoved(key: InternalRow) extends StoreUpdate
+
 
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrive stores
@@ -100,11 +105,6 @@ trait StateStoreProvider {
 private[state] object StateStore extends Logging {
 
   val MANAGEMENT_TASK_INTERVAL_SECS = 60
-
-  sealed trait StoreUpdate
-  case class ValueUpdated(key: InternalRow, value: InternalRow) extends StoreUpdate
-  case class KeyRemoved(key: InternalRow) extends StoreUpdate
-
 
   private val loadedStores = new mutable.HashMap[StateStoreId, StateStoreProvider]()
   private val managementTimer = new Timer("StateStore Timer", true)

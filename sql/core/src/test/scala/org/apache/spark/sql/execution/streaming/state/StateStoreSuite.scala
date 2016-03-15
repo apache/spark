@@ -42,7 +42,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     StateStore.clearAll()
   }
 
-  test("update, remove, commit") {
+  test("update, remove, commit, and all data iterator") {
     val provider = newStoreProvider()
 
     // Verify state before starting a new set of updates
@@ -95,6 +95,57 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(getDataFromFiles(provider) === Set("b" -> 2, "c" -> 4))
     assert(getDataFromFiles(provider, version = 1) === Set("b" -> 2))
     assert(getDataFromFiles(provider, version = 2) === Set("b" -> 2, "c" -> 4))
+  }
+
+  test("updates iterator with all combos of updates and removes") {
+    val provider = newStoreProvider()
+    var currentVersion: Int = 0
+    def withStore(body: StateStore => Unit): Unit = {
+      val store = provider.getStore(currentVersion)
+      body(store)
+      currentVersion += 1
+    }
+
+    // New data should be seen in updates as value added, even if they had multiple updates
+    withStore { store =>
+      update(store, "a", 1)
+      update(store, "aa", 1)
+      update(store, "aa", 2)
+      store.commit()
+      assert(unwrapUpdates(store.updates()) === Set(Added("a", 1), Added("aa", 2)))
+      assert(unwrapToSet(store.iterator()) === Set("a" -> 1, "aa" -> 2))
+    }
+
+    // Multiple updates to same key should be collapsed in the updates as a single value update
+    // Keys that have not been updated should not appear in the updates
+    withStore { store =>
+      update(store, "a", 4)
+      update(store, "a", 6)
+      store.commit()
+      assert(unwrapUpdates(store.updates()) === Set(Updated("a", 6)))
+      assert(unwrapToSet(store.iterator()) === Set("a" -> 6, "aa" -> 2))
+    }
+
+    // Keys added, updated and finally removed before commit should not appear in updates
+    withStore { store =>
+      update(store, "b", 4)     // Added, finally removed
+      update(store, "bb", 5)    // Added, updated, finally removed
+      update(store, "bb", 6)
+      remove(store, _.startsWith("b"))
+      store.commit()
+      assert(unwrapUpdates(store.updates()) === Set.empty)
+      assert(unwrapToSet(store.iterator()) === Set("a" -> 6, "aa" -> 2))
+    }
+
+    // Removed data should be seen in updates as a key removed
+    // Removed, but re-added data should be seen in updates as a value update
+    withStore { store =>
+      remove(store, _.startsWith("a"))
+      update(store, "a", 10)
+      store.commit()
+      assert(unwrapUpdates(store.updates()) === Set(Updated("a", 10), Removed("aa")))
+      assert(unwrapToSet(store.iterator()) === Set("a" -> 10))
+    }
   }
 
   test("cancel") {
@@ -156,7 +207,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       }
       require(currentVersion === targetVersion)
     }
-
 
     updateVersionTo(2)
     require(getDataFromFiles(provider) === Set("a" -> 2))
@@ -275,6 +325,13 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
 private[state] object StateStoreSuite {
 
+  /** Trait and class mirroring [[StoreUpdate]] for testing */
+  trait TestUpdate
+  case class Added(key: String, value: Int) extends TestUpdate
+  case class Updated(key: String, value: Int) extends TestUpdate
+  case class Removed(key: String) extends TestUpdate
+
+
   def wrapValue(i: Int): InternalRow = {
     new GenericInternalRow(Array[Any](i))
   }
@@ -301,5 +358,13 @@ private[state] object StateStoreSuite {
 
   def unwrapToSet(iterator: Iterator[InternalRow]): Set[(String, Int)] = {
     iterator.map(unwrapKeyValue).toSet
+  }
+
+  def unwrapUpdates(iterator: Iterator[StoreUpdate]): Set[TestUpdate] = {
+    iterator.map { _ match {
+      case ValueAdded(key, value) => Added(unwrapKey(key), unwrapValue(value))
+      case ValueUpdated(key, value) => Updated(unwrapKey(key), unwrapValue(value))
+      case KeyRemoved(key) => Removed(unwrapKey(key))
+    }}.toSet
   }
 }
