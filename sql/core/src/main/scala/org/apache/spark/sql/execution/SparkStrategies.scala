@@ -80,8 +80,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object CanBroadcast {
     def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
-      if (sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
-          plan.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
+      if (conf.autoBroadcastJoinThreshold > 0 &&
+          plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold) {
         Some(plan)
       } else {
         None
@@ -398,11 +398,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
       case describe @ LogicalDescribeCommand(table, isExtended) =>
-        val resultPlan = self.sqlContext.executePlan(table).executedPlan
-        ExecutedCommand(
-          RunnableDescribeCommand(resultPlan, describe.output, isExtended)) :: Nil
+        ExecutedCommand(RunnableDescribeCommand(table, describe.output, isExtended)) :: Nil
 
-      case logical.ShowFunctions(db, pattern) => ExecutedCommand(ShowFunctions(db, pattern)) :: Nil
+      case logical.ShowFunctions(db, pattern) =>
+        ExecutedCommand(ShowFunctions(db, pattern)) :: Nil
 
       case logical.DescribeFunction(function, extended) =>
         ExecutedCommand(DescribeFunction(function, extended)) :: Nil

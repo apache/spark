@@ -47,7 +47,7 @@ case class LeftSemiJoinHash(
     val numOutputRows = longMetric("numOutputRows")
 
     right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
-      val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
+      val hashRelation = HashedRelation(buildIter.map(_.copy()), rightKeyGenerator)
       hashSemiJoin(streamIter, hashRelation, numOutputRows)
     }
   }
