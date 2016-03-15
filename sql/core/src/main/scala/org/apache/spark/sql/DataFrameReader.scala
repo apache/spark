@@ -399,7 +399,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+   * Loads a text file and returns a [[Dataset[String]] with a single string column named "value".
    * Each line in the text file is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
@@ -410,10 +410,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * }}}
    *
    * @param paths input path
-   * @since 1.6.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  def text(paths: String*): Dataset[String] = {
+    import sqlContext.implicits._
+    format("text").load(paths: _*).toDF("value").as[String]
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
