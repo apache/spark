@@ -29,7 +29,7 @@ class CombiningLimitsSuite extends PlanTest {
     val batches =
       Batch("Filter Pushdown", FixedPoint(100),
         ColumnPruning,
-        EliminateObjects) ::
+        EliminateOperators) ::
       Batch("Combine Limit", FixedPoint(10),
         CombineLimits) ::
       Batch("Constant Folding", FixedPoint(10),

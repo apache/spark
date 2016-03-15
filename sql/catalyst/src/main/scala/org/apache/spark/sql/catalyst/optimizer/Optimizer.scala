@@ -71,7 +71,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughAggregate,
       LimitPushDown,
       ColumnPruning,
-      EliminateObjects,
+      EliminateOperators,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -405,7 +405,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
  *
  * Note: this rule should be executed just after ColumnPruning.
  */
-object EliminateObjects extends Rule[LogicalPlan] {
+object EliminateOperators extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Eliminate no-op Projects
     case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
