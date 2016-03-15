@@ -1161,7 +1161,7 @@ object functions {
    * @group normal_funcs
    */
   def expr(expr: String): Column = {
-    val parser = SQLContext.getActive().map(_.sqlParser).getOrElse(new CatalystQl())
+    val parser = SQLContext.getActive().map(_.sessionState.sqlParser).getOrElse(new CatalystQl())
     Column(parser.parseExpression(expr))
   }
 

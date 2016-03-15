@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -29,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
 import org.apache.spark.sql.execution.metric.LongSQLMetricValue
+import org.apache.spark.sql.internal.SQLConf
 
 /**
   * An interface for those physical operators that support codegen.
@@ -427,7 +427,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
 /**
   * Find the chained plans that support codegen, collapse them together as WholeStageCodegen.
   */
-private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Rule[SparkPlan] {
+case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def supportCodegen(e: Expression): Boolean = e match {
     case e: LeafExpression => true
@@ -472,7 +472,7 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (sqlContext.conf.wholeStageEnabled) {
+    if (conf.wholeStageEnabled) {
       insertWholeStageCodegen(plan)
     } else {
       plan

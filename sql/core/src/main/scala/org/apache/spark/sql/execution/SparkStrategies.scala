@@ -80,8 +80,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object CanBroadcast {
     def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
-      if (sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
-          plan.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
+      if (conf.autoBroadcastJoinThreshold > 0 &&
+          plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold) {
         Some(plan)
       } else {
         None

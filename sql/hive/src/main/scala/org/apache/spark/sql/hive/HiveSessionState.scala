@@ -74,11 +74,11 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    * Planner that takes into account Hive-specific strategies.
    */
   override lazy val planner: SparkPlanner = {
-    new SparkPlanner(ctx) with HiveStrategies {
+    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods) with HiveStrategies {
       override val hiveContext = ctx
 
       override def strategies: Seq[Strategy] = {
-        ctx.experimental.extraStrategies ++ Seq(
+        experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
           HiveCommandStrategy(ctx),

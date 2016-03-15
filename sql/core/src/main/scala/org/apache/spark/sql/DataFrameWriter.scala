@@ -242,7 +242,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         options = extraOptions.toMap,
         partitionColumns = normalizedParCols.getOrElse(Nil))
 
-    df.sqlContext.continuousQueryManager.startQuery(
+    df.sqlContext.sessionState.continuousQueryManager.startQuery(
       extraOptions.getOrElse("queryName", StreamExecution.nextName), df, dataSource.createSink())
   }
 
@@ -255,7 +255,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    insertInto(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
+    insertInto(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
@@ -354,7 +354,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
+    saveAsTable(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {

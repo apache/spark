@@ -358,13 +358,14 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     case Some(p) =>
       try {
         val regex = java.util.regex.Pattern.compile(p)
-        sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
+        sqlContext.sessionState.functionRegistry.listFunction()
+          .filter(regex.matcher(_).matches()).map(Row(_))
       } catch {
         // probably will failed in the regex that user provided, then returns empty row.
         case _: Throwable => Seq.empty[Row]
       }
     case None =>
-      sqlContext.functionRegistry.listFunction().map(Row(_))
+      sqlContext.sessionState.functionRegistry.listFunction().map(Row(_))
   }
 }
 
@@ -395,7 +396,7 @@ case class DescribeFunction(
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.functionRegistry.lookupFunction(functionName) match {
+    sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
       case Some(info) =>
         val result =
           Row(s"Function: ${info.getName}") ::
