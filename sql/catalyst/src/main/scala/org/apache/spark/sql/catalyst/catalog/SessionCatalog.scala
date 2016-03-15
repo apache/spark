@@ -220,13 +220,23 @@ abstract class SessionCatalog(catalog: ExternalCatalog) {
   // | Methods that interact with metastore functions only |
   // -------------------------------------------------------
 
+  /**
+   * Create a metastore function in the database specified in `funcDefinition`.
+   * If no such database is specified, create it in the current database.
+   */
   def createFunction(currentDb: String, funcDefinition: CatalogFunction): Unit
 
+  /**
+   * Drop a metastore function.
+   * If no database is specified, assume the function is in the current database.
+   */
   def dropFunction(currentDb: String, funcName: FunctionIdentifier): Unit
 
   /**
-   * Alter a function whose name that matches the one specified in `funcDefinition`,
-   * assuming the function exists.
+   * Alter a function whose name that matches the one specified in `funcDefinition`.
+   *
+   * If no database is specified in `funcDefinition`, assume the function is in the
+   * current database.
    *
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
@@ -237,20 +247,43 @@ abstract class SessionCatalog(catalog: ExternalCatalog) {
   // | Methods that interact with temporary and metastore functions |
   // ----------------------------------------------------------------
 
+  /**
+   * Create a temporary function.
+   * This assumes no database is specified in `funcDefinition`.
+   */
   def createTempFunction(funcDefinition: CatalogFunction): Unit
 
   // TODO: The reason that we distinguish dropFunction and dropTempFunction is that
   // Hive has DROP FUNCTION and DROP TEMPORARY FUNCTION. We may want to consolidate
   // dropFunction and dropTempFunction.
-  def dropTempFunction(funcName: String): Unit
+  def dropTempFunction(name: String): Unit
 
+  /**
+   * Rename a function.
+   *
+   * If a database is specified in `oldName`, this will rename the function in that database.
+   * If no database is specified, this will first attempt to rename a temporary function with
+   * the same name, then, if that does not exist, rename the function in the current database.
+   *
+   * This assumes the database specified in `oldName` matches the one specified in `newName`.
+   */
   def renameFunction(
       currentDb: String,
       oldName: FunctionIdentifier,
       newName: FunctionIdentifier): Unit
 
-  def getFunction(currentDb: String, funcIdentifier: FunctionIdentifier): CatalogFunction
+  /**
+   * Retrieve the metadata of an existing function.
+   *
+   * If a database is specified in `name`, this will return the function in that database.
+   * If no database is specified, this will first attempt to return a temporary function with
+   * the same name, then, if that does not exist, return the function in the current database.
+   */
+  def getFunction(currentDb: String, name: FunctionIdentifier): CatalogFunction
 
+  /**
+   * List all matching functions in the current database, including temporary functions.
+   */
   def listFunctions(currentDb: String, pattern: String): Seq[FunctionIdentifier]
 
 }
