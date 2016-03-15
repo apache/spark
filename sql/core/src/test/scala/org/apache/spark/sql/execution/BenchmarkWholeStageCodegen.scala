@@ -428,4 +428,29 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       */
     benchmark.run()
   }
+
+  ignore("collect") {
+    val N = 1 << 20
+
+    val benchmark = new Benchmark("collect", N)
+    benchmark.addCase("collect 1 million") { iter =>
+      sqlContext.range(N).collect()
+    }
+    benchmark.addCase("collect 2 millions") { iter =>
+      sqlContext.range(N * 2).collect()
+    }
+    benchmark.addCase("collect 4 millions") { iter =>
+      sqlContext.range(N * 4).collect()
+    }
+    benchmark.run()
+
+    /**
+     * Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    collect:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    collect 1 million                          775 / 1170          1.4         738.9       1.0X
+    collect 2 millions                        1153 / 1758          0.9        1099.3       0.7X
+    collect 4 millions                        4451 / 5124          0.2        4244.9       0.2X
+     */
+  }
 }
