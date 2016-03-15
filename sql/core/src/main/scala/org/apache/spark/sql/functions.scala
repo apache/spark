@@ -33,25 +33,6 @@ import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-/**
- * Ensures that java functions signatures for methods that now return a [[TypedColumn]] still have
- * legacy equivalents in bytecode.  This compatibility is done by forcing the compiler to generate
- * "bridge" methods due to the use of covariant return types.
- *
- * {{{
- *   // In LegacyFunctions:
- *   public abstract org.apache.spark.sql.Column avg(java.lang.String);
- *
- *   // In functions:
- *   public static org.apache.spark.sql.TypedColumn<java.lang.Object, java.lang.Object> avg(...);
- * }}}
- *
- * This allows us to use the same functions both in typed [[Dataset]] operations and untyped
- * [[DataFrame]] operations when the return type for a given function is statically known.
- */
-private[sql] abstract class LegacyFunctions {
-  def count(columnName: String): Column
-}
 
 /**
  * :: Experimental ::
@@ -72,7 +53,7 @@ private[sql] abstract class LegacyFunctions {
  */
 @Experimental
 // scalastyle:off
-object functions extends LegacyFunctions {
+object functions {
 // scalastyle:on
 
   private def withExpr(expr: Expression): Column = Column(expr)
@@ -287,7 +268,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def count(columnName: String): TypedColumn[Any, Long] =
-    count(Column(columnName)).as(ExpressionEncoder[Long])
+    count(Column(columnName)).as(ExpressionEncoder[Long]())
 
   /**
    * Aggregate function: returns the number of distinct items in a group.

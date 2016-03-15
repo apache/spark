@@ -210,43 +210,6 @@ streaming_kinesis_asl = Module(
 )
 
 
-streaming_zeromq = Module(
-    name="streaming-zeromq",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/zeromq",
-    ],
-    sbt_test_goals=[
-        "streaming-zeromq/test",
-    ]
-)
-
-
-streaming_twitter = Module(
-    name="streaming-twitter",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/twitter",
-    ],
-    sbt_test_goals=[
-        "streaming-twitter/test",
-    ]
-)
-
-
-streaming_mqtt = Module(
-    name="streaming-mqtt",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/mqtt",
-        "external/mqtt-assembly",
-    ],
-    sbt_test_goals=[
-        "streaming-mqtt/test",
-    ]
-)
-
-
 streaming_kafka = Module(
     name="streaming-kafka",
     dependencies=[streaming],
@@ -256,51 +219,6 @@ streaming_kafka = Module(
     ],
     sbt_test_goals=[
         "streaming-kafka/test",
-    ]
-)
-
-
-streaming_flume_sink = Module(
-    name="streaming-flume-sink",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/flume-sink",
-    ],
-    sbt_test_goals=[
-        "streaming-flume-sink/test",
-    ]
-)
-
-
-streaming_akka = Module(
-    name="streaming-akka",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/akka",
-    ],
-    sbt_test_goals=[
-        "streaming-akka/test",
-    ]
-)
-
-
-streaming_flume = Module(
-    name="streaming-flume",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/flume",
-    ],
-    sbt_test_goals=[
-        "streaming-flume/test",
-    ]
-)
-
-
-streaming_flume_assembly = Module(
-    name="streaming-flume-assembly",
-    dependencies=[streaming_flume, streaming_flume_sink],
-    source_file_regexes=[
-        "external/flume-assembly",
     ]
 )
 
@@ -376,8 +294,6 @@ pyspark_streaming = Module(
         pyspark_core,
         streaming,
         streaming_kafka,
-        streaming_flume_assembly,
-        streaming_mqtt,
         streaming_kinesis_asl
     ],
     source_file_regexes=[

@@ -79,6 +79,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
 
       override def strategies: Seq[Strategy] = {
         ctx.experimental.extraStrategies ++ Seq(
+          FileSourceStrategy,
           DataSourceStrategy,
           HiveCommandStrategy(ctx),
           HiveDDLStrategy,
