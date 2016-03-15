@@ -768,18 +768,16 @@ class DAGScheduler(
 
   /**
    * Check for waiting stages which are now eligible for resubmission.
-   * Ordinarily run on every iteration of the event loop.
+   * Ordinarily run after the parent stage completed successfully.
    */
-  private def submitWaitingStages() {
-    // TODO: We might want to run this less often, when we are sure that something has become
-    // runnable that wasn't before.
+  private def submitWaitingChildStages(parent: Stage) {
     logTrace("Checking for newly runnable parent stages")
     logTrace("running: " + runningStages)
     logTrace("waiting: " + waitingStages)
     logTrace("failed: " + failedStages)
-    val waitingStagesCopy = waitingStages.toArray
-    waitingStages.clear()
-    for (stage <- waitingStagesCopy.sortBy(_.firstJobId)) {
+    val childStages = waitingStages.filter(_.parents.contains(parent)).toArray
+    waitingStages --= childStages
+    for (stage <- childStages.sortBy(_.firstJobId)) {
       submitStage(stage)
     }
   }
@@ -1083,6 +1081,8 @@ class DAGScheduler(
           s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})"
       }
       logDebug(debugString)
+
+      submitWaitingChildStages(stage)
     }
   }
 
@@ -1252,7 +1252,7 @@ class DAGScheduler(
                 }
               }
 
-              submitWaitingStages()
+              submitWaitingChildStages(shuffleStage)
             }
         }
 
