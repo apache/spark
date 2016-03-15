@@ -2479,7 +2479,7 @@
         <property><name>scala-2.10</name></property>
       </activation>
       <properties>
-        <scala.version>2.10.5</scala.version>
+        <scala.version>2.10.6</scala.version>
         <scala.binary.version>2.10</scala.binary.version>
         <jline.version>${scala.version}</jline.version>
         <jline.groupid>org.scala-lang</jline.groupid>
