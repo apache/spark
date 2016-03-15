@@ -82,7 +82,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> model.intercept == model2.intercept
     True
 
-    .. versionadded:: 1.6.0
+    .. versionadded:: 1.3.0
     """
 
     threshold = Param(Params._dummy(), "threshold",
@@ -732,7 +732,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     |[0.0,0.0]|       0.0|
     +---------+----------+
     ...
-
 
     .. versionadded:: 1.6.0
     """
