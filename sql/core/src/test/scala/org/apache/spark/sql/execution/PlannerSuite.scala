@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -487,6 +488,7 @@ class PlannerSuite extends SharedSQLContext {
     val inputPlan = SortMergeJoin(
         Literal(1) :: Nil,
         Literal(1) :: Nil,
+        Inner,
         None,
         shuffle,
         shuffle)
@@ -503,6 +505,7 @@ class PlannerSuite extends SharedSQLContext {
     val inputPlan2 = SortMergeJoin(
       Literal(1) :: Nil,
       Literal(1) :: Nil,
+      Inner,
       None,
       ShuffleExchange(finalPartitioning, inputPlan),
       ShuffleExchange(finalPartitioning, inputPlan))

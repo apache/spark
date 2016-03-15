@@ -99,7 +99,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(sqlContext.sessionState.conf).apply(
-              SortMergeOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+              SortMergeJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
