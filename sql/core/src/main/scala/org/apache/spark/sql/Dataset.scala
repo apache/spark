@@ -1989,9 +1989,9 @@ class Dataset[T] private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  def toJSON: RDD[String] = {
+  def toJSON: Dataset[String] = {
     val rowSchema = this.schema
-    queryExecution.toRdd.mapPartitions { iter =>
+    val rdd = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
@@ -2013,6 +2013,8 @@ class Dataset[T] private[sql](
         }
       }
     }
+    import sqlContext.implicits._
+    rdd.toDS
   }
 
   /**
