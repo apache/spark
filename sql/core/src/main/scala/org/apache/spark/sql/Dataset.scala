@@ -48,11 +48,17 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
-private[sql] object Dataset {
-  def apply[T: Encoder](sqlContext: SQLContext, logicalPlan: LogicalPlan): Dataset[T] = {
+object Dataset {
+  private[sql] def apply[T: Encoder](
+      sqlContext: SQLContext, logicalPlan: LogicalPlan): Dataset[T] = {
     new Dataset(sqlContext, logicalPlan, implicitly[Encoder[T]])
   }
 
+  /**
+   * Creates a [[DataFrame]] by analyzing a given logical plan.
+   *
+   * @since 2.0.0
+   */
   def newDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sqlContext.executePlan(logicalPlan)
     qe.assertAnalyzed()
