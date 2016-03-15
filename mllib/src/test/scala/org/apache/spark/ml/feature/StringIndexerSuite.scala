@@ -31,8 +31,8 @@ class StringIndexerSuite
 
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
-    val model = new StringIndexerModel("indexer", Array("a", "b"))
-    val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
+    val model = StringIndexer("indexer", Array("a", "b"))
+    val modelWithoutUid = new StringIndexer().setLabels(Array("a", "b"))
     ParamsSuite.checkParams(model)
     ParamsSuite.checkParams(modelWithoutUid)
   }
@@ -111,7 +111,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexerModel should keep silent if the input column does not exist.") {
-    val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
+    val indexerModel = StringIndexer("indexer", Array("a", "b", "c"))
       .setInputCol("label")
       .setOutputCol("labelIndex")
     val df = sqlContext.range(0L, 10L).toDF()
@@ -138,7 +138,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexerModel read/write") {
-    val instance = new StringIndexerModel("myStringIndexerModel", Array("a", "b", "c"))
+    val instance = StringIndexer("myStringIndexerModel", Array("a", "b", "c"))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setHandleInvalid("skip")
@@ -189,7 +189,7 @@ class StringIndexerSuite
     val idx2str = new IndexToString()
       .setInputCol("labelIndex")
       .setOutputCol("sameLabel")
-      .setLabels(indexer.labels)
+      .setLabels(indexer.getLabels)
     idx2str.transform(transformed).select("label", "sameLabel").collect().foreach {
       case Row(a: String, b: String) =>
         assert(a === b)

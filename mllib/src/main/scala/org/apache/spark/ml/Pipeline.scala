@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
  */
 @DeveloperApi
-abstract class PipelineStage extends Params with Logging {
+trait PipelineStage extends Params with Logging {
 
   /**
    * :: DeveloperApi ::
@@ -89,7 +89,8 @@ abstract class PipelineStage extends Params with Logging {
 @Since("1.2.0")
 @Experimental
 class Pipeline @Since("1.4.0") (
-  @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel] with MLWritable {
+  @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel]
+  with MLWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("pipeline"))

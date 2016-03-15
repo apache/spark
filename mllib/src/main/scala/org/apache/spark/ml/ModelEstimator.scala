@@ -17,38 +17,22 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param.ParamMap
 
-/**
- * :: DeveloperApi ::
- * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
- *
- * @tparam M model type
- */
-@DeveloperApi
-trait Model[M <: Model[M]] extends Transformer {
+abstract class ModelEstimator[T <: ModelEstimator[T] with Model[T]]
+  extends Estimator[T] with Model[T] {
 
-  /**
-   * The parent estimator that produced this model.
-   * Note: For ensembles' component Models, this value can be null.
-   */
-  @transient private[this] var _parent: Estimator[M] = null
+  final override def parent: Estimator[T] = this
 
-  def parent: Estimator[M] = _parent
-
-  def parent_=(p: Estimator[M]): Unit = { _parent = p }
-
-  /**
-   * Sets the parent of this model (Java API).
-   */
-  def setParent(parent: Estimator[M]): M = {
-    this.parent = parent
-    this.asInstanceOf[M]
+  def newInstance(uid: String): T = {
+    // This reflection trick is ugly, we should force users to reimplement this method.
+    this.getClass.getConstructor(classOf[String]).newInstance(uid).asInstanceOf[T]
   }
 
-  /** Indicates whether this [[Model]] has a corresponding parent. */
-  def hasParent: Boolean = parent != null
+  // Because of the current way of testing the signature, this does not work properly.
+  override def copy(extra: ParamMap): T = {
+    val that = newInstance(uid)
+    copyValues(that, extra).setParent(this)
+  }
 
-  override def copy(extra: ParamMap): M
 }

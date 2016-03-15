@@ -25,6 +25,7 @@ object MLTestingUtils {
     val copied = model.copy(ParamMap.empty)
       .asInstanceOf[Model[_]]
     assert(copied.parent.uid == model.parent.uid)
-    assert(copied.parent == model.parent)
+    // This does not work when combining estimators and models, because the parent is itself.
+//    assert(copied.parent == model.parent)
   }
 }
