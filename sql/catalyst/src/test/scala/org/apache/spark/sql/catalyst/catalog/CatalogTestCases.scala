@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 
 
 /**
@@ -89,8 +90,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
 
   private def newTable(name: String, db: String): CatalogTable = {
     CatalogTable(
-      specifiedDatabase = Some(db),
-      name = name,
+      name = TableIdentifier(name, Some(db)),
       tableType = CatalogTableType.EXTERNAL_TABLE,
       storage = storageFormat,
       schema = Seq(CatalogColumn("col1", "int"), CatalogColumn("col2", "string")),
@@ -277,7 +277,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("get table") {
-    assert(newBasicCatalog().getTable("db2", "tbl1").name == "tbl1")
+    assert(newBasicCatalog().getTable("db2", "tbl1").name.table == "tbl1")
   }
 
   test("get table when database/table does not exist") {

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.catalog
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 
 
 /**
@@ -156,12 +157,13 @@ class InMemoryCatalog extends ExternalCatalog {
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
     requireDbExists(db)
-    if (existsTable(db, tableDefinition.name)) {
+    val table = tableDefinition.name.table
+    if (existsTable(db, table)) {
       if (!ignoreIfExists) {
-        throw new AnalysisException(s"Table ${tableDefinition.name} already exists in $db database")
+        throw new AnalysisException(s"Table $table already exists in $db database")
       }
     } else {
-      catalog(db).tables.put(tableDefinition.name, new TableDesc(tableDefinition))
+      catalog(db).tables.put(table, new TableDesc(tableDefinition))
     }
   }
 
@@ -182,14 +184,14 @@ class InMemoryCatalog extends ExternalCatalog {
   override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
     requireTableExists(db, oldName)
     val oldDesc = catalog(db).tables(oldName)
-    oldDesc.table = oldDesc.table.copy(name = newName)
+    oldDesc.table = oldDesc.table.copy(name = TableIdentifier(newName, Some(db)))
     catalog(db).tables.put(newName, oldDesc)
     catalog(db).tables.remove(oldName)
   }
 
   override def alterTable(db: String, tableDefinition: CatalogTable): Unit = synchronized {
-    requireTableExists(db, tableDefinition.name)
-    catalog(db).tables(tableDefinition.name).table = tableDefinition
+    requireTableExists(db, tableDefinition.name.table)
+    catalog(db).tables(tableDefinition.name.table).table = tableDefinition
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
