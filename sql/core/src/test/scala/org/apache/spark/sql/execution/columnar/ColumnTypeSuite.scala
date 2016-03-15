@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import java.nio.charset.StandardCharsets
 import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.Row
