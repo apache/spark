@@ -29,7 +29,6 @@ import org.apache.spark.sql.types.IntegerType
 class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    System.setProperty("spark.testing", "true")
     val batches =
       Batch("SimplifyConditionals", FixedPoint(50), SimplifyConditionals) :: Nil
   }

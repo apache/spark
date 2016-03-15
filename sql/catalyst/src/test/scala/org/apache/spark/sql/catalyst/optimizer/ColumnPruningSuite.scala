@@ -33,7 +33,6 @@ import org.apache.spark.sql.types.StringType
 class ColumnPruningSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    System.setProperty("spark.testing", "true")
     val batches = Batch("Column pruning", FixedPoint(100),
       ColumnPruning,
       CollapseProject) :: Nil

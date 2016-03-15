@@ -26,6 +26,9 @@ import org.apache.spark.sql.catalyst.util._
  * Provides helper methods for comparing plans.
  */
 abstract class PlanTest extends SparkFunSuite with PredicateHelper {
+
+  System.setProperty("spark.testing", "true")
+
   /**
    * Since attribute references are given globally unique ids during analysis,
    * we must normalize them to check if two different queries are identical.
