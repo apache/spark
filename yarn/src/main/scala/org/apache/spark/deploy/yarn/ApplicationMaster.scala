@@ -123,19 +123,14 @@ private[spark] class ApplicationMaster(
     // Register signal handler for signal "TERM", "INT" and "HUP". For the cases where AM receive a
     // signal and stop, from RM's aspect this application needs to be reattempted, rather than mark
     // as success.
-    // Replace this signal handler with SignalLogger in AM side.
-    val signalHandler = new SignalHandler() {
+    class AMSignalHandler(name: String) extends SignalHandler {
+      val prevHandler = Signal.handle(new Signal(name), this)
       override def handle(sig: Signal): Unit = {
-
-        logInfo(s"RECEIVED SIGNAL ${sig.getNumber}: SIG${sig.getName}")
         finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_SIGNAL)
+        prevHandler.handle(sig)
       }
     }
-    Seq("TERM", "INT", "HUP").foreach { sig => Signal.handle(new Signal(sig), signalHandler) }
-  }
-
-  def getAttemptId(): ApplicationAttemptId = {
-    client.getAttemptId()
+    Seq("TERM", "INT", "HUP").foreach { sig => new AMSignalHandler(sig) }
   }
 
   final def run(): Int = {
@@ -668,6 +663,7 @@ object ApplicationMaster extends Logging {
   private var master: ApplicationMaster = _
 
   def main(args: Array[String]): Unit = {
+    SignalLogger.register(log)
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
       master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
