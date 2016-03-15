@@ -22,7 +22,7 @@ import java.util.NoSuchElementException
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row, SQLContext}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -293,13 +293,14 @@ case object ClearCacheCommand extends RunnableCommand {
 
 
 case class DescribeCommand(
-    child: SparkPlan,
+    table: TableIdentifier,
     override val output: Seq[Attribute],
     isExtended: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    child.schema.fields.map { field =>
+    val relation = sqlContext.sessionState.catalog.lookupRelation(table)
+    relation.schema.fields.map { field =>
       val cmtKey = "comment"
       val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
       Row(field.name, field.dataType.simpleString, comment)

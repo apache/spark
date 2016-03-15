@@ -33,8 +33,9 @@ import org.apache.spark.sql.types._
  *                   It is effective only when the table is a Hive table.
  */
 case class DescribeCommand(
-    table: LogicalPlan,
-    isExtended: Boolean) extends LogicalPlan with logical.Command {
+    table: TableIdentifier,
+    isExtended: Boolean)
+  extends LogicalPlan with logical.Command {
 
   override def children: Seq[LogicalPlan] = Seq.empty
 
