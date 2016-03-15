@@ -718,7 +718,7 @@ class SQLContext private[sql](
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in an range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
@@ -729,7 +729,7 @@ class SQLContext private[sql](
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in an range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
@@ -742,7 +742,7 @@ class SQLContext private[sql](
 
   /**
     * :: Experimental ::
-    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
     * in an range from `start` to `end` (exclusive) with an step value.
     *
     * @since 2.0.0
@@ -755,7 +755,7 @@ class SQLContext private[sql](
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in an range from `start` to `end` (exclusive) with an step value, with partition number
    * specified.
    *
