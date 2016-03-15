@@ -136,7 +136,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
    * Posts a message to a specific endpoint.
    *
    * @param endpointName name of the endpoint.
-   * @param createMessageFn function to create the message.
+   * @param message the message to post
    * @param callbackIfStopped callback function if the endpoint is stopped.
    */
   private def postMessage(
