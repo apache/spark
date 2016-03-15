@@ -39,7 +39,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   private val tempDir = Utils.createTempDir().toString
 
   after {
-    StateStore.clearAll()
+    StateStore.stop()
   }
 
   test("update, remove, commit, and all data iterator") {
@@ -325,12 +325,11 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
 private[state] object StateStoreSuite {
 
-  /** Trait and class mirroring [[StoreUpdate]] for testing */
+  /** Trait and classes mirroring [[StoreUpdate]] for testing store updates iterator */
   trait TestUpdate
   case class Added(key: String, value: Int) extends TestUpdate
   case class Updated(key: String, value: Int) extends TestUpdate
   case class Removed(key: String) extends TestUpdate
-
 
   def wrapValue(i: Int): InternalRow = {
     new GenericInternalRow(Array[Any](i))

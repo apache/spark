@@ -37,7 +37,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
   import StateStoreSuite._
 
   after {
-    StateStore.clearAll()
+    StateStore.stop()
   }
 
   override def afterAll(): Unit = {

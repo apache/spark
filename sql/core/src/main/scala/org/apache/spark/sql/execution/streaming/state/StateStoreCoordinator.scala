@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
+import org.apache.spark.util.RpcUtils
+import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinator.StateStoreCoordinatorEndpoint
@@ -34,7 +36,7 @@ private object StopCoordinator extends StateStoreCoordinatorMessage
 
 class StateStoreCoordinator(rpcEnv: RpcEnv) {
   private val coordinatorRef = rpcEnv.setupEndpoint(
-    "StateStoreCoordinator", new StateStoreCoordinatorEndpoint(rpcEnv, this))
+    StateStoreCoordinator.endpointName, new StateStoreCoordinatorEndpoint(rpcEnv, this))
   private val instances = new mutable.HashMap[StateStoreId, ExecutorCacheTaskLocation]
 
   def reportActiveInstance(storeId: StateStoreId, host: String, executorId: String): Boolean = {
@@ -44,7 +46,10 @@ class StateStoreCoordinator(rpcEnv: RpcEnv) {
 
   def verifyIfInstanceActive(storeId: StateStoreId, executorId: String): Boolean = {
     instances.synchronized {
-      instances.get(storeId).forall(_.executorId == executorId)
+      instances.get(storeId) match {
+        case Some(location) => location.executorId == executorId
+        case None => false
+      }
     }
   }
 
@@ -54,30 +59,44 @@ class StateStoreCoordinator(rpcEnv: RpcEnv) {
 
   def makeInstancesInactive(operatorIds: Set[Long]): Unit = {
     instances.synchronized {
-      val instancesToRemove =
+      val storeIdsToRemove =
         instances.keys.filter(id => operatorIds.contains(id.operatorId)).toSeq
-      instances --= instancesToRemove
+      instances --= storeIdsToRemove
     }
+  }
+
+  def stop(): Unit = {
+    coordinatorRef.askWithRetry[Boolean](StopCoordinator)
   }
 }
 
-private[spark] object StateStoreCoordinator {
+private[sql] object StateStoreCoordinator {
 
-  private[spark] class StateStoreCoordinatorEndpoint(
+  private val endpointName = "StateStoreCoordinator"
+
+  private class StateStoreCoordinatorEndpoint(
     override val rpcEnv: RpcEnv, coordinator: StateStoreCoordinator)
     extends RpcEndpoint with Logging {
-
-    override def receive: PartialFunction[Any, Unit] = {
-      case StopCoordinator =>
-        logInfo("StateStoreCoordinator stopped!")
-        stop()
-    }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case ReportActiveInstance(id, host, executorId) =>
         context.reply(coordinator.reportActiveInstance(id, host, executorId))
       case VerifyIfInstanceActive(id, executor) =>
         context.reply(coordinator.verifyIfInstanceActive(id, executor))
+      case StopCoordinator =>
+        // Stop before replying to ensure that endpoint name has been deregistered
+        stop()
+        context.reply(true)
+    }
+  }
+
+  def ask(message: StateStoreCoordinatorMessage): Option[Boolean] = {
+    val env = SparkEnv.get
+    if (env != null) {
+      val coordinatorRef = RpcUtils.makeDriverRef(endpointName, env.conf, env.rpcEnv)
+      Some(coordinatorRef.askWithRetry[Boolean](message))
+    } else {
+      None
     }
   }
 }

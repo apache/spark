@@ -106,77 +106,85 @@ private[state] object StateStore extends Logging {
 
   val MANAGEMENT_TASK_INTERVAL_SECS = 60
 
-  private val loadedStores = new mutable.HashMap[StateStoreId, StateStoreProvider]()
+  private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
   private val managementTimer = new Timer("StateStore Timer", true)
   @volatile private var managementTask: TimerTask = null
 
   /** Get or create a store associated with the id. */
   def get(storeId: StateStoreId, directory: String, version: Long): StateStore = {
-    val storeProvider = loadedStores.synchronized {
+    val storeProvider = loadedProviders.synchronized {
       startIfNeeded()
-      loadedStores.getOrElseUpdate(storeId, new HDFSBackedStateStoreProvider(storeId, directory))
+      val provider = loadedProviders.getOrElseUpdate(
+          storeId, new HDFSBackedStateStoreProvider(storeId, directory))
+      reportActiveInstance(storeId)
+      provider
     }
-    reportActiveInstance(storeId)
     storeProvider.getStore(version)
   }
 
-  def clearAll(): Unit = loadedStores.synchronized {
-    loadedStores.clear()
+  /** Unload and stop all state store provider */
+  def stop(): Unit = loadedProviders.synchronized {
+    loadedProviders.clear()
     if (managementTask != null) {
       managementTask.cancel()
       managementTask = null
+      logInfo("StateStore stopped")
     }
   }
 
-  private def remove(storeId: StateStoreId): Unit = {
-    loadedStores.remove(storeId)
+  private def startIfNeeded(): Unit = loadedProviders.synchronized {
+    if (managementTask == null) {
+      managementTask = new TimerTask {
+        override def run(): Unit = { manageAll() }
+      }
+      val periodMs = MANAGEMENT_TASK_INTERVAL_SECS * 1000
+      managementTimer.schedule(managementTask, periodMs, periodMs)
+      logInfo("StateStore started")
+    }
+  }
+
+  /**
+   * Execute background management task in all the loaded store providers if they are still
+   * the active instances according to the coordinator.
+   */
+  private def manageAll(): Unit = {
+    loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
+      try {
+        if (verifyIfInstanceActive(id)) {
+          provider.manage()
+        } else {
+          remove(id)
+          logInfo(s"Unloaded $provider")
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Error managing $provider")
+      }
+    }
+  }
+
+  private def remove(storeId: StateStoreId): Unit = loadedProviders.synchronized {
+    loadedProviders.remove(storeId)
   }
 
   private def reportActiveInstance(storeId: StateStoreId): Unit = {
     val host = SparkEnv.get.blockManager.blockManagerId.host
     val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-    askCoordinator[Boolean](ReportActiveInstance(storeId, host, executorId))
+    askCoordinator(ReportActiveInstance(storeId, host, executorId))
   }
 
   private def verifyIfInstanceActive(storeId: StateStoreId): Boolean = {
     val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-    askCoordinator[Boolean](VerifyIfInstanceActive(storeId, executorId)).getOrElse(false)
+    askCoordinator(VerifyIfInstanceActive(storeId, executorId)).getOrElse(false)
   }
 
-  private def askCoordinator[T: ClassTag](message: StateStoreCoordinatorMessage): Option[T] = {
+  private def askCoordinator(message: StateStoreCoordinatorMessage): Option[Boolean] = {
     try {
-      val env = SparkEnv.get
-      if (env != null) {
-        val coordinatorRef = RpcUtils.makeDriverRef("StateStoreCoordinator", env.conf, env.rpcEnv)
-        Some(coordinatorRef.askWithRetry[T](message))
-      } else {
-        None
-      }
+      StateStoreCoordinator.ask(message)
     } catch {
       case NonFatal(e) =>
-        clearAll()
+        logWarning("Error communicating")
         None
-    }
-  }
-
-  private def startIfNeeded(): Unit = loadedStores.synchronized {
-    if (managementTask == null) {
-      managementTask = new TimerTask {
-        override def run(): Unit = {
-          loadedStores.synchronized { loadedStores.values.toSeq }.foreach { store =>
-            try {
-              store.manage()
-            } catch {
-              case NonFatal(e) =>
-                logWarning(s"Error performing snapshot and cleaning up $store")
-            }
-          }
-        }
-      }
-      managementTimer.schedule(
-        managementTask,
-        MANAGEMENT_TASK_INTERVAL_SECS * 1000,
-        MANAGEMENT_TASK_INTERVAL_SECS * 1000)
     }
   }
 }
