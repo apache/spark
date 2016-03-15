@@ -72,7 +72,6 @@ object CSVRelation extends Logging {
     }.foreach {
       case (field, index) => safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
     }
-    val rowArray = new Array[Any](safeRequiredIndices.length)
     val requiredSize = requiredFields.length
     val row = new GenericMutableRow(requiredSize)
     tokenizedRDD.flatMap { tokens =>
