@@ -299,7 +299,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a input stream from TCP source hostname:port. Data is received using
-   * a TCP socket and the receive bytes it interepreted as object using the given
+   * a TCP socket and the receive bytes it interpreted as object using the given
    * converter.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data

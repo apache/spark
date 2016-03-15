@@ -33,7 +33,6 @@ import org.apache.spark.mllib.linalg.BLAS;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
@@ -86,7 +85,7 @@ public class JavaDeveloperApiExample {
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     Dataset<Row> results = model.transform(test);
     double sumPredictions = 0;
-    for (Row r : results.select("features", "label", "prediction").collectRows()) {
+    for (Row r : results.select("features", "label", "prediction").collectAsList()) {
       sumPredictions += r.getDouble(2);
     }
     if (sumPredictions != 0.0) {
