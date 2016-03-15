@@ -363,12 +363,12 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
         unsafeReader.initialize(split, hadoopAttemptContext)
 
         if (enableVectorizedParquetReader) {
-          unsafeReader.resultBatch()
+          unsafeReader.initBatch(partitionSchema, file.partitionValues)
           // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
           // TODO: fix column appending
-//          if (enableWholestageCodegen) {
-//            unsafeReader.enableReturningBatches()
-//          }
+          if (enableWholestageCodegen) {
+            unsafeReader.enableReturningBatches()
+          }
         }
         unsafeReader
       } catch {
@@ -385,18 +385,22 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
           reader
       }
 
-
       val iter = new RecordReaderIterator(parquetReader)
       val fullSchema = dataSchema.toAttributes ++ partitionSchema.toAttributes
       val joinedRow = new JoinedRow()
       val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
-      // This is a horrible erasure hack...  if we type the iterator above, then it actually checks
-      // the type in next() and we get a class cast exception.  If we make that function return
-      // Object, then we can defer the cast until later!
-      iter.asInstanceOf[Iterator[InternalRow]]
-        .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
-        .map(r => r.copy())
+      // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
+      if (parquetReader.isInstanceOf[UnsafeRowParquetRecordReader]) {
+        iter.asInstanceOf[Iterator[InternalRow]]
+      } else {
+        // This is a horrible erasure hack...  if we type the iterator above, then it actually check
+        // the type in next() and we get a class cast exception.  If we make that function return
+        // Object, then we can defer the cast until later!
+        iter.asInstanceOf[Iterator[InternalRow]]
+            .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+            .map(r => r.copy())
+      }
     }
   }
 
