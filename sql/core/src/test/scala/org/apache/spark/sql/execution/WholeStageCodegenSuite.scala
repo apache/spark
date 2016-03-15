@@ -27,12 +27,6 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
 
-  setupTestData()
-
-  test("test null filtering") {
-    println(sql("select count(*) from testData where value is not NULL AND key > 5").collect())
-  }
-
   test("range/filter should be combined") {
     val df = sqlContext.range(10).filter("id = 1").selectExpr("id + 1")
     val plan = df.queryExecution.executedPlan

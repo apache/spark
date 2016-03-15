@@ -237,21 +237,6 @@ public final class ColumnarBatch {
   }
 
   /**
-   * Marks a given row as "filtered" if one of its attributes is part of a non-nullable column
-   *
-   * @return true if a given rowId can be filtered
-   */
-  public boolean shouldSkipRow(int rowId) {
-    for (int ordinal : nullFilteredColumns) {
-      if (columns[ordinal].getIsNull(rowId)) {
-        filteredRows[rowId] = true;
-        break;
-      }
-    }
-    return filteredRows[rowId];
-  }
-
-  /**
    * Returns an iterator over the rows in this batch. This skips rows that are filtered out.
    */
   public Iterator<Row> rowIterator() {
@@ -262,7 +247,7 @@ public final class ColumnarBatch {
 
       @Override
       public boolean hasNext() {
-        while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId] && shouldSkipRow(rowId)) {
+        while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
           ++rowId;
         }
         return rowId < maxRows;
@@ -302,11 +287,23 @@ public final class ColumnarBatch {
   }
 
   /**
-   * Sets the number of rows that are valid.
+   * Sets the number of rows that are valid. Additionally, marks all rows as "filtered" if one or
+   * more of their attributes are part of a non-nullable column.
    */
   public void setNumRows(int numRows) {
-    assert(numRows <= this.capacity);
+    assert (numRows <= this.capacity);
     this.numRows = numRows;
+
+    for (int ordinal : nullFilteredColumns) {
+      if (columns[ordinal].numNulls != 0) {
+        for (int rowId = 0; rowId < numRows; rowId++) {
+          if (!filteredRows[rowId] && columns[ordinal].getIsNull(rowId)) {
+            filteredRows[rowId] = true;
+            ++numRowsFiltered;
+          }
+        }
+      }
+    }
   }
 
   /**
