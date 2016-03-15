@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.io.File
+import java.nio.file.Files
+
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
@@ -29,7 +32,8 @@ import org.apache.spark.util.Utils
 class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
 
   private val conf = new SparkConf().setMaster("local").setAppName(this.getClass.getCanonicalName)
-  private var tempDir = Utils.createTempDir().toString
+  private var tempDir = Files.createTempDirectory("StateStoreRDDSuite").toString
+  println(tempDir)
 
   import StateStoreSuite._
 
@@ -37,7 +41,12 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
     StateStore.clearAll()
   }
 
-  test("versioning and immuability") {
+  override def afterAll(): Unit = {
+    super.afterAll()
+    Utils.deleteRecursively(new File(tempDir))
+  }
+
+  test("versioning and immutability") {
     withSpark(new SparkContext(conf)) { sc =>
       val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
       val increment = (store: StateStore, iter: Iterator[String]) => {
@@ -53,12 +62,12 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
       }
       val opId = 0
       val rdd1 = makeRDD(sc, Seq("a", "b", "a"))
-        .withStateStores(increment, opId, newStoreVersion = 0, path, null)
+        .withStateStores(increment, opId, storeVersion = 0, path, null)
       assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
 
       // Generate next version of stores
       val rdd2 = makeRDD(sc, Seq("a", "c"))
-        .withStateStores(increment, opId, newStoreVersion = 1, path, null)
+        .withStateStores(increment, opId, storeVersion = 1, path, null)
       assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
 
       // Make sure the previous RDD still has the same data.
@@ -66,7 +75,40 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
     }
   }
 
+  test("recovering from files") {
+    val opId = 0
+    val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
+
+    def makeStoreRDD(sc: SparkContext, seq: Seq[String], storeVersion: Int): RDD[(String, Int)] = {
+      makeRDD(sc, Seq("a")).withStateStores(increment, opId, storeVersion, path, null)
+    }
+
+    // Generate RDDs and state store data
+    withSpark(new SparkContext(conf)) { sc =>
+      for (i <- 1 to 20) {
+        require(makeStoreRDD(sc, Seq("a"), i - 1).collect().toSet === Set("a" -> i))
+      }
+    }
+
+    // With a new context, try using the earlier state store data
+    withSpark(new SparkContext(conf)) { sc =>
+      assert(makeStoreRDD(sc, Seq("a"), 20).collect().toSet === Set("a" -> 21))
+    }
+  }
+
   private def makeRDD(sc: SparkContext, seq: Seq[String]): RDD[String] = {
     sc.makeRDD(seq, 2).groupBy(x => x).flatMap(_._2)
+  }
+
+  private val increment = (store: StateStore, iter: Iterator[String]) => {
+    iter.foreach { s =>
+      store.update(
+        wrapKey(s), oldRow => {
+          val oldValue = oldRow.map(unwrapValue).getOrElse(0)
+          wrapValue(oldValue + 1)
+        })
+    }
+    store.commit()
+    store.iterator().map(unwrapKeyValue)
   }
 }

@@ -27,12 +27,12 @@ package object state {
     def withStateStores[OUTPUT: ClassTag](
       storeUpdateFunction: (StateStore, Iterator[INPUT]) => Iterator[OUTPUT],
       operatorId: Long,
-      newStoreVersion: Long,
+      storeVersion: Long,
       storeDirectory: String,
       storeCoordinator: StateStoreCoordinator
-    ): RDD[OUTPUT] = {
+    ): StateStoreRDD[INPUT, OUTPUT] = {
       new StateStoreRDD(
-        dataRDD, storeUpdateFunction, operatorId, newStoreVersion, storeDirectory, storeCoordinator)
+        dataRDD, storeUpdateFunction, operatorId, storeVersion, storeDirectory, storeCoordinator)
     }
   }
 }

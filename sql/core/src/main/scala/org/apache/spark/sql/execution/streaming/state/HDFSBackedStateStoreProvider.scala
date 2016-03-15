@@ -143,7 +143,7 @@ class HDFSBackedStateStoreProvider(
      */
     override def iterator(): Iterator[InternalRow] = {
       verify(state == COMMITTED, "Cannot get iterator of store data before comitting")
-      HDFSBackedStateStoreProvider.this.iterator(version)
+      HDFSBackedStateStoreProvider.this.iterator(newVersion)
     }
 
     /**
@@ -245,10 +245,8 @@ class HDFSBackedStateStoreProvider(
 
   /** Load the required version of the map data from the backing files */
   private def loadMap(version: Long): MapType = {
-    if (version < 0) return new MapType
-    synchronized {
-      loadedMaps.get(version)
-    }.getOrElse {
+    if (version <= 0) return new MapType
+    synchronized { loadedMaps.get(version) }.getOrElse {
       val mapFromFile = readSnapshotFile(version).getOrElse {
         val prevMap = loadMap(version - 1)
         val deltaUpdates = readDeltaFile(version)
@@ -328,9 +326,7 @@ class HDFSBackedStateStoreProvider(
         val lastVersion = files.last.version
         val deltaFilesForLastVersion =
           filesForVersion(files, lastVersion).filter(_.isSnapshot == false)
-        synchronized {
-          loadedMaps.get(lastVersion)
-        } match {
+        synchronized { loadedMaps.get(lastVersion) } match {
           case Some(map) =>
             if (deltaFilesForLastVersion.size > maxDeltaChainForSnapshots) {
               writeSnapshotFile(lastVersion, map)
@@ -342,7 +338,7 @@ class HDFSBackedStateStoreProvider(
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error doing snapshots for $this")
+        logWarning(s"Error doing snapshots for $this", e)
     }
   }
 
@@ -356,7 +352,7 @@ class HDFSBackedStateStoreProvider(
       val files = fetchFiles()
       if (files.nonEmpty) {
         val earliestVersionToRetain = files.last.version - numBatchesToRetain
-        if (earliestVersionToRetain >= 0) {
+        if (earliestVersionToRetain > 0) {
           val earliestFileToRetain = filesForVersion(files, earliestVersionToRetain).head
           synchronized {
             loadedMaps.keys.filter(_ < earliestVersionToRetain).foreach(loadedMaps.remove)
@@ -368,7 +364,7 @@ class HDFSBackedStateStoreProvider(
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error cleaning up files for $this")
+        logWarning(s"Error cleaning up files for $this", e)
     }
   }
 
@@ -380,7 +376,6 @@ class HDFSBackedStateStoreProvider(
       .filter(_.isSnapshot == true)
       .takeWhile(_.version <= version)
       .lastOption
-
     val deltaBatchFiles = latestSnapshotFileBeforeVersion match {
       case Some(snapshotFile) =>
         val deltaBatchIds = (snapshotFile.version + 1) to version

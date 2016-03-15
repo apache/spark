@@ -30,9 +30,11 @@ class StateStoreRDD[INPUT: ClassTag, OUTPUT: ClassTag](
     dataRDD: RDD[INPUT],
     storeUpdateFunction: (StateStore, Iterator[INPUT]) => Iterator[OUTPUT],
     operatorId: Long,
-    newStoreVersion: Long,
+    storeVersion: Long,
     storeDirectory: String,
     storeCoordinator: StateStoreCoordinator) extends RDD[OUTPUT](dataRDD) {
+
+  val nextVersion = storeVersion + 1
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
   override def getPreferredLocations(partition: Partition): Seq[String] = {
@@ -47,11 +49,8 @@ class StateStoreRDD[INPUT: ClassTag, OUTPUT: ClassTag](
     var store: StateStore = null
 
     Utils.tryWithSafeFinally {
-      store = StateStore.get(
-        StateStoreId(operatorId, partition.index),
-        storeDirectory,
-        newStoreVersion - 1
-      )
+      val storeId = StateStoreId(operatorId, partition.index)
+      store = StateStore.get(storeId, storeDirectory, storeVersion)
       val inputIter = dataRDD.compute(partition, ctxt)
       val outputIter = storeUpdateFunction(store, inputIter)
       assert(store.hasCommitted)
