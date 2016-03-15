@@ -69,7 +69,8 @@ private[csv] object CSVInferSchema {
 
   def mergeRowTypes(first: Array[DataType], second: Array[DataType]): Array[DataType] = {
     first.zipAll(second, NullType, NullType).map { case (a, b) =>
-      findTightestCommonType(a, b).getOrElse(NullType)
+      val aa = findTightestCommonType(a, b).getOrElse(NullType)
+      aa
     }
   }
 
@@ -86,6 +87,7 @@ private[csv] object CSVInferSchema {
         case IntegerType => tryParseInteger(field)
         case LongType => tryParseLong(field)
         case DoubleType => tryParseDouble(field)
+        case _: DecimalType => tryParseDecimal(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
@@ -108,14 +110,38 @@ private[csv] object CSVInferSchema {
   }
 
   private def tryParseDouble(field: String): DataType = {
-    if ((allCatch opt field.toDouble).isDefined) {
+    val doubleTry = allCatch opt field.toDouble
+    // If `doubleTry` is successful, then it should be successful
+    // for casting to `BigDecimal`. So, we do not handle the case it fails
+    // to cast to `BigDecimal` below. Also, it is okay to make this `String`
+    // and then make a `BigDecimal`. Otherwise, this loses some values.
+    // For example,
+    //   Option(new BigDecimal("1.23112331231231231231E13")) becomes Some(12311233123123.1231231)
+    //   but Option(new BigDecimal(1.23112331231231231231E13)) becomes
+    //   Some(12311233123123.123046875).
+    val roundtripTry = doubleTry.map(double => new BigDecimal(double.toString))
+    val decimalTryOther = allCatch opt new BigDecimal(field)
+    // This compares two `BigDecimal` but one of them is casted back from double.
+    // So, if the roundtrip loses some values, then this means casting to double
+    // loses some values.
+    if (roundtripTry == decimalTryOther && doubleTry.isDefined) {
       DoubleType
+    } else {
+      tryParseDecimal(field)
+    }
+  }
+
+  private def tryParseDecimal(field: String): DataType = {
+    val decimalTry = allCatch opt new BigDecimal(field)
+    if (decimalTry.isDefined) {
+      val decimalValue = decimalTry.get
+      DecimalType(decimalValue.precision, decimalValue.scale)
     } else {
       tryParseTimestamp(field)
     }
   }
 
-  def tryParseTimestamp(field: String): DataType = {
+  private def tryParseTimestamp(field: String): DataType = {
     if ((allCatch opt Timestamp.valueOf(field)).isDefined) {
       TimestampType
     } else {
@@ -123,7 +149,7 @@ private[csv] object CSVInferSchema {
     }
   }
 
-  def tryParseBoolean(field: String): DataType = {
+  private def tryParseBoolean(field: String): DataType = {
     if ((allCatch opt field.toBoolean).isDefined) {
       BooleanType
     } else {
@@ -150,6 +176,15 @@ private[csv] object CSVInferSchema {
     case (t1, NullType) => Some(t1)
     case (StringType, t2) => Some(StringType)
     case (t1, StringType) => Some(StringType)
+
+    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+      Some(t2)
+    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+      Some(t1)
+    case (t1: DecimalType, t2: DecimalType) if t2.isWiderThan(t1) =>
+      Some(t2)
+    case (t1: DecimalType, t2: DecimalType) if t1.isWiderThan(t2) =>
+      Some(t1)
 
     // Promote numeric types to the highest of the two and all numeric types to unlimited decimal
     case (t1, t2) if Seq(t1, t2).forall(numericPrecedence.contains) =>
