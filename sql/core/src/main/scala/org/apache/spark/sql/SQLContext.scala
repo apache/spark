@@ -120,7 +120,6 @@ class SQLContext private[sql](
   @transient
   protected[sql] lazy val sessionState: SessionState = new SessionState(self)
   protected[sql] def conf: SQLConf = sessionState.conf
-  protected[sql] def catalog: Catalog = sessionState.catalog
   protected[sql] def analyzer: Analyzer = sessionState.analyzer
 
   /**
@@ -699,7 +698,8 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(sessionState.sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
+    sessionState.catalog.registerTable(
+      sessionState.sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
   }
 
   /**
@@ -712,7 +712,7 @@ class SQLContext private[sql](
    */
   def dropTempTable(tableName: String): Unit = {
     cacheManager.tryUncacheQuery(table(tableName))
-    catalog.unregisterTable(TableIdentifier(tableName))
+    sessionState.catalog.unregisterTable(TableIdentifier(tableName))
   }
 
   /**
@@ -797,7 +797,7 @@ class SQLContext private[sql](
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.newDataFrame(this, catalog.lookupRelation(tableIdent))
+    Dataset.newDataFrame(this, sessionState.catalog.lookupRelation(tableIdent))
   }
 
   /**
@@ -839,7 +839,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(): Array[String] = {
-    catalog.getTables(None).map {
+    sessionState.catalog.getTables(None).map {
       case (tableName, _) => tableName
     }.toArray
   }
@@ -851,7 +851,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    catalog.getTables(Some(databaseName)).map {
+    sessionState.catalog.getTables(Some(databaseName)).map {
       case (tableName, _) => tableName
     }.toArray
   }
