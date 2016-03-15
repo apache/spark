@@ -38,11 +38,9 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
-    streaming, streamingFlumeSink, streamingFlume, streamingAkka, streamingKafka, streamingMqtt,
-    streamingTwitter, streamingZeromq
+    streaming, streamingKafka
   ) = Seq(
-    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-akka", "streaming-kafka",
-    "streaming-mqtt", "streaming-twitter", "streaming-zeromq"
+    "streaming", "streaming-kafka"
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
@@ -57,8 +55,8 @@ object BuildCommons {
     Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingMqttAssembly, streamingKinesisAslAssembly) =
-    Seq("assembly", "examples", "network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly", "streaming-mqtt-assembly", "streaming-kinesis-asl-assembly")
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
@@ -245,11 +243,10 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  // TODO: remove streamingAkka and sketch from this list after 2.0.0
   allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, streamingAkka, testTags, sketch
+      unsafe, testTags, sketch
     ).contains(x)
   }.foreach { x =>
     enable(MimaBuild.mimaSettings(sparkHome, x))(x)
@@ -260,9 +257,6 @@ object SparkBuild extends PomBuild {
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
-
-  /* Enable Assembly for streamingMqtt test */
-  enable(inConfig(Test)(Assembly.settings))(streamingMqtt)
 
   /* Package pyspark artifacts in a separate zip file for YARN. */
   enable(PySparkAssembly.settings)(assembly)
@@ -278,8 +272,6 @@ object SparkBuild extends PomBuild {
 
   /* Hive console settings */
   enable(Hive.settings)(hive)
-
-  enable(Flume.settings)(streamingFlumeSink)
 
   enable(Java8TestSettings.settings)(java8Tests)
 
@@ -346,10 +338,6 @@ object Unsafe {
   )
 }
 
-object Flume {
-  lazy val settings = sbtavro.SbtAvro.avroSettings
-}
-
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
@@ -387,10 +375,6 @@ object OldDeps {
     name := "old-deps",
     scalaVersion := "2.10.5",
     libraryDependencies := Seq(
-      "spark-streaming-mqtt",
-      "spark-streaming-zeromq",
-      "spark-streaming-flume",
-      "spark-streaming-twitter",
       "spark-streaming",
       "spark-mllib",
       "spark-graphx",
@@ -531,7 +515,7 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly") || mName.contains("streaming-mqtt-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
+      if (mName.contains("streaming-kafka-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
         // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
         s"${mName}-${v}.jar"
       } else {
@@ -629,7 +613,6 @@ object Unidoc {
   private def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
     packages
       .map(_.filterNot(_.getName.contains("$")))
-      .map(_.filterNot(_.getCanonicalPath.contains("akka")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/examples")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/memory")))
@@ -650,9 +633,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, yarn, testTags),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, yarn, testTags),
 
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.
@@ -671,8 +654,7 @@ object Unidoc {
       "-public",
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
-        "streaming.api.java", "streaming.flume", "streaming.akka", "streaming.kafka",
-        "streaming.mqtt", "streaming.twitter", "streaming.zeromq", "streaming.kinesis"
+        "streaming.api.java", "streaming.kafka", "streaming.kinesis"
       ),
       "-group", "MLlib", packageList(
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
@@ -772,7 +754,6 @@ object TestSettings {
     scalacOptions in (Compile, doc) := Seq(
       "-groups",
       "-skip-packages", Seq(
-        "akka",
         "org.apache.spark.api.python",
         "org.apache.spark.network",
         "org.apache.spark.deploy",
