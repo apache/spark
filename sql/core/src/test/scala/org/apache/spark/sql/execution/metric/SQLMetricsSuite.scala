@@ -128,7 +128,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
     // TODO: update metrics in generated operators
-    val df = sqlContext.range(10).filter('id < 5)
+    val df = sqlContext.range(10).toDF().filter('id < 5)
     testSparkPlanMetrics(df, 1, Map.empty)
   }
 
@@ -157,7 +157,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   test("Sort metrics") {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
-    val df = sqlContext.range(10).sort('id)
+    val df = sqlContext.range(10).toDF("id").sort('id)
     testSparkPlanMetrics(df, 2, Map.empty)
   }
 
