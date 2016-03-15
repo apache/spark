@@ -21,12 +21,16 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.channels.WritableByteChannel
 
+import com.google.common.primitives.UnsignedBytes
 import io.netty.buffer.{ByteBuf, Unpooled}
 
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.storage.BlockManager
 
 private[spark] class ChunkedByteBuffer(_chunks: Array[ByteBuffer]) {
+
+  require(_chunks.nonEmpty, "Cannot create a ChunkedByteBuffer with no chunks")
+  require(_chunks.forall(_.limit() > 0), "chunks must be non-empty")
 
   def this(byteBuffer: ByteBuffer) = {
     this(Array(byteBuffer))
@@ -39,20 +43,20 @@ private[spark] class ChunkedByteBuffer(_chunks: Array[ByteBuffer]) {
   val limit: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
 
   def writeFully(channel: WritableByteChannel): Unit = {
-    for (chunk <- chunks) {
-      // So that we do not modify the input offsets !
-      // duplicate does not copy buffer, so inexpensive
-      val bytes = chunk.duplicate()
+    for (bytes <- getChunks()) {
       while (bytes.remaining > 0) {
         channel.write(bytes)
       }
     }
   }
 
-  def toNetty: ByteBuf = Unpooled.wrappedBuffer(chunks: _*)
+  def toNetty: ByteBuf = Unpooled.wrappedBuffer(getChunks(): _*)
 
   def toArray: Array[Byte] = {
-    // TODO(josh): assert on the limit range / size
+    if (limit >= Integer.MAX_VALUE) {
+      throw new UnsupportedOperationException(
+        s"cannot call toArray because buffer size ($limit bytes) exceeds maximum array size")
+    }
     val byteChannel = new ByteArrayWritableChannel(limit.toInt)
     writeFully(byteChannel)
     byteChannel.close()
@@ -64,7 +68,7 @@ private[spark] class ChunkedByteBuffer(_chunks: Array[ByteBuffer]) {
   def getChunks(): Array[ByteBuffer] = chunks.map(_.duplicate())
 
   def copy(): ChunkedByteBuffer = {
-    val copiedChunks = chunks.map { chunk =>
+    val copiedChunks = getChunks().map { chunk =>
       // TODO: accept an allocator in this copy method, etc.
       val newChunk = ByteBuffer.allocate(chunk.limit())
       newChunk.put(chunk)
@@ -84,12 +88,16 @@ private class ChunkedByteBufferInputStream(
     chunkedBuffer: ChunkedByteBuffer,
     dispose: Boolean = false) extends InputStream {
 
-  // TODO(josh): assumption of non-empty iterator needs to be enforced elsewhere
   private[this] val chunksIterator: Iterator[ByteBuffer] = chunkedBuffer.getChunks().iterator
   private[this] var currentChunk: ByteBuffer = chunksIterator.next()
+  assert(currentChunk.position() == 0)
 
   override def available(): Int = {
-   currentChunk.remaining()
+    while (!currentChunk.hasRemaining && chunksIterator.hasNext) {
+      currentChunk = chunksIterator.next()
+      assert(currentChunk.position() == 0)
+    }
+    currentChunk.remaining()
   }
 
 //  override def skip(n: Long): Long = {
@@ -105,9 +113,10 @@ private class ChunkedByteBufferInputStream(
   override def read(): Int = {
     if (!currentChunk.hasRemaining && chunksIterator.hasNext) {
       currentChunk = chunksIterator.next()
+      assert(currentChunk.position() == 0)
     }
     if (currentChunk.hasRemaining) {
-      currentChunk.get()
+      UnsignedBytes.toInt(currentChunk.get())
     } else {
       -1
     }
@@ -119,6 +128,6 @@ private class ChunkedByteBufferInputStream(
 //  override def read(b: Array[Byte], off: Int, len: Int): Int = super.read(b, off, len)
 
   override def close(): Unit = {
-    // TODO(josh): implement
+    currentChunk = null
   }
 }
