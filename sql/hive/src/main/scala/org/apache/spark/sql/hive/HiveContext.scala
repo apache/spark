@@ -348,12 +348,12 @@ class HiveContext private[hive](
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     catalog.invalidateTable(tableIdent)
   }
 
@@ -367,7 +367,7 @@ class HiveContext private[hive](
    * @since 1.2.0
    */
   def analyze(tableName: String) {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubqueryAliases(catalog.lookupRelation(tableIdent))
 
     relation match {
