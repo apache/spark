@@ -19,6 +19,10 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 object MLTestingUtils {
   def checkCopy(model: Model[_]): Unit = {
@@ -27,4 +31,35 @@ object MLTestingUtils {
     assert(copied.parent.uid == model.parent.uid)
     assert(copied.parent == model.parent)
   }
+
+  def generateDFWithNumericLabelCol(
+    sqlContext: SQLContext,
+    labelColName: String,
+    featuresColName: String
+  ): Map[NumericType, DataFrame] = {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0, 2, 3)),
+      (1, Vectors.dense(0, 3, 1)),
+      (0, Vectors.dense(0, 2, 2)),
+      (1, Vectors.dense(0, 3, 9)),
+      (0, Vectors.dense(0, 2, 6))
+    )).toDF(labelColName, featuresColName)
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+    types.map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName))).toMap
+  }
+
+  def generateDFWithStringLabelCol(
+    sqlContext: SQLContext,
+    labelColName: String,
+    featuresColName: String
+  ): DataFrame =
+    sqlContext.createDataFrame(Seq(
+      ("0", Vectors.dense(0, 2, 3)),
+      ("1", Vectors.dense(0, 3, 1)),
+      ("0", Vectors.dense(0, 2, 2)),
+      ("1", Vectors.dense(0, 3, 9)),
+      ("0", Vectors.dense(0, 2, 6))
+    )).toDF(labelColName, featuresColName)
 }
