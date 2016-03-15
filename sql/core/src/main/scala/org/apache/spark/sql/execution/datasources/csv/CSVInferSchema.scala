@@ -69,8 +69,7 @@ private[csv] object CSVInferSchema {
 
   def mergeRowTypes(first: Array[DataType], second: Array[DataType]): Array[DataType] = {
     first.zipAll(second, NullType, NullType).map { case (a, b) =>
-      val aa = findTightestCommonType(a, b).getOrElse(NullType)
-      aa
+      findTightestCommonType(a, b).getOrElse(NullType)
     }
   }
 
