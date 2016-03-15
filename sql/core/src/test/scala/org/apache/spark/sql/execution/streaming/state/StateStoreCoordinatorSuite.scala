@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.util.RpcUtils
-import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.{SparkContext, SharedSparkContext, SparkFunSuite}
 
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
+  import StateStoreCoordinatorSuite._
+
   test("report, verify, getLocation") {
-    withCoordinator { coordinator =>
+    withCoordinator(sc) { coordinator =>
       val id = StateStoreId(0, 0)
 
       assert(coordinator.verifyIfInstanceActive(id, "exec1") === false)
@@ -46,7 +48,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("make inactive") {
-    withCoordinator { coordinator =>
+    withCoordinator(sc) { coordinator =>
       val id1 = StateStoreId(0, 0)
       val id2 = StateStoreId(1, 0)
       val id3 = StateStoreId(0, 1)
@@ -80,7 +82,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("communication") {
-    withCoordinator { coordinator =>
+    withCoordinator(sc) { coordinator =>
       import StateStoreCoordinator._
       val id = StateStoreId(0, 0)
       val host = "hostX"
@@ -103,8 +105,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           Some(ExecutorCacheTaskLocation(host, "exec2").toString))
     }
   }
+}
 
-  private def withCoordinator(body: StateStoreCoordinator => Unit): Unit = {
+object StateStoreCoordinatorSuite {
+  def withCoordinator(sc: SparkContext)(body: StateStoreCoordinator => Unit): Unit = {
     var coordinator: StateStoreCoordinator = null
     try {
       coordinator = new StateStoreCoordinator(sc.env.rpcEnv)

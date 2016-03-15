@@ -34,6 +34,7 @@ private case class VerifyIfInstanceActive(storeId: StateStoreId, executorId: Str
   extends StateStoreCoordinatorMessage
 private object StopCoordinator extends StateStoreCoordinatorMessage
 
+
 /** Class for coordinating instances of [[StateStore]]s loaded in the cluster */
 class StateStoreCoordinator(rpcEnv: RpcEnv) {
   private val coordinatorRef = rpcEnv.setupEndpoint(
@@ -74,6 +75,7 @@ class StateStoreCoordinator(rpcEnv: RpcEnv) {
     coordinatorRef.askWithRetry[Boolean](StopCoordinator)
   }
 }
+
 
 private[sql] object StateStoreCoordinator {
 
