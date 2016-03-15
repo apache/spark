@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 class ComputeCurrentTimeSuite extends PlanTest {
+  System.setProperty("spark.testing", "true")
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Seq(Batch("ComputeCurrentTime", Once, ComputeCurrentTime))
   }

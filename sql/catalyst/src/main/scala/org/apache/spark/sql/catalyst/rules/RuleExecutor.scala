@@ -21,9 +21,10 @@ import scala.collection.JavaConverters._
 
 import com.google.common.util.concurrent.AtomicLongMap
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.util.Utils
 
 object RuleExecutor {
   protected val timeMap = AtomicLongMap.create[String]()
@@ -46,15 +47,23 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   /**
    * An execution strategy for rules that indicates the maximum number of executions. If the
    * execution reaches fix point (i.e. converge) before maxIterations, it will stop.
+   * If throws is equal to true, it will issue an exception AnalysisExceptions
    */
-  abstract class Strategy { def maxIterations: Int }
+  abstract class Strategy {
+    def maxIterations: Int
+    def throws: Boolean
+  }
 
   /** A strategy that only runs once. */
-  case object Once extends Strategy { val maxIterations = 1 }
+  case object Once extends Strategy {
+    val maxIterations = 1
+    val throws = false
+  }
 
   /** A strategy that runs until fix point or maxIterations times, whichever comes first. */
-  case class FixedPoint(maxIterations: Int) extends Strategy
-
+  case class FixedPoint(maxIterations: Int) extends Strategy {
+    override val throws: Boolean = if (Utils.isTesting) true else false
+  }
   /** A batch of rules. */
   protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
 
@@ -98,7 +107,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         if (iteration > batch.strategy.maxIterations) {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
-            logInfo(s"Max iterations (${iteration - 1}) reached for batch ${batch.name}")
+            val msg = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}"
+            if (batch.strategy.throws) throw new SparkException(msg) else logTrace(msg)
           }
           continue = false
         }

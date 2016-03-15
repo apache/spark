@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral, Literal}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 
@@ -46,9 +46,13 @@ class RuleExecutorSuite extends SparkFunSuite {
 
   test("to maxIterations") {
     object ToFixedPoint extends RuleExecutor[Expression] {
+      System.setProperty("spark.testing", "true")
       val batches = Batch("fixedPoint", FixedPoint(10), DecrementLiterals) :: Nil
     }
 
-    assert(ToFixedPoint.execute(Literal(100)) === Literal(90))
+    val message = intercept[SparkException] {
+      ToFixedPoint.execute(Literal(100))
+    }.getMessage
+    assert(message.contains("Max iterations (10) reached for batch fixedPoint"))
   }
 }

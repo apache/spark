@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules._
 class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
+    System.setProperty("spark.testing", "true")
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::

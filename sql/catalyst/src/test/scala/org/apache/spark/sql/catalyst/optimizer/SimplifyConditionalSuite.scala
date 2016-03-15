@@ -29,7 +29,9 @@ import org.apache.spark.sql.types.IntegerType
 class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("SimplifyConditionals", FixedPoint(50), SimplifyConditionals) :: Nil
+    System.setProperty("spark.testing", "true")
+    val batches =
+      Batch("SimplifyConditionals", FixedPoint(50), SimplifyConditionals) :: Nil
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {

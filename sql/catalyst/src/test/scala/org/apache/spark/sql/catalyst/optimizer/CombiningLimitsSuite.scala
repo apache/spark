@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.rules._
 class CombiningLimitsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
+    System.setProperty("spark.testing", "true")
     val batches =
       Batch("Filter Pushdown", FixedPoint(100),
         ColumnPruning) ::
