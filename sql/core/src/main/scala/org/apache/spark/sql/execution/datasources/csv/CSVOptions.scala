@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.execution.datasources.CompressionCodecs
@@ -64,7 +64,7 @@ private[sql] class CSVOptions(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val charset = parameters.getOrElse("encoding",
-    parameters.getOrElse("charset", Charset.forName("UTF-8").name()))
+    parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')

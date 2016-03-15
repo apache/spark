@@ -103,7 +103,8 @@ public class JavaSimpleParamsExample {
     // Note that model2.transform() outputs a 'myProbability' column instead of the usual
     // 'probability' column since we renamed the lr.probabilityCol parameter previously.
     Dataset<Row> results = model2.transform(test);
-    for (Row r: results.select("features", "label", "myProbability", "prediction").collectRows()) {
+    Dataset<Row> rows = results.select("features", "label", "myProbability", "prediction");
+    for (Row r: rows.collectAsList()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") -> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }

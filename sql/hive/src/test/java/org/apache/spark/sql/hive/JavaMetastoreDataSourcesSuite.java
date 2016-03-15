@@ -48,7 +48,6 @@ public class JavaMetastoreDataSourcesSuite {
   private transient JavaSparkContext sc;
   private transient HiveContext sqlContext;
 
-  String originalDefaultSource;
   File path;
   Path hiveManagedPath;
   FileSystem fs;
@@ -66,13 +65,12 @@ public class JavaMetastoreDataSourcesSuite {
     sqlContext = TestHive$.MODULE$;
     sc = new JavaSparkContext(sqlContext.sparkContext());
 
-    originalDefaultSource = sqlContext.conf().defaultDataSourceName();
     path =
       Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
     if (path.exists()) {
       path.delete();
     }
-    hiveManagedPath = new Path(sqlContext.catalog().hiveDefaultTableFilePath(
+    hiveManagedPath = new Path(sqlContext.sessionState().catalog().hiveDefaultTableFilePath(
       new TableIdentifier("javaSavedTable")));
     fs = hiveManagedPath.getFileSystem(sc.hadoopConfiguration());
     if (fs.exists(hiveManagedPath)){

@@ -46,7 +46,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1, 1, 1)
   }
 
-  test("SPARK-12404: Datatype Helper Serializablity") {
+  test("SPARK-12404: Datatype Helper Serializability") {
     val ds = sparkContext.parallelize((
       new Timestamp(0),
       new Date(0),

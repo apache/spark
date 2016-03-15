@@ -98,14 +98,14 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
       rdd.coalesce(4).count()
     }
 
-    // for count and coelesce, the same bytes should be read.
+    // for count and coalesce, the same bytes should be read.
     assert(bytesRead != 0)
     assert(bytesRead2 == bytesRead)
   }
 
   /**
    * This checks the situation where we have interleaved reads from
-   * different sources. Currently, we only accumulate fron the first
+   * different sources. Currently, we only accumulate from the first
    * read method we find in the task. This test uses cartesian to create
    * the interleaved reads.
    *
@@ -183,7 +183,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     assert(records == numRecords)
   }
 
-  test("input metrics on recordsd read with cache") {
+  test("input metrics on records read with cache") {
     // prime the cache manager
     val rdd = sc.textFile(tmpFilePath, 4).cache()
     rdd.collect()

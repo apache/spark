@@ -155,7 +155,7 @@ object DecimalPrecision extends Rule[LogicalPlan] {
    *
    * Note that technically this is an "optimization" and should go into the optimizer. However,
    * by the time the optimizer runs, these comparison expressions would be pretty hard to pattern
-   * match because there are multuple (at least 2) levels of casts involved.
+   * match because there are multiple (at least 2) levels of casts involved.
    *
    * There are a lot more possible rules we can implement, but we don't do them
    * because we are not sure how common they are.
