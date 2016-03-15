@@ -58,7 +58,7 @@ def get_spark_dist_classpath():
     original_working_dir = os.getcwd()
     os.chdir(SPARK_HOME)
     cp = subprocess_check_output(
-        ["./build/sbt", "export assembly/managedClasspath"], universal_newlines=True)
+        ["./build/sbt", "-Phive", "export assembly/managedClasspath"], universal_newlines=True)
     cp = cp.strip().split("\n")[-1]
     os.chdir(original_working_dir)
     return cp
