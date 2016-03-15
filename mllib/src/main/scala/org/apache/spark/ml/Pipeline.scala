@@ -297,10 +297,6 @@ class PipelineModel private[ml] (
     this(uid, stages.asScala.toArray)
   }
 
-  private[ml] def this(uid: String, stages: Array[PipelineStage]) = {
-    this(uid, stages.map(_.asInstanceOf[Transformer]))
-  }
-
   @Since("1.4.0")
   override def validateParams(): Unit = {
     super.validateParams()

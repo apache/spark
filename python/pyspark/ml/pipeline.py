@@ -20,8 +20,6 @@ import sys
 if sys.version > '3':
     basestring = str
 
-from py4j.java_collections import ListConverter
-
 from pyspark import SparkContext
 from pyspark import since
 from pyspark.ml import Estimator, Model, Transformer
@@ -38,10 +36,10 @@ def _stages_java2py(java_stages):
     :return: An array of Python stages.
     """
 
-    return list(map(JavaWrapper._transfer_stage_from_java, java_stages))
+    return [JavaWrapper._transfer_stage_from_java(stage) for stage in java_stages]
 
 
-def _stages_py2java(py_stages):
+def _stages_py2java(py_stages, cls):
     """
     Transforms the parameter of Python stages to a Java array of Java stages.
     :param py_stages: An array of Python stages.
@@ -50,29 +48,31 @@ def _stages_py2java(py_stages):
 
     for stage in py_stages:
         assert(isinstance(stage, JavaWrapper),
-               "Python side implementation is not supported in nested PipelineStage currently.")
-    java_stages = map(lambda stage: stage._transfer_stage_to_java(), py_stages)
-    ListConverter().convert(java_stages,
-                            SparkContext._active_spark_context._gateway._gateway_client)
+               "Python side implementation is not supported in the meta-PipelineStage currently.")
+    gateway = SparkContext._gateway
+    java_stages = gateway.new_array(cls, len(py_stages))
+    for idx, stage in enumerate(py_stages):
+        java_stages[idx] = stage._transfer_stage_to_java()
     return java_stages
 
 
 @inherit_doc
-class _PipelineMLWriter(JavaMLWriter, JavaWrapper):
+class PipelineMLWriter(JavaMLWriter, JavaWrapper):
     """
-    Pipeline utility class that can save ML instances through their Scala implementation.
+    Private Pipeline utility class that can save ML instances through their Scala implementation.
     """
 
     def __init__(self, instance):
+        cls = SparkContext._jvm.org.apache.spark.ml.PipelineStage
         self._java_obj = self._new_java_obj("org.apache.spark.ml.Pipeline", instance.uid)
-        self._java_obj.setStages(_stages_py2java(instance.getStages()))
+        self._java_obj.setStages(_stages_py2java(instance.getStages(), cls))
         self._jwrite = self._java_obj.write()
 
 
 @inherit_doc
-class _PipelineMLReader(JavaMLReader):
+class PipelineMLReader(JavaMLReader):
     """
-    Utility class that can load Pipeline instances through their Scala implementation.
+    Private utility class that can load Pipeline instances through their Scala implementation.
     """
 
     def load(self, path):
@@ -196,7 +196,7 @@ class Pipeline(Estimator):
     @since("2.0.0")
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
-        return _PipelineMLWriter(self)
+        return PipelineMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -207,7 +207,7 @@ class Pipeline(Estimator):
     @since("2.0.0")
     def read(cls):
         """Returns an JavaMLReader instance for this class."""
-        return _PipelineMLReader(cls)
+        return PipelineMLReader(cls)
 
     @classmethod
     @since("2.0.0")
@@ -217,22 +217,24 @@ class Pipeline(Estimator):
 
 
 @inherit_doc
-class _PipelineModelMLWriter(JavaMLWriter, JavaWrapper):
+class PipelineModelMLWriter(JavaMLWriter, JavaWrapper):
     """
-    PipelineModel utility class that can save ML instances through their Scala implementation.
+    Private PipelineModel utility class that can save ML instances through their Scala
+    implementation.
     """
 
     def __init__(self, instance):
+        cls = SparkContext._jvm.org.apache.spark.ml.Transformer
         self._java_obj = self._new_java_obj("org.apache.spark.ml.PipelineModel",
                                             instance.uid,
-                                            _stages_py2java(instance.stages))
+                                            _stages_py2java(instance.stages, cls))
         self._jwrite = self._java_obj.write()
 
 
 @inherit_doc
-class _PipelineModelMLReader(JavaMLReader):
+class PipelineModelMLReader(JavaMLReader):
     """
-    Utility class that can load PipelineModel instances through their Scala implementation.
+    Private utility class that can load PipelineModel instances through their Scala implementation.
     """
 
     def load(self, path):
@@ -278,7 +280,7 @@ class PipelineModel(Model):
     @since("2.0.0")
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
-        return _PipelineModelMLWriter(self)
+        return PipelineModelMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -289,7 +291,7 @@ class PipelineModel(Model):
     @since("2.0.0")
     def read(cls):
         """Returns an JavaMLReader instance for this class."""
-        return _PipelineModelMLReader(cls)
+        return PipelineModelMLReader(cls)
 
     @classmethod
     @since("2.0.0")

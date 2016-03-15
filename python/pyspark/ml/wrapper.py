@@ -110,7 +110,7 @@ class JavaWrapper(Params):
         # Generate a default new instance from the stage_name class.
         py_stage = __get_class(stage_name)()
         assert(isinstance(py_stage, JavaWrapper),
-               "Python side implementation is not supported in nested PipelineStage currently.")
+               "Python side implementation is not supported in the meta-PipelineStage currently.")
         # Load information from java_stage to the instance.
         py_stage._java_obj = java_stage
         py_stage._resetUid(java_stage.uid())
