@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.scheduler
 
+import scala.annotation.meta.param
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.concurrent.Eventually._
@@ -105,7 +106,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 }
 
 /** An input DStream with for testing rate controlling */
-private[streaming] class RateTestInputDStream(@transient _ssc: StreamingContext)
+private[streaming] class RateTestInputDStream(@(transient @param) _ssc: StreamingContext)
   extends ReceiverInputDStream[Int](_ssc) {
 
   override def getReceiver(): Receiver[Int] = new RateTestReceiver(id)
