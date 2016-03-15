@@ -121,14 +121,7 @@ class SQLContext private[sql](
   protected[sql] lazy val sessionState: SessionState = new SessionState(self)
   protected[sql] def conf: SQLConf = sessionState.conf
   protected[sql] def catalog: Catalog = sessionState.catalog
-  protected[sql] def functionRegistry: FunctionRegistry = sessionState.functionRegistry
   protected[sql] def analyzer: Analyzer = sessionState.analyzer
-  protected[sql] def optimizer: Optimizer = sessionState.optimizer
-  protected[sql] def sqlParser: ParserInterface = sessionState.sqlParser
-  protected[sql] def planner: SparkPlanner = sessionState.planner
-  protected[sql] def continuousQueryManager = sessionState.continuousQueryManager
-  protected[sql] def prepareForExecution: RuleExecutor[SparkPlan] =
-    sessionState.prepareForExecution
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -197,7 +190,7 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
+  protected[sql] def parseSql(sql: String): LogicalPlan = sessionState.sqlParser.parsePlan(sql)
 
   protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
 
@@ -244,7 +237,7 @@ class SQLContext private[sql](
    */
   @Experimental
   @transient
-  val experimental: ExperimentalMethods = new ExperimentalMethods(this)
+  def experimental: ExperimentalMethods = sessionState.experimentalMethods
 
   /**
    * :: Experimental ::
@@ -641,7 +634,7 @@ class SQLContext private[sql](
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -687,7 +680,7 @@ class SQLContext private[sql](
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -706,7 +699,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
+    catalog.registerTable(sessionState.sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
   }
 
   /**
@@ -800,7 +793,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(sqlParser.parseTableIdentifier(tableName))
+    table(sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
@@ -837,9 +830,7 @@ class SQLContext private[sql](
    *
    * @since 2.0.0
    */
-  def streams: ContinuousQueryManager = {
-    continuousQueryManager
-  }
+  def streams: ContinuousQueryManager = sessionState.continuousQueryManager
 
   /**
    * Returns the names of tables in the current database as an array.
