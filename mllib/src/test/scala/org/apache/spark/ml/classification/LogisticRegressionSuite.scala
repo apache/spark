@@ -947,6 +947,7 @@ class LogisticRegressionSuite
 
     val strSummary = summary.toString
     assert(strSummary.isInstanceOf[String])
+    assert(strSummary.length >0)
     assert(strSummary.contains("ROC"))
     assert(strSummary.contains("Precision"))
     assert(strSummary.contains("F-Measure"))
