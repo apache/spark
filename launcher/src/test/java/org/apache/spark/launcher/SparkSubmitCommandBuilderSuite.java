@@ -199,11 +199,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     for (String arg : cmd) {
       if (arg.startsWith("-XX:MaxPermSize=")) {
-        if (isDriver) {
-          assertEquals("-XX:MaxPermSize=256m", arg);
-        } else {
-          assertEquals("-XX:MaxPermSize=256m", arg);
-        }
+        assertEquals("-XX:MaxPermSize=256m", arg);
       }
     }
 
@@ -286,7 +282,6 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   private SparkSubmitCommandBuilder newCommandBuilder(List<String> args) {
     SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(args);
     builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, System.getProperty("spark.test.home"));
-    builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_ASSEMBLY, "dummy");
     return builder;
   }
 
