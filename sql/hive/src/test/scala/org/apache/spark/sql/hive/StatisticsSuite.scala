@@ -212,7 +212,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
     // Using `sparkPlan` because for relevant patterns in HashJoin to be
     // matched, other strategies need to be applied.
     var bhj = df.queryExecution.sparkPlan.collect {
-      case j: BroadcastLeftSemiJoinHash => j
+      case j: BroadcastHashJoin => j
     }
     assert(bhj.size === 1,
       s"actual query plans do not contain broadcast join: ${df.queryExecution}")
@@ -225,7 +225,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
       sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
       df = sql(leftSemiJoinQuery)
       bhj = df.queryExecution.sparkPlan.collect {
-        case j: BroadcastLeftSemiJoinHash => j
+        case j: BroadcastHashJoin => j
       }
       assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
