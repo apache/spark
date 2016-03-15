@@ -22,10 +22,10 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import java.{ util => ju }
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.kafka.clients.consumer.{
-  ConsumerConfig, ConsumerRebalanceListener, ConsumerRecord, Consumer
-}
+import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
 
 import org.apache.spark.{Logging, SparkException}
@@ -199,6 +199,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets
+    commitAll()
     Some(rdd)
   }
 
@@ -215,6 +216,42 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
   override def stop(): Unit = this.synchronized {
     if (kc != null) {
       kc.close()
+    }
+  }
+
+  protected val commitQueue = new ConcurrentLinkedQueue[OffsetRange]
+  protected val commitCallback = new AtomicReference[OffsetCommitCallback]
+
+  /**
+   * Queue up offset ranges for commit to Kafka at a future time.  Threadsafe.
+   * @param offsetRanges The maximum untilOffset for a given partition will be used at commit.
+   */
+  def commitAsync(offsetRanges: Array[OffsetRange]): Unit = {
+    commitAsync(offsetRanges, null)
+  }
+
+  /**
+   * Queue up offset ranges for commit to Kafka at a future time.  Threadsafe.
+   * @param offsetRanges The maximum untilOffset for a given partition will be used at commit.
+   * @param callback Only the most recently provided callback will be used at commit.
+   */
+  def commitAsync(offsetRanges: Array[OffsetRange], callback: OffsetCommitCallback): Unit = {
+    commitCallback.set(callback)
+    commitQueue.addAll(ju.Arrays.asList(offsetRanges: _*))
+  }
+
+  protected def commitAll(): Unit = {
+    val m = new ju.HashMap[TopicPartition, OffsetAndMetadata]()
+    val it = commitQueue.iterator()
+    while (it.hasNext) {
+      val osr = it.next
+      val tp = osr.topicPartition
+      val x = m.get(tp)
+      val offset = if (null == x) { osr.untilOffset } else { Math.max(x.offset, osr.untilOffset) }
+      m.put(tp, new OffsetAndMetadata(offset))
+    }
+    if (!m.isEmpty) {
+      consumer.commitAsync(m, commitCallback.get)
     }
   }
 

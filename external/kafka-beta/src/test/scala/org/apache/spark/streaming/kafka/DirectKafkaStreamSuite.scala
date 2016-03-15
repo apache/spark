@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.kafka
 
 import java.io.File
-import java.util.{ Arrays, HashMap => JHashMap }
+import java.util.{ Arrays, HashMap => JHashMap, Map => JMap }
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -27,7 +27,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-import org.apache.kafka.clients.consumer.{ ConsumerRecord, KafkaConsumer }
+import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
 
@@ -337,6 +337,67 @@ class DirectKafkaStreamSuite
     }
     ssc.stop()
   }
+
+    // Test to verify the offsets can be recovered from Kafka
+  test("offset recovery from kafka") {
+    val topic = "recoveryfromkafka"
+    kafkaTestUtils.createTopic(topic)
+
+    val kafkaParams = getKafkaParams(
+      "auto.offset.reset" -> "earliest",
+      ("enable.auto.commit", false: java.lang.Boolean)
+    )
+
+    val collectedData = new ConcurrentLinkedQueue[String]()
+    val committed = new JHashMap[TopicPartition, OffsetAndMetadata]()
+
+    // Send data to Kafka and wait for it to be received
+    def sendDataAndWaitForReceive(data: Seq[Int]) {
+      val strings = data.map { _.toString}
+      kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1}.toMap)
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        assert(strings.forall { collectedData.contains })
+      }
+    }
+
+    // Setup the streaming context
+    ssc = new StreamingContext(sparkConf, Milliseconds(100))
+    withClue("Error creating direct stream") {
+      val kafkaStream = DirectKafkaInputDStream[String, String](
+        ssc, preferredHosts, kafkaParams, () => {
+          val consumer = new KafkaConsumer[String, String](kafkaParams)
+          consumer.subscribe(Arrays.asList(topic))
+          consumer
+        })
+      kafkaStream.foreachRDD { (rdd: RDD[ConsumerRecord[String, String]], time: Time) =>
+        val offsets = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+        val data = rdd.map(_.value).collect()
+        collectedData.addAll(Arrays.asList(data: _*))
+        kafkaStream.commitAsync(offsets, new OffsetCommitCallback() {
+          def onComplete(m: JMap[TopicPartition, OffsetAndMetadata], e: Exception) {
+            committed.putAll(m)
+          }
+        })
+      }
+    }
+    ssc.start()
+    // Send some data and wait for them to be received
+    for (i <- (1 to 10).grouped(4)) {
+      sendDataAndWaitForReceive(i)
+    }
+    ssc.stop()
+    assert(! committed.isEmpty)
+    val consumer = new KafkaConsumer[String, String](kafkaParams)
+    consumer.subscribe(Arrays.asList(topic))
+    consumer.poll(0)
+    committed.asScala.foreach {
+      case (k, v) =>
+        // commits are async, not exactly once
+        assert(v.offset > 0)
+        assert(consumer.position(k) >= v.offset)
+    }
+  }
+
 
   test("Direct Kafka stream report input information") {
     val topic = "report-test"
