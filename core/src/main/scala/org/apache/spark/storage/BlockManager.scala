@@ -42,7 +42,7 @@ import org.apache.spark.serializer.{Serializer, SerializerInstance}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
 import org.apache.spark.util._
-import org.apache.spark.util.io.ChunkedByteBuffer
+import org.apache.spark.util.io.{ByteArrayChunkOutputStream, ChunkedByteBuffer}
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
@@ -481,7 +481,7 @@ private[spark] class BlockManager(
         diskStore.getBytes(blockId)
       } else if (level.useMemory && memoryStore.contains(blockId)) {
         // The block was not found on disk, so serialize an in-memory copy:
-        new ChunkedByteBuffer(dataSerialize(blockId, memoryStore.getValues(blockId).get))
+        dataSerialize(blockId, memoryStore.getValues(blockId).get)
       } else {
         releaseLock(blockId)
         throw new SparkException(s"Block $blockId was not found even though it's read-locked")
@@ -1281,11 +1281,11 @@ private[spark] class BlockManager(
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
   }
 
-  /** Serializes into a byte buffer. */
-  def dataSerialize(blockId: BlockId, values: Iterator[Any]): ByteBuffer = {
-    val byteStream = new ByteBufferOutputStream(4096)
-    dataSerializeStream(blockId, byteStream, values)
-    byteStream.toByteBuffer
+  /** Serializes into a chunked byte buffer. */
+  def dataSerialize(blockId: BlockId, values: Iterator[Any]): ChunkedByteBuffer = {
+    val byteArrayChunkOutputStream = new ByteArrayChunkOutputStream(1024 * 1024 * 4)
+    dataSerializeStream(blockId, byteArrayChunkOutputStream, values)
+    new ChunkedByteBuffer(byteArrayChunkOutputStream.toArrays.map(ByteBuffer.wrap))
   }
 
   /**

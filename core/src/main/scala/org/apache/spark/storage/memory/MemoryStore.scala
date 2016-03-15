@@ -188,8 +188,7 @@ private[spark] class MemoryStore(
       val entry = if (level.deserialized) {
         new DeserializedMemoryEntry(arrayValues, SizeEstimator.estimate(arrayValues))
       } else {
-        // TODO(josh): incrementally serialize
-        val bytes = new ChunkedByteBuffer(blockManager.dataSerialize(blockId, arrayValues.iterator))
+        val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
         new SerializedMemoryEntry(bytes, bytes.limit)
       }
       val size = entry.size

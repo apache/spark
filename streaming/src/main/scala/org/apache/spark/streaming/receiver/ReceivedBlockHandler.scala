@@ -179,7 +179,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
         numRecords = countIterator.count
         serializedBlock
       case ByteBufferBlock(byteBuffer) =>
-        byteBuffer
+        new ChunkedByteBuffer(byteBuffer.duplicate())
       case _ =>
         throw new Exception(s"Could not push $blockId to block manager, unexpected block type")
     }
@@ -188,7 +188,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     val storeInBlockManagerFuture = Future {
       val putSucceeded = blockManager.putBytes(
         blockId,
-        new ChunkedByteBuffer(serializedBlock.duplicate()),
+        serializedBlock,
         effectiveStorageLevel,
         tellMaster = true)
       if (!putSucceeded) {
@@ -199,7 +199,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
     // Store the block in write ahead log
     val storeInWriteAheadLogFuture = Future {
-      writeAheadLog.write(serializedBlock, clock.getTimeMillis())
+      writeAheadLog.write(serializedBlock.toByteBuffer, clock.getTimeMillis())
     }
 
     // Combine the futures, wait for both to complete, and return the write ahead log record handle

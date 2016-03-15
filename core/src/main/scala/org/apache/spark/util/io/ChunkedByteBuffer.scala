@@ -62,6 +62,14 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
     byteChannel.getData
   }
 
+  def toByteBuffer: ByteBuffer = {
+    if (chunks.length == 1) {
+      chunks.head
+    } else {
+      ByteBuffer.wrap(toArray)
+    }
+  }
+
   def toInputStream(dispose: Boolean = false): InputStream = {
     new ChunkedByteBufferInputStream(this, dispose)
   }
