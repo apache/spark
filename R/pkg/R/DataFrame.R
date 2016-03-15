@@ -321,7 +321,7 @@ setMethod("colnames<-",
             }
 
             # Check if the column names have . in it
-            if (any(regexec(".", value, fixed=TRUE)[[1]][1] != -1)) {
+            if (any(regexec(".", value, fixed = TRUE)[[1]][1] != -1)) {
               stop("Colum names cannot contain the '.' symbol.")
             }
 
@@ -351,7 +351,7 @@ setMethod("coltypes",
             types <- sapply(dtypes(x), function(x) {x[[2]]})
 
             # Map Spark data types into R's data types using DATA_TYPES environment
-            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
+            rTypes <- sapply(types, USE.NAMES = F, FUN = function(x) {
               # Check for primitive types
               type <- PRIMITIVE_TYPES[[x]]
 
@@ -1779,7 +1779,7 @@ setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y, by = intersect(names(x), names(y)), by.x = by, by.y = by,
                    all = FALSE, all.x = all, all.y = all,
-                   sort = TRUE, suffixes = c("_x","_y"), ... ) {
+                   sort = TRUE, suffixes = c("_x", "_y"), ... ) {
 
             if (length(suffixes) != 2) {
               stop("suffixes must have length 2")
@@ -2299,7 +2299,7 @@ setMethod("as.data.frame",
           function(x, ...) {
             # Check if additional parameters have been passed
             if (length(list(...)) > 0) {
-              stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
+              stop(paste("Unused argument(s): ", paste(list(...), collapse = ", ")))
             }
             collect(x)
           })
@@ -2395,13 +2395,13 @@ setMethod("str",
                 # Get the first elements for each column
 
                 firstElements <- if (types[i] == "character") {
-                  paste(paste0("\"", localDF[,i], "\""), collapse = " ")
+                  paste(paste0("\"", localDF[, i], "\""), collapse = " ")
                 } else {
-                  paste(localDF[,i], collapse = " ")
+                  paste(localDF[, i], collapse = " ")
                 }
 
                 # Add the corresponding number of spaces for alignment
-                spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse="")
+                spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse = "")
 
                 # Get the short type. For 'character', it would be 'chr';
                 # 'for numeric', it's 'num', etc.
@@ -2413,7 +2413,7 @@ setMethod("str",
                 # Concatenate the colnames, coltypes, and first
                 # elements of each column
                 line <- paste0(" $ ", names[i], spaces, ": ",
-                               dataType, " ",firstElements)
+                               dataType, " ", firstElements)
 
                 # Chop off extra characters if this is too long
                 cat(substr(line, 1, MAX_CHAR_PER_ROW))

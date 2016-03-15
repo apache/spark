@@ -157,7 +157,7 @@ object InputFormatInfo {
     b) Decrement the currently allocated containers on that host.
     c) Compute rack info for each host and update rack -> count map based on (b).
     d) Allocate nodes based on (c)
-    e) On the allocation result, ensure that we dont allocate "too many" jobs on a single node
+    e) On the allocation result, ensure that we don't allocate "too many" jobs on a single node
        (even if data locality on that is very high) : this is to prevent fragility of job if a
        single (or small set of) hosts go down.
 

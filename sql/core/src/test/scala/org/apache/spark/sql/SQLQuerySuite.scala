@@ -54,7 +54,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
       val regex = java.util.regex.Pattern.compile(pattern)
-      sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
+      sqlContext.sessionState.functionRegistry.listFunction()
+        .filter(regex.matcher(_).matches()).map(Row(_))
     }
     checkAnswer(sql("SHOW functions"), getFunctions(".*"))
     Seq("^c.*", ".*e$", "log.*", ".*date.*").foreach { pattern =>
@@ -986,7 +987,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SET commands with illegal or inappropriate argument") {
     sqlContext.conf.clear()
-    // Set negative mapred.reduce.tasks for automatically determing
+    // Set negative mapred.reduce.tasks for automatically determining
     // the number of reducers is not supported
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))

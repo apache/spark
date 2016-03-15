@@ -100,7 +100,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
- * tests and does not provide durablility.
+ * tests and does not provide durability.
  */
 class MemorySink(schema: StructType) extends Sink with Logging {
   /** An order list of batches that have been written to this [[Sink]]. */
