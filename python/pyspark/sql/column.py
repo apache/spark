@@ -22,7 +22,7 @@ if sys.version >= '3':
     basestring = str
     long = int
 
-from pyspark import since
+from pyspark import copy_func, since
 from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.types import *
@@ -337,7 +337,7 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
-    astype = cast
+    astype = copy_func(cast, sinceversion=1.4, doc=":func:`astype` is an alias for :func:`cast`.")
 
     @since(1.3)
     def between(self, lowerBound, upperBound):
