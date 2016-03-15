@@ -125,7 +125,8 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val splitsWithKeys = MLUtils.kFoldStratified(pairData, $(numFolds), 0)
       splitsWithKeys.map { case (training, validation) => (training.values, validation.values)}
     } else {
-      if (isSet(stratifiedCol)) logWarning(s"Stratified column does not exist. Performing regular k-fold subsampling.")
+      if (isSet(stratifiedCol)) logWarning(s"Stratified column does not exist. " +
+        s"Performing regular k-fold subsampling.")
       // regular kFold
       MLUtils.kFold(dataset.rdd, $(numFolds), $(seed))
     }

@@ -793,7 +793,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         n: Int,
         exact: Boolean): Unit = {
       val baseFold = weights(0).map(x => (x._1, 0.0))
-      val totalWeightByKey = weights.foldLeft(baseFold){ case (accMap, iterMap) =>
+      val totalWeightByKey = weights.foldLeft(baseFold) { case (accMap, iterMap) =>
         accMap.map { case (k, v) => (k, v + iterMap(k)) }
       }
       val normedWeights = weights.map(m => m.map { case(k, v) => (k, v / totalWeightByKey(k))})

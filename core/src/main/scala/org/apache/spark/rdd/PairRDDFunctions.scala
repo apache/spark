@@ -332,7 +332,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val rightBoundary = weights(0).map(x => (x._1, 1.0))
 
     // normalize and cumulative sum
-    val cumWeightsByKey = weights.scanLeft(leftBoundary){ case (accMap, iterMap) =>
+    val cumWeightsByKey = weights.scanLeft(leftBoundary) { case (accMap, iterMap) =>
       accMap.map { case (k, v) => (k, v + iterMap(k)) }
     }.drop(1)
 

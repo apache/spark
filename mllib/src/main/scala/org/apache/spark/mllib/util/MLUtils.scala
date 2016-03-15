@@ -23,9 +23,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.dot
-
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, PairRDDFunctions}
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
 
@@ -285,7 +284,6 @@ object MLUtils {
   }
 
   /**
-   * :: Experimental ::
    * Return a k element array of pairs of RDDs with the first element of each pair
    * containing the training data, a complement of the validation data and the second
    * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
@@ -293,7 +291,6 @@ object MLUtils {
    * ratios in the original data are maintained in each stratum of the train and validation
    * data.
    */
-  @Experimental
   def kFoldStratified[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)],
       numFolds: Int,
       seed: Int): Array[(RDD[(K, V)], RDD[(K, V)])] = {
