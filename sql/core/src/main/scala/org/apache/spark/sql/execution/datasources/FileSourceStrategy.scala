@@ -67,7 +67,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val filterSet = ExpressionSet(filters)
 
       val partitionColumns =
-        AttributeSet(l.resolve(files.partitionSchema, files.sqlContext.analyzer.resolver))
+        AttributeSet(
+          l.resolve(files.partitionSchema, files.sqlContext.sessionState.analyzer.resolver))
       val partitionKeyFilters =
         ExpressionSet(filters.filter(_.references.subsetOf(partitionColumns)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")

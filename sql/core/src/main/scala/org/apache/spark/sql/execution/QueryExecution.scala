@@ -31,14 +31,14 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
  */
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
-  def assertAnalyzed(): Unit = try sqlContext.analyzer.checkAnalysis(analyzed) catch {
+  def assertAnalyzed(): Unit = try sqlContext.sessionState.analyzer.checkAnalysis(analyzed) catch {
     case e: AnalysisException =>
       val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
       ae.setStackTrace(e.getStackTrace)
       throw ae
   }
 
-  lazy val analyzed: LogicalPlan = sqlContext.analyzer.execute(logical)
+  lazy val analyzed: LogicalPlan = sqlContext.sessionState.analyzer.execute(logical)
 
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
