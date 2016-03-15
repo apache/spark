@@ -250,7 +250,40 @@ case class Join(
     condition: Option[Expression])
   extends BinaryNode with PredicateHelper {
 
+  private def leftNotNulls = constraints
+    .filter(_.isInstanceOf[IsNotNull])
+    .filter(_.references.subsetOf(left.outputSet))
+    .flatMap(_.references.map(_.exprId))
+
+  private def notNullLeftOutput = left.output.map { o =>
+    if (leftNotNulls.contains(o.exprId)) o.withNullability(false) else o
+  }
+
+  private def rightNotNulls = constraints
+    .filter(_.isInstanceOf[IsNotNull])
+    .filter(_.references.subsetOf(right.outputSet))
+    .flatMap(_.references.map(_.exprId))
+
+  private def notNullRightOutput = right.output.map { o =>
+    if (rightNotNulls.contains(o.exprId)) o.withNullability(false) else o
+  }
+
   override def output: Seq[Attribute] = {
+    joinType match {
+      case LeftSemi =>
+        notNullLeftOutput
+      case LeftOuter =>
+        notNullLeftOutput ++ right.output.map(_.withNullability(true))
+      case RightOuter =>
+        left.output.map(_.withNullability(true)) ++ notNullRightOutput
+      case FullOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
+      case _ =>
+        notNullLeftOutput ++ notNullRightOutput
+    }
+  }
+
+  override def outputForConstraint: Seq[Attribute] = {
     joinType match {
       case LeftSemi =>
         left.output
