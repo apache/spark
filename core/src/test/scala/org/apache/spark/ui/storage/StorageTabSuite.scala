@@ -140,7 +140,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Drop some blocks
     val blockUpdateInfos2 = Seq(
-      BlockUpdatedInfo(bm1, RDDBlockId(0, 100), none, 0l, 0L),
+      BlockUpdatedInfo(bm1, RDDBlockId(0, 100), none, 0L, 0L),
       BlockUpdatedInfo(bm1, RDDBlockId(1, 20), none, 0L, 0L),
       BlockUpdatedInfo(bm1, RDDBlockId(2, 40), none, 0L, 0L), // doesn't actually exist
       BlockUpdatedInfo(bm1, RDDBlockId(4, 80), none, 0L, 0L) // doesn't actually exist

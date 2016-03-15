@@ -17,7 +17,6 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.storage.BlockManagerMessages.UpdateBlockInfo
 import org.apache.spark.{SparkConf, SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
@@ -90,7 +89,7 @@ class StorageStatusListenerSuite extends SparkFunSuite {
 
     val blockUpdateInfos1 = Seq(
       BlockUpdatedInfo(bm1, RDDBlockId(1, 1), StorageLevel.DISK_ONLY, 0L, 100L),
-      BlockUpdatedInfo(bm1,RDDBlockId(1, 2), StorageLevel.DISK_ONLY, 0L, 200L)
+      BlockUpdatedInfo(bm1, RDDBlockId(1, 2), StorageLevel.DISK_ONLY, 0L, 200L)
     )
     val blockUpdateInfos2 =
       Seq(BlockUpdatedInfo(bm2, RDDBlockId(4, 0), StorageLevel.DISK_ONLY, 0L, 300L))
@@ -117,7 +116,7 @@ class StorageStatusListenerSuite extends SparkFunSuite {
       BlockUpdatedInfo(bm1, RDDBlockId(4, 0), StorageLevel.NONE, 0L, 0L)
     )
     val droppedBlockInfo2 = Seq(
-      BlockUpdatedInfo(bm2,RDDBlockId(1, 2), StorageLevel.NONE, 0L, 0L),
+      BlockUpdatedInfo(bm2, RDDBlockId(1, 2), StorageLevel.NONE, 0L, 0L),
       BlockUpdatedInfo(bm2, RDDBlockId(4, 0), StorageLevel.NONE, 0L, 0L)
     )
 
@@ -140,7 +139,7 @@ class StorageStatusListenerSuite extends SparkFunSuite {
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     val blockUpdateInfos1 = Seq(
       BlockUpdatedInfo(bm1, RDDBlockId(1, 1), StorageLevel.DISK_ONLY, 0L, 100L),
-      BlockUpdatedInfo(bm1,RDDBlockId(1, 2), StorageLevel.DISK_ONLY, 0L, 200L)
+      BlockUpdatedInfo(bm1, RDDBlockId(1, 2), StorageLevel.DISK_ONLY, 0L, 200L)
     )
     val blockUpdateInfos2 =
       Seq(BlockUpdatedInfo(bm1, RDDBlockId(4, 0), StorageLevel.DISK_ONLY, 0L, 300L))
