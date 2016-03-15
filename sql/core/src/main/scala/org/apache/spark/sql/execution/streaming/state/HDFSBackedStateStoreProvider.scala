@@ -17,22 +17,18 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.util.{TimerTask, Timer}
-
 import scala.collection.mutable
-import scala.collection.mutable.HashMap
 import scala.util.Random
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.sql.catalyst.expressions.JoinedRow
-import org.apache.spark.sql.execution.streaming.state.StateStore._
-import org.apache.spark.util.{Utils, CompletionIterator}
-import org.apache.spark.{SparkConf, Logging}
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, KryoSerializer}
+import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.serializer.{DeserializationStream, KryoSerializer, SerializationStream}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 
 /**

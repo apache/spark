@@ -33,7 +33,6 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
 
   private val conf = new SparkConf().setMaster("local").setAppName(this.getClass.getCanonicalName)
   private var tempDir = Files.createTempDirectory("StateStoreRDDSuite").toString
-  println(tempDir)
 
   import StateStoreSuite._
 

@@ -23,9 +23,9 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.util.RpcUtils
-import org.apache.spark.{Logging, SparkEnv}
 
 /** Unique identifier for a [[StateStore]] */
 case class StateStoreId(operatorId: Long, partitionId: Int)
