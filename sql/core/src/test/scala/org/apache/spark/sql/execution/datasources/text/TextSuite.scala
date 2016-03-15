@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -37,7 +37,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SQLContext.read.text() API") {
-    verifyFrame(sqlContext.read.text(testFile))
+    verifyDataset(sqlContext.read.text(testFile))
   }
 
   test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
@@ -46,7 +46,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
     val tempFile = Utils.createTempDir()
     tempFile.delete()
     df.write.text(tempFile.getCanonicalPath)
-    verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath))
+    verifyDataset(sqlContext.read.text(tempFile.getCanonicalPath))
 
     Utils.deleteRecursively(tempFile)
   }
@@ -75,7 +75,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
         testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
         val compressedFiles = new File(tempDirPath).listFiles()
         assert(compressedFiles.exists(_.getName.endsWith(s".txt$extension")))
-        verifyFrame(sqlContext.read.text(tempDirPath))
+        verifyDataset(sqlContext.read.text(tempDirPath))
     }
 
     val errMsg = intercept[IllegalArgumentException] {
@@ -103,7 +103,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
         testDf.write.option("compression", "none").mode(SaveMode.Overwrite).text(tempDirPath)
         val compressedFiles = new File(tempDirPath).listFiles()
         assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
-        verifyFrame(sqlContext.read.text(tempDirPath))
+        verifyDataset(sqlContext.read.text(tempDirPath))
       } finally {
         // Hadoop 1 doesn't have `Configuration.unset`
         hadoopConfiguration.clear()
@@ -114,6 +114,10 @@ class TextSuite extends QueryTest with SharedSQLContext {
 
   private def testFile: String = {
     Thread.currentThread().getContextClassLoader.getResource("text-suite.txt").toString
+  }
+
+  private def verifyDataset(ds: Dataset[String]): Unit = {
+    verifyFrame(ds.toDF())
   }
 
   /** Verifies data and schema. */
