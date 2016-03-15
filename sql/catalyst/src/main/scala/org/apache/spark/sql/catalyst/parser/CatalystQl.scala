@@ -175,7 +175,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               clusterByClause ::
               distributeByClause ::
               limitClause ::
-              lateralViewClause ::
               windowClause :: Nil) = {
             getClauses(
               Seq(
@@ -194,7 +193,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 "TOK_CLUSTERBY",
                 "TOK_DISTRIBUTEBY",
                 "TOK_LIMIT",
-                "TOK_LATERAL_VIEW",
                 "WINDOW"),
               singleInsert)
           }
@@ -214,10 +212,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
           val transformation = nodeToTransformation(select.children.head, withWhere)
 
-          val withLateralView = lateralViewClause.map { lv =>
-            nodeToGenerate(lv.children.head, outer = false, withWhere)
-          }.getOrElse(withWhere)
-
           // The projection of the query can either be a normal projection, an aggregation
           // (if there is a group by) or a script transformation.
           val withProject: LogicalPlan = transformation.getOrElse {
@@ -227,13 +221,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               groupByClause.map(e => e match {
                 case Token("TOK_GROUPBY", children) =>
                   // Not a transformation so must be either project or aggregation.
-                  Aggregate(children.map(nodeToExpr), selectExpressions, withLateralView)
+                  Aggregate(children.map(nodeToExpr), selectExpressions, withWhere)
                 case _ => sys.error("Expect GROUP BY")
               }),
               groupingSetsClause.map(e => e match {
                 case Token("TOK_GROUPING_SETS", children) =>
                   val(groupByExprs, masks) = extractGroupingSet(children)
-                  GroupingSets(masks, groupByExprs, withLateralView, selectExpressions)
+                  GroupingSets(masks, groupByExprs, withWhere, selectExpressions)
                 case _ => sys.error("Expect GROUPING SETS")
               }),
               rollupGroupByClause.map(e => e match {
@@ -241,7 +235,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                   Aggregate(
                     Seq(Rollup(children.map(nodeToExpr))),
                     selectExpressions,
-                    withLateralView)
+                    withWhere)
                 case _ => sys.error("Expect WITH ROLLUP")
               }),
               cubeGroupByClause.map(e => e match {
@@ -249,10 +243,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                   Aggregate(
                     Seq(Cube(children.map(nodeToExpr))),
                     selectExpressions,
-                    withLateralView)
+                    withWhere)
                 case _ => sys.error("Expect WITH CUBE")
               }),
-              Some(Project(selectExpressions, withLateralView))).flatten.head
+              Some(Project(selectExpressions, withWhere))).flatten.head
           }
 
           // Handle HAVING clause.
