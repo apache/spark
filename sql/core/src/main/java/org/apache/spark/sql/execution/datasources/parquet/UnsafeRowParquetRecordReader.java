@@ -37,14 +37,18 @@ import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
+import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.parquet.column.ValuesType.*;
@@ -210,6 +214,30 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
    * This object is reused. Calling this enables the vectorized reader. This should be called
    * before any calls to nextKeyValue/nextBatch.
    */
+
+  // Creates a columnar batch that includes the schema from the data files and the additional
+  // partition columns appended to the end of the batch.
+  // For example, if the data contains two columns, with 2 partition columns:
+  // Columns 0,1: data columns
+  // Column 2: partitionValues[0]
+  // Column 3: partitionValues[1]
+  public ColumnarBatch initBatch(StructType partitionColumns, InternalRow partitionValues) {
+    StructType batchSchema = new StructType();
+    for (StructField f: sparkSchema.fields()) {
+      batchSchema = batchSchema.add(f);
+    }
+    for (StructField f: partitionColumns.fields()) {
+      batchSchema = batchSchema.add(f);
+    }
+
+    ColumnarBatch resultBatch = ColumnarBatch.allocate(batchSchema);
+    int partitionIdx = sparkSchema.fields().length;
+    for (int i = 0; i < partitionColumns.fields().length; i++) {
+      ColumnVectorUtils.populate(resultBatch.column(i + partitionIdx), partitionValues, i);
+    }
+    return resultBatch;
+  }
+
   public ColumnarBatch resultBatch() {
     return resultBatch(DEFAULT_MEMORY_MODE);
   }
