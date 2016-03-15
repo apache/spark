@@ -192,7 +192,7 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-12896 Send only accumulator updates to driver, not TaskMetrics
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.Accumulable.this"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.Accumulator.this"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.Accumulator.this"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulator.initialValue")
       ) ++ Seq(
         // SPARK-12692 Scala style: Fix the style violation (Space before "," or ":")
@@ -314,10 +314,14 @@ object MimaExcludes {
 
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrame"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrame$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.LegacyFunctions"),
 
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.evaluation.MultilabelMetrics.this"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.predictions"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.predictions")
+      ) ++ Seq(
+        // [SPARK-13686][MLLIB][STREAMING] Add a constructor parameter `reqParam` to (Streaming)LinearRegressionWithSGD
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.regression.LinearRegressionWithSGD.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
@@ -334,7 +338,7 @@ object MimaExcludes {
         excludePackage("org.apache.spark.sql.columnar"),
         // The shuffle package is considered private.
         excludePackage("org.apache.spark.shuffle"),
-        // The collections utlities are considered pricate.
+        // The collections utilities are considered private.
         excludePackage("org.apache.spark.util.collection")
       ) ++
       MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
@@ -639,7 +643,7 @@ object MimaExcludes {
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
         MimaBuild.excludeSparkPackage("ml"),
-        // SPARK-7910 Adding a method to get the partioner to JavaRDD,
+        // SPARK-7910 Adding a method to get the partitioner to JavaRDD,
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitioner"),
         // SPARK-5922 Adding a generalized diff(other: RDD[(VertexId, VD)]) to VertexRDD
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.VertexRDD.diff"),
@@ -657,7 +661,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorEndpoint")
       ) ++ Seq(
-        // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
+        // SPARK-4655 - Making Stage an Abstract class broke binary compatibility even though
         // the stage class is defined as private[spark]
         ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.scheduler.Stage")
       ) ++ Seq(

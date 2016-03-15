@@ -111,7 +111,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister {
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      inputFiles: Array[FileStatus],
+      inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
     val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
@@ -221,7 +221,7 @@ private[orc] case class OrcTableScan(
     @transient sqlContext: SQLContext,
     attributes: Seq[Attribute],
     filters: Array[Filter],
-    @transient inputPaths: Array[FileStatus])
+    @transient inputPaths: Seq[FileStatus])
   extends Logging
   with HiveInspectors {
 

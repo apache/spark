@@ -18,8 +18,8 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -78,7 +78,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: ExternalShuffleDriver [result file] [registed exec file]
+        |Usage: ExternalShuffleDriver [result file] [registered exec file]
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
@@ -104,7 +104,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
     } finally {
       sc.stop()
       FileUtils.deleteDirectory(execStateCopy)
-      Files.write(result, status, UTF_8)
+      Files.write(result, status, StandardCharsets.UTF_8)
     }
   }
 
