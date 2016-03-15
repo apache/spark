@@ -68,8 +68,6 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       intercept[SparkException] {
         piped.collect()
       }
-    } else {
-      assert(true)
     }
   }
 
