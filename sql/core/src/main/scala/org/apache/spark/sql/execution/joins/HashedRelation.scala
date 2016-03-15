@@ -161,6 +161,11 @@ private[execution] object HashedRelation {
     apply(localNode.asIterator.map(_.copy()), keyGenerator)
   }
 
+  /**
+   * Create a HashedRelation from an Iterator of InternalRow.
+   *
+   * Note: The caller should make sure that these InternalRow are different objects.
+   */
   def apply(
       input: Iterator[InternalRow],
       keyGenerator: Projection,
