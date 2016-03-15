@@ -178,6 +178,9 @@
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
 
+    <!-- Modules that copy jars to the build directory should do so under this location. -->
+    <jars.target.dir>${project.build.directory}/scala-${scala.binary.version}/jars</jars.target.dir>
+
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
       declared in the projects that build assemblies.
