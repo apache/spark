@@ -48,7 +48,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   /**
    * An execution strategy for rules that indicates the maximum number of executions. If the
    * execution reaches fix point (i.e. converge) before maxIterations, it will stop.
-   * If throws is equal to true, it will issue an exception AnalysisExceptions
+   * If throwsExceptionUponMaxIterations is equal to true, it will issue an exception
+   * TreeNodeException.
    */
   abstract class Strategy {
     def maxIterations: Int
