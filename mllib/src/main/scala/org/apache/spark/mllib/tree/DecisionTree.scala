@@ -829,35 +829,35 @@ object DecisionTree extends Serializable with Logging {
             binAggregates.mergeForFeature(nodeFeatureOffset, splitIndex + 1, splitIndex)
             splitIndex += 1
           }
-        // Find best split.
-        val (bestFeatureSplitIndex, bestFeatureGainStats) =
-          Range(0, numSplits).map { case splitIdx =>
-            val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
-            val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
-            rightChildStats.subtract(leftChildStats)
-            predictWithImpurity = Some(predictWithImpurity.getOrElse(
-              calculatePredictImpurity(leftChildStats, rightChildStats)))
-            val gainStats = calculateGainForSplit(leftChildStats,
-              rightChildStats, binAggregates.metadata, predictWithImpurity.get._2)
-            (splitIdx, gainStats)
-          }.maxBy(_._2.gain)
-        (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
-      } else if (binAggregates.metadata.isUnordered(featureIndex)) {
-        // Unordered categorical feature
-        val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
-        val (bestFeatureSplitIndex, bestFeatureGainStats) =
-          Range(0, numSplits).map { splitIndex =>
-            val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
-            val rightChildStats = binAggregates.getParentImpurityCalculator()
-              .subtract(leftChildStats)
-            predictWithImpurity = Some(predictWithImpurity.getOrElse(
-              calculatePredictImpurity(leftChildStats, rightChildStats)))
-            val gainStats = calculateGainForSplit(leftChildStats,
-              rightChildStats, binAggregates.metadata, predictWithImpurity.get._2)
-            (splitIndex, gainStats)
-          }.maxBy(_._2.gain)
-        (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
-      } else {
+          // Find best split.
+          val (bestFeatureSplitIndex, bestFeatureGainStats) =
+            Range(0, numSplits).map { case splitIdx =>
+              val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
+              val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
+              rightChildStats.subtract(leftChildStats)
+              predictWithImpurity = Some(predictWithImpurity.getOrElse(
+                calculatePredictImpurity(leftChildStats, rightChildStats)))
+              val gainStats = calculateGainForSplit(leftChildStats,
+                rightChildStats, binAggregates.metadata, predictWithImpurity.get._2)
+              (splitIdx, gainStats)
+            }.maxBy(_._2.gain)
+          (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+        } else if (binAggregates.metadata.isUnordered(featureIndex)) {
+          // Unordered categorical feature
+          val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
+          val (bestFeatureSplitIndex, bestFeatureGainStats) =
+            Range(0, numSplits).map { splitIndex =>
+              val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
+              val rightChildStats = binAggregates.getParentImpurityCalculator()
+                .subtract(leftChildStats)
+              predictWithImpurity = Some(predictWithImpurity.getOrElse(
+                calculatePredictImpurity(leftChildStats, rightChildStats)))
+              val gainStats = calculateGainForSplit(leftChildStats,
+                rightChildStats, binAggregates.metadata, predictWithImpurity.get._2)
+              (splitIndex, gainStats)
+            }.maxBy(_._2.gain)
+          (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+        } else {
           // Ordered categorical feature
           val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)
           val numBins = binAggregates.metadata.numBins(featureIndex)
