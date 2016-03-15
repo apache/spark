@@ -117,57 +117,6 @@ class Pipeline(Estimator):
     pipeline stages. If there are no stages, the pipeline acts as an
     identity transformer.
 
-    >>> from pyspark.ml.feature import HashingTF
-    >>> from pyspark.ml.feature import PCA
-    >>> df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
-    >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
-    >>> pca = PCA(k=2, inputCol="features", outputCol="pca_features")
-    >>> pl = Pipeline(stages=[hashingTF, pca])
-    >>> model = pl.fit(df)
-    >>> transformed = model.transform(df)
-    >>> transformed.head().words == ["a", "b", "c"]
-    True
-    >>> transformed.head().features
-    SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
-    >>> transformed.head().pca_features
-    DenseVector([1.0, 0.5774])
-    >>> featurePath = temp_path + "/feature-transformer"
-    >>> pl.save(featurePath)
-    >>> loadedPipeline = Pipeline.load(featurePath)
-    >>> loadedPipeline.uid == pl.uid
-    True
-    >>> len(loadedPipeline.getStages())
-    2
-    >>> [loadedHT, loadedPCA] = loadedPipeline.getStages()
-    >>> type(loadedHT)
-    <class 'pyspark.ml.feature.HashingTF'>
-    >>> type(loadedPCA)
-    <class 'pyspark.ml.feature.PCA'>
-    >>> loadedHT.uid == hashingTF.uid
-    True
-    >>> param = loadedHT.getParam("numFeatures")
-    >>> loadedHT.getOrDefault(param) == hashingTF.getOrDefault(param)
-    True
-    >>> loadedPCA.uid == pca.uid
-    True
-    >>> loadedPCA.getK() == pca.getK()
-    True
-    >>> modelPath = temp_path + "/feature-model"
-    >>> model.save(modelPath)
-    >>> loadedModel = PipelineModel.load(modelPath)
-    >>> [hashingTFinModel, pcaModel] = model.stages
-    >>> [loadedHTinModel, loadedPCAModel] = loadedModel.stages
-    >>> hashingTFinModel.uid == loadedHTinModel.uid
-    True
-    >>> hashingTFinModel.getOrDefault(param) == loadedHTinModel.getOrDefault(param)
-    True
-    >>> pcaModel.uid == loadedPCAModel.uid
-    True
-    >>> pcaModel.pc == loadedPCAModel.pc
-    True
-    >>> pcaModel.explainedVariance == loadedPCAModel.explainedVariance
-    True
-
     .. versionadded:: 1.3.0
     """
 
@@ -365,35 +314,3 @@ class PipelineModel(Model):
     def load(cls, path):
         """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
         return cls.read().load(path)
-
-
-if __name__ == "__main__":
-    import doctest
-    import tempfile
-
-    import pyspark.ml
-    import pyspark.ml.feature
-    from pyspark.sql import SQLContext
-    globs = pyspark.ml.__dict__.copy()
-    globs_feature = pyspark.ml.feature.__dict__.copy()
-    globs.update(globs_feature)
-    # The small batch size here ensures that we see multiple batches,
-    # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.pipeline tests")
-    sqlContext = SQLContext(sc)
-    globs['sc'] = sc
-    globs['sqlContext'] = sqlContext
-    temp_path = tempfile.mkdtemp()
-    globs['temp_path'] = temp_path
-    failure_count = False
-    try:
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-        sc.stop()
-    finally:
-        from shutil import rmtree
-        try:
-            rmtree(temp_path)
-        except OSError:
-            pass
-    if failure_count:
-        exit(-1)

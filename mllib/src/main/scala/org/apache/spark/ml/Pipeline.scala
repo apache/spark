@@ -297,8 +297,7 @@ class PipelineModel private[ml] (
     this(uid, stages.asScala.toArray)
   }
 
-  @Since("2.0.0")
-  def this(uid: String, stages: Array[PipelineStage]) = {
+  private[ml] def this(uid: String, stages: Array[PipelineStage]) = {
     this(uid, stages.map(_.asInstanceOf[Transformer]))
   }
 
