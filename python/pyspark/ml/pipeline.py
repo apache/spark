@@ -20,6 +20,8 @@ import sys
 if sys.version > '3':
     basestring = str
 
+from py4j.java_collections import ListConverter
+
 from pyspark import SparkContext
 from pyspark import since
 from pyspark.ml import Estimator, Model, Transformer
@@ -36,10 +38,6 @@ def _stages_java2py(java_stages):
     :return: An array of Python stages.
     """
 
-    for stage in java_stages:
-        assert(stage.getClass().getName() != "org.apache.spark.Pipeline" or
-               stage.getClass().getName() != "org.apache.spark.PipelineModel",
-               "Nested Pipeline and PipelineModel are not supported for save/load now.")
     return list(map(JavaWrapper._transfer_stage_from_java, java_stages))
 
 
@@ -52,12 +50,10 @@ def _stages_py2java(py_stages):
 
     for stage in py_stages:
         assert(isinstance(stage, JavaWrapper),
-               "Nested Pipeline and PipelineModel are not supported for save/load now.")
-    gateway = SparkContext._gateway
-    jvm = SparkContext._jvm
-    java_stages = gateway.new_array(jvm.org.apache.spark.ml.PipelineStage, len(py_stages))
-    for idx, stage in enumerate(py_stages):
-        java_stages[idx] = stage._transfer_stage_to_java()
+               "Python side implementation is not supported in nested PipelineStage currently.")
+    java_stages = map(lambda stage: stage._transfer_stage_to_java(), py_stages)
+    ListConverter().convert(java_stages,
+                            SparkContext._active_spark_context._gateway._gateway_client)
     return java_stages
 
 
@@ -69,9 +65,7 @@ class _PipelineMLWriter(JavaMLWriter, JavaWrapper):
 
     def __init__(self, instance):
         self._java_obj = self._new_java_obj("org.apache.spark.ml.Pipeline", instance.uid)
-        jparam = self._java_obj.getParam(instance.stages.name)
-        jstages = _stages_py2java(instance.getStages())
-        self._java_obj.set(jparam.w(jstages))
+        self._java_obj.setStages(_stages_py2java(instance.getStages()))
         self._jwrite = self._java_obj.write()
 
 
@@ -86,14 +80,10 @@ class _PipelineMLReader(JavaMLReader):
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
 
-        sc = SparkContext._active_spark_context
         java_obj = self._jread.load(path)
         instance = self._clazz()
         instance._resetUid(java_obj.uid())
-        jparam = java_obj.getParam(instance.stages.name)
-        if java_obj.isDefined(jparam):
-            java_stages = java_obj.getOrDefault(jparam)
-            instance._paramMap[instance.stages] = _stages_java2py(java_stages)
+        instance.setStages(_stages_java2py(java_obj.getStages()))
 
         return instance
 
@@ -227,13 +217,9 @@ class Pipeline(Estimator):
 
 
 @inherit_doc
-class PipelineModelMLWriter(JavaMLWriter, JavaWrapper):
+class _PipelineModelMLWriter(JavaMLWriter, JavaWrapper):
     """
-    .. note:: Experimental
-
     PipelineModel utility class that can save ML instances through their Scala implementation.
-
-    .. versionadded:: 2.0.0
     """
 
     def __init__(self, instance):
@@ -244,13 +230,9 @@ class PipelineModelMLWriter(JavaMLWriter, JavaWrapper):
 
 
 @inherit_doc
-class PipelineModelMLReader(JavaMLReader):
+class _PipelineModelMLReader(JavaMLReader):
     """
-    .. note:: Experimental
-
     Utility class that can load PipelineModel instances through their Scala implementation.
-
-    .. versionadded:: 2.0.0
     """
 
     def load(self, path):
@@ -296,7 +278,7 @@ class PipelineModel(Model):
     @since("2.0.0")
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
-        return PipelineModelMLWriter(self)
+        return _PipelineModelMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -307,7 +289,7 @@ class PipelineModel(Model):
     @since("2.0.0")
     def read(cls):
         """Returns an JavaMLReader instance for this class."""
-        return PipelineModelMLReader(cls)
+        return _PipelineModelMLReader(cls)
 
     @classmethod
     @since("2.0.0")

@@ -109,6 +109,8 @@ class JavaWrapper(Params):
         stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.
         py_stage = __get_class(stage_name)()
+        assert(isinstance(py_stage, JavaWrapper),
+               "Python side implementation is not supported in nested PipelineStage currently.")
         # Load information from java_stage to the instance.
         py_stage._java_obj = java_stage
         py_stage._resetUid(java_stage.uid())
