@@ -73,17 +73,18 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     }
   }
 
-  // TODO(josh) test dispose behavior
   test("toInputStream()") {
     val bytes1 = ByteBuffer.wrap(Array.tabulate(256)(_.toByte))
     val bytes2 = ByteBuffer.wrap(Array.tabulate(128)(_.toByte))
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(bytes1, bytes2))
     assert(chunkedByteBuffer.limit === bytes1.limit() + bytes2.limit())
 
-    val inputStream = chunkedByteBuffer.toInputStream(false)
+    val inputStream = chunkedByteBuffer.toInputStream(dispose = false)
     val bytesFromStream = new Array[Byte](chunkedByteBuffer.limit.toInt)
     ByteStreams.readFully(inputStream, bytesFromStream)
     assert(bytesFromStream === bytes1.array() ++ bytes2.array())
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
   }
+
+  // TODO(josh): figure out how to test the dispose=true case.
 }

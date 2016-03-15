@@ -418,7 +418,7 @@ private[spark] class BlockManager(
           val iter: Iterator[Any] = if (level.deserialized) {
             memoryStore.getValues(blockId).get
           } else {
-            dataDeserializeStream(blockId, memoryStore.getBytes(blockId).get.toInputStream)
+            dataDeserialize(blockId, memoryStore.getBytes(blockId).get)
           }
           val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
@@ -426,7 +426,7 @@ private[spark] class BlockManager(
           val iterToReturn: Iterator[Any] = {
             val diskBytes = diskStore.getBytes(blockId)
             if (level.deserialized) {
-              val diskValues = dataDeserializeStream(blockId, diskBytes.toDestructiveInputStream)
+              val diskValues = dataDeserialize(blockId, diskBytes)
               maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
             } else {
               dataDeserialize(blockId, maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes))
@@ -505,8 +505,7 @@ private[spark] class BlockManager(
    */
   def getRemoteValues(blockId: BlockId): Option[BlockResult] = {
     getRemoteBytes(blockId).map { data =>
-      val values = dataDeserializeStream(blockId, data.toInputStream)
-      new BlockResult(values, DataReadMethod.Network, data.limit)
+      new BlockResult(dataDeserialize(blockId, data), DataReadMethod.Network, data.limit)
     }
   }
 
@@ -751,7 +750,7 @@ private[spark] class BlockManager(
         // Put it in memory first, even if it also has useDisk set to true;
         // We will drop it to disk later if the memory store can't hold it.
         val putSucceeded = if (level.deserialized) {
-          val values = dataDeserializeStream(blockId, bytes.toInputStream)
+          val values = dataDeserialize(blockId, bytes)
           memoryStore.putIterator(blockId, values, level) match {
             case Right(_) => true
             case Left(iter) =>
