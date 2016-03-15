@@ -1994,9 +1994,8 @@ class Dataset[T] private[sql](
   def write: DataFrameWriter = new DataFrameWriter(toDF())
 
   /**
-   * Returns the content of the [[DataFrame]] as a RDD of JSON strings.
-   * @group rdd
-   * @since 1.3.0
+   * Returns the content of the [[Dataset]] as a Dataset of JSON strings.
+   * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
@@ -2022,8 +2021,7 @@ class Dataset[T] private[sql](
         }
       }
     }
-    import sqlContext.implicits._
-    rdd.toDS
+    sqlContext.createDataset(rdd)
   }
 
   /**
