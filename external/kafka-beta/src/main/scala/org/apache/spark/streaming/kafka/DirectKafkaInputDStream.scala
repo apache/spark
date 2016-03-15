@@ -156,6 +156,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     // make sure new partitions are reflected in currentOffsets
     val newPartitions = parts.diff(currentOffsets.keySet)
     currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
+    newPartitions.foreach(tp => c.pause(tp))
 
     c.seekToEnd()
     parts.map(tp => tp -> c.position(tp)).toMap
@@ -211,6 +212,9 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
         tp -> c.position(tp)
       }.toMap
     }
+
+    // don't actually want to consume any messages, so pause all partitions
+    currentOffsets.keySet.foreach(tp => c.pause(tp))
   }
 
   override def stop(): Unit = this.synchronized {

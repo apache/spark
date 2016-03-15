@@ -375,7 +375,11 @@ class DirectKafkaStreamSuite
         collectedData.addAll(Arrays.asList(data: _*))
         kafkaStream.commitAsync(offsets, new OffsetCommitCallback() {
           def onComplete(m: JMap[TopicPartition, OffsetAndMetadata], e: Exception) {
-            committed.putAll(m)
+            if (null != e) {
+              System.err.println(e)
+            } else {
+              committed.putAll(m)
+            }
           }
         })
       }
