@@ -153,11 +153,10 @@ private[spark] class ApplicationMaster(
 
         if (!finished) {
           // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
-          // This behavior is different compared to 1.x version, we guarantee user will not call
-          // System.exit() at the end of application, so state will be updated before calling
-          // into shutdown hook.
-          // If user application is exited ahead of time by calling System.exit(), here mark
-          // this application as failed with EXIT_EARLY.
+          // This behavior is different compared to 1.x version.
+          // If user application is exited ahead of time by calling System.exit(N), here mark
+          // this application as failed with EXIT_EARLY. For a good shutdown, user shouldn't call
+          // System.exit(0) to terminate the application.
           finish(finalStatus,
             ApplicationMaster.EXIT_EARLY,
             "Shutdown hook called before final status was reported.")
