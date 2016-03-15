@@ -973,6 +973,11 @@ class DataFrame(object):
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sql_ctx)
 
+    def dropDuplicates(self, subset=None):
+        """
+        :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
+        """
+
     @since("1.3.1")
     def dropna(self, how='any', thresh=None, subset=None):
         """Returns a new :class:`DataFrame` omitting rows with null values.
@@ -1362,7 +1367,6 @@ class DataFrame(object):
     ##########################################################################################
 
     groupby = groupBy
-    drop_duplicates = dropDuplicates
 
 
 def _to_scala_map(sc, jm):
