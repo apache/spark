@@ -952,6 +952,7 @@ class LogisticRegressionSuite
     assert(strSummary.contains("ROC"))
     assert(strSummary.contains("Precision"))
     assert(strSummary.contains("F-Measure"))
+    // TODO add checking with regex
   }
 }
 
