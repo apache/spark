@@ -443,6 +443,11 @@ object SQLConf {
     .booleanConf
     .withDefault(true)
 
+  val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")
+    .doc"The maximum number of bytes to pack into a single partition when reading files.")
+    .longConf
+    .withDefault(128 * 1024 * 1024) // parquet.block.size
+
   val EXCHANGE_REUSE_ENABLED = SQLConfigBuilder("spark.sql.exchange.reuse")
     .internal
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them")
@@ -477,6 +482,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
+
+  def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
@@ -545,7 +552,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
-  def bucketingEnabled(): Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+  def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
