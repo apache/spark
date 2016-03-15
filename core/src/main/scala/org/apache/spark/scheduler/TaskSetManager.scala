@@ -543,22 +543,21 @@ private[spark] class TaskSetManager(
         case TaskLocality.NO_PREF => pendingTasksWithNoPrefs.nonEmpty
         case TaskLocality.RACK_LOCAL => moreTasksToRunIn(pendingTasksForRack)
       }
-      val previousLocalityIndex = currentLocalityIndex
       if (!moreTasks) {
         // This is a performance optimization: if there are no more tasks that can
         // be scheduled at a particular locality level, there is no point in waiting
         // for the locality wait timeout (SPARK-4939).
         lastLaunchTime = curTime
+        logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
+          s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
-        logDebug(s"No tasks for locality level ${myLocalityLevels(previousLocalityIndex)}, " +
-          s"so moving to locality level ${myLocalityLevels(currentLocalityIndex)}")
       } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
         // Jump to the next locality level, and reset lastLaunchTime so that the next locality
         // wait timer doesn't immediately expire
         lastLaunchTime += localityWaits(currentLocalityIndex)
+        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
+          s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1
-        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex)} after waiting for " +
-          s"${localityWaits(previousLocalityIndex)}ms")
       } else {
         return myLocalityLevels(currentLocalityIndex)
       }
