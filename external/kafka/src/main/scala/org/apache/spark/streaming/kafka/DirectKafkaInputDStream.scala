@@ -85,6 +85,9 @@ class DirectKafkaInputDStream[
     }
   }
 
+  /* This DirectKafkaInputDStream would be under rate control if its rateController is defined. */
+  override protected[streaming] lazy val underRateControl = rateController.isDefined
+
   protected val kc = new KafkaCluster(kafkaParams)
 
   private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(

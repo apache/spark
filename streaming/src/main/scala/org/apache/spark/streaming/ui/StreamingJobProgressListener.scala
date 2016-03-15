@@ -196,6 +196,17 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     ssc.graph.getInputStreamName(streamId)
   }
 
+  lazy val allStreamsUnderRateControl = ssc.graph.getInputStreams().forall(_.underRateControl)
+
+  def streamUnderRateControl(streamId: Int): Option[Boolean] = {
+    if (allStreamsUnderRateControl) {
+      Some(true)
+    }
+    else {
+      ssc.graph.getInputStreams().filter(_.id == streamId).headOption.map(_.underRateControl)
+    }
+  }
+
   /**
    * Return all InputDStream Ids
    */
