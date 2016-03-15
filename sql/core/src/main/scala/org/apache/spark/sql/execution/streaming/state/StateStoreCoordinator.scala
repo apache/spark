@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.streaming.state
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkEnv, Logging}
-import org.apache.spark.util.RpcUtils
+import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinator.StateStoreCoordinatorEndpoint
+import org.apache.spark.util.RpcUtils
 
 /** Trait representing all messages to [[StateStoreCoordinator]] */
 private sealed trait StateStoreCoordinatorMessage extends Serializable

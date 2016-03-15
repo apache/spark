@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.util.RpcUtils
-import org.apache.spark.{SparkContext, SharedSparkContext, SparkFunSuite}
 
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
