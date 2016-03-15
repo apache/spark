@@ -557,7 +557,7 @@ private[spark] class TaskSetManager(
         lastLaunchTime += localityWaits(currentLocalityIndex)
         currentLocalityIndex += 1
         logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex)} after waiting for " +
-          s"${localityWaits(currentLocalityIndex)}ms")
+          s"${localityWaits(currentLocalityIndex - 1)}ms")
       } else {
         return myLocalityLevels(currentLocalityIndex)
       }
