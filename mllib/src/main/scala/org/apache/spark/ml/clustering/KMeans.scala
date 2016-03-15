@@ -86,6 +86,15 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
+
+  override def validateParams(): Unit = {
+    super.validateParams()
+    if (isSet(initialModel)) {
+      val kOfInitialModel = $(initialModel).parentModel.clusterCenters.length
+      require(kOfInitialModel == $(k),
+        s"${$(k)} cluster centers required but $kOfInitialModel found in the initial model.")
+    }
+  }
 }
 
 /**
@@ -187,7 +196,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
 
     override protected def saveImpl(path: String): Unit = {
       if (instance.isSet(instance.initialModel)) {
-        val initialModelPath = new Path(path, "initial-model").toString
+        val initialModelPath = new Path(path, "initialModel").toString
         val initialModel = instance.getInitialModel
         initialModel.save(initialModelPath)
 
@@ -221,11 +230,14 @@ object KMeansModel extends MLReadable[KMeansModel] {
 
       DefaultParamsReader.getAndSetParams(model, metadata)
 
-      val hasInitialModel = (metadata.metadata \ "hasInitialModel").extract[Boolean]
-      if (hasInitialModel) {
-        val initialModelPath = new Path(path, "initial-model").toString
-        val initialModel = KMeansModel.load(initialModelPath)
-        model.set(model.initialModel, initialModel)
+      // Try to load initial model after version 2.0.0.
+      if (metadata.sparkVersion.split("\\.").head.toInt >= 2) {
+        val hasInitialModel = (metadata.metadata \ "hasInitialModel").extract[Boolean]
+        if (hasInitialModel) {
+          val initialModelPath = new Path(path, "initialModel").toString
+          val initialModel = KMeansModel.load(initialModelPath)
+          model.set(model.initialModel, initialModel)
+        }
       }
 
       model
@@ -324,7 +336,6 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
 
     if (isSet(initialModel)) {
-      require($(initialModel).parentModel.clusterCenters.length == $(k), "mismatched cluster count")
       require(rdd.first().size == $(initialModel).clusterCenters.head.size, "mismatched dimension")
       algo.setInitialModel($(initialModel).parentModel)
     }
@@ -359,7 +370,7 @@ object KMeans extends MLReadable[KMeans] {
 
     override protected def saveImpl(path: String): Unit = {
       if (instance.isSet(instance.initialModel)) {
-        val initialModelPath = new Path(path, "initial-model").toString
+        val initialModelPath = new Path(path, "initialModel").toString
         val initialModel = instance.getInitialModel
         initialModel.save(initialModelPath)
 
@@ -384,11 +395,14 @@ object KMeans extends MLReadable[KMeans] {
       val instance = new KMeans(metadata.uid)
       DefaultParamsReader.getAndSetParams(instance, metadata)
 
-      val hasInitialModel = (metadata.metadata \ "hasInitialModel").extract[Boolean]
-      if (hasInitialModel) {
-        val initialModelPath = new Path(path, "initial-model").toString
-        val initialModel = KMeansModel.load(initialModelPath)
-        instance.setInitialModel(initialModel)
+      // Try to load initial model after version 2.0.0.
+      if (metadata.sparkVersion.split("\\.").head.toInt >= 2) {
+        val hasInitialModel = (metadata.metadata \ "hasInitialModel").extract[Boolean]
+        if (hasInitialModel) {
+          val initialModelPath = new Path(path, "initialModel").toString
+          val initialModel = KMeansModel.load(initialModelPath)
+          instance.setInitialModel(initialModel)
+        }
       }
 
       instance

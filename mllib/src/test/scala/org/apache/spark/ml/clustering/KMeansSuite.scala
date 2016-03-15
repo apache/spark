@@ -20,6 +20,7 @@ package org.apache.spark.ml.clustering
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -113,18 +114,13 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   }
 
   test("Initialize using given cluster centers") {
-    val kmeans = new KMeans()
-      .setK(k)
-      .setSeed(1)
-      .setMaxIter(1000)  // Set a fairly high maxIter to make sure the model is converged.
-    val convergedModel = kmeans.fit(dataset).clusterCenters
+    val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(1)
+    val oneIterModel = kmeans.fit(dataset)
+    val twoIterModel = kmeans.copy(ParamMap(ParamPair(kmeans.maxIter, 2))).fit(dataset)
+    val oneMoreIterModel = kmeans.setInitialModel(oneIterModel).fit(dataset)
 
-    // Converged initial model should lead to only a single iteration.
-    val oneMoreIterationModel =
-      kmeans.setInitialModel(convergedModel).setMaxIter(1).fit(dataset).clusterCenters
-    convergedModel.zip(oneMoreIterationModel).foreach { case (center1, center2) =>
-      assert(center1 ~== center2 absTol 1E-8)
-    }
+    twoIterModel.clusterCenters.zip(oneMoreIterModel.clusterCenters)
+      .foreach { case (center1, center2) => assert(center1 ~== center2 absTol 1E-8) }
   }
 }
 
