@@ -17,37 +17,48 @@
 
 package org.apache.spark.sql.catalyst
 
+
+/**
+ * An identifier that optionally specifies a database.
+ *
+ * Format (unquoted): "name" or "db.name"
+ * Format (quoted): "`name`" or "`db`.`name`"
+ */
+private[sql] abstract class IdentifierWithDatabase(name: String) {
+  def database: Option[String]
+  def quotedString: String = database.map(db => s"`$db`.`$name`").getOrElse(s"`$name`")
+  def unquotedString: String = database.map(db => s"$db.$name").getOrElse(name)
+  override def toString: String = quotedString
+}
+
+
 /**
  * Identifies a table in a database.
  * If `database` is not defined, the current database is used.
  */
-private[sql] case class TableIdentifier(table: String, database: Option[String]) {
-  def this(table: String) = this(table, None)
+private[sql] case class TableIdentifier(
+    table: String,
+    database: Option[String])
+  extends IdentifierWithDatabase(table) {
 
-  override def toString: String = quotedString
-
-  def quotedString: String = database.map(db => s"`$db`.`$table`").getOrElse(s"`$table`")
-
-  def unquotedString: String = database.map(db => s"$db.$table").getOrElse(table)
+  def this(name: String) = this(name, None)
 }
 
 private[sql] object TableIdentifier {
-  def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)
+  def apply(tableName: String): TableIdentifier = TableIdentifier(tableName)
 }
+
 
 /**
  * Identifies a function in a database.
  * If `database` is not defined, the current database is used.
  */
-// TODO: reuse some code with TableIdentifier.
-private[sql] case class FunctionIdentifier(funcName: String, database: Option[String]) {
+private[sql] case class FunctionIdentifier(
+    funcName: String,
+    database: Option[String])
+  extends IdentifierWithDatabase(funcName) {
+
   def this(name: String) = this(name, None)
-
-  override def toString: String = quotedString
-
-  def quotedString: String = database.map(db => s"`$db`.`$funcName`").getOrElse(s"`$funcName`")
-
-  def unquotedString: String = database.map(db => s"$db.$funcName").getOrElse(funcName)
 }
 
 private[sql] object FunctionIdentifier {
