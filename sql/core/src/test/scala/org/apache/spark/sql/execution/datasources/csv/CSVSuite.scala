@@ -160,12 +160,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
          |charset "iso-8859-1", delimiter "þ")
       """.stripMargin.replaceAll("\n", " "))
-    //scalstyle:on
+    // scalastyle:on
 
     verifyCars(sqlContext.table("carsTable"), withHeader = true)
   }
 
   test("test aliases sep and encoding for delimiter and charset") {
+    // scalastyle:off
     val cars = sqlContext
       .read
       .format("csv")
@@ -173,6 +174,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("encoding", "iso-8859-1")
       .option("sep", "þ")
       .load(testFile(carsFile8859))
+    // scalastyle:on
 
     verifyCars(cars, withHeader = true)
   }
