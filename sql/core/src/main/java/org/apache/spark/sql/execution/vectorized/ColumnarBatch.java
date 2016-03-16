@@ -368,7 +368,6 @@ public final class ColumnarBatch {
    * attribute is filtered out.
    */
   public final void filterNullsInColumn(int ordinal) {
-    assert(!nullFilteredColumns.contains(ordinal));
     nullFilteredColumns.add(ordinal);
   }
 
