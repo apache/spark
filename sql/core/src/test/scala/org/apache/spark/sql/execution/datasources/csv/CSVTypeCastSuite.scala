@@ -23,7 +23,9 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class CSVTypeCastSuite extends SparkFunSuite {
 
@@ -33,7 +35,9 @@ class CSVTypeCastSuite extends SparkFunSuite {
     val decimalType = new DecimalType()
 
     stringValues.zip(decimalValues).foreach { case (strVal, decimalVal) =>
-      assert(CSVTypeCast.castTo(strVal, decimalType) === new BigDecimal(decimalVal.toString))
+      val decimalValue = new BigDecimal(decimalVal.toString)
+      assert(CSVTypeCast.castTo(strVal, decimalType) ===
+        Decimal(decimalValue, decimalType.precision, decimalType.scale))
     }
   }
 
@@ -66,8 +70,8 @@ class CSVTypeCastSuite extends SparkFunSuite {
   }
 
   test("String type should always return the same as the input") {
-    assert(CSVTypeCast.castTo("", StringType, nullable = true) == "")
-    assert(CSVTypeCast.castTo("", StringType, nullable = false) == "")
+    assert(CSVTypeCast.castTo("", StringType, nullable = true) == UTF8String.fromString(""))
+    assert(CSVTypeCast.castTo("", StringType, nullable = false) == UTF8String.fromString(""))
   }
 
   test("Throws exception for empty string with non null type") {
@@ -85,20 +89,20 @@ class CSVTypeCastSuite extends SparkFunSuite {
     assert(CSVTypeCast.castTo("1.00", FloatType) == 1.0)
     assert(CSVTypeCast.castTo("1.00", DoubleType) == 1.0)
     assert(CSVTypeCast.castTo("true", BooleanType) == true)
-    val timestamp = "2015-01-01 00:00:00"
-    assert(CSVTypeCast.castTo(timestamp, TimestampType) == Timestamp.valueOf(timestamp))
-    assert(CSVTypeCast.castTo("2015-01-01", DateType) == Date.valueOf("2015-01-01"))
 
     val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
     val customTimestamp = "31/01/2015 00:00"
-    // `SimpleDateFormat.parse` returns `java.util.Date`. This needs to be converted
-    // to `java.sql.Date`
-    val expectedDate = new Date(dateFormat.parse("31/01/2015 00:00").getTime)
-    val expectedTimestamp = new Timestamp(expectedDate.getTime)
+    val expectedTime = dateFormat.parse("31/01/2015 00:00").getTime
     assert(CSVTypeCast.castTo(customTimestamp, TimestampType, dateFormat = dateFormat)
-      == expectedTimestamp)
+      == expectedTime * 1000L)
     assert(CSVTypeCast.castTo(customTimestamp, DateType, dateFormat = dateFormat) ==
-      expectedDate)
+      DateTimeUtils.millisToDays(expectedTime))
+
+    val timestamp = "2015-01-01 00:00:00"
+    assert(CSVTypeCast.castTo(timestamp, TimestampType) ==
+      DateTimeUtils.stringToTime(timestamp).getTime  * 1000L)
+    assert(CSVTypeCast.castTo("2015-01-01", DateType) ==
+      DateTimeUtils.millisToDays(DateTimeUtils.stringToTime("2015-01-01").getTime))
   }
 
   test("Float and Double Types are cast correctly with Locale") {

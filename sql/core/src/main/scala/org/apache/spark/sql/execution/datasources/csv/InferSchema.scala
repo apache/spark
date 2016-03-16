@@ -27,7 +27,9 @@ import scala.util.Try
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[csv] object InferSchema {
 
@@ -112,7 +114,7 @@ private[csv] object InferSchema {
         }
       } else {
         // We keep this for backwords competibility.
-        if ((allCatch opt Timestamp.valueOf(field)).isDefined) {
+        if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
           TimestampType
         } else {
           tryParseBoolean(field)
@@ -206,14 +208,22 @@ private[csv] object CSVTypeCast {
         case _: DoubleType => Try(datum.toDouble)
           .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
         case _: BooleanType => datum.toBoolean
-        case _: DecimalType => new BigDecimal(datum.replaceAll(",", ""))
+        case dt: DecimalType =>
+          val value = new BigDecimal(datum.replaceAll(",", ""))
+          Decimal(value, dt.precision, dt.scale)
         case _: TimestampType if dateFormat != null =>
-          new Timestamp(dateFormat.parse(datum).getTime)
-        case _: TimestampType => Timestamp.valueOf(datum)
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.
+          dateFormat.parse(datum).getTime * 1000L
+        case _: TimestampType =>
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.
+          DateTimeUtils.stringToTime(datum).getTime  * 1000L
         case _: DateType if dateFormat != null =>
-          new Date(dateFormat.parse(datum).getTime)
-        case _: DateType => Date.valueOf(datum)
-        case _: StringType => datum
+          DateTimeUtils.millisToDays(dateFormat.parse(datum).getTime)
+        case _: DateType =>
+          DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
+        case _: StringType => UTF8String.fromString(datum)
         case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
       }
     }

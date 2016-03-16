@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import breeze.stats.distributions.{Gaussian => GD}
+import breeze.stats.{distributions => dist}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
@@ -217,7 +217,15 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
-      return model
+      // Handle possible missing or invalid prediction columns
+      val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
+      val trainingSummary = new GeneralizedLinearRegressionSummary(
+        summaryModel.transform(dataset),
+        predictionColName,
+        model,
+        wlsModel.diagInvAtWA.toArray,
+        1)
+      return model.setSummary(trainingSummary)
     }
 
     // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
@@ -229,7 +237,16 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     val model = copyValues(
       new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
         .setParent(this))
-    model
+    // Handle possible missing or invalid prediction columns
+    val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
+    val trainingSummary = new GeneralizedLinearRegressionSummary(
+      summaryModel.transform(dataset),
+      predictionColName,
+      model,
+      irlsModel.diagInvAtWA.toArray,
+      irlsModel.numIterations)
+
+    model.setSummary(trainingSummary)
   }
 
   @Since("2.0.0")
@@ -318,6 +335,22 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     /** The variance of the endogenous variable's mean, given the value mu. */
     def variance(mu: Double): Double
 
+    /** Deviance of (y, mu) pair. */
+    def deviance(y: Double, mu: Double, weight: Double): Double
+
+    /**
+     * Akaike's 'An Information Criterion'(AIC) value of the family for a given dataset.
+     * @param predictions an RDD of (y, mu, weight) of instances in evaluation dataset
+     * @param deviance the deviance for the fitted model in evaluation dataset
+     * @param numInstances number of instances in evaluation dataset
+     * @param weightSum weights sum of instances in evaluation dataset
+     */
+    def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double
+
     /** Trim the fitted value so that it will be in valid range. */
     def project(mu: Double): Double = mu
   }
@@ -348,7 +381,20 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def initialize(y: Double, weight: Double): Double = y
 
-    def variance(mu: Double): Double = 1.0
+    override def variance(mu: Double): Double = 1.0
+
+    override def deviance(y: Double, mu: Double, weight: Double): Double = {
+      weight * (y - mu) * (y - mu)
+    }
+
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
+      val wt = predictions.map(x => math.log(x._3)).sum()
+      numInstances * (math.log(deviance / numInstances * 2.0 * math.Pi) + 1.0) + 2.0 - wt
+    }
 
     override def project(mu: Double): Double = {
       if (mu.isNegInfinity) {
@@ -378,6 +424,22 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def variance(mu: Double): Double = mu * (1.0 - mu)
 
+    override def deviance(y: Double, mu: Double, weight: Double): Double = {
+      val my = 1.0 - y
+      2.0 * weight * (y * math.log(math.max(y, 1.0) / mu) +
+        my * math.log(math.max(my, 1.0) / (1.0 - mu)))
+    }
+
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
+      -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
+        weight * dist.Binomial(1, mu).logProbabilityOf(math.round(y).toInt)
+      }.sum()
+    }
+
     override def project(mu: Double): Double = {
       if (mu < epsilon) {
         epsilon
@@ -405,6 +467,20 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def variance(mu: Double): Double = mu
 
+    override def deviance(y: Double, mu: Double, weight: Double): Double = {
+      2.0 * weight * (y * math.log(y / mu) - (y - mu))
+    }
+
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
+      -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
+        weight * dist.Poisson(mu).logProbabilityOf(y.toInt)
+      }.sum()
+    }
+
     override def project(mu: Double): Double = {
       if (mu < epsilon) {
         epsilon
@@ -430,7 +506,22 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       y
     }
 
-    override def variance(mu: Double): Double = math.pow(mu, 2.0)
+    override def variance(mu: Double): Double = mu * mu
+
+    override def deviance(y: Double, mu: Double, weight: Double): Double = {
+      -2.0 * weight * (math.log(y / mu) - (y - mu)/mu)
+    }
+
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
+      val disp = deviance / weightSum
+      -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
+        weight * dist.Gamma(1.0 / disp, mu * disp).logPdf(y)
+      }.sum() + 2.0
+    }
 
     override def project(mu: Double): Double = {
       if (mu < epsilon) {
@@ -519,11 +610,13 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[ml] object Probit extends Link("probit") {
 
-    override def link(mu: Double): Double = GD(0.0, 1.0).icdf(mu)
+    override def link(mu: Double): Double = dist.Gaussian(0.0, 1.0).icdf(mu)
 
-    override def deriv(mu: Double): Double = 1.0 / GD(0.0, 1.0).pdf(GD(0.0, 1.0).icdf(mu))
+    override def deriv(mu: Double): Double = {
+      1.0 / dist.Gaussian(0.0, 1.0).pdf(dist.Gaussian(0.0, 1.0).icdf(mu))
+    }
 
-    override def unlink(eta: Double): Double = GD(0.0, 1.0).cdf(eta)
+    override def unlink(eta: Double): Double = dist.Gaussian(0.0, 1.0).cdf(eta)
   }
 
   private[ml] object CLogLog extends Link("cloglog") {
@@ -541,7 +634,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def deriv(mu: Double): Double = 1.0 / (2.0 * math.sqrt(mu))
 
-    override def unlink(eta: Double): Double = math.pow(eta, 2.0)
+    override def unlink(eta: Double): Double = eta * eta
   }
 }
 
@@ -571,6 +664,39 @@ class GeneralizedLinearRegressionModel private[ml] (
   override protected def predict(features: Vector): Double = {
     val eta = BLAS.dot(features, coefficients) + intercept
     familyAndLink.fitted(eta)
+  }
+
+  private var trainingSummary: Option[GeneralizedLinearRegressionSummary] = None
+
+  /**
+   * Gets R-like summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  @Since("2.0.0")
+  def summary: GeneralizedLinearRegressionSummary = trainingSummary.getOrElse {
+    throw new SparkException(
+      "No training summary available for this GeneralizedLinearRegressionModel",
+      new RuntimeException())
+  }
+
+  private[regression] def setSummary(summary: GeneralizedLinearRegressionSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /**
+   * If the prediction column is set returns the current model and prediction column,
+   * otherwise generates a new column and sets it as the prediction column on a new copy
+   * of the current model.
+   */
+  private[regression] def findSummaryModelAndPredictionCol()
+    : (GeneralizedLinearRegressionModel, String) = {
+    $(predictionCol) match {
+      case "" =>
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
+      case p => (this, p)
+    }
   }
 
   @Since("2.0.0")
@@ -630,6 +756,203 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
+    }
+  }
+}
+
+/**
+ * :: Experimental ::
+ * Summarizing Generalized Linear regression Fits.
+ *
+ * @param predictions predictions outputted by the model's `transform` method
+ * @param predictionCol field in "predictions" which gives the prediction value of each instance
+ * @param model the model that should be summarized
+ * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
+ * @param numIterations number of iterations
+ */
+@Since("2.0.0")
+@Experimental
+class GeneralizedLinearRegressionSummary private[regression] (
+    @Since("2.0.0") @transient val predictions: DataFrame,
+    @Since("2.0.0") val predictionCol: String,
+    @Since("2.0.0") val model: GeneralizedLinearRegressionModel,
+    private val diagInvAtWA: Array[Double],
+    @Since("2.0.0") val numIterations: Int) extends Serializable {
+
+  import GeneralizedLinearRegression._
+
+  private lazy val family = Family.fromName(model.getFamily)
+  private lazy val link = if (model.isDefined(model.getParam("link"))) {
+    Link.fromName(model.getLink)
+  } else {
+    family.defaultLink
+  }
+
+  /** Number of instances in DataFrame predictions */
+  private lazy val numInstances: Long = predictions.count()
+
+  /** The numeric rank of the fitted linear model */
+  @Since("2.0.0")
+  lazy val rank: Long = if (model.getFitIntercept) {
+    model.coefficients.size + 1
+  } else {
+    model.coefficients.size
+  }
+
+  /** Degrees of freedom */
+  @Since("2.0.0")
+  lazy val degreesOfFreedom: Long = {
+    numInstances - rank
+  }
+
+  /** The residual degrees of freedom */
+  @Since("2.0.0")
+  lazy val residualDegreeOfFreedom: Long = degreesOfFreedom
+
+  /** The residual degrees of freedom for the null model */
+  @Since("2.0.0")
+  lazy val residualDegreeOfFreedomNull: Long = if (model.getFitIntercept) {
+    numInstances - 1
+  } else {
+    numInstances
+  }
+
+  private lazy val devianceResiduals: DataFrame = {
+    val drUDF = udf { (y: Double, mu: Double, weight: Double) =>
+      val r = math.sqrt(math.max(family.deviance(y, mu, weight), 0.0))
+      if (y > mu) r else -1.0 * r
+    }
+    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
+    predictions.select(
+      drUDF(col(model.getLabelCol), col(predictionCol), w).as("devianceResiduals"))
+  }
+
+  private lazy val pearsonResiduals: DataFrame = {
+    val prUDF = udf { mu: Double => family.variance(mu) }
+    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
+    predictions.select(col(model.getLabelCol).minus(col(predictionCol))
+      .multiply(sqrt(w)).divide(sqrt(prUDF(col(predictionCol)))).as("pearsonResiduals"))
+  }
+
+  private lazy val workingResiduals: DataFrame = {
+    val wrUDF = udf { (y: Double, mu: Double) => (y - mu) * link.deriv(mu) }
+    predictions.select(wrUDF(col(model.getLabelCol), col(predictionCol)).as("workingResiduals"))
+  }
+
+  private lazy val responseResiduals: DataFrame = {
+    predictions.select(col(model.getLabelCol).minus(col(predictionCol)).as("responseResiduals"))
+  }
+
+  /**
+   * Get the default residuals(deviance residuals) of the fitted model.
+   */
+  @Since("2.0.0")
+  def residuals(): DataFrame = devianceResiduals
+
+  /**
+   * Get the residuals of the fitted model by type.
+   * @param residualsType The type of residuals which should be returned.
+   *                      Supported options: deviance, pearson, working and response.
+   */
+  @Since("2.0.0")
+  def residuals(residualsType: String): DataFrame = {
+    residualsType match {
+      case "deviance" => devianceResiduals
+      case "pearson" => pearsonResiduals
+      case "working" => workingResiduals
+      case "response" => responseResiduals
+      case other => throw new UnsupportedOperationException(
+        s"The residuals type $other is not supported by Generalized Linear Regression.")
+    }
+  }
+
+  /**
+   * The deviance for the null model.
+   */
+  @Since("2.0.0")
+  lazy val nullDeviance: Double = {
+    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
+    val wtdmu: Double = if (model.getFitIntercept) {
+      val agg = predictions.agg(sum(w.multiply(col(model.getLabelCol))), sum(w)).first()
+      agg.getDouble(0) / agg.getDouble(1)
+    } else {
+      link.unlink(0.0)
+    }
+    predictions.select(col(model.getLabelCol), w).rdd.map {
+      case Row(y: Double, weight: Double) =>
+        family.deviance(y, wtdmu, weight)
+    }.sum()
+  }
+
+  /**
+   * The deviance for the fitted model.
+   */
+  @Since("2.0.0")
+  lazy val deviance: Double = {
+    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
+    predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
+      case Row(label: Double, pred: Double, weight: Double) =>
+        family.deviance(label, pred, weight)
+    }.sum()
+  }
+
+  /**
+   * The dispersion of the fitted model.
+   * It is taken as 1.0 for the "binomial" and "poisson" families, and otherwise
+   * estimated by the residual Pearson's Chi-Squared statistic(which is defined as
+   * sum of the squares of the Pearson residuals) divided by the residual degrees of freedom.
+   */
+  @Since("2.0.0")
+  lazy val dispersion: Double = if (
+    model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+    1.0
+  } else {
+    val rss = pearsonResiduals.agg(sum(pow(col("pearsonResiduals"), 2.0))).first().getDouble(0)
+    rss / degreesOfFreedom
+  }
+
+  /** Akaike's "An Information Criterion"(AIC) for the fitted model. */
+  @Since("2.0.0")
+  lazy val aic: Double = {
+    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
+    val weightSum = predictions.select(w).agg(sum(w)).first().getDouble(0)
+    val t = predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
+      case Row(label: Double, pred: Double, weight: Double) =>
+        (label, pred, weight)
+    }
+    family.aic(t, deviance, numInstances, weightSum) + 2 * rank
+  }
+
+  /**
+   * Standard error of estimated coefficients and intercept.
+   */
+  @Since("2.0.0")
+  lazy val coefficientStandardErrors: Array[Double] = {
+    diagInvAtWA.map(_ * dispersion).map(math.sqrt)
+  }
+
+  /**
+   * T-statistic of estimated coefficients and intercept.
+   */
+  @Since("2.0.0")
+  lazy val tValues: Array[Double] = {
+    val estimate = if (model.getFitIntercept) {
+      Array.concat(model.coefficients.toArray, Array(model.intercept))
+    } else {
+      model.coefficients.toArray
+    }
+    estimate.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
+  }
+
+  /**
+   * Two-sided p-value of estimated coefficients and intercept.
+   */
+  @Since("2.0.0")
+  lazy val pValues: Array[Double] = {
+    if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+      tValues.map { x => 2.0 * (1.0 - dist.Gaussian(0.0, 1.0).cdf(math.abs(x))) }
+    } else {
+      tValues.map { x => 2.0 * (1.0 - dist.StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
     }
   }
 }

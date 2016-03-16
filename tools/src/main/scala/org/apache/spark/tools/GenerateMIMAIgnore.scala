@@ -40,15 +40,6 @@ object GenerateMIMAIgnore {
   private val classLoader = Thread.currentThread().getContextClassLoader
   private val mirror = runtimeMirror(classLoader)
 
-  private def isDeveloperApi(sym: unv.Symbol) = sym.annotations.exists {
-    _.tpe =:= mirror.staticClass("org.apache.spark.annotation.DeveloperApi").toType
-  }
-
-  private def isExperimental(sym: unv.Symbol) = sym.annotations.exists {
-    _.tpe =:= mirror.staticClass("org.apache.spark.annotation.Experimental").toType
-  }
-
-
   private def isPackagePrivate(sym: unv.Symbol) =
     !sym.privateWithin.fullName.startsWith("<none>")
 
@@ -57,7 +48,7 @@ object GenerateMIMAIgnore {
 
   /**
    * For every class checks via scala reflection if the class itself or contained members
-   * have DeveloperApi or Experimental annotations or they are package private.
+   * are package private.
    * Returns the tuple of such classes and members.
    */
   private def privateWithin(packageName: String): (Set[String], Set[String]) = {
@@ -74,8 +65,6 @@ object GenerateMIMAIgnore {
           isPackagePrivate(classSymbol) ||
           isPackagePrivateModule(moduleSymbol) ||
           classSymbol.isPrivate
-        val developerApi = isDeveloperApi(classSymbol) || isDeveloperApi(moduleSymbol)
-        val experimental = isExperimental(classSymbol) || isExperimental(moduleSymbol)
         /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
         lazy val indirectlyPrivateSpark = {
@@ -87,7 +76,7 @@ object GenerateMIMAIgnore {
             false
           }
         }
-        if (directlyPrivateSpark || indirectlyPrivateSpark || developerApi || experimental) {
+        if (directlyPrivateSpark || indirectlyPrivateSpark) {
           ignoredClasses += className
         }
         // check if this class has package-private/annotated members.
@@ -122,9 +111,7 @@ object GenerateMIMAIgnore {
   private def getAnnotatedOrPackagePrivateMembers(classSymbol: unv.ClassSymbol) = {
     classSymbol.typeSignature.members.filterNot(x =>
       x.fullName.startsWith("java") || x.fullName.startsWith("scala")
-    ).filter(x =>
-      isPackagePrivate(x) || isDeveloperApi(x) || isExperimental(x)
-    ).map(_.fullName) ++ getInnerFunctions(classSymbol)
+    ).filter(x => isPackagePrivate(x)).map(_.fullName) ++ getInnerFunctions(classSymbol)
   }
 
   def main(args: Array[String]) {
@@ -143,7 +130,6 @@ object GenerateMIMAIgnore {
     println("Created : .generated-mima-member-excludes in current directory.")
     // scalastyle:on println
   }
-
 
   private def shouldExclude(name: String) = {
     // Heuristic to remove JVM classes that do not correspond to user-facing classes in Scala
