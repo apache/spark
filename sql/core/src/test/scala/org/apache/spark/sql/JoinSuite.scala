@@ -49,7 +49,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       case j: BroadcastHashJoin => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
-      case j: BroadcastLeftSemiJoinHash => j
+      case j: BroadcastHashJoin => j
       case j: SortMergeJoin => j
     }
 
@@ -427,7 +427,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
-          classOf[BroadcastLeftSemiJoinHash])
+          classOf[BroadcastHashJoin])
       ).foreach {
         case (query, joinClass) => assertJoin(query, joinClass)
       }

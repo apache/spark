@@ -38,7 +38,7 @@ import org.apache.spark.util.Benchmark
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
     .set("spark.sql.shuffle.partitions", "1")
-    .set("spark.sql.autoBroadcastJoinThreshold", "0")
+    .set("spark.sql.autoBroadcastJoinThreshold", "1")
   lazy val sc = SparkContext.getOrCreate(conf)
   lazy val sqlContext = SQLContext.getOrCreate(sc)
 
@@ -200,6 +200,18 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     outer join w long codegen=false        15280 / 16497          6.9         145.7       1.0X
     outer join w long codegen=true            769 /  796        136.3           7.3      19.9X
       */
+
+    runBenchmark("semi join w long", N) {
+      sqlContext.range(N).join(dim, (col("id") bitwiseAND M) === col("k"), "leftsemi").count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    semi join w long:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    semi join w long codegen=false           5804 / 5969         18.1          55.3       1.0X
+    semi join w long codegen=true             814 /  934        128.8           7.8       7.1X
+     */
   }
 
   ignore("sort merge join") {
