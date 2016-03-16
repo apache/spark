@@ -19,8 +19,8 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
+from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.param import Params
-from pyspark.ml.pipeline import Estimator, Transformer, Model
 from pyspark.ml.util import _jvm
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 
@@ -89,6 +89,33 @@ class JavaWrapper(Params):
         Returns an empty Java ParamMap reference.
         """
         return _jvm().org.apache.spark.ml.param.ParamMap()
+
+    def _transfer_stage_to_java(self):
+        self._transfer_params_to_java()
+        return self._java_obj
+
+    @staticmethod
+    def _transfer_stage_from_java(java_stage):
+        def __get_class(clazz):
+            """
+            Loads Python class from its name.
+            """
+            parts = clazz.split('.')
+            module = ".".join(parts[:-1])
+            m = __import__(module)
+            for comp in parts[1:]:
+                m = getattr(m, comp)
+            return m
+        stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
+        # Generate a default new instance from the stage_name class.
+        py_stage = __get_class(stage_name)()
+        assert(isinstance(py_stage, JavaWrapper),
+               "Python side implementation is not supported in the meta-PipelineStage currently.")
+        # Load information from java_stage to the instance.
+        py_stage._java_obj = java_stage
+        py_stage._resetUid(java_stage.uid())
+        py_stage._transfer_params_from_java()
+        return py_stage
 
 
 @inherit_doc

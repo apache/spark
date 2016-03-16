@@ -37,7 +37,7 @@ else:
 from shutil import rmtree
 import tempfile
 
-from pyspark.ml import Estimator, Model, Pipeline, Transformer
+from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import RegressionEvaluator
@@ -498,6 +498,49 @@ class PersistenceTest(PySparkTestCase):
             rmtree(path)
         except OSError:
             pass
+
+    def test_pipeline_persistence(self):
+        sqlContext = SQLContext(self.sc)
+        temp_path = tempfile.mkdtemp()
+
+        try:
+            df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
+            tf = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
+            pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+            pl = Pipeline(stages=[tf, pca])
+            model = pl.fit(df)
+            pipeline_path = temp_path + "/pipeline"
+            pl.save(pipeline_path)
+            loaded_pipeline = Pipeline.load(pipeline_path)
+            self.assertEqual(loaded_pipeline.uid, pl.uid)
+            self.assertEqual(len(loaded_pipeline.getStages()), 2)
+
+            [loaded_tf, loaded_pca] = loaded_pipeline.getStages()
+            self.assertIsInstance(loaded_tf, HashingTF)
+            self.assertEqual(loaded_tf.uid, tf.uid)
+            param = loaded_tf.getParam("numFeatures")
+            self.assertEqual(loaded_tf.getOrDefault(param), tf.getOrDefault(param))
+
+            self.assertIsInstance(loaded_pca, PCA)
+            self.assertEqual(loaded_pca.uid, pca.uid)
+            self.assertEqual(loaded_pca.getK(), pca.getK())
+
+            model_path = temp_path + "/pipeline-model"
+            model.save(model_path)
+            loaded_model = PipelineModel.load(model_path)
+            [model_tf, model_pca] = model.stages
+            [loaded_model_tf, loaded_model_pca] = loaded_model.stages
+            self.assertEqual(model_tf.uid, loaded_model_tf.uid)
+            self.assertEqual(model_tf.getOrDefault(param), loaded_model_tf.getOrDefault(param))
+
+            self.assertEqual(model_pca.uid, loaded_model_pca.uid)
+            self.assertEqual(model_pca.pc, loaded_model_pca.pc)
+            self.assertEqual(model_pca.explainedVariance, loaded_model_pca.explainedVariance)
+        finally:
+            try:
+                rmtree(temp_path)
+            except OSError:
+                pass
 
 
 class HasThrowableProperty(Params):
