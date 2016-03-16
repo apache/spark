@@ -34,7 +34,8 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SSLOptions}
+import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
