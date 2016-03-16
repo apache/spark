@@ -531,6 +531,11 @@ object MimaExcludes {
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.scheduler.SparkListener.onOtherEvent"),
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.CreatableRelationProvider.createRelation"),
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.InsertableRelation.insert")
+      ) ++ Seq(
+        // [SPARK-13926] Automatically use Kryo serializer when shuffling RDDs with simple types
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ShuffleDependency.this"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ShuffleDependency.serializer"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.Serializer$")
       )
     case v if v.startsWith("1.6") =>
       Seq(
