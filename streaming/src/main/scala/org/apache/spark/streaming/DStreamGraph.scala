@@ -21,7 +21,7 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.util.Utils
@@ -37,6 +37,8 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   var zeroTime: Time = null
   var startTime: Time = null
   var batchDuration: Duration = null
+
+  @transient private[streaming] var recoveredFromCheckpoint: Boolean = false
 
   def start(time: Time) {
     this.synchronized {
@@ -84,15 +86,25 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def addInputStream(inputStream: InputDStream[_]) {
     this.synchronized {
-      inputStream.setGraph(this)
-      inputStreams += inputStream
+      if (recoveredFromCheckpoint) {
+        throw new SparkException("It's not allowed to register a new InputDStream in " +
+          "the DStreamGraph recovered from Checkpoint")
+      } else {
+        inputStream.setGraph(this)
+        inputStreams += inputStream
+      }
     }
   }
 
   def addOutputStream(outputStream: DStream[_]) {
     this.synchronized {
-      outputStream.setGraph(this)
-      outputStreams += outputStream
+      if (recoveredFromCheckpoint) {
+        throw new SparkException("It's not allowed to register a new OutputDStream in " +
+          "the DStreamGraph recovered from Checkpoint")
+      } else {
+        outputStream.setGraph(this)
+        outputStreams += outputStream
+      }
     }
   }
 
