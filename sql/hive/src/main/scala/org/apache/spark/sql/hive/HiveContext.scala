@@ -113,8 +113,6 @@ class HiveContext private[hive](
   @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
 
-  protected[sql] override def catalog = sessionState.catalog
-
   // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
   // but the optimizer can't access the SessionState of metadataHive.
   sessionState.functionRegistry.registerFunction(
@@ -348,13 +346,13 @@ class HiveContext private[hive](
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    catalog.refreshTable(tableIdent)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionState.catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    catalog.invalidateTable(tableIdent)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionState.catalog.invalidateTable(tableIdent)
   }
 
   /**
@@ -367,8 +365,8 @@ class HiveContext private[hive](
    * @since 1.2.0
    */
   def analyze(tableName: String) {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(catalog.lookupRelation(tableIdent))
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -429,7 +427,7 @@ class HiveContext private[hive](
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          catalog.client.alterTable(
+          sessionState.catalog.client.alterTable(
             relation.table.copy(
               properties = relation.table.properties +
                 (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))

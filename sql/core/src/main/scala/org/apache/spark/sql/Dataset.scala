@@ -166,15 +166,16 @@ class Dataset[T] private[sql](
   private implicit def classTag = unresolvedTEncoder.clsTag
 
   protected[sql] def resolve(colName: String): NamedExpression = {
-    queryExecution.analyzed.resolveQuoted(colName, sqlContext.analyzer.resolver).getOrElse {
-      throw new AnalysisException(
-        s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
-    }
+    queryExecution.analyzed.resolveQuoted(colName, sqlContext.sessionState.analyzer.resolver)
+      .getOrElse {
+        throw new AnalysisException(
+          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+      }
   }
 
   protected[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      queryExecution.analyzed.resolveQuoted(n.name, sqlContext.analyzer.resolver).get
+      queryExecution.analyzed.resolveQuoted(n.name, sqlContext.sessionState.analyzer.resolver).get
     }
   }
 
@@ -818,7 +819,7 @@ class Dataset[T] private[sql](
   @scala.annotation.varargs
   def selectExpr(exprs: String*): DataFrame = {
     select(exprs.map { expr =>
-      Column(sqlContext.sqlParser.parseExpression(expr))
+      Column(sqlContext.sessionState.sqlParser.parseExpression(expr))
     }: _*)
   }
 
@@ -919,7 +920,7 @@ class Dataset[T] private[sql](
    * @since 1.3.0
    */
   def filter(conditionExpr: String): Dataset[T] = {
-    filter(Column(sqlContext.sqlParser.parseExpression(conditionExpr)))
+    filter(Column(sqlContext.sessionState.sqlParser.parseExpression(conditionExpr)))
   }
 
   /**
@@ -943,7 +944,7 @@ class Dataset[T] private[sql](
    * @since 1.5.0
    */
   def where(conditionExpr: String): Dataset[T] = {
-    filter(Column(sqlContext.sqlParser.parseExpression(conditionExpr)))
+    filter(Column(sqlContext.sessionState.sqlParser.parseExpression(conditionExpr)))
   }
 
   /**
@@ -1400,7 +1401,7 @@ class Dataset[T] private[sql](
    * @since 1.3.0
    */
   def withColumn(colName: String, col: Column): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
+    val resolver = sqlContext.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
@@ -1421,7 +1422,7 @@ class Dataset[T] private[sql](
    * Returns a new [[DataFrame]] by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
+    val resolver = sqlContext.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
@@ -1445,7 +1446,7 @@ class Dataset[T] private[sql](
    * @since 1.3.0
    */
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
+    val resolver = sqlContext.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
     val shouldRename = output.exists(f => resolver(f.name, existingName))
     if (shouldRename) {
@@ -1480,7 +1481,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
+    val resolver = sqlContext.sessionState.analyzer.resolver
     val remainingCols =
       schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
     if (remainingCols.size == this.schema.size) {
@@ -1501,7 +1502,8 @@ class Dataset[T] private[sql](
   def drop(col: Column): DataFrame = {
     val expression = col match {
       case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(u.name, sqlContext.analyzer.resolver).getOrElse(u)
+        queryExecution.analyzed.resolveQuoted(
+          u.name, sqlContext.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
     }
     val attrs = this.logicalPlan.output
@@ -1797,14 +1799,14 @@ class Dataset[T] private[sql](
    */
   def collectAsList(): java.util.List[T] = withCallback("collectAsList", toDF()) { _ =>
     withNewExecutionId {
-      val values = queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
+      val values = queryExecution.executedPlan.executeCollect().map(boundTEncoder.fromRow)
       java.util.Arrays.asList(values : _*)
     }
   }
 
   private def collect(needCallback: Boolean): Array[T] = {
     def execute(): Array[T] = withNewExecutionId {
-      queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
+      queryExecution.executedPlan.executeCollect().map(boundTEncoder.fromRow)
     }
 
     if (needCallback) {
@@ -1987,9 +1989,9 @@ class Dataset[T] private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  def toJSON: RDD[String] = {
+  def toJSON: Dataset[String] = {
     val rowSchema = this.schema
-    queryExecution.toRdd.mapPartitions { iter =>
+    val rdd = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
@@ -2011,6 +2013,8 @@ class Dataset[T] private[sql](
         }
       }
     }
+    import sqlContext.implicits._
+    rdd.toDS
   }
 
   /**
