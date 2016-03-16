@@ -1001,12 +1001,12 @@ class GeneralizedLinearRegressionSuite
     val dfWithStringLabels =
       MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
 
-    val lr = new LinearRegression()
+    val glr = new GeneralizedLinearRegression()
       .setLabelCol("label")
       .setFeaturesCol("features")
 
     val thrown = intercept[IllegalArgumentException] {
-      lr.fit(dfWithStringLabels)
+      glr.fit(dfWithStringLabels)
     }
     assert(thrown.getMessage contains
       "Column label must be of type NumericType but was actually of type StringType")

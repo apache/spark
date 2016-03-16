@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import org.apache.spark.sql.types.DoubleType
+
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
@@ -345,6 +347,34 @@ class AFTSurvivalRegressionSuite
         case Row(features: Vector, prediction: Double) =>
           assert(prediction ~== model.predict(features) relTol 1E-5)
     }
+  }
+
+  test("should support all NumericType labels") {
+    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
+
+    val aft = new AFTSurvivalRegression().setFeaturesCol("features")
+
+    val expected = aft.setLabelCol("label").fit(dfs(DoubleType))
+    dfs.keys.filter(_ != DoubleType).foreach { t =>
+      val actual = aft.setLabelCol("label").fit(dfs(t))
+      assert(expected.intercept === actual.intercept)
+      assert(expected.coefficients === actual.coefficients)
+    }
+  }
+
+  test("shouldn't support non NumericType labels") {
+    val dfWithStringLabels =
+      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
+
+    val aft = new AFTSurvivalRegression()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    val thrown = intercept[IllegalArgumentException] {
+      aft.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
   }
 
   test("read/write") {
