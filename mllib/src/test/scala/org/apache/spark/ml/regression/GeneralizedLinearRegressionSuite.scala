@@ -124,34 +124,44 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
   ignore("export test data into CSV format") {
     datasetGaussianIdentity.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("gaussian-identity-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianIdentity")
     datasetGaussianLog.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("gaussian-log-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianLog")
     datasetGaussianInverse.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("gaussian-inverse-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianInverse")
     datasetBinomial.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("binomial-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetBinomial")
     datasetPoissonLog.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("poisson-log-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLog")
     datasetPoissonIdentity.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("poisson-identity-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonIdentity")
     datasetPoissonSqrt.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("poisson-sqrt-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonSqrt")
     datasetGammaInverse.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("gamma-inverse-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaInverse")
     datasetGammaIdentity.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("gamma-identity-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaIdentity")
     datasetGammaLog.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("gamma-log-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaLog")
   }
 
   test("params") {

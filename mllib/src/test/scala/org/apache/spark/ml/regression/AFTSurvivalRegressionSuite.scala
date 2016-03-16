@@ -51,10 +51,10 @@ class AFTSurvivalRegressionSuite
   ignore("export test data into CSV format") {
     datasetUnivariate.rdd.map { case Row(features: Vector, label: Double, censor: Double) =>
       features.toArray.mkString(",") + "," + censor + "," + label
-    }.repartition(1).saveAsTextFile("univariate-path")
+    }.repartition(1).saveAsTextFile("target/tmp/AFTSurvivalRegressionSuite/datasetUnivariate")
     datasetMultivariate.rdd.map { case Row(features: Vector, label: Double, censor: Double) =>
       features.toArray.mkString(",") + "," + censor + "," + label
-    }.repartition(1).saveAsTextFile("multivariate-path")
+    }.repartition(1).saveAsTextFile("target/tmp/AFTSurvivalRegressionSuite/datasetMultivariate")
   }
 
   test("params") {

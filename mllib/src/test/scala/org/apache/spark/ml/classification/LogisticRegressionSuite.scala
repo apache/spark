@@ -65,7 +65,7 @@ class LogisticRegressionSuite
   ignore("export test data into CSV format") {
     binaryDataset.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("path")
+    }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
   }
 
   test("params") {

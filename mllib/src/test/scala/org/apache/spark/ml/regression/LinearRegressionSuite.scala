@@ -113,16 +113,17 @@ class LinearRegressionSuite
   ignore("export test data into CSV format") {
     datasetWithDenseFeature.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("dense-feature-path")
+    }.repartition(1).saveAsTextFile("target/tmp/LinearRegressionSuite/datasetWithDenseFeature")
 
     datasetWithDenseFeatureWithoutIntercept.rdd.map {
       case Row(label: Double, features: Vector) =>
         label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("dense-feature-without-intercept-path")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/LinearRegressionSuite/datasetWithDenseFeatureWithoutIntercept")
 
     datasetWithSparseFeature.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
-    }.repartition(1).saveAsTextFile("sparse-feature-path")
+    }.repartition(1).saveAsTextFile("target/tmp/LinearRegressionSuite/datasetWithSparseFeature")
   }
 
   test("params") {
