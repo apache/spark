@@ -169,12 +169,12 @@ class CodegenContext {
   final var INPUT_ROW = "i"
 
   /** The variable name of the input col in generated code. */
-  var INPUT_COLORDINAL = "idx"
+  var INPUT_COL_ORDINAL = "idx"
 
   /**
     * The map from a variable name to it's next ID.
     */
-  private val freshNameJavaTypes = new mutable.HashMap[String, String]
+  private val freshNameColumnarTypes = new mutable.HashSet[String]
   private val freshNameIds = new mutable.HashMap[String, Int]
   freshNameIds += INPUT_ROW -> 1
 
@@ -186,7 +186,7 @@ class CodegenContext {
   /**
    * Returns a term name that is unique within this instance of a `CodegenContext`.
    */
-  def freshName(name: String, javaType: String = ""): String = synchronized {
+  def freshName(name: String, columnarInput: Boolean = false): String = synchronized {
     val fullName = if (freshNamePrefix == "") {
       name
     } else {
@@ -200,13 +200,14 @@ class CodegenContext {
       freshNameIds += fullName -> 1
       fullName
     }
-    freshNameJavaTypes.put(freshname, javaType)
+    if (columnarInput) {
+      freshNameColumnarTypes.add(freshname)
+    }
     freshname
   }
 
   def isColumnarType(name: String): Boolean = {
-    val javaType = freshNameJavaTypes.getOrElse(name, "")
-    (javaType.indexOf("ColumnVector") >= 0)
+    freshNameColumnarTypes.contains(name)
   }
 
   /**

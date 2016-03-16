@@ -63,7 +63,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     val value = if (!ctx.isColumnarType(ctx.INPUT_ROW)) {
       ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
     } else {
-      ctx.getValue(ctx.INPUT_ROW, dataType, ctx.INPUT_COLORDINAL)
+      ctx.getValue(ctx.INPUT_ROW, dataType, ctx.INPUT_COL_ORDINAL)
     }
     if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
       val oev = ctx.currentVars(ordinal)
@@ -80,7 +80,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
         """
       } else {
         s"""
-          boolean ${ev.isNull} = ${ctx.INPUT_ROW}.getIsNull(${ctx.INPUT_COLORDINAL});
+          boolean ${ev.isNull} = ${ctx.INPUT_ROW}.getIsNull(${ctx.INPUT_COL_ORDINAL});
           $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
         """
       }

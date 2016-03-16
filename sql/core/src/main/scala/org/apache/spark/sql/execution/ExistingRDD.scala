@@ -210,8 +210,8 @@ private[sql] case class DataSourceScan(
     ctx.addMutableState("int", idx, s"$idx = 0;")
 
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
-    val row = ctx.freshName("row", "InternalRow")
-    val col = ctx.freshName("col", columnVectorClz)
+    val row = ctx.freshName("row")
+    val col = ctx.freshName("col", columnarInput = true)
     val numOutputRows = metricTerm(ctx, "numOutputRows")
 
     // The input RDD can either return (all) ColumnarBatches or InternalRows. We determine this
@@ -220,9 +220,9 @@ private[sql] case class DataSourceScan(
     // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
     // here which path to use. Fix this.
 
-    ctx.INPUT_COLORDINAL = rowidx
+    ctx.INPUT_COL_ORDINAL = rowidx
     ctx.currentVars = null
-    val colVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2, columnVectorClz))
+    val colVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2, columnarInput = true))
     val colDeclarations = colVars.zipWithIndex.map(x => {
       (columnVectorClz + " " + x._1 + " = " + batch + ".column(" + x._2 + ");\n").trim} )
     val columns1 = (exprs zip colVars).map(x => {
@@ -237,9 +237,9 @@ private[sql] case class DataSourceScan(
       |     int numRows = $batch.numRows();
       |     if ($idx == 0) $numOutputRows.add(numRows);
       |
+      |     ${colDeclarations.mkString("", "\n", "\n")}
       |     while (!shouldStop() && $idx < numRows) {
       |       int $rowidx = $idx++;
-      |       ${colDeclarations.mkString("", "\n", "\n")}
       |       ${consume(ctx, columns1).trim}
       |     }
       |     if (shouldStop()) return;
