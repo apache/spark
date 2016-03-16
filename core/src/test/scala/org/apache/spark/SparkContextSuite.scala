@@ -319,4 +319,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       assert(sc.getConf.getInt("spark.executor.instances", 0) === 6)
     }
   }
+
+  test("Can't broadcast RDD directly") {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      val rdd = sc.parallelize(1 to 4)
+      intercept[IllegalArgumentException] { sc.broadcast(rdd) }
+      sc.stop()
+  }
 }
