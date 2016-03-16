@@ -57,8 +57,8 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val mapSideCombines = List(true, false)
     inputs.foreach { input =>
       mapSideCombines.foreach { mapSideCombine =>
-        val accs = 1.to(4).map(x => sc.accumulator(0, consistent = true)).toList
-        val raccs = 1.to(4).map(x => sc.accumulator(0, consistent = false)).toList
+        val accs = (1 to 4).map(x => sc.accumulator(0, consistent = true)).toList
+        val raccs = (1 to 4).map(x => sc.accumulator(0, consistent = false)).toList
         val List(acc, acc1, acc2, acc3) = accs
         val List(racc, racc1, racc2, racc3) = raccs
         val c = input.combineByKey(
@@ -124,7 +124,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test("coalesce acc on either side") {
     sc = new SparkContext("local[2]", "test")
-    val List(acc1, acc2, acc3) = 1.to(3).map(x => sc.accumulator(0, consistent = true)).toList
+    val List(acc1, acc2, acc3) = (1 to 3).map(x => sc.accumulator(0, consistent = true)).toList
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc1 += x; acc2 += x; 2 * x}
     val c = b.coalesce(2).map{x => acc1 += x; acc3 += x; x}
