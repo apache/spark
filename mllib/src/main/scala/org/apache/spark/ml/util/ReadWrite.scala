@@ -282,7 +282,10 @@ private[ml] object DefaultParamsReader {
    */
   def loadMetadata(path: String, sc: SparkContext, expectedClassName: String = ""): Metadata = {
     val metadataPath = new Path(path, "metadata").toString
-    val metadataStr = sc.textFile(metadataPath, 1).first()
+    val metadataStr = try sc.textFile(metadataPath, 1).first() catch {
+      case _: UnsupportedOperationException =>
+        throw new IllegalArgumentException(s"Empty metadata for path $path")
+    }
     val metadata = parse(metadataStr)
 
     implicit val format = DefaultFormats
