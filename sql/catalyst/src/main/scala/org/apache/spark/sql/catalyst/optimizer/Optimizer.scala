@@ -20,11 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.FullOuter
-import org.apache.spark.sql.catalyst.plans.LeftOuter
-import org.apache.spark.sql.catalyst.plans.RightOuter
-import org.apache.spark.sql.catalyst.plans.LeftSemi
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
@@ -43,6 +39,7 @@ object DefaultOptimizer extends Optimizer {
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
+      TransitiveClosure,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -670,6 +667,85 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
         stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
       } else {
         filter
+      }
+  }
+}
+
+/**
+  * Tries to generate a transitive filter for an EqualTo join condition and a filter that on one side
+  * has the left/right side of the join condition and on the other a foldable expression. Also works
+  * for filters which are part of the join condition itself
+  */
+object TransitiveClosure extends Rule[LogicalPlan] with PredicateHelper {
+
+  def split(conditions: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = conditions.partition { cond =>
+    cond.references.subsetOf(left.outputSet) ^ cond.references.subsetOf(right.outputSet)
+  }
+
+  def toTransPredOption(cond: Expression, from: Expression, to: Expression): Option[Expression] = cond match {
+    case Not(child) =>
+      toTransPredOption(child, from, to) map Not
+    case Or(left, right) => for {
+      l <- toTransPredOption(left, from, to)
+      r <- toTransPredOption(right, from, to)
+    } yield Or(l, r)
+    case e @ In(value, exprs) if value == from && exprs.forall(_.foldable) =>
+      Some(e.copy(value = to))
+    case e @ BinaryComparison(l, r) if l.foldable ^ r.foldable && l == from || r == from =>
+      val res =
+        if (l.foldable) e.makeCopy(Array(to, l))
+        else e.makeCopy(Array(to, r))
+      Some(res)
+    case _ => None
+  }
+
+  def toTransPredByJoinType(filterCondition: Expression, joinCondition: EqualTo, joinType: JoinType) = {
+    val fromTo = joinType match {
+      case Inner =>
+        (joinCondition.left, joinCondition.right) ::
+        (joinCondition.right, joinCondition.left) :: Nil
+      case LeftOuter | LeftSemi =>
+        (joinCondition.left, joinCondition.right) :: Nil
+      case RightOuter => (joinCondition.right, joinCondition.left) :: Nil
+      case FullOuter => Nil
+    }
+    fromTo.flatMap(ft => toTransPredOption(filterCondition, ft._1, ft._2))
+  }
+
+  def findTransitivePredicates(filterConditions: Seq[Expression], joinConditions: Seq[Expression], joinType: JoinType) = {
+    val transitivePredCandidate = for {
+      joinCond <- joinConditions.collect{case e: EqualTo => e}
+      filterCond <- filterConditions
+      newPred <- toTransPredByJoinType(filterCond, joinCond, joinType)
+    } yield newPred
+
+    transitivePredCandidate.toSet -- filterConditions
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(filterCondition, j @ Join(left, right, joinType, joinCondition)) =>
+      val (filterConditions, commonConditions) = split(splitConjunctivePredicates(filterCondition), left, right)
+
+      val joinConditions = commonConditions ++ joinCondition.map(splitConjunctivePredicates).getOrElse(Nil)
+
+      val transitiveCond = findTransitivePredicates(filterConditions, joinConditions, joinType)
+
+      if (transitiveCond.nonEmpty) Filter((transitiveCond + filterCondition).reduce(And), j)
+      else f
+
+    case j @ Join(left, right, joinType, Some(joinCondition)) =>
+      val (leftRightCondition, commonCondition) = split(splitConjunctivePredicates(joinCondition), left, right)
+
+      // We can process only Inner join in this case because otherwise the original
+      // predicate does not get pushed down and keeps triggering generation of the same
+      // transitive predicate on each Iteration
+      joinType match {
+        case Inner =>
+          val transitiveCond = findTransitivePredicates(leftRightCondition, commonCondition, joinType)
+
+          if (transitiveCond.nonEmpty) j.copy(condition = Option((transitiveCond + joinCondition).reduce(And)))
+          else j
+        case _ => j
       }
   }
 }
