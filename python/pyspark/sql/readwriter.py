@@ -162,6 +162,9 @@ class DataFrameReader(object):
                 (e.g. 00012)
             * ``allowBackslashEscapingAnyCharacter`` (default ``false``): allows accepting quoting \
                 of all character using backslash quoting mechanism
+            *  ``mode`` (default ``PERMISSIVE``): allows a mode for dealing with corrupt records \
+                during parsing. When fails to parse, ``PERMISSIVE`` mode sets ``null``, \
+                ``DROPMALFORMED`` drops the record and ``FAILFAST`` throws an exception.
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes

@@ -288,6 +288,9 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * </li>
    * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
    * (e.g. 00012)</li>
+   * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
+   * during parsing. When fails to parse, `PERMISSIVE` mode sets `null`, `DROPMALFORMED` drops the
+   * record and `FAILFAST` throws an exception.<li>
    *
    * @since 1.4.0
    */

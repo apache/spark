@@ -27,8 +27,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
-import org.scalactic.Tolerance._
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -969,6 +969,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       withTempTable("jsonTable") {
         val jsonDF = sqlContext.read.json(corruptRecords)
         jsonDF.registerTempTable("jsonTable")
+        val jsonDFWithDropMalformed =
+          sqlContext.read.option("mode", "DROPMALFORMED").json(corruptRecords)
+        jsonDFWithDropMalformed.registerTempTable("jsonTableWithDropMalformed")
+        val exception = intercept[SparkException]{
+          sqlContext.read.option("mode", "FAILFAST").json(corruptRecords).collect()
+        }
+        assert(exception.getMessage.contains("Malformed line in FAILFAST mode: {"))
+
         val schema = StructType(
           StructField("_unparsed", StringType, true) ::
           StructField("a", StringType, true) ::
@@ -989,6 +997,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
             Row(null, null, null, """{"a":{, b:3}""") ::
             Row("str_a_4", "str_b_4", "str_c_4", null) ::
             Row(null, null, null, "]") :: Nil
+        )
+
+        // Check if corrupt records are dropped.
+        checkAnswer(
+          sql(
+            """
+              |SELECT a, b, c, _unparsed
+              |FROM jsonTableWithDropMalformed
+            """.stripMargin),
+            Row("str_a_4", "str_b_4", "str_c_4", null) :: Nil
         )
 
         checkAnswer(
