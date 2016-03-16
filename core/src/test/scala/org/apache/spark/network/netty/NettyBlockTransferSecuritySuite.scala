@@ -121,7 +121,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
           new InputStreamReader(buf.createInputStream(), StandardCharsets.UTF_8))
         actualString should equal(blockString)
         buf.release()
-        Success()
+        Success(())
       case Failure(t) =>
         Failure(t)
     }

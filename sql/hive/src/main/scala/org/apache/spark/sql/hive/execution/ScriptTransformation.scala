@@ -272,7 +272,7 @@ private class ScriptTransformationWriterThread(
             sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
             sb.toString()
           }
-          outputStream.write(data.getBytes("utf-8"))
+          outputStream.write(data.getBytes(StandardCharsets.UTF_8))
         } else {
           val writable = inputSerde.serialize(
             row.asInstanceOf[GenericInternalRow].values, inputSoi)

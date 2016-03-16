@@ -18,6 +18,7 @@
 package org.apache.spark.api.python
 
 import java.nio.ByteOrder
+import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._
@@ -68,7 +69,8 @@ private[spark] object SerDeUtil extends Logging {
         construct(args ++ Array(""))
       } else if (args.length == 2 && args(1).isInstanceOf[String]) {
         val typecode = args(0).asInstanceOf[String].charAt(0)
-        val data: Array[Byte] = args(1).asInstanceOf[String].getBytes("ISO-8859-1")
+        // This must be ISO 8859-1 / Latin 1, not UTF-8, to interoperate correctly
+        val data = args(1).asInstanceOf[String].getBytes(StandardCharsets.ISO_8859_1)
         construct(typecode, machineCodes(typecode), data)
       } else {
         super.construct(args)

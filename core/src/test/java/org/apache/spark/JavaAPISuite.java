@@ -1068,8 +1068,8 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void wholeTextFiles() throws Exception {
-    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
-    byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
+    byte[] content2 = "spark is also easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
     Files.write(content1, new File(tempDirName + "/part-00000"));
@@ -1131,7 +1131,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void binaryFiles() throws Exception {
     // Reusing the wholeText files example
-    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
     File file1 = new File(tempDirName + "/part-00000");
@@ -1152,7 +1152,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void binaryFilesCaching() throws Exception {
     // Reusing the wholeText files example
-    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
     File file1 = new File(tempDirName + "/part-00000");
@@ -1181,7 +1181,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void binaryRecords() throws Exception {
     // Reusing the wholeText files example
-    byte[] content1 = "spark isn't always easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark isn't always easy to use.\n".getBytes(StandardCharsets.UTF_8);
     int numOfCopies = 10;
     String tempDirName = tempDir.getAbsolutePath();
     File file1 = new File(tempDirName + "/part-00000");

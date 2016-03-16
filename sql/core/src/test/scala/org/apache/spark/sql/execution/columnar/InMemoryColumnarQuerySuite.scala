@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{QueryTest, Row}
@@ -160,7 +161,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       sparkContext.parallelize((1 to 10000), 10).map { i =>
         Row(
           s"str${i}: test cache.",
-          s"binary${i}: test cache.".getBytes("UTF-8"),
+          s"binary${i}: test cache.".getBytes(StandardCharsets.UTF_8),
           null,
           i % 2 == 0,
           i.toByte,

@@ -410,7 +410,7 @@ private[spark] object SerDe {
   }
 
   def writeString(out: DataOutputStream, value: String): Unit = {
-    val utf8 = value.getBytes("UTF-8")
+    val utf8 = value.getBytes(StandardCharsets.UTF_8)
     val len = utf8.length
     out.writeInt(len)
     out.write(utf8, 0, len)
