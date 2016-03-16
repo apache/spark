@@ -39,12 +39,14 @@ import org.clapper.classutil.ClassFinder
 object GenerateMIMAIgnore {
   private val classLoader = Thread.currentThread().getContextClassLoader
   private val mirror = runtimeMirror(classLoader)
+  // SPARK-13920: MIMA checks should apply to @Experimental and @DeveloperAPI APIs
+  private val ignoreExpDevApi = false
 
-  private def isDeveloperApi(sym: unv.Symbol) = sym.annotations.exists {
+  private def isDeveloperApi(sym: unv.Symbol) = ignoreExpDevApi && sym.annotations.exists {
     _.tpe =:= mirror.staticClass("org.apache.spark.annotation.DeveloperApi").toType
   }
 
-  private def isExperimental(sym: unv.Symbol) = sym.annotations.exists {
+  private def isExperimental(sym: unv.Symbol) = ignoreExpDevApi && sym.annotations.exists {
     _.tpe =:= mirror.staticClass("org.apache.spark.annotation.Experimental").toType
   }
 
