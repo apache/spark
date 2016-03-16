@@ -26,19 +26,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   def output: Seq[Attribute]
 
-  def outputForConstraint: Seq[Attribute] = output
-
   /**
    * Extracts the relevant constraints from a given set of constraints based on the attributes that
    * appear in the [[outputSet]].
    */
   protected def getRelevantConstraints(constraints: Set[Expression]): Set[Expression] = {
-    val relatedOutputSet = AttributeSet(outputForConstraint)
     constraints
       .union(inferAdditionalConstraints(constraints))
       .union(constructIsNotNullConstraints(constraints))
       .filter(constraint =>
-        constraint.references.nonEmpty && constraint.references.subsetOf(relatedOutputSet))
+        constraint.references.nonEmpty && constraint.references.subsetOf(outputSet))
   }
 
   /**

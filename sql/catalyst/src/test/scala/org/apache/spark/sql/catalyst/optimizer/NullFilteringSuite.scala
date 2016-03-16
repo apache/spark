@@ -31,7 +31,7 @@ class NullFilteringSuite extends PlanTest {
       Batch("CombineFilters", FixedPoint(5), CombineFilters) :: Nil
   }
 
-  def compareNullability(query: LogicalPlan): Unit = {
+  def checkNullability(query: LogicalPlan): Unit = {
     val constraints = query.constraints
     val output = query.output
 
@@ -61,7 +61,7 @@ class NullFilteringSuite extends PlanTest {
     val originalQuery = x.join(y,
       condition = Some(("x.a".attr === "y.a".attr) && ("x.b".attr === 1) && ("y.c".attr > 5)))
       .analyze
-    compareNullability(originalQuery)
+    checkNullability(originalQuery)
     val left = x.where(IsNotNull('a) && IsNotNull('b))
     val right = y.where(IsNotNull('a) && IsNotNull('c))
     val correctAnswer = left.join(right,
@@ -69,7 +69,7 @@ class NullFilteringSuite extends PlanTest {
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
-    compareNullability(optimized)
+    checkNullability(optimized)
   }
 
   test("single inner join: filter out nulls on either side on non equal keys") {
@@ -78,7 +78,7 @@ class NullFilteringSuite extends PlanTest {
     val originalQuery = x.join(y,
       condition = Some(("x.a".attr =!= "y.a".attr) && ("x.b".attr === 1) && ("y.c".attr > 5)))
       .analyze
-    compareNullability(originalQuery)
+    checkNullability(originalQuery)
     val left = x.where(IsNotNull('a) && IsNotNull('b))
     val right = y.where(IsNotNull('a) && IsNotNull('c))
     val correctAnswer = left.join(right,
@@ -86,7 +86,7 @@ class NullFilteringSuite extends PlanTest {
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
-    compareNullability(optimized)
+    checkNullability(optimized)
   }
 
   test("single inner join with pre-existing filters: filter out nulls on either side") {
@@ -94,14 +94,14 @@ class NullFilteringSuite extends PlanTest {
     val y = testRelation.subquery('y)
     val originalQuery = x.where('b > 5).join(y.where('c === 10),
       condition = Some("x.a".attr === "y.a".attr)).analyze
-    compareNullability(originalQuery)
+    checkNullability(originalQuery)
     val left = x.where(IsNotNull('a) && IsNotNull('b) && 'b > 5)
     val right = y.where(IsNotNull('a) && IsNotNull('c) && 'c === 10)
     val correctAnswer = left.join(right,
       condition = Some("x.a".attr === "y.a".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
-    compareNullability(optimized)
+    checkNullability(optimized)
   }
 
   test("single outer join: no null filters are generated") {
@@ -109,10 +109,10 @@ class NullFilteringSuite extends PlanTest {
     val y = testRelation.subquery('y)
     val originalQuery = x.join(y, FullOuter,
       condition = Some("x.a".attr === "y.a".attr)).analyze
-    compareNullability(originalQuery)
+    checkNullability(originalQuery)
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, originalQuery)
-    compareNullability(optimized)
+    checkNullability(optimized)
   }
 
   test("multiple inner joins: filter out nulls on all sides on equi-join keys") {
@@ -125,13 +125,14 @@ class NullFilteringSuite extends PlanTest {
       .join(t2, condition = Some("t1.b".attr === "t2.b".attr))
       .join(t3, condition = Some("t2.b".attr === "t3.b".attr))
       .join(t4, condition = Some("t3.b".attr === "t4.b".attr)).analyze
-    compareNullability(originalQuery)
+    checkNullability(originalQuery)
     val correctAnswer = t1.where(IsNotNull('b))
       .join(t2.where(IsNotNull('b)), condition = Some("t1.b".attr === "t2.b".attr))
       .join(t3.where(IsNotNull('b)), condition = Some("t2.b".attr === "t3.b".attr))
       .join(t4.where(IsNotNull('b)), condition = Some("t3.b".attr === "t4.b".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
-    compareNullability(optimized)
+    checkNullability(correctAnswer)
+    checkNullability(optimized)
   }
 }
