@@ -199,12 +199,7 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
-  override def nullable: Boolean = (left.nullable ||
-    !(!right.nullable && right.isInstanceOf[Literal] &&
-      ((right.asInstanceOf[Literal].value.isInstanceOf[Decimal] &&
-        right.asInstanceOf[Literal].value.asInstanceOf[Decimal].toLong != 0) ||
-        (!right.asInstanceOf[Literal].value.isInstanceOf[Decimal] &&
-          right.asInstanceOf[Literal].value != 0))))
+  override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
@@ -289,12 +284,7 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
-  override def nullable: Boolean = (left.nullable ||
-    !(!right.nullable && right.isInstanceOf[Literal] &&
-      ((right.asInstanceOf[Literal].value.isInstanceOf[Decimal] &&
-        right.asInstanceOf[Literal].value.asInstanceOf[Decimal].toLong != 0) ||
-        (!right.asInstanceOf[Literal].value.isInstanceOf[Decimal] &&
-          right.asInstanceOf[Literal].value != 0))))
+  override def nullable: Boolean = true
 
   private lazy val integral = dataType match {
     case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]

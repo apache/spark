@@ -282,66 +282,26 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
         if (${eval1.value}) {
           ${eval2.code}
-          if (${eval2.value}) {
-            ${ev.value} = true;
-          }
+          ${ev.value} = ${eval2.value};
         }
       """
     } else {
-      if (!left.nullable) {
-        s"""
-          ${eval1.code}
-          boolean ${ev.isNull} = false;
-          boolean ${ev.value} = false;
+      s"""
+        ${eval1.code}
+        boolean ${ev.isNull} = false;
+        boolean ${ev.value} = false;
 
-          if (!${eval1.value}) {
-          } else {
-            ${eval2.code}
-            if (!${eval2.isNull} && !${eval2.value}) {
-            } else if (!${eval2.isNull}) {
-              ${ev.value} = true;
-            } else {
-              ${ev.isNull} = true;
-            }
-          }
-        """
-      } else {
-        if (!right.nullable) {
-          s"""
-            ${eval1.code}
-            boolean ${ev.isNull} = false;
-            boolean ${ev.value} = false;
-
-            if (!${eval1.isNull} && !${eval1.value}) {
-            } else {
-              ${eval2.code}
-              if (!${eval2.value}) {
-              } else if (!${eval1.isNull}) {
-                ${ev.value} = true;
-              } else {
-                ${ev.isNull} = true;
-              }
-            }
-          """
+        if (!${eval1.isNull} && !${eval1.value}) {
         } else {
-          s"""
-            ${eval1.code}
-            boolean ${ev.isNull} = false;
-            boolean ${ev.value} = false;
-
-            if (!${eval1.isNull} && !${eval1.value}) {
-            } else {
-              ${eval2.code}
-              if (!${eval2.isNull} && !${eval2.value}) {
-              } else if (!${eval1.isNull} && !${eval2.isNull}) {
-                ${ev.value} = true;
-              } else {
-                ${ev.isNull} = true;
-              }
-            }
-          """
+          ${eval2.code}
+          if (!${eval2.isNull} && !${eval2.value}) {
+          } else if (!${eval1.isNull} && !${eval2.isNull}) {
+            ${ev.value} = true;
+          } else {
+            ${ev.isNull} = true;
+          }
         }
-      }
+      """
     }
   }
 }
@@ -384,12 +344,9 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
         ${eval1.code}
         boolean ${ev.value} = true;
 
-        if (${eval1.value}) {
-        } else {
+        if (!${eval1.value}) {
           ${eval2.code}
-          if (!${eval2.value}) {
-            ${ev.value} = false;
-          }
+          ${ev.value} = ${eval2.value};
         }
       """
     } else {
@@ -399,8 +356,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
           boolean ${ev.isNull} = false;
           boolean ${ev.value} = true;
 
-          if (${eval1.value}) {
-          } else {
+          if (!${eval1.value}) {
             ${eval2.code}
             if (!${eval2.isNull} && ${eval2.value}) {
             } else if (!${eval2.isNull}) {
