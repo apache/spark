@@ -15,6 +15,7 @@ from email.mime.application import MIMEApplication
 import errno
 from functools import wraps
 import imp
+import importlib
 import inspect
 import json
 import logging
@@ -494,6 +495,16 @@ def ask_yesno(question):
 
 
 def send_email(to, subject, html_content, files=None, dryrun=False):
+    """
+    Send email using backend specified in EMAIL_BACKEND.
+    """
+    path, attr = configuration.get('email', 'EMAIL_BACKEND').rsplit('.', 1)
+    module = importlib.import_module(path)
+    backend = getattr(module, attr)
+    return backend(to, subject, html_content, files=files, dryrun=dryrun)
+
+
+def send_email_smtp(to, subject, html_content, files=None, dryrun=False):
     """
     Send an email with html content
 

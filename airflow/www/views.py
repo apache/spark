@@ -16,7 +16,7 @@ import inspect
 import traceback
 
 import sqlalchemy as sqla
-from sqlalchemy import or_, desc
+from sqlalchemy import or_, desc, and_
 
 
 from flask import redirect, url_for, request, Markup, Response, current_app, render_template
@@ -548,13 +548,36 @@ class Airflow(BaseView):
             task_ids += dag.task_ids
             if not dag.is_subdag:
                 dag_ids.append(dag.dag_id)
+
         TI = models.TaskInstance
+        DagRun = models.DagRun
         session = Session()
+
+        LastDagRun = (
+            session.query(DagRun.dag_id, sqla.func.max(DagRun.execution_date).label('execution_date'))
+            .group_by(DagRun.dag_id)
+            .subquery('last_dag_run')
+        )
+
+        # Select all task_instances from active dag_runs.
+        # If no dag_run is active, return task instances from most recent dag_run.
         qry = (
             session.query(TI.dag_id, TI.state, sqla.func.count(TI.task_id))
-                .filter(TI.task_id.in_(task_ids))
-                .filter(TI.dag_id.in_(dag_ids))
-                .group_by(TI.dag_id, TI.state)
+            .outerjoin(DagRun, and_(
+                DagRun.dag_id == TI.dag_id,
+                DagRun.execution_date == TI.execution_date,
+                DagRun.state == State.RUNNING))
+            .outerjoin(LastDagRun, and_(
+                LastDagRun.c.dag_id == TI.dag_id,
+                LastDagRun.c.execution_date == TI.execution_date)
+            )
+            .filter(TI.task_id.in_(task_ids))
+            .filter(TI.dag_id.in_(dag_ids))
+            .filter(or_(
+                DagRun.dag_id != None,
+                LastDagRun.c.dag_id != None
+            ))
+            .group_by(TI.dag_id, TI.state)
         )
 
         data = {}
@@ -2071,6 +2094,10 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
         'extra',
         'extra__jdbc__drv_path',
         'extra__jdbc__drv_clsname',
+        'extra__google_cloud_platform__project',
+        'extra__google_cloud_platform__key_path',
+        'extra__google_cloud_platform__service_account',
+        'extra__google_cloud_platform__scope',
     )
     verbose_name = "Connection"
     verbose_name_plural = "Connections"
@@ -2089,6 +2116,11 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     form_extra_fields = {
         'extra__jdbc__drv_path' : StringField('Driver Path'),
         'extra__jdbc__drv_clsname': StringField('Driver Class'),
+        'extra__google_cloud_platform__project': StringField('Project'),
+        'extra__google_cloud_platform__key_path': StringField('Keyfile Path'),
+        'extra__google_cloud_platform__service_account': StringField('Service Account'),
+        'extra__google_cloud_platform__scope': StringField('Scopes (comma seperated)'),
+
     }
     form_choices = {
         'conn_type': [
@@ -2096,6 +2128,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             ('datastore', 'Google Datastore'),
             ('ftp', 'FTP',),
             ('google_cloud_storage', 'Google Cloud Storage'),
+            ('google_cloud_platform', 'Google Cloud Platform'),
             ('hdfs', 'HDFS',),
             ('http', 'HTTP',),
             ('hive_cli', 'Hive Client Wrapper',),
@@ -2110,6 +2143,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             ('s3', 'S3',),
             ('samba', 'Samba',),
             ('sqlite', 'Sqlite',),
+            ('ssh', 'SSH',),
             ('mssql', 'Microsoft SQL Server'),
             ('mesos_framework-id', 'Mesos Framework ID'),
         ]
@@ -2117,7 +2151,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
 
     def on_model_change(self, form, model, is_created):
         formdata = form.data
-        if formdata['conn_type'] in ['jdbc']:
+        if formdata['conn_type'] in ['jdbc', 'google_cloud_platform']:
             extra = {
                 key:formdata[key]
                 for key in self.form_extra_fields.keys() if key in formdata}

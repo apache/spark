@@ -78,6 +78,7 @@ defaults = {
         'dags_are_paused_at_creation': False,
         'sql_alchemy_pool_size': 5,
         'sql_alchemy_pool_recycle': 3600,
+        'dagbag_import_timeout': 30,
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -103,6 +104,9 @@ defaults = {
     'celery': {
         'default_queue': 'default',
         'flower_port': '5555'
+    },
+    'email': {
+        'email_backend': 'airflow.utils.send_email_smtp',
     },
     'smtp': {
         'smtp_starttls': True,
@@ -183,6 +187,9 @@ fernet_key = {FERNET_KEY}
 # Whether to disable pickling dags
 donot_pickle = False
 
+# How long before timing out a python file import while filling the DagBag
+dagbag_import_timeout = 30
+
 [webserver]
 # The base url of your website as airflow cannot guess what domain or
 # cname you are using. This is use in automated emails that
@@ -213,6 +220,9 @@ authenticate = False
 
 # Filter the list of dags by owner name (requires authentication to be enabled)
 filter_by_owner = False
+
+[email]
+email_backend = airflow.utils.send_email_smtp
 
 [smtp]
 # If you want airflow to send emails on retries, failure, and you want to
@@ -333,6 +343,9 @@ fernet_key = {FERNET_KEY}
 base_url = http://localhost:8080
 web_server_host = 0.0.0.0
 web_server_port = 8080
+
+[email]
+email_backend = airflow.utils.send_email_smtp
 
 [smtp]
 smtp_host = localhost

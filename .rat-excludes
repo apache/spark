@@ -1,0 +1,16 @@
+.gitignore
+.gitattributes
+.coverage
+.coveragerc
+.coveralls.yml
+.rat-excludes
+requirements.txt
+.*log
+.travis.yml
+.*pyc
+docs
+.*md
+dist
+build
+airflow.egg-info
+.idea

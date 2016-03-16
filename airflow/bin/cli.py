@@ -304,6 +304,10 @@ def test(args):
         raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
     task = dag.get_task(task_id=args.task_id)
+    # Add CLI provided task_params to task.params
+    if args.task_params:
+        passed_in_params = json.loads(args.task_params)
+        task.params.update(passed_in_params)
     ti = TaskInstance(task, args.execution_date)
 
     if args.dry_run:
@@ -636,6 +640,8 @@ def get_parser():
         default=DAGS_FOLDER)
     parser_test.add_argument(
         "-dr", "--dry_run", help="Perform a dry run", action="store_true")
+    parser_test.add_argument(
+        "-tp", "--task_params", help="Sends a JSON params dict to the task")
     parser_test.set_defaults(func=test)
 
     ht = "Get the status of a task instance."
