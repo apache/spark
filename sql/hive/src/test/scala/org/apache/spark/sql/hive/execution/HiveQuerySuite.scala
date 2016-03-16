@@ -602,7 +602,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |select * where key = 4
     """.stripMargin)
 
-  // test get_json_object again Hive, because the HiveCompatabilitySuite cannot handle result
+  // test get_json_object again Hive, because the HiveCompatibilitySuite cannot handle result
   // with newline in it.
   createQueryTest("get_json_object #1",
     "SELECT get_json_object(src_json.json, '$') FROM src_json")

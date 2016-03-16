@@ -21,8 +21,6 @@ from pyspark import SparkContext
 from pyspark.sql import SQLContext
 
 # $example on$
-import math
-
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.recommendation import ALS
 from pyspark.sql import Row

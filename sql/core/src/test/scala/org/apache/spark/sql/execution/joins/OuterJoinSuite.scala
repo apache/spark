@@ -94,12 +94,12 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
       }
     }
 
-    test(s"$testName using SortMergeOuterJoin") {
+    test(s"$testName using SortMergeJoin") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(sqlContext).apply(
-              SortMergeOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+            EnsureRequirements(sqlContext.sessionState.conf).apply(
+              SortMergeJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }

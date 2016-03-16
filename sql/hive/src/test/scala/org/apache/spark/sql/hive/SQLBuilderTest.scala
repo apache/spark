@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{DataFrame, Dataset, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -63,7 +63,7 @@ abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
            """.stripMargin)
     }
 
-    checkAnswer(sqlContext.sql(generatedSQL), DataFrame(sqlContext, plan))
+    checkAnswer(sqlContext.sql(generatedSQL), Dataset.newDataFrame(sqlContext, plan))
   }
 
   protected def checkSQL(df: DataFrame, expectedSQL: String): Unit = {

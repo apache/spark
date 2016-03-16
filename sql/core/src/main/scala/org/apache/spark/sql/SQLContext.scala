@@ -120,15 +120,6 @@ class SQLContext private[sql](
   @transient
   protected[sql] lazy val sessionState: SessionState = new SessionState(self)
   protected[sql] def conf: SQLConf = sessionState.conf
-  protected[sql] def catalog: Catalog = sessionState.catalog
-  protected[sql] def functionRegistry: FunctionRegistry = sessionState.functionRegistry
-  protected[sql] def analyzer: Analyzer = sessionState.analyzer
-  protected[sql] def optimizer: Optimizer = sessionState.optimizer
-  protected[sql] def sqlParser: ParserInterface = sessionState.sqlParser
-  protected[sql] def planner: SparkPlanner = sessionState.planner
-  protected[sql] def continuousQueryManager = sessionState.continuousQueryManager
-  protected[sql] def prepareForExecution: RuleExecutor[SparkPlan] =
-    sessionState.prepareForExecution
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -197,7 +188,7 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
+  protected[sql] def parseSql(sql: String): LogicalPlan = sessionState.sqlParser.parsePlan(sql)
 
   protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
 
@@ -244,7 +235,7 @@ class SQLContext private[sql](
    */
   @Experimental
   @transient
-  val experimental: ExperimentalMethods = new ExperimentalMethods(this)
+  def experimental: ExperimentalMethods = sessionState.experimentalMethods
 
   /**
    * :: Experimental ::
@@ -374,7 +365,7 @@ class SQLContext private[sql](
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    DataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
+    Dataset.newDataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
@@ -389,7 +380,7 @@ class SQLContext private[sql](
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    DataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
+    Dataset.newDataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
   /**
@@ -399,7 +390,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    DataFrame(this, LogicalRelation(baseRelation))
+    Dataset.newDataFrame(this, LogicalRelation(baseRelation))
   }
 
   /**
@@ -454,7 +445,7 @@ class SQLContext private[sql](
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    DataFrame(this, logicalPlan)
+    Dataset.newDataFrame(this, logicalPlan)
   }
 
 
@@ -489,7 +480,7 @@ class SQLContext private[sql](
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    DataFrame(this, logicalPlan)
+    Dataset.newDataFrame(this, logicalPlan)
   }
 
   /**
@@ -517,7 +508,7 @@ class SQLContext private[sql](
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    DataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+    Dataset.newDataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
   /**
@@ -536,7 +527,7 @@ class SQLContext private[sql](
       val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
       SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
     }
-    DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
+    Dataset.newDataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
   }
 
   /**
@@ -564,7 +555,7 @@ class SQLContext private[sql](
     val className = beanClass.getName
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    DataFrame(self, LocalRelation(attrSeq, rows.toSeq))
+    Dataset.newDataFrame(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
   /**
@@ -641,7 +632,7 @@ class SQLContext private[sql](
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -687,7 +678,7 @@ class SQLContext private[sql](
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -706,7 +697,8 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
+    sessionState.catalog.registerTable(
+      sessionState.sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
   }
 
   /**
@@ -719,7 +711,7 @@ class SQLContext private[sql](
    */
   def dropTempTable(tableName: String): Unit = {
     cacheManager.tryUncacheQuery(table(tableName))
-    catalog.unregisterTable(TableIdentifier(tableName))
+    sessionState.catalog.unregisterTable(TableIdentifier(tableName))
   }
 
   /**
@@ -770,7 +762,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
-    DataFrame(this, Range(start, end, step, numPartitions))
+    Dataset.newDataFrame(this, Range(start, end, step, numPartitions))
   }
 
   /**
@@ -781,7 +773,16 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def sql(sqlText: String): DataFrame = {
-    DataFrame(this, parseSql(sqlText))
+    Dataset.newDataFrame(this, parseSql(sqlText))
+  }
+
+  /**
+   * Executes a SQL query without parsing it, but instead passing it directly to an underlying
+   * system to process. This is currently only used for Hive DDLs and will be removed as soon
+   * as Spark can parse all supported Hive DDLs itself.
+   */
+  private[sql] def runNativeSql(sqlText: String): Seq[Row] = {
+    throw new UnsupportedOperationException
   }
 
   /**
@@ -791,11 +792,11 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(sqlParser.parseTableIdentifier(tableName))
+    table(sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    DataFrame(this, catalog.lookupRelation(tableIdent))
+    Dataset.newDataFrame(this, sessionState.catalog.lookupRelation(tableIdent))
   }
 
   /**
@@ -807,7 +808,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    DataFrame(this, ShowTablesCommand(None))
+    Dataset.newDataFrame(this, ShowTablesCommand(None))
   }
 
   /**
@@ -819,7 +820,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    DataFrame(this, ShowTablesCommand(Some(databaseName)))
+    Dataset.newDataFrame(this, ShowTablesCommand(Some(databaseName)))
   }
 
   /**
@@ -828,9 +829,7 @@ class SQLContext private[sql](
    *
    * @since 2.0.0
    */
-  def streams: ContinuousQueryManager = {
-    continuousQueryManager
-  }
+  def streams: ContinuousQueryManager = sessionState.continuousQueryManager
 
   /**
    * Returns the names of tables in the current database as an array.
@@ -839,7 +838,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(): Array[String] = {
-    catalog.getTables(None).map {
+    sessionState.catalog.getTables(None).map {
       case (tableName, _) => tableName
     }.toArray
   }
@@ -851,7 +850,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    catalog.getTables(Some(databaseName)).map {
+    sessionState.catalog.getTables(Some(databaseName)).map {
       case (tableName, _) => tableName
     }.toArray
   }
@@ -886,7 +885,7 @@ class SQLContext private[sql](
       schema: StructType): DataFrame = {
 
     val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
-    DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
+    Dataset.newDataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**

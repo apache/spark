@@ -115,7 +115,7 @@ private[yarn] class AMDelegationTokenRenewer(
         }
       }
     // Schedule update of credentials. This handles the case of updating the tokens right now
-    // as well, since the renenwal interval will be 0, and the thread will get scheduled
+    // as well, since the renewal interval will be 0, and the thread will get scheduled
     // immediately.
     scheduleRenewal(driverTokenRenewerRunnable)
   }
