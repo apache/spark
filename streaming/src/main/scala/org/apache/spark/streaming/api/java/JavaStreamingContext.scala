@@ -29,7 +29,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.spark.api.java.function.{Function0 => JFunction0}
@@ -531,7 +530,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Return the current state of the context. The context can be in three possible states -
    * <ul>
    *   <li>
-   *   StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *   StreamingContextState.INITIALIZED - The context has been created, but not been started yet.
    *   Input DStreams, transformations and output operations can be created on the context.
    *   </li>
    *   <li>

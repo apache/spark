@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
 
+import scala.annotation.tailrec
+
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -234,8 +236,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
 
   override def prettyName: String = "hash"
 
-  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")}, $seed)"
-
   override def eval(input: InternalRow): Any = {
     var hash = seed
     var i = 0
@@ -354,6 +354,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 
+  @tailrec
   private def computeHash(
       input: String,
       dataType: DataType,

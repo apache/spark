@@ -65,7 +65,7 @@ class FiltersSuite extends SparkFunSuite with Logging {
     "")
 
   private def filterTest(name: String, filters: Seq[Expression], result: String) = {
-    test(name){
+    test(name) {
       val converted = shim.convertFilters(testTable, filters)
       if (converted != result) {
         fail(

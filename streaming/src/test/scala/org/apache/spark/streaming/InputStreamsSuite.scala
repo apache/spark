@@ -19,7 +19,7 @@ package org.apache.spark.streaming
 
 import java.io.{BufferedWriter, File, OutputStreamWriter}
 import java.net.{ServerSocket, Socket, SocketException}
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -146,7 +146,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       val testDir = Utils.createTempDir()
       // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
-      Files.write("0\n", existingFile, Charset.forName("UTF-8"))
+      Files.write("0\n", existingFile, StandardCharsets.UTF_8)
       assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
 
       // Set up the streaming context and input streams
@@ -369,7 +369,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       val testDir = Utils.createTempDir()
       // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
-      Files.write("0\n", existingFile, Charset.forName("UTF-8"))
+      Files.write("0\n", existingFile, StandardCharsets.UTF_8)
       assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
 
       // Set up the streaming context and input streams
@@ -393,7 +393,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val input = Seq(1, 2, 3, 4, 5)
         input.foreach { i =>
           val file = new File(testDir, i.toString)
-          Files.write(i + "\n", file, Charset.forName("UTF-8"))
+          Files.write(i + "\n", file, StandardCharsets.UTF_8)
           assert(file.setLastModified(clock.getTimeMillis()))
           assert(file.lastModified === clock.getTimeMillis())
           logInfo("Created file " + file)
@@ -448,7 +448,7 @@ class TestServer(portToBind: Int = 0) extends Logging {
             try {
               clientSocket.setTcpNoDelay(true)
               val outputStream = new BufferedWriter(
-                new OutputStreamWriter(clientSocket.getOutputStream))
+                new OutputStreamWriter(clientSocket.getOutputStream, StandardCharsets.UTF_8))
 
               while (clientSocket.isConnected) {
                 val msg = queue.poll(100, TimeUnit.MILLISECONDS)

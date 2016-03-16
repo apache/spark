@@ -119,6 +119,9 @@ object Pregel extends Logging {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] =
   {
+    require(maxIterations > 0, s"Maximum of iterations must be greater than 0," +
+      s" but got ${maxIterations}")
+
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
     // compute the messages
     var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
