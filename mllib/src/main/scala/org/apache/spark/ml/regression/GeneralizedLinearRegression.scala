@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
  * Params for Generalized Linear Regression.
@@ -47,6 +47,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * to be used in the model.
    * Supported options: "gaussian", "binomial", "poisson" and "gamma".
    * Default is "gaussian".
+ *
    * @group param
    */
   @Since("2.0.0")
@@ -63,6 +64,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Param for the name of link function which provides the relationship
    * between the linear predictor and the mean of the distribution function.
    * Supported options: "identity", "log", "inverse", "logit", "probit", "cloglog" and "sqrt".
+ *
    * @group param
    */
   @Since("2.0.0")
@@ -123,6 +125,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the value of param [[family]].
    * Default is "gaussian".
+ *
    * @group setParam
    */
   @Since("2.0.0")
@@ -131,6 +134,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   /**
    * Sets the value of param [[link]].
+ *
    * @group setParam
    */
   @Since("2.0.0")
@@ -139,6 +143,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets if we should fit the intercept.
    * Default is true.
+ *
    * @group setParam
    */
   @Since("2.0.0")
@@ -147,6 +152,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the maximum number of iterations.
    * Default is 25 if the solver algorithm is "irls".
+ *
    * @group setParam
    */
   @Since("2.0.0")
@@ -156,6 +162,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * Sets the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-6.
+ *
    * @group setParam
    */
   @Since("2.0.0")
@@ -165,6 +172,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the regularization parameter.
    * Default is 0.0.
+ *
    * @group setParam
    */
   @Since("2.0.0")
@@ -175,6 +183,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * Sets the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is empty, so all instances have weight one.
+ *
    * @group setParam
    */
   @Since("2.0.0")
@@ -184,6 +193,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the solver algorithm used for optimization.
    * Currently only support "irls" which is also the default solver.
+ *
    * @group setParam
    */
   @Since("2.0.0")
@@ -210,9 +220,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     }
 
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
-      .map { case Row(label: Double, weight: Double, features: Vector) =>
-        Instance(label, weight, features)
+    val instances: RDD[Instance] =
+      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+        case Row(label: Double, weight: Double, features: Vector) =>
+          Instance(label, weight, features)
       }
 
     if (familyObj == Gaussian && linkObj == Identity) {
@@ -328,6 +339,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   /**
    * A description of the error distribution to be used in the model.
+ *
    * @param name the name of the family.
    */
   private[ml] abstract class Family(val name: String) extends Serializable {
@@ -365,6 +377,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     /**
      * Gets the [[Family]] object from its name.
+ *
      * @param name family name: "gaussian", "binomial", "poisson" or "gamma".
      */
     def fromName(name: String): Family = {
@@ -544,6 +557,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
    * A description of the link function to be used in the model.
    * The link function provides the relationship between the linear predictor
    * and the mean of the distribution function.
+ *
    * @param name the name of link function.
    */
   private[ml] abstract class Link(val name: String) extends Serializable {
@@ -562,6 +576,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     /**
      * Gets the [[Link]] object from its name.
+ *
      * @param name link name: "identity", "logit", "log",
      *             "inverse", "probit", "cloglog" or "sqrt".
      */
@@ -698,7 +713,7 @@ class GeneralizedLinearRegressionModel private[ml] (
     : (GeneralizedLinearRegressionModel, String) = {
     $(predictionCol) match {
       case "" =>
-        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString
         (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
       case p => (this, p)
     }
