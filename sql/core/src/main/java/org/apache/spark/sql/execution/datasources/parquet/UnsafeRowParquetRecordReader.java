@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.lang.NotImplementedException;
@@ -85,7 +86,8 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
   /**
    * For each request column, the reader to read this column.
-   * columnsReaders[i] populated the UnsafeRow's attribute at i.
+   * columnsReaders[i] populated the UnsafeRow's attribute at i. This is NULL if this column
+   * is missing from the file, in which case we populate the attribute with NULL.
    */
   private ColumnReader[] columnReaders;
 
@@ -103,6 +105,11 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
    * For each column, the annotated original type.
    */
   private OriginalType[] originalTypes;
+
+  /**
+   * For each column, true if the column is missing in the file and we'll instead return NULLs.
+   */
+  private boolean[] missingColumns;
 
   /**
    * The default size for varlen columns. The row grows as necessary to accommodate the
@@ -221,32 +228,46 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   // Columns 0,1: data columns
   // Column 2: partitionValues[0]
   // Column 3: partitionValues[1]
-  public ColumnarBatch initBatch(StructType partitionColumns, InternalRow partitionValues) {
+  public void initBatch(MemoryMode memMode, StructType partitionColumns,
+                        InternalRow partitionValues) {
     StructType batchSchema = new StructType();
     for (StructField f: sparkSchema.fields()) {
       batchSchema = batchSchema.add(f);
     }
-    for (StructField f: partitionColumns.fields()) {
-      batchSchema = batchSchema.add(f);
+    if (partitionColumns != null) {
+      for (StructField f : partitionColumns.fields()) {
+        batchSchema = batchSchema.add(f);
+      }
     }
 
     columnarBatch = ColumnarBatch.allocate(batchSchema);
-    int partitionIdx = sparkSchema.fields().length;
-    for (int i = 0; i < partitionColumns.fields().length; i++) {
-      ColumnVectorUtils.populate(columnarBatch.column(i + partitionIdx), partitionValues, i);
-      columnarBatch.column(i + partitionIdx).setIsConstant();
+    if (partitionColumns != null) {
+      int partitionIdx = sparkSchema.fields().length;
+      for (int i = 0; i < partitionColumns.fields().length; i++) {
+        ColumnVectorUtils.populate(columnarBatch.column(i + partitionIdx), partitionValues, i);
+        columnarBatch.column(i + partitionIdx).setIsConstant();
+      }
     }
-    return columnarBatch;
+
+    // Initialize missing columns with nulls.
+    for (int i = 0; i < missingColumns.length; i++) {
+      if (missingColumns[i]) {
+        columnarBatch.column(i).putNulls(0, columnarBatch.capacity());
+        columnarBatch.column(i).setIsConstant();
+      }
+    }
+  }
+
+  public void initBatch() {
+    initBatch(DEFAULT_MEMORY_MODE, null, null);
+  }
+
+  public void initBatch(StructType partitionColumns, InternalRow partitionValues) {
+    initBatch(DEFAULT_MEMORY_MODE, partitionColumns, partitionValues);
   }
 
   public ColumnarBatch resultBatch() {
-    return resultBatch(DEFAULT_MEMORY_MODE);
-  }
-
-  public ColumnarBatch resultBatch(MemoryMode memMode) {
-    if (columnarBatch == null) {
-      columnarBatch = ColumnarBatch.allocate(sparkSchema, memMode);
-    }
+    if (columnarBatch == null) initBatch();
     return columnarBatch;
   }
 
@@ -269,6 +290,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
     int num = (int)Math.min((long) columnarBatch.capacity(), totalCountLoadedSoFar - rowsReturned);
     for (int i = 0; i < columnReaders.length; ++i) {
+      if (columnReaders[i] == null) continue;
       columnReaders[i].readBatch(num, columnarBatch.column(i));
     }
     rowsReturned += num;
@@ -289,6 +311,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
      */
     int numVarLenFields = 0;
     originalTypes = new OriginalType[requestedSchema.getFieldCount()];
+    missingColumns = new boolean[requestedSchema.getFieldCount()];
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
       Type t = requestedSchema.getFields().get(i);
       if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
@@ -311,9 +334,19 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       if (primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT96) {
         throw new IOException("Int96 not supported.");
       }
-      ColumnDescriptor fd = fileSchema.getColumnDescription(requestedSchema.getPaths().get(i));
-      if (!fd.equals(requestedSchema.getColumns().get(i))) {
-        throw new IOException("Schema evolution not supported.");
+      String[] colPath = requestedSchema.getPaths().get(i);
+      if (fileSchema.containsPath(colPath)) {
+        ColumnDescriptor fd = fileSchema.getColumnDescription(colPath);
+        if (!fd.equals(requestedSchema.getColumns().get(i))) {
+          throw new IOException("Schema evolution not supported.");
+        }
+        missingColumns[i] = false;
+      } else {
+        if (requestedSchema.getColumns().get(i).getMaxDefinitionLevel() == 0) {
+          // Column is missing in data but the required data is non-nullable. This file is invalid.
+          throw new IOException("Required column is missing in data file. Col: " + colPath);
+        }
+        missingColumns[i] = true;
       }
 
       if (primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.BINARY) {
@@ -331,6 +364,11 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       rows[i] = new UnsafeRow(requestedSchema.getFieldCount());
       BufferHolder holder = new BufferHolder(rows[i], numVarLenFields * DEFAULT_VAR_LEN_SIZE);
       rowWriters[i] = new UnsafeRowWriter(holder, requestedSchema.getFieldCount());
+
+      // Populate the rows with NULLs for the missing columns.
+      for (int j = 0; j < missingColumns.length; j++) {
+        if (missingColumns[j]) rows[i].setNullAt(j);
+      }
     }
   }
 
@@ -352,6 +390,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     }
 
     for (int i = 0; i < columnReaders.length; ++i) {
+      if (columnReaders[i] == null) continue; // Column missing in file.
       switch (columnReaders[i].descriptor.getType()) {
         case BOOLEAN:
           decodeBooleanBatch(i, num);
@@ -966,7 +1005,9 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     }
     List<ColumnDescriptor> columns = requestedSchema.getColumns();
     columnReaders = new ColumnReader[columns.size()];
+
     for (int i = 0; i < columns.size(); ++i) {
+      if (missingColumns[i]) continue;
       columnReaders[i] = new ColumnReader(columns.get(i), pages.getPageReader(columns.get(i)));
     }
     totalCountLoadedSoFar += pages.getRowCount();
