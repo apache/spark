@@ -40,19 +40,6 @@ class LinearRegressionSuite
   @transient var datasetWithWeightConstantLabel: DataFrame = _
   @transient var datasetWithWeightZeroLabel: DataFrame = _
 
-  /*
-     In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
-     is the same as the one trained by R's glmnet package. The following instruction
-     describes how to reproduce the data in R.
-     In a spark-shell, use the following code:
-
-     import org.apache.spark.mllib.util.LinearDataGenerator
-     val data =
-       sc.parallelize(LinearDataGenerator.generateLinearInput(6.3, Array(4.7, 7.2),
-         Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2)
-     data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).coalesce(1)
-       .saveAsTextFile("path")
-   */
   override def beforeAll(): Unit = {
     super.beforeAll()
     datasetWithDenseFeature = sqlContext.createDataFrame(
@@ -60,8 +47,8 @@ class LinearRegressionSuite
         intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
     /*
-       datasetWithoutIntercept is not needed for correctness testing but is useful for illustrating
-       training model without intercept
+       datasetWithDenseFeatureWithoutIntercept is not needed for correctness testing
+       but is useful for illustrating training model without intercept
      */
     datasetWithDenseFeatureWithoutIntercept = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
@@ -117,6 +104,26 @@ class LinearRegressionSuite
         Instance(0.0, 3.0, Vectors.dense(2.0, 11.0)),
         Instance(0.0, 4.0, Vectors.dense(3.0, 13.0))
       ), 2))
+  }
+
+  /**
+   * Enable the ignored test to export the dataset into CSV format,
+   * so we can validate the training accuracy compared with R's glmnet package.
+   */
+  ignore("export test data into CSV format") {
+    datasetWithDenseFeature.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LinearRegressionSuite/datasetWithDenseFeature")
+
+    datasetWithDenseFeatureWithoutIntercept.rdd.map {
+      case Row(label: Double, features: Vector) =>
+        label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/LinearRegressionSuite/datasetWithDenseFeatureWithoutIntercept")
+
+    datasetWithSparseFeature.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LinearRegressionSuite/datasetWithSparseFeature")
   }
 
   test("params") {
@@ -222,7 +229,7 @@ class LinearRegressionSuite
 
       /*
          Then again with the data with no intercept:
-         > coefficientsWithourIntercept
+         > coefficientsWithoutIntercept
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
          (Intercept)           .

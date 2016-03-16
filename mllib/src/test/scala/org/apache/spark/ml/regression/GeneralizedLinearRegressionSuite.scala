@@ -24,7 +24,7 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
-import org.apache.spark.mllib.linalg.{BLAS, DenseVector, Vectors}
+import org.apache.spark.mllib.linalg.{BLAS, DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.random._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -118,6 +118,53 @@ class GeneralizedLinearRegressionSuite
         intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gamma", link = "log"), 2))
+  }
+
+  /**
+   * Enable the ignored test to export the dataset into CSV format,
+   * so we can validate the training accuracy compared with R's glm and glmnet package.
+   */
+  ignore("export test data into CSV format") {
+    datasetGaussianIdentity.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianIdentity")
+    datasetGaussianLog.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianLog")
+    datasetGaussianInverse.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianInverse")
+    datasetBinomial.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetBinomial")
+    datasetPoissonLog.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLog")
+    datasetPoissonIdentity.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonIdentity")
+    datasetPoissonSqrt.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonSqrt")
+    datasetGammaInverse.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaInverse")
+    datasetGammaIdentity.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaIdentity")
+    datasetGammaLog.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaLog")
   }
 
   test("params") {
