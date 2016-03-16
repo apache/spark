@@ -554,7 +554,7 @@ class Dataset[T] private[sql](
    * programmatically compute summary statistics, use the `agg` function instead.
    *
    * {{{
-   *   df.describe("age", "height").show()
+   *   ds.describe("age", "height").show()
    *
    *   // output:
    *   // summary age   height
@@ -750,7 +750,7 @@ class Dataset[T] private[sql](
    * Selects column based on the column name and return it as a [[Column]].
    * Note that the column name can also reference to a nested column like `a.b`.
    *
-   * @group untyped
+   * @group untypedrel
    * @since 2.0.0
    */
   def apply(colName: String): Column = col(colName)
@@ -774,7 +774,7 @@ class Dataset[T] private[sql](
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
    * {{{
    *   // Dropping rows containing any null values.
-   *   df.na.drop()
+   *   ds.na.drop()
    * }}}
    *
    * @group untypedrel
@@ -786,7 +786,7 @@ class Dataset[T] private[sql](
    * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
    * {{{
    *   // Finding frequent items in column with name 'a'.
-   *   df.stat.freqItems(Seq("a"))
+   *   ds.stat.freqItems(Seq("a"))
    * }}}
    *
    * @group untypedrel
@@ -1195,7 +1195,7 @@ class Dataset[T] private[sql](
   /**
    * (Scala-specific) Aggregates on the entire [[Dataset]] without groups.
    * {{{
-   *   // ds.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
    *   ds.agg("age" -> "max", "salary" -> "avg")
    *   ds.groupBy().agg("age" -> "max", "salary" -> "avg")
    * }}}
@@ -1210,7 +1210,7 @@ class Dataset[T] private[sql](
   /**
    * (Scala-specific) Aggregates on the entire [[Dataset]] without groups.
    * {{{
-   *   // ds.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
    *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
    *   ds.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
    * }}}
@@ -1223,7 +1223,7 @@ class Dataset[T] private[sql](
   /**
    * (Java-specific) Aggregates on the entire [[Dataset]] without groups.
    * {{{
-   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
    *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
    *   ds.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
    * }}}
@@ -1236,7 +1236,7 @@ class Dataset[T] private[sql](
   /**
    * Aggregates on the entire [[Dataset]] without groups.
    * {{{
-   *   // ds.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
    *   ds.agg(max($"age"), avg($"salary"))
    *   ds.groupBy().agg(max($"age"), avg($"salary"))
    * }}}
