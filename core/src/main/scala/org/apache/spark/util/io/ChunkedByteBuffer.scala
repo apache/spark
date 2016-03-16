@@ -108,7 +108,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   }
 
   /**
-   * Get duplicates of the ByteBuffers backing this ChunkedByteBuffer. Visible for testing
+   * Get duplicates of the ByteBuffers backing this ChunkedByteBuffer.
    */
   def getChunks(): Array[ByteBuffer] = {
     chunks.map(_.duplicate())
