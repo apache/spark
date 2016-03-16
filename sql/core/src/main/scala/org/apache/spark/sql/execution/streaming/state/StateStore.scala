@@ -127,6 +127,10 @@ private[state] object StateStore extends Logging {
     loadedProviders.remove(storeId)
   }
 
+  def isLoaded(storeId: StateStoreId): Boolean = loadedProviders.synchronized {
+    loadedProviders.contains(storeId)
+  }
+
   /** Unload and stop all state store provider */
   def stop(): Unit = loadedProviders.synchronized {
     loadedProviders.clear()

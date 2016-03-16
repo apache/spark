@@ -276,6 +276,8 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       intercept[IllegalArgumentException] {
         StateStore.get(storeId, dir, -1)
       }
+      assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
+
       intercept[IllegalStateException] {
         StateStore.get(storeId, dir, 1)
       }
@@ -291,7 +293,10 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
       // Verify that you can remove the store and still reload and use it
       StateStore.remove(storeId)
+      assert(!StateStore.isLoaded(storeId))
+
       val store1 = StateStore.get(storeId, dir, 1)
+      assert(StateStore.isLoaded(storeId))
       update(store1, "a", 2)
       assert(store1.commit() === 2)
       assert(unwrapToSet(store1.iterator()) === Set("a" -> 2))
@@ -303,8 +308,11 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       .setMaster("local")
       .setAppName("test")
       .set("spark.sql.streaming.stateStore.managementInterval", "10ms")
-    val storeId = StateStoreId(0, 0)
+    val opId = 0
+    val storeId = StateStoreId(opId, 0)
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    val provider = new HDFSBackedStateStoreProvider(storeId, dir)
+
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinator(sc) { coordinator =>
@@ -314,15 +322,33 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
             store.commit()
           }
 
-          val provider = new HDFSBackedStateStoreProvider(storeId, dir)
-
+          // Background management should clean up and generate snapshots
           eventually(timeout(4 seconds)) {
+            // Earliest delta file should get cleaned up
             assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
 
+            // Some snapshots should have been generated
             val snapshotVersions = (0 to 20).filter { version =>
               fileExists(provider, version, isSnapshot = true)
             }
             assert(snapshotVersions.nonEmpty, "no snapshot file found")
+          }
+
+          // If driver decides to deactivate all instances of the store, then this instance
+          // should be unloaded
+          coordinator.deactivateInstances(Set(opId))
+          eventually(timeout(4 seconds)) {
+            assert(!StateStore.isLoaded(storeId))
+          }
+
+          // Reload the store and verify
+          StateStore.get(storeId, dir, 20)
+          assert(StateStore.isLoaded(storeId))
+
+          // If some other executor loads the store, then this instance should be unloaded
+          coordinator.reportActiveInstance(storeId, "other-host", "other-exec")
+          eventually(timeout(4 seconds)) {
+            assert(!StateStore.isLoaded(storeId))
           }
         }
       }
