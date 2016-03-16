@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.sql.{Date, Timestamp}
 import java.text.{NumberFormat, SimpleDateFormat}
 import java.util.Locale
 
