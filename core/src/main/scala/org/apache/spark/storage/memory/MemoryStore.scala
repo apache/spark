@@ -99,7 +99,7 @@ private[spark] class MemoryStore(
     if (memoryManager.acquireStorageMemory(blockId, size)) {
       // We acquired enough memory for the block, so go ahead and put it
       val bytes = _bytes()
-      assert(bytes.limit == size)
+      assert(bytes.size == size)
       val entry = new SerializedMemoryEntry(bytes, size)
       entries.synchronized {
         entries.put(blockId, entry)
@@ -189,7 +189,7 @@ private[spark] class MemoryStore(
         new DeserializedMemoryEntry(arrayValues, SizeEstimator.estimate(arrayValues))
       } else {
         val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-        new SerializedMemoryEntry(bytes, bytes.limit)
+        new SerializedMemoryEntry(bytes, bytes.size)
       }
       val size = entry.size
       def transferUnrollToStorage(amount: Long): Unit = {

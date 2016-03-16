@@ -503,7 +503,7 @@ private[spark] class BlockManager(
    */
   def getRemoteValues(blockId: BlockId): Option[BlockResult] = {
     getRemoteBytes(blockId).map { data =>
-      new BlockResult(dataDeserialize(blockId, data), DataReadMethod.Network, data.limit)
+      new BlockResult(dataDeserialize(blockId, data), DataReadMethod.Network, data.size)
     }
   }
 
@@ -742,7 +742,7 @@ private[spark] class BlockManager(
         null
       }
 
-      val size = bytes.limit
+      val size = bytes.size
 
       if (level.useMemory) {
         // Put it in memory first, even if it also has useDisk set to true;
@@ -950,7 +950,7 @@ private[spark] class BlockManager(
           diskBytes.dispose()
           memoryStore.getBytes(blockId).get
         } else {
-          val putSucceeded = memoryStore.putBytes(blockId, diskBytes.limit, () => {
+          val putSucceeded = memoryStore.putBytes(blockId, diskBytes.size, () => {
             // https://issues.apache.org/jira/browse/SPARK-6076
             // If the file size is bigger than the free memory, OOM will happen. So if we
             // cannot put it into MemoryStore, copyForMemory should not be created. That's why
@@ -1079,7 +1079,7 @@ private[spark] class BlockManager(
         case Some(peer) =>
           try {
             val onePeerStartTime = System.currentTimeMillis
-            logTrace(s"Trying to replicate $blockId of ${data.limit} bytes to $peer")
+            logTrace(s"Trying to replicate $blockId of ${data.size} bytes to $peer")
             blockTransferService.uploadBlockSync(
               peer.host,
               peer.port,
@@ -1087,7 +1087,7 @@ private[spark] class BlockManager(
               blockId,
               new NettyManagedBuffer(data.toNetty),
               tLevel)
-            logTrace(s"Replicated $blockId of ${data.limit} bytes to $peer in %s ms"
+            logTrace(s"Replicated $blockId of ${data.size} bytes to $peer in %s ms"
               .format(System.currentTimeMillis - onePeerStartTime))
             peersReplicatedTo += peer
             peersForReplication -= peer
@@ -1110,7 +1110,7 @@ private[spark] class BlockManager(
       }
     }
     val timeTakeMs = (System.currentTimeMillis - startTime)
-    logDebug(s"Replicating $blockId of ${data.limit} bytes to " +
+    logDebug(s"Replicating $blockId of ${data.size} bytes to " +
       s"${peersReplicatedTo.size} peer(s) took $timeTakeMs ms")
     if (peersReplicatedTo.size < numPeersToReplicateTo) {
       logWarning(s"Block $blockId replicated to only " +

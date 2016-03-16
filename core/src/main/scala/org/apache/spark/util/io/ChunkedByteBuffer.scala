@@ -27,12 +27,13 @@ import io.netty.buffer.{ByteBuf, Unpooled}
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.storage.StorageUtils
 
+
 private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks != null, "chunks must not be null")
   require(chunks.forall(_.limit() > 0), "chunks must be non-empty")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
-  val limit: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
+  val size: Long = chunks.map(_.limit().asInstanceOf[Long]).sum
 
   def this(byteBuffer: ByteBuffer) = {
     this(Array(byteBuffer))
@@ -56,11 +57,11 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    * @throws UnsupportedOperationException if this buffer's size exceeds the maximum array size.
    */
   def toArray: Array[Byte] = {
-    if (limit >= Integer.MAX_VALUE) {
+    if (size >= Integer.MAX_VALUE) {
       throw new UnsupportedOperationException(
-        s"cannot call toArray because buffer size ($limit bytes) exceeds maximum array size")
+        s"cannot call toArray because buffer size ($size bytes) exceeds maximum array size")
     }
-    val byteChannel = new ByteArrayWritableChannel(limit.toInt)
+    val byteChannel = new ByteArrayWritableChannel(size.toInt)
     writeFully(byteChannel)
     byteChannel.close()
     byteChannel.getData
@@ -81,6 +82,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 
   /**
    * Creates an input stream to read data from this ChunkedByteBuffer.
+ *
    * @param dispose if true, [[dispose()]] will be called at the end of the stream
    *                in order to close any memory-mapped files which back this buffer.
    */

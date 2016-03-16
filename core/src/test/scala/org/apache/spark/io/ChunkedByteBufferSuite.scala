@@ -29,7 +29,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
 
   test("no chunks") {
     val emptyChunkedByteBuffer = new ChunkedByteBuffer(Array.empty[ByteBuffer])
-    assert(emptyChunkedByteBuffer.limit === 0)
+    assert(emptyChunkedByteBuffer.size === 0)
     assert(emptyChunkedByteBuffer.getChunks().isEmpty)
     assert(emptyChunkedByteBuffer.toArray === Array.empty)
     assert(emptyChunkedByteBuffer.toByteBuffer.capacity() === 0)
@@ -58,7 +58,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
 
   test("writeFully() does not affect original buffer's position") {
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(8)))
-    chunkedByteBuffer.writeFully(new ByteArrayWritableChannel(chunkedByteBuffer.limit.toInt))
+    chunkedByteBuffer.writeFully(new ByteArrayWritableChannel(chunkedByteBuffer.size.toInt))
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
   }
 
@@ -72,7 +72,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     val fourMegabyteBuffer = ByteBuffer.allocate(1024 * 1024 * 4)
     fourMegabyteBuffer.limit(fourMegabyteBuffer.capacity())
     val chunkedByteBuffer = new ChunkedByteBuffer(Array.fill(1024)(fourMegabyteBuffer))
-    assert(chunkedByteBuffer.limit === (1024L * 1024L * 1024L * 4L))
+    assert(chunkedByteBuffer.size === (1024L * 1024L * 1024L * 4L))
     intercept[UnsupportedOperationException] {
       chunkedByteBuffer.toArray
     }
@@ -82,10 +82,10 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     val bytes1 = ByteBuffer.wrap(Array.tabulate(256)(_.toByte))
     val bytes2 = ByteBuffer.wrap(Array.tabulate(128)(_.toByte))
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(bytes1, bytes2))
-    assert(chunkedByteBuffer.limit === bytes1.limit() + bytes2.limit())
+    assert(chunkedByteBuffer.size === bytes1.limit() + bytes2.limit())
 
     val inputStream = chunkedByteBuffer.toInputStream(dispose = false)
-    val bytesFromStream = new Array[Byte](chunkedByteBuffer.limit.toInt)
+    val bytesFromStream = new Array[Byte](chunkedByteBuffer.size.toInt)
     ByteStreams.readFully(inputStream, bytesFromStream)
     assert(bytesFromStream === bytes1.array() ++ bytes2.array())
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
