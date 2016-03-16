@@ -29,6 +29,7 @@ import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -54,7 +55,7 @@ object CSVRelation extends Logging {
       requiredColumns: Array[String],
       inputs: Seq[FileStatus],
       sqlContext: SQLContext,
-      params: CSVOptions): RDD[Row] = {
+      params: CSVOptions): RDD[InternalRow] = {
 
     val schemaFields = schema.fields
     val requiredFields = StructType(requiredColumns.map(schema(_))).fields
@@ -71,8 +72,8 @@ object CSVRelation extends Logging {
     }.foreach {
       case (field, index) => safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
     }
-    val rowArray = new Array[Any](safeRequiredIndices.length)
     val requiredSize = requiredFields.length
+    val row = new GenericMutableRow(requiredSize)
     tokenizedRDD.flatMap { tokens =>
       if (params.dropMalformed && schemaFields.length != tokens.length) {
         logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
@@ -94,14 +95,20 @@ object CSVRelation extends Logging {
           while (subIndex < safeRequiredIndices.length) {
             index = safeRequiredIndices(subIndex)
             val field = schemaFields(index)
-            rowArray(subIndex) = CSVTypeCast.castTo(
+            // It anyway needs to try to parse since it decides if this row is malformed
+            // or not after trying to cast in `DROPMALFORMED` mode even if the casted
+            // value is not stored in the row.
+            val value = CSVTypeCast.castTo(
               indexSafeTokens(index),
               field.dataType,
               field.nullable,
               params.nullValue)
+            if (subIndex < requiredSize) {
+              row(subIndex) = value
+            }
             subIndex = subIndex + 1
           }
-          Some(Row.fromSeq(rowArray.take(requiredSize)))
+          Some(row)
         } catch {
           case NonFatal(e) if params.dropMalformed =>
             logWarning("Parse exception. " +
