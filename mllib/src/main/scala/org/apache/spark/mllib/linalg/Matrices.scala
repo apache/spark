@@ -22,10 +22,11 @@ import java.util.{Arrays, Random}
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
@@ -57,6 +58,20 @@ sealed trait Matrix extends Serializable {
     }
     newArray
   }
+
+  /**
+   * Returns an iterator of column vectors.
+   * This operation could be expensive, depending on the underlying storage.
+   */
+  @Since("2.0.0")
+  def colIter: Iterator[Vector]
+
+  /**
+   * Returns an iterator of row vectors.
+   * This operation could be expensive, depending on the underlying storage.
+   */
+  @Since("2.0.0")
+  def rowIter: Iterator[Vector] = this.transpose.colIter
 
   /** Converts to a breeze matrix. */
   private[mllib] def toBreeze: BM[Double]
@@ -386,6 +401,21 @@ class DenseMatrix @Since("1.3.0") (
     }
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices.result(), spVals.result())
   }
+
+  @Since("2.0.0")
+  override def colIter: Iterator[Vector] = {
+    if (isTransposed) {
+      Iterator.tabulate(numCols) { j =>
+        val col = new Array[Double](numRows)
+        blas.dcopy(numRows, values, j, numCols, col, 0, 1)
+        new DenseVector(col)
+      }
+    } else {
+      Iterator.tabulate(numCols) { j =>
+        new DenseVector(values.slice(j * numRows, (j + 1) * numRows))
+      }
+    }
+  }
 }
 
 /**
@@ -656,6 +686,38 @@ class SparseMatrix @Since("1.3.0") (
   @Since("1.5.0")
   override def numActives: Int = values.length
 
+  @Since("2.0.0")
+  override def colIter: Iterator[Vector] = {
+    if (isTransposed) {
+      val indicesArray = Array.fill(numCols)(MArrayBuilder.make[Int])
+      val valuesArray = Array.fill(numCols)(MArrayBuilder.make[Double])
+      var i = 0
+      while (i < numRows) {
+        var k = colPtrs(i)
+        val rowEnd = colPtrs(i + 1)
+        while (k < rowEnd) {
+          val j = rowIndices(k)
+          indicesArray(j) += i
+          valuesArray(j) += values(k)
+          k += 1
+        }
+        i += 1
+      }
+      Iterator.tabulate(numCols) { j =>
+        val ii = indicesArray(j).result()
+        val vv = valuesArray(j).result()
+        new SparseVector(numRows, ii, vv)
+      }
+    } else {
+      Iterator.tabulate(numCols) { j =>
+        val colStart = colPtrs(j)
+        val colEnd = colPtrs(j + 1)
+        val ii = rowIndices.slice(colStart, colEnd)
+        val vv = values.slice(colStart, colEnd)
+        new SparseVector(numRows, ii, vv)
+      }
+    }
+  }
 }
 
 /**
