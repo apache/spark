@@ -83,17 +83,17 @@ public class LauncherServerSuite extends BaseSuite {
 
       client = new TestClient(s);
       client.send(new Hello(handle.getSecret(), "1.4.0"));
-      semaphore.tryAcquire(10, TimeUnit.MILLISECONDS);
+      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
 
       // Make sure the server matched the client to the handle.
       assertNotNull(handle.getConnection());
 
       client.send(new SetAppId("app-id"));
-      semaphore.tryAcquire(10, TimeUnit.MILLISECONDS);
+      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
       assertEquals("app-id", handle.getAppId());
 
       client.send(new SetState(SparkAppHandle.State.RUNNING));
-      semaphore.tryAcquire(10, TimeUnit.MILLISECONDS);
+      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
       assertEquals(SparkAppHandle.State.RUNNING, handle.getState());
 
       handle.stop();
