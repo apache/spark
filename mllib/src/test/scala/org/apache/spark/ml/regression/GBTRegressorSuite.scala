@@ -27,9 +27,8 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.util.Utils
-
 
 /**
  * Test suite for [[GBTRegressor]].
