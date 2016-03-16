@@ -20,12 +20,10 @@ package org.apache.spark.sql.execution.streaming.state
 import java.util.{Timer, TimerTask}
 
 import scala.collection.mutable
-import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.util.RpcUtils
 
 /** Unique identifier for a [[StateStore]] */
 case class StateStoreId(operatorId: Long, partitionId: Int)
@@ -34,8 +32,6 @@ case class StateStoreId(operatorId: Long, partitionId: Int)
  * Base trait for a versioned key-value store used for streaming aggregations
  */
 trait StateStore {
-
-  import StateStore._
 
   /** Unique identifier of the store */
   def id: StateStoreId
@@ -104,7 +100,7 @@ case class KeyRemoved(key: InternalRow) extends StoreUpdate
  */
 private[state] object StateStore extends Logging {
 
-  val MANAGEMENT_TASK_INTERVAL_SECS = 60
+  private val MANAGEMENT_TASK_INTERVAL_SECS = 60
 
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
   private val managementTimer = new Timer("StateStore Timer", true)

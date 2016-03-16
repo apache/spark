@@ -33,7 +33,7 @@ import org.apache.spark.util.{CompletionIterator, Utils}
 
 /**
  * An implementation of [[StateStoreProvider]] and [[StateStore]] in which all the data is backed
-  * by files in a HDFS-compatible file system. All updates to the store has to be done in sets
+ * by files in a HDFS-compatible file system. All updates to the store has to be done in sets
  * transactionally, and each set of updates increments the store's version. These versions can
  * be used to re-execute the updates (by retries in RDD operations) on the correct version of
  * the store, and regenerate the store version.
@@ -56,7 +56,7 @@ import org.apache.spark.util.{CompletionIterator, Utils}
  * to ensure re-executed RDD operations re-apply updates on the correct past version of the
  * store.
  */
-class HDFSBackedStateStoreProvider(
+private[state] class HDFSBackedStateStoreProvider(
     val id: StateStoreId,
     val directory: String,
     numBatchesToRetain: Int = 2,
@@ -66,10 +66,11 @@ class HDFSBackedStateStoreProvider(
 
   import StateStore._
 
-
+  /** Implementation of [[StateStore]] API which is backed by a HDFS-compatible file system */
   class HDFSBackedStateStore( val version: Long, mapToUpdate: MapType)
     extends StateStore {
 
+    /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
@@ -94,10 +95,14 @@ class HDFSBackedStateStoreProvider(
       mapToUpdate.put(key, value)
       allUpdates.get(key) match {
         case Some(ValueAdded(_, _)) =>
+          // Value did not exist in previous version and was added already, keep it marked as added
           allUpdates.put(key, ValueAdded(key, value))
         case Some(ValueUpdated(_, _)) | Some(KeyRemoved(_)) =>
+          // Value existed in prev version and updated/removed, mark it as updated
           allUpdates.put(key, ValueUpdated(key, value))
         case None =>
+          // There was no prior update, so mark this as added or updated according to its presence
+          // in previous version.
           val update =
             if (oldValueOption.nonEmpty) ValueUpdated(key, value) else ValueAdded(key, value)
           allUpdates.put(key, update)
@@ -113,10 +118,13 @@ class HDFSBackedStateStoreProvider(
         val key = keyIter.next
         if (condition(key)) {
           mapToUpdate.remove(key)
+
           allUpdates.get(key) match {
             case Some(ValueUpdated(_, _)) | None =>
+              // Value existed in previous version and maybe was updated, mark removed
               allUpdates.put(key, KeyRemoved(key))
             case Some(ValueAdded(_, _)) =>
+              // Value did not exist in previous version and was added, should not appear in updates
               allUpdates.remove(key)
             case Some(KeyRemoved(_)) =>
               // Remove already in update map, no need to change
@@ -189,6 +197,7 @@ class HDFSBackedStateStoreProvider(
     new HDFSBackedStateStore(version, newMap)
   }
 
+  /** Manage backing files, including creating snapshots and cleaning up old files */
   override def manage(): Unit = {
     try {
       doSnapshot()
@@ -382,6 +391,7 @@ class HDFSBackedStateStoreProvider(
     }
   }
 
+  /** Files needed to recover the given version of the store */
   private def filesForVersion(allFiles: Seq[StoreFile], version: Long): Seq[StoreFile] = {
     require(version >= 0)
     require(allFiles.exists(_.version == version))
@@ -409,6 +419,7 @@ class HDFSBackedStateStoreProvider(
     latestSnapshotFileBeforeVersion.toSeq ++ deltaBatchFiles
   }
 
+  /** Fetch all the files that back the store */
   private def fetchFiles(): Seq[StoreFile] = {
     val files: Seq[FileStatus] = try {
       fs.listStatus(baseDir)
