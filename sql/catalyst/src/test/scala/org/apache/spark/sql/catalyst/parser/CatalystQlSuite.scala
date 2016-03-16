@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -171,6 +171,7 @@ class CatalystQlSuite extends PlanTest {
   test("table identifier") {
     assert(TableIdentifier("q") === parser.parseTableIdentifier("q"))
     assert(TableIdentifier("q", Some("d")) === parser.parseTableIdentifier("d.q"))
+    assert(TableIdentifier("104e4d676bac4d9aa3856f00b5b9f51c") === parser.parseTableIdentifier("104e4d676bac4d9aa3856f00b5b9f51c"))
     intercept[AnalysisException](parser.parseTableIdentifier(""))
     intercept[AnalysisException](parser.parseTableIdentifier("d.q.g"))
   }

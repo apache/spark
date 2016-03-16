@@ -129,7 +129,7 @@ class SqlLexical extends StdLexical {
   override def identChar: Parser[Elem] = letter | elem('_')
 
   private lazy val scientificNotation: Parser[String] =
-    (elem('e') | elem('E')) ~> (elem('+') | elem('-')).? ~ rep1(digit) ^^ {
+    (elem('e') | elem('E')) ~> (elem('+') | elem('-')).? ~ rep1(digit) <~ not(rep1(identChar)) ^^ {
       case s ~ rest => "e" + s.mkString + rest.mkString
     }
 
