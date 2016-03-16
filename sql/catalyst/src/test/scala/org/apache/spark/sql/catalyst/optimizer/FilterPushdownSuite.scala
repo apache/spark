@@ -81,6 +81,21 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("combine redundant filters") {
+    val originalQuery =
+      testRelation
+        .where('a === 1 && 'b === 1)
+        .where('a === 1 && 'c === 1)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 1 && 'b === 1 && 'c === 1)
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("can't push without rewrite") {
     val originalQuery =
       testRelation
