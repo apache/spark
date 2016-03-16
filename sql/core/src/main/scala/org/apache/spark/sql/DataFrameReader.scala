@@ -321,6 +321,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * (e.g. 00012)</li>
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
+   * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
+   * during parsing.<li>
    * <ul>
    *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
    *  malformed string into a new field configured by `spark.sql.columnNameOfCorruptRecord`. When
