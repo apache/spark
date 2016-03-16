@@ -56,7 +56,11 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
 
-private[sql] class DefaultSource extends FileFormat with DataSourceRegister with Logging {
+private[sql] class DefaultSource
+  extends FileFormat
+  with DataSourceRegister
+  with Logging
+  with Serializable {
 
   override def shortName(): String = "parquet"
 
@@ -373,6 +377,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
         unsafeReader
       } catch {
         case NonFatal(e) =>
+          logError(s"Falling back to parquet-mr: $e", e)
           val reader = pushed match {
             case Some(filter) =>
               new ParquetRecordReader[InternalRow](
