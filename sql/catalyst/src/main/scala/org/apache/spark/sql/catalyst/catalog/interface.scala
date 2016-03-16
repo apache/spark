@@ -282,7 +282,7 @@ object ExternalCatalog {
 case class CatalogRelation(
     db: String,
     metadata: CatalogTable,
-    alias: Option[String])
+    alias: Option[String] = None)
   extends LeafNode {
 
   // TODO: implement this

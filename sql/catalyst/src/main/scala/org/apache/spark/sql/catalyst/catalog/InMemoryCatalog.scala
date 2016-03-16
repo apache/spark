@@ -176,7 +176,7 @@ class InMemoryCatalog extends ExternalCatalog {
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
-        throw new AnalysisException(s"Table $table does not exist in $db database")
+        throw new AnalysisException(s"Table '$table' does not exist in database '$db'")
       }
     }
   }
