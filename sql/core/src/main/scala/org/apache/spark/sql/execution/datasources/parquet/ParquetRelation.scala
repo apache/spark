@@ -391,20 +391,21 @@ private[sql] class DefaultSource
       }
 
       val iter = new RecordReaderIterator(parquetReader)
-      val fullSchema = dataSchema.toAttributes ++ partitionSchema.toAttributes
-      val joinedRow = new JoinedRow()
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
       // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
-      if (parquetReader.isInstanceOf[UnsafeRowParquetRecordReader]) {
+      if (parquetReader.isInstanceOf[UnsafeRowParquetRecordReader] &&
+          enableVectorizedParquetReader) {
         iter.asInstanceOf[Iterator[InternalRow]]
       } else {
+        val fullSchema = dataSchema.toAttributes ++ partitionSchema.toAttributes
+        val joinedRow = new JoinedRow()
+        val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+
         // This is a horrible erasure hack...  if we type the iterator above, then it actually check
         // the type in next() and we get a class cast exception.  If we make that function return
         // Object, then we can defer the cast until later!
         iter.asInstanceOf[Iterator[InternalRow]]
             .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
-            .map(r => r.copy())
       }
     }
   }
