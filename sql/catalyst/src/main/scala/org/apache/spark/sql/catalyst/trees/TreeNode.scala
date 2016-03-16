@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
 private class MutableInt(var i: Int)
 
 case class Origin(
-  callSite: Option[String] = None,
+  var callSite: Option[String] = None,
   line: Option[Int] = None,
   startPosition: Option[Int] = None)
 

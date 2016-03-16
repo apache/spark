@@ -683,6 +683,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
+    Column.updateExpressionsOrigin(joinExprs)
     // Note that in this function, we introduce a hack in the case of self-join to automatically
     // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
     // Consider this case: df.join(df, df("key") === df("key"))
@@ -967,6 +968,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = withPlan {
+    Column.updateExpressionsOrigin(cols : _*)
     Project(cols.map(_.named), logicalPlan)
   }
 
@@ -1111,6 +1113,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def filter(condition: Column): Dataset[T] = withTypedPlan {
+    Column.updateExpressionsOrigin(condition)
     Filter(condition.expr, logicalPlan)
   }
 
@@ -1173,6 +1176,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
+    Column.updateExpressionsOrigin(cols : _*)
     RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
   }
 
@@ -1197,6 +1201,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def rollup(cols: Column*): RelationalGroupedDataset = {
+    Column.updateExpressionsOrigin(cols : _*)
     RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.RollupType)
   }
 
@@ -1221,6 +1226,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
+    Column.updateExpressionsOrigin(cols : _*)
     RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.CubeType)
   }
 
@@ -1419,7 +1425,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
+  def agg(expr: Column, exprs: Column*): DataFrame = {
+    Column.updateExpressionsOrigin(exprs : _*)
+    groupBy().agg(expr, exprs : _*)
+  }
 
   /**
    * Returns a new [[Dataset]] by taking the first `n` rows. The difference between this function
@@ -1608,6 +1617,7 @@ class Dataset[T] private[sql](
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+    Column.updateExpressionsOrigin(input : _*)
     val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
     val convert = CatalystTypeConverters.createToCatalystConverter(elementSchema)
@@ -1671,7 +1681,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def withColumn(colName: String, col: Column): DataFrame = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
+    Column.updateExpressionsOrigin(col)
     val output = queryExecution.analyzed.output
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
@@ -1692,6 +1702,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
+    Column.updateExpressionsOrigin(col)
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
     val shouldReplace = output.exists(f => resolver(f.name, colName))
@@ -1782,6 +1793,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def drop(col: Column): DataFrame = {
+    Column.updateExpressionsOrigin(col)
     val expression = col match {
       case Column(u: UnresolvedAttribute) =>
         queryExecution.analyzed.resolveQuoted(
@@ -2218,6 +2230,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = withTypedPlan {
+    Column.updateExpressionsOrigin(partitionExprs : _*)
     RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, Some(numPartitions))
   }
 
@@ -2233,6 +2246,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(partitionExprs: Column*): Dataset[T] = withTypedPlan {
+    Column.updateExpressionsOrigin(partitionExprs : _*)
     RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions = None)
   }
 
@@ -2528,6 +2542,7 @@ class Dataset[T] private[sql](
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
+    Column.updateExpressionsOrigin(sortExprs : _*)
     val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>

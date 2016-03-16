@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.functions.lit
@@ -47,6 +47,12 @@ private[sql] object Column {
         a.aggregateFunction.toString
       case expr => usePrettyExpression(expr).sql
     }
+  }
+
+  @scala.annotation.varargs
+  def updateExpressionsOrigin(cols: Column*): Unit = {
+    val callSite = org.apache.spark.util.Utils.getCallSite().shortForm
+    cols.map(col => col.expr.foreach(e => e.origin.callSite = Some(callSite)))
   }
 }
 
