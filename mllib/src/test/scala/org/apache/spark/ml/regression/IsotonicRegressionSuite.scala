@@ -23,6 +23,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.types.DoubleType
 
 class IsotonicRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -179,6 +180,34 @@ class IsotonicRegressionSuite
     val ir = new IsotonicRegression()
     testEstimatorAndModelReadWrite(ir, dataset, IsotonicRegressionSuite.allParamSettings,
       checkModelData)
+  }
+
+  test("should support all NumericType labels") {
+    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
+
+    val ir = new IsotonicRegression().setFeaturesCol("features")
+
+    val expected = ir.setLabelCol("label").fit(dfs(DoubleType))
+    dfs.keys.filter(_ != DoubleType).foreach { t =>
+      val actual = ir.setLabelCol("label").fit(dfs(t))
+      assert(expected.boundaries === actual.boundaries)
+      assert(expected.predictions === actual.predictions)
+    }
+  }
+
+  test("shouldn't support non NumericType labels") {
+    val dfWithStringLabels =
+      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
+
+    val ir = new IsotonicRegression()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    val thrown = intercept[IllegalArgumentException] {
+      ir.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
   }
 }
 
