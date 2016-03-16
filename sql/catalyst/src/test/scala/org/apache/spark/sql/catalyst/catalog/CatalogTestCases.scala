@@ -544,9 +544,11 @@ abstract class CatalogTestUtils {
     CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)
   }
 
-  def newTable(name: String, db: String): CatalogTable = {
+  def newTable(name: String, db: String): CatalogTable = newTable(name, Some(db))
+
+  def newTable(name: String, database: Option[String] = None): CatalogTable = {
     CatalogTable(
-      name = TableIdentifier(name, Some(db)),
+      name = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL_TABLE,
       storage = storageFormat,
       schema = Seq(CatalogColumn("col1", "int"), CatalogColumn("col2", "string")),

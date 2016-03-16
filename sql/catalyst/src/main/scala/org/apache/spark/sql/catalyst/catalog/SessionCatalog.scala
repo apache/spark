@@ -80,6 +80,9 @@ class SessionCatalog(externalCatalog: ExternalCatalog) {
   def getCurrentDatabase: String = currentDb
 
   def setCurrentDatabase(db: String): Unit = {
+    if (!databaseExists(db)) {
+      throw new AnalysisException(s"cannot set current database to non-existent '$db'")
+    }
     currentDb = db
   }
 
@@ -223,7 +226,7 @@ class SessionCatalog(externalCatalog: ExternalCatalog) {
    */
   def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
     val dbTables =
-      externalCatalog.listTables(db, pattern).map { t => TableIdentifier(t, Some(currentDb)) }
+      externalCatalog.listTables(db, pattern).map { t => TableIdentifier(t, Some(db)) }
     val regex = pattern.replaceAll("\\*", ".*").r
     val _tempTables = tempTables.keys().asScala
       .filter { t => regex.pattern.matcher(t).matches() }

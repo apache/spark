@@ -69,19 +69,20 @@ class InMemoryCatalog extends ExternalCatalog {
 
   private def requireFunctionExists(db: String, funcName: String): Unit = {
     if (!existsFunction(db, funcName)) {
-      throw new AnalysisException(s"Function $funcName does not exist in $db database")
+      throw new AnalysisException(s"Function '$funcName' does not exist in database '$db'")
     }
   }
 
   private def requireTableExists(db: String, table: String): Unit = {
     if (!existsTable(db, table)) {
-      throw new AnalysisException(s"Table $table does not exist in $db database")
+      throw new AnalysisException(s"Table '$table' does not exist in database '$db'")
     }
   }
 
   private def requirePartitionExists(db: String, table: String, spec: TablePartitionSpec): Unit = {
     if (!existsPartition(db, table, spec)) {
-      throw new AnalysisException(s"Partition does not exist in database $db table $table: $spec")
+      throw new AnalysisException(
+        s"Partition does not exist in database '$db' table '$table': '$spec'")
     }
   }
 
@@ -94,7 +95,7 @@ class InMemoryCatalog extends ExternalCatalog {
       ignoreIfExists: Boolean): Unit = synchronized {
     if (catalog.contains(dbDefinition.name)) {
       if (!ignoreIfExists) {
-        throw new AnalysisException(s"Database ${dbDefinition.name} already exists.")
+        throw new AnalysisException(s"Database '${dbDefinition.name}' already exists.")
       }
     } else {
       catalog.put(dbDefinition.name, new DatabaseDesc(dbDefinition))
@@ -109,17 +110,17 @@ class InMemoryCatalog extends ExternalCatalog {
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
         if (catalog(db).tables.nonEmpty) {
-          throw new AnalysisException(s"Database $db is not empty. One or more tables exist.")
+          throw new AnalysisException(s"Database '$db' is not empty. One or more tables exist.")
         }
         if (catalog(db).functions.nonEmpty) {
-          throw new AnalysisException(s"Database $db is not empty. One or more functions exist.")
+          throw new AnalysisException(s"Database '$db' is not empty. One or more functions exist.")
         }
       }
       // Remove the database.
       catalog.remove(db)
     } else {
       if (!ignoreIfNotExists) {
-        throw new AnalysisException(s"Database $db does not exist")
+        throw new AnalysisException(s"Database '$db' does not exist")
       }
     }
   }
@@ -160,7 +161,7 @@ class InMemoryCatalog extends ExternalCatalog {
     val table = tableDefinition.name.table
     if (existsTable(db, table)) {
       if (!ignoreIfExists) {
-        throw new AnalysisException(s"Table $table already exists in $db database")
+        throw new AnalysisException(s"Table '$table' already exists in database '$db'")
       }
     } else {
       catalog(db).tables.put(table, new TableDesc(tableDefinition))
@@ -224,8 +225,8 @@ class InMemoryCatalog extends ExternalCatalog {
       val dupSpecs = parts.collect { case p if existingParts.contains(p.spec) => p.spec }
       if (dupSpecs.nonEmpty) {
         val dupSpecsStr = dupSpecs.mkString("\n===\n")
-        throw new AnalysisException(
-          s"The following partitions already exist in database $db table $table:\n$dupSpecsStr")
+        throw new AnalysisException("The following partitions already exist in database " +
+          s"'$db' table '$table':\n$dupSpecsStr")
       }
     }
     parts.foreach { p => existingParts.put(p.spec, p) }
@@ -242,8 +243,8 @@ class InMemoryCatalog extends ExternalCatalog {
       val missingSpecs = partSpecs.collect { case s if !existingParts.contains(s) => s }
       if (missingSpecs.nonEmpty) {
         val missingSpecsStr = missingSpecs.mkString("\n===\n")
-        throw new AnalysisException(
-          s"The following partitions do not exist in database $db table $table:\n$missingSpecsStr")
+        throw new AnalysisException("The following partitions do not exist in database " +
+          s"'$db' table '$table':\n$missingSpecsStr")
       }
     }
     partSpecs.foreach(existingParts.remove)
@@ -295,7 +296,7 @@ class InMemoryCatalog extends ExternalCatalog {
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
     if (existsFunction(db, func.name.funcName)) {
-      throw new AnalysisException(s"Function $func already exists in $db database")
+      throw new AnalysisException(s"Function '$func' already exists in '$db' database")
     } else {
       catalog(db).functions.put(func.name.funcName, func)
     }
