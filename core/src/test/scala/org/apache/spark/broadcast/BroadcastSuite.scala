@@ -136,7 +136,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     intercept[IllegalArgumentException] { sc.broadcast(rdd) }
     sc.stop()
   }
-  
+
   /**
    * Verify the persistence of state associated with an TorrentBroadcast in a local-cluster.
    *
