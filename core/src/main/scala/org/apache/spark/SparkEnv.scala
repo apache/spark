@@ -48,7 +48,7 @@ import org.apache.spark.util.{RpcUtils, Utils}
  * SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a SparkContext).
  */
 @DeveloperApi
-private[spark] class SparkEnv (
+class SparkEnv (
     val executorId: String,
     private[spark] val rpcEnv: RpcEnv,
     val serializer: Serializer,
