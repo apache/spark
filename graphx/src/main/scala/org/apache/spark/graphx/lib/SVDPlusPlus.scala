@@ -191,13 +191,13 @@ object SVDPlusPlus {
     g.unpersist()
     g = gJoinT3
 
-    // Convert DoubleMatrix to Array[Double]:
+    // Convert DoubleMatrix to Array[Double].
     val newVertices = g.vertices.mapValues(v => (v._1.toArray, v._2.toArray, v._3, v._4))
     (Graph(newVertices, g.edges), u)
   }
 
   /**
-   * Forces materialization of a Graph by count()ing its RDDs.
+   * Forces materialization of a Graph by counting its RDDs.
    */
   private def materialize(g: Graph[_, _]): Unit = {
     g.vertices.count()
