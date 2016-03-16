@@ -1225,7 +1225,7 @@ setMethod("[", signature(x = "DataFrame"),
             } else {
               if (class(i) != "Column") {
                 stop(paste0("Expressions other than filtering predicates are not supported ",
-                      "in the first parameter of subsetting operator [."))
+                      "in the first parameter of extract operator [ or subset() method."))
               }
               filter(x, i)
             }
