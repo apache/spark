@@ -130,6 +130,13 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     assert(thrown.getMessage.toLowerCase.contains("stopped"))
   }
 
+  test("Forbid broadcasting RDD directly") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    val rdd = sc.parallelize(1 to 4)
+    intercept[IllegalArgumentException] { sc.broadcast(rdd) }
+    sc.stop()
+  }
+
   /**
    * Verify the persistence of state associated with an TorrentBroadcast in a local-cluster.
    *
