@@ -499,6 +499,24 @@ class PersistenceTest(PySparkTestCase):
         except OSError:
             pass
 
+    def test_logistic_regression(self):
+        lr = LogisticRegression(maxIter=1)
+        path = tempfile.mkdtemp()
+        lr_path = path + "/logreg"
+        lr.save(lr_path)
+        lr2 = LogisticRegression.load(lr_path)
+        self.assertEqual(lr2.uid, lr2.maxIter.parent,
+                         "Loaded LogisticRegression instance uid (%s) "
+                         "did not match Param's uid (%s)"
+                         % (lr2.uid, lr2.maxIter.parent))
+        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
+                         "Loaded LogisticRegression instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
     def test_pipeline_persistence(self):
         sqlContext = SQLContext(self.sc)
         temp_path = tempfile.mkdtemp()
