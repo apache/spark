@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.tailrec
 import scala.collection.Map
-import scala.collection.mutable.{HashMap, HashSet, Stack}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.existentials
@@ -407,8 +407,8 @@ class DAGScheduler(
    * Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet,
    * in topological order to ensure building ancestor stages first.
    */
-  private def getAncestorShuffleDependencies(rdd: RDD[_]): List[ShuffleDependency[_, _, _]] = {
-    val parents = new Stack[ShuffleDependency[_, _, _]]
+  private def getAncestorShuffleDependencies(rdd: RDD[_]): Seq[ShuffleDependency[_, _, _]] = {
+    val parents = new ArrayBuffer[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
@@ -424,13 +424,13 @@ class DAGScheduler(
         for (dep <- deps) {
           dep match {
             case shufDep: ShuffleDependency[_, _, _] =>
-              parents.push(shufDep)
+              parents += shufDep
             case _ =>
           }
         }
       } else {
         waitingForVisit.push(r)
-        for (dep <- deps) {
+        for (dep <- deps if !visited(dep.rdd)) {
           waitingForVisit.push(dep.rdd)
         }
       }
@@ -440,7 +440,7 @@ class DAGScheduler(
     while (waitingForVisit.nonEmpty) {
       visit(waitingForVisit.pop())
     }
-    parents.toList.reverse
+    parents
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
