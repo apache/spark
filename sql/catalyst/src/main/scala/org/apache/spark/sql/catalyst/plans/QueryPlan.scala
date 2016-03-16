@@ -280,12 +280,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * can do better should override this function.
    */
   def sameResult(plan: PlanType): Boolean = {
-    val canonicalizedLeft = this.canonicalized
-    val canonicalizedRight = plan.canonicalized
-    canonicalizedLeft.getClass == canonicalizedRight.getClass &&
-      canonicalizedLeft.children.size == canonicalizedRight.children.size &&
-      canonicalizedLeft.cleanArgs == canonicalizedRight.cleanArgs &&
-      (canonicalizedLeft.children, canonicalizedRight.children).zipped.forall(_ sameResult _)
+    val left = this.canonicalized
+    val right = plan.canonicalized
+    left.getClass == right.getClass &&
+      left.children.size == right.children.size &&
+      left.cleanArgs == right.cleanArgs &&
+      (left.children, right.children).zipped.forall(_ sameResult _)
   }
 
   /**

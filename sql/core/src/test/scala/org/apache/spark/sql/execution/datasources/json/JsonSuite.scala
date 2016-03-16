@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, StringWriter}
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
@@ -27,7 +28,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
-import org.scalactic.Tolerance._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -1096,7 +1096,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(result2(3) === "{\"f1\":{\"f11\":4,\"f12\":true},\"f2\":{\"D4\":2147483644}}")
 
     val jsonDF = sqlContext.read.json(primitiveFieldAndType)
-    val primTable = sqlContext.read.json(jsonDF.toJSON)
+    val primTable = sqlContext.read.json(jsonDF.toJSON.rdd)
     primTable.registerTempTable("primitiveTable")
     checkAnswer(
         sql("select * from primitiveTable"),
@@ -1109,7 +1109,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
 
     val complexJsonDF = sqlContext.read.json(complexFieldAndType1)
-    val compTable = sqlContext.read.json(complexJsonDF.toJSON)
+    val compTable = sqlContext.read.json(complexJsonDF.toJSON.rdd)
     compTable.registerTempTable("complexTable")
     // Access elements of a primitive array.
     checkAnswer(
@@ -1292,7 +1292,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val constantValues =
       Seq(
-        "a string in binary".getBytes("UTF-8"),
+        "a string in binary".getBytes(StandardCharsets.UTF_8),
         null,
         true,
         1.toByte,

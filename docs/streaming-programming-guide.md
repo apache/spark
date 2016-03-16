@@ -594,7 +594,7 @@ data from a source and stores it in Spark's memory for processing.
 Spark Streaming provides two categories of built-in streaming sources.
 
 - *Basic sources*: Sources directly available in the StreamingContext API.
-  Examples: file systems, socket connections, and Akka actors.
+  Examples: file systems, and socket connections.
 - *Advanced sources*: Sources like Kafka, Flume, Kinesis, Twitter, etc. are available through
   extra utility classes. These require linking against extra dependencies as discussed in the
   [linking](#linking) section.
@@ -631,7 +631,7 @@ as well as to run the receiver(s).
 We have already taken a look at the `ssc.socketTextStream(...)` in the [quick example](#a-quick-example)
 which creates a DStream from text
 data received over a TCP socket connection. Besides sockets, the StreamingContext API provides
-methods for creating DStreams from files and Akka actors as input sources.
+methods for creating DStreams from files as input sources.
 
 - **File Streams:** For reading data from files on any file system compatible with the HDFS API (that is, HDFS, S3, NFS, etc.), a DStream can be created as:
 
@@ -658,17 +658,12 @@ methods for creating DStreams from files and Akka actors as input sources.
 
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
-- **Streams based on Custom Actors:** DStreams can be created with data streams received through Akka
-  actors by using `AkkaUtils.createStream(ssc, actorProps, actor-name)`. See the [Custom Receiver
-  Guide](streaming-custom-receivers.html) for more details.
-
-  <span class="badge" style="background-color: grey">Python API</span> Since actors are available only in the Java and Scala
-  libraries, `AkkaUtils.createStream` is not available in the Python API.
+- **Streams based on Custom Receivers:** DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
+  Guide](streaming-custom-receivers.html) and [DStream Akka](https://github.com/spark-packages/dstream-akka) for more details.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
-For more details on streams from sockets, files, and actors,
-see the API documentations of the relevant functions in
+For more details on streams from sockets and files, see the API documentations of the relevant functions in
 [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) for
 Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
 for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) for Python.
@@ -2439,13 +2434,8 @@ that can be called to store the data in Spark. So, to migrate your custom networ
 BlockGenerator object (does not exist any more in Spark 1.0 anyway), and use `store(...)` methods on
 received data.
 
-**Actor-based Receivers**: Data could have been received using any Akka Actors by extending the actor class with
-`org.apache.spark.streaming.receivers.Receiver` trait. This has been renamed to
-[`org.apache.spark.streaming.receiver.ActorHelper`](api/scala/index.html#org.apache.spark.streaming.receiver.ActorHelper)
-and the `pushBlock(...)` methods to store received data has been renamed to `store(...)`. Other helper classes in
-the `org.apache.spark.streaming.receivers` package were also moved
-to [`org.apache.spark.streaming.receiver`](api/scala/index.html#org.apache.spark.streaming.receiver.package)
-package and renamed for better clarity.
+**Actor-based Receivers**: The Actor-based Receiver APIs have been moved to [DStream Akka](https://github.com/spark-packages/dstream-akka).
+Please refer to the project for more details.
 
 ***************************************************************************************************
 ***************************************************************************************************

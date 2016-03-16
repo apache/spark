@@ -18,7 +18,7 @@
 package org.apache.spark.streaming;
 
 import java.io.*;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -1866,7 +1866,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         @Override
         public Iterable<String> call(InputStream in) throws IOException {
           List<String> out = new ArrayList<>();
-          try (BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
+          try (BufferedReader reader = new BufferedReader(
+              new InputStreamReader(in, StandardCharsets.UTF_8))) {
             for (String line; (line = reader.readLine()) != null;) {
               out.add(line);
             }
@@ -1930,7 +1931,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   private static List<List<String>> fileTestPrepare(File testDir) throws IOException {
     File existingFile = new File(testDir, "0");
-    Files.write("0\n", existingFile, Charset.forName("UTF-8"));
+    Files.write("0\n", existingFile, StandardCharsets.UTF_8);
     Assert.assertTrue(existingFile.setLastModified(1000));
     Assert.assertEquals(1000, existingFile.lastModified());
     return Arrays.asList(Arrays.asList("0"));

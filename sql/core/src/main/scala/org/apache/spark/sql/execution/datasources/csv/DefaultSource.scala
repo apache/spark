@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.nio.charset.Charset
+import java.nio.charset.{Charset, StandardCharsets}
 
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -28,7 +28,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.datasources.CompressionCodecs
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -103,7 +103,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      inputFiles: Array[FileStatus],
+      inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
     // TODO: Filter before calling buildInternalScan.
@@ -113,13 +113,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val pathsString = csvFiles.map(_.getPath.toUri.toString)
     val header = dataSchema.fields.map(_.name)
     val tokenizedRdd = tokenRdd(sqlContext, csvOptions, header, pathsString)
-    val external = CSVRelation.parseCsv(
+    val rows = CSVRelation.parseCsv(
       tokenizedRdd, dataSchema, requiredColumns, csvFiles, sqlContext, csvOptions)
 
-    // TODO: Generate InternalRow in parseCsv
-    val outputSchema = StructType(requiredColumns.map(c => dataSchema.find(_.name == c).get))
-    val encoder = RowEncoder(outputSchema)
-    external.map(encoder.toRow)
+    val requiredDataSchema = StructType(requiredColumns.map(c => dataSchema.find(_.name == c).get))
+    rows.mapPartitions { iterator =>
+      val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
+      iterator.map(unsafeProjection)
+    }
   }
 
 
@@ -161,7 +162,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sqlContext: SQLContext,
       options: CSVOptions,
       location: String): RDD[String] = {
-    if (Charset.forName(options.charset) == Charset.forName("UTF-8")) {
+    if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
       sqlContext.sparkContext.textFile(location)
     } else {
       val charset = options.charset

@@ -55,17 +55,17 @@ class GroupedData protected[sql](
 
     groupType match {
       case GroupedData.GroupByType =>
-        DataFrame(
+        Dataset.newDataFrame(
           df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case GroupedData.RollupType =>
-        DataFrame(
+        Dataset.newDataFrame(
           df.sqlContext, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.CubeType =>
-        DataFrame(
+        Dataset.newDataFrame(
           df.sqlContext, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
-        DataFrame(
+        Dataset.newDataFrame(
           df.sqlContext, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
     }
   }
