@@ -108,7 +108,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan) = {
       val sortMergeJoin =
-        joins.SortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan)
+        joins.SortMergeJoin(leftKeys, rightKeys, Inner, boundCondition, leftPlan, rightPlan)
       EnsureRequirements(sqlContext.sessionState.conf).apply(sortMergeJoin)
     }
 

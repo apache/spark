@@ -51,7 +51,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       case j: BroadcastNestedLoopJoin => j
       case j: BroadcastLeftSemiJoinHash => j
       case j: SortMergeJoin => j
-      case j: SortMergeOuterJoin => j
     }
 
     assert(operators.size === 1)
@@ -83,13 +82,13 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
         ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
         ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin]),
-        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeOuterJoin]),
+        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeJoin]),
         ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
           classOf[SortMergeJoin]),
         ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-          classOf[SortMergeOuterJoin]),
+          classOf[SortMergeJoin]),
         ("SELECT * FROM testData full outer join testData2 ON key = a",
-          classOf[SortMergeOuterJoin]),
+          classOf[SortMergeJoin]),
         ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
           classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
