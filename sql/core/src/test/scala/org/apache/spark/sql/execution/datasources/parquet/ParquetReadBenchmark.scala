@@ -359,38 +359,26 @@ object ParquetReadBenchmark {
         }
 
         /*
-        =======================
-        Fraction of NULLs: 0
-        =======================
+        Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+        String with Nulls Scan (0%):        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        -------------------------------------------------------------------------------------------
+        SQL Parquet Vectorized                   1229 / 1648          8.5         117.2       1.0X
+        PR Vectorized                             833 /  846         12.6          79.4       1.5X
+        PR Vectorized (Null Filtering)            732 /  782         14.3          69.8       1.7X
 
         Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-        String with Nulls Scan:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        String with Nulls Scan (50%):       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         -------------------------------------------------------------------------------------------
-        SQL Parquet Vectorized                   1164 / 1333          9.0         111.0       1.0X
-        PR Vectorized                             809 /  882         13.0          77.1       1.4X
-        PR Vectorized (Null Filtering)            723 /  800         14.5          69.0       1.6X
-
-        =======================
-        Fraction of NULLs: 0.5
-        =======================
+        SQL Parquet Vectorized                    995 / 1053         10.5          94.9       1.0X
+        PR Vectorized                             732 /  772         14.3          69.8       1.4X
+        PR Vectorized (Null Filtering)            725 /  790         14.5          69.1       1.4X
 
         Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-        String with Nulls Scan:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        String with Nulls Scan (95%):       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         -------------------------------------------------------------------------------------------
-        SQL Parquet Vectorized                    983 / 1001         10.7          93.8       1.0X
-        PR Vectorized                             699 /  728         15.0          66.7       1.4X
-        PR Vectorized (Null Filtering)            722 /  746         14.5          68.9       1.4X
-
-        =======================
-        Fraction of NULLs: 0.95
-        =======================
-
-        Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-        String with Nulls Scan:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-        -------------------------------------------------------------------------------------------
-        SQL Parquet Vectorized                    332 /  343         31.6          31.6       1.0X
-        PR Vectorized                             177 /  180         59.1          16.9       1.9X
-        PR Vectorized (Null Filtering)            168 /  175         62.4          16.0       2.0X
+        SQL Parquet Vectorized                    326 /  333         32.2          31.1       1.0X
+        PR Vectorized                             190 /  200         55.1          18.2       1.7X
+        PR Vectorized (Null Filtering)            168 /  172         62.2          16.1       1.9X
         */
 
         benchmark.run()

@@ -16,12 +16,10 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
-import java.util.Vector;
+import java.util.*;
 
 import org.apache.commons.lang.NotImplementedException;
+
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
@@ -59,7 +57,7 @@ public final class ColumnarBatch {
   private final boolean[] filteredRows;
 
   // Column indices that cannot have null values.
-  private final Vector<Integer> nullFilteredColumns;
+  private final Set<Integer> nullFilteredColumns;
 
   // Total number of rows that have been filtered.
   private int numRowsFiltered = 0;
@@ -291,7 +289,7 @@ public final class ColumnarBatch {
    * more of their attributes are part of a non-nullable column.
    */
   public void setNumRows(int numRows) {
-    assert (numRows <= this.capacity);
+    assert(numRows <= this.capacity);
     this.numRows = numRows;
 
     for (int ordinal : nullFilteredColumns) {
@@ -378,7 +376,7 @@ public final class ColumnarBatch {
     this.schema = schema;
     this.capacity = maxRows;
     this.columns = new ColumnVector[schema.size()];
-    this.nullFilteredColumns = new Vector<>();
+    this.nullFilteredColumns = new HashSet<>();
     this.filteredRows = new boolean[maxRows];
 
     for (int i = 0; i < schema.fields().length; ++i) {
