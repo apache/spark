@@ -72,6 +72,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       LimitPushDown,
       ColumnPruning,
       EliminateOperators,
+      InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -79,7 +80,6 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       CombineLimits,
       CombineUnions,
       // Constant folding and strength reduction
-      InferFiltersFromConstraints,
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
@@ -607,18 +607,15 @@ object NullPropagation extends Rule[LogicalPlan] {
 }
 
 /**
- * Eliminate reading unnecessary values if they are not required for correctness (and can help in
- * optimizing the query) by inserting relevant filters in the query plan based on an operator's
- * data constraints. These filters are currently inserted to the existing conditions in the Filter
+ * Generate a list of additional filters from an operator's existing constraint but remove those
+ * that are either already part of the operator's condition or are part of the operator's child
+ * constraints. These filters are currently inserted to the existing conditions in the Filter
  * operators and on either side of Join operators.
  *
  * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
  * LeftSemi joins.
  */
 object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
-  // We generate a list of additional filters from the operator's existing constraint but remove
-  // those that are either already part of the operator's condition or are part of the operator's
-  // child constraints.
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
       val newFilters = filter.constraints --
@@ -630,10 +627,12 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       }
 
     case join @ Join(left, right, joinType, conditionOpt) =>
-      val additionalConstraints = join.constraints.filter { c =>
-        // Only consider constraints that can be pushed down to either the left or the right child
-        c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)} --
-        (left.constraints ++ right.constraints)
+      // Only consider constraints that can be pushed down completely to either the left or the
+      // right child
+      val constraints = join.constraints.filter { c =>
+        c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)}
+      // Remove those constraints that are already enforced by either the left or the right child
+      val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
       val newConditionOpt = conditionOpt match {
         case Some(condition) =>
           val newFilters = additionalConstraints -- splitConjunctivePredicates(condition)
