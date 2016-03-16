@@ -135,12 +135,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("test inferring decimals") {
     val result = sqlContext.read
       .format("csv")
+      .option("comment", "~")
       .option("header", "true")
       .option("inferSchema", "true")
       .load(testFile(decimalFile))
-
     val expectedSchema = StructType(List(
-      StructField("decimal", DecimalType(34, 0), nullable = true)))
+      StructField("decimal-precision", DecimalType(20, 0), nullable = true),
+      StructField("decimal-scale", DecimalType(18, 17), nullable = true)))
     assert(result.schema === expectedSchema)
   }
 

@@ -111,16 +111,17 @@ private[csv] object CSVInferSchema {
   private def tryParseDouble(field: String): DataType = {
     val doubleTry = allCatch opt field.toDouble
     // If `doubleTry` is successful, then it should be successful
-    // to cast this to `BigDecimal`. So, it does not handle the case that it fails
-    // to cast to `BigDecimal` below. Also, it is okay to make this `String`
-    // and then make it a `BigDecimal`. Otherwise, this leads to precision loss.
+    // to cast it to `BigDecimal`. So, it does not handle the case that it fails
+    // to cast this to `BigDecimal` below. Also, this should use `BigDecimal.valueOf()`
+    // so that this does not lose precision (by the real double value). This identically
+    // works with `new BigDecimal(double.toString)`.
     // For example,
-    //   Option(new BigDecimal("1.23112331231231231231E13")) becomes Some(12311233123123.1231231)
-    //   but Option(new BigDecimal(1.23112331231231231231E13)) becomes
-    //   Some(12311233123123.123046875).
-    val roundtripTry = doubleTry.map(double => new BigDecimal(double.toString))
+    //   new BigDecimal("1.23112331231231231231E13") becomes 12311233123123.1231231
+    //   but new BigDecimal(1.23112331231231231231E13) becomes
+    //   12311233123123.123046875.
+    val roundtripTry = doubleTry.map(BigDecimal.valueOf)
     val decimalTryOther = allCatch opt new BigDecimal(field)
-    // This compares two `BigDecimal` but one of them is casted back from double.
+    // This compares two `BigDecimal`s but one of them is casted back from double.
     // So, if the roundtrip leads to precision loss, then this means casting to double
     // loses some values.
     if (roundtripTry == decimalTryOther && doubleTry.isDefined) {
@@ -176,13 +177,9 @@ private[csv] object CSVInferSchema {
     case (StringType, t2) => Some(StringType)
     case (t1, StringType) => Some(StringType)
 
-    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+    case (t1: NumericType, t2: DecimalType) if t2.isWiderThan(t1) =>
       Some(t2)
-    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
-      Some(t1)
-    case (t1: DecimalType, t2: DecimalType) if t2.isWiderThan(t1) =>
-      Some(t2)
-    case (t1: DecimalType, t2: DecimalType) if t1.isWiderThan(t2) =>
+    case (t1: DecimalType, t2: NumericType) if t1.isWiderThan(t2) =>
       Some(t1)
 
     // Promote numeric types to the highest of the two and all numeric types to unlimited decimal
