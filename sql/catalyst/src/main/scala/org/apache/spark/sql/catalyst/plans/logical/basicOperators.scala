@@ -259,25 +259,25 @@ case class Join(
     condition: Option[Expression])
   extends BinaryNode with PredicateHelper {
 
-  private def notNullsFromCondition: Set[Expression] =
+  private lazy val notNullsFromCondition: Set[Expression] =
     constructIsNotNullConstraints(condition.toSet.flatMap(splitConjunctivePredicates))
       .filter(_.references.nonEmpty)
 
-  private def leftNotNulls = left.constraints.union(notNullsFromCondition)
+  private lazy val leftNotNulls = left.constraints.union(notNullsFromCondition)
     .filter(_.isInstanceOf[IsNotNull])
     .filter(_.references.subsetOf(left.outputSet))
     .flatMap(_.references.map(_.exprId))
 
-  private def notNullLeftOutput = left.output.map { o =>
+  private lazy val notNullLeftOutput = left.output.map { o =>
     if (leftNotNulls.contains(o.exprId)) o.withNullability(false) else o
   }
 
-  private def rightNotNulls = right.constraints.union(notNullsFromCondition)
+  private lazy val rightNotNulls = right.constraints.union(notNullsFromCondition)
     .filter(_.isInstanceOf[IsNotNull])
     .filter(_.references.subsetOf(right.outputSet))
     .flatMap(_.references.map(_.exprId))
 
-  private def notNullRightOutput = right.output.map { o =>
+  private lazy val notNullRightOutput = right.output.map { o =>
     if (rightNotNulls.contains(o.exprId)) o.withNullability(false) else o
   }
 
