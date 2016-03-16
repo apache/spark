@@ -183,11 +183,7 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
     } else if (fraction >= 1.0) {
       1
     } else if (fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
-      if (gapSampling.sample()) {
-        1
-      } else {
-        0
-      }
+      gapSampling.sample()
     } else {
       if (rng.nextDouble() <= fraction) {
         1
@@ -343,14 +339,14 @@ class GapSampling(
 
   private val lnq = math.log1p(-f)
 
-  /** Return true if the next item should be sampled. Otherwise, return false. */
-  def sample(): Boolean = {
+  /** Return 1 if the next item should be sampled. Otherwise, return 0. */
+  def sample(): Int = {
     if (countForDropping > 0) {
       countForDropping -= 1
-      false
+      0
     } else {
       advance()
-      true
+      1
     }
   }
 
@@ -496,4 +492,7 @@ class GapSamplingReplacement(
 
   /** advance to first sample as part of object construction. */
   advance()
+  // Attempting to invoke this closer to the top with other object initialization
+  // was causing it to break in strange ways, so I'm invoking it last, which seems to
+  // work reliably.
 }
