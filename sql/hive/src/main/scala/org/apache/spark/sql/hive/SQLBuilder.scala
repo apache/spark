@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.hive.execution.HiveScriptIOSchema
 import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
 
 /**
@@ -184,6 +185,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         p.partitionExpressions.map(_.sql).mkString(", ")
       )
 
+    case p: ScriptTransformation =>
+      scriptTransformationToSQL(p)
+
     case OneRowRelation =>
       ""
 
@@ -204,6 +208,31 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       "SELECT",
       if (isDistinct) "DISTINCT" else "",
       plan.projectList.map(_.sql).mkString(", "),
+      if (plan.child == OneRowRelation) "" else "FROM",
+      toSQL(plan.child)
+    )
+  }
+
+  private def scriptTransformationToSQL(plan: ScriptTransformation): String = {
+    val ioSchema = plan.ioschema.asInstanceOf[HiveScriptIOSchema]
+    val inputRowFormatSQL = ioSchema.inputRowFormatSQL.getOrElse(
+      throw new UnsupportedOperationException(
+        s"unsupported row format ${ioSchema.inputRowFormat}"))
+    val outputRowFormatSQL = ioSchema.outputRowFormatSQL.getOrElse(
+      throw new UnsupportedOperationException(
+        s"unsupported row format ${ioSchema.outputRowFormat}"))
+
+    val outputSchema = plan.output.map { attr =>
+      s"${attr.sql} ${attr.dataType.simpleString}"
+    }.mkString(", ")
+
+    build(
+      "SELECT TRANSFORM",
+      "(" + plan.input.map(_.sql).mkString(", ") + ")",
+      inputRowFormatSQL,
+      s"USING \'${plan.script}\'",
+      "AS (" + outputSchema + ")",
+      outputRowFormatSQL,
       if (plan.child == OneRowRelation) "" else "FROM",
       toSQL(plan.child)
     )

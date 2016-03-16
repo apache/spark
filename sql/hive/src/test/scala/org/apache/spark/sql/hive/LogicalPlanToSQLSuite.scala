@@ -383,6 +383,63 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
   }
 
+  test("script transformation - schemaless") {
+    checkHiveQl("SELECT TRANSFORM (a, b, c, d) USING 'cat' FROM parquet_t2")
+    checkHiveQl("SELECT TRANSFORM (*) USING 'cat' FROM parquet_t2")
+  }
+
+  test("script transformation - alias list") {
+    checkHiveQl("SELECT TRANSFORM (a, b, c, d) USING 'cat' AS (d1, d2, d3, d4) FROM parquet_t2")
+  }
+
+  test("script transformation - alias list with type") {
+    checkHiveQl(
+      """FROM
+        |(FROM parquet_t1 SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
+        |SELECT thing1 + 1
+      """.stripMargin)
+  }
+
+  test("script transformation - row format delimited clause with only one format property") {
+    checkHiveQl(
+      """SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+        |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("script transformation - row format delimited clause with multiple format properties") {
+    checkHiveQl(
+      """SELECT TRANSFORM (key)
+        |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\t'
+        |USING 'cat' AS (tKey)
+        |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\t'
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("script transformation - row format serde clauses with SERDEPROPERTIES") {
+    checkHiveQl(
+      """SELECT TRANSFORM (key, value)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |WITH SERDEPROPERTIES('field.delim' = '|')
+        |USING 'cat' AS (tKey, tValue)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |WITH SERDEPROPERTIES('field.delim' = '|')
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("script transformation - row format serde clauses without SERDEPROPERTIES") {
+    checkHiveQl(
+      """SELECT TRANSFORM (key, value)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |USING 'cat' AS (tKey, tValue)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
   test("plans with non-SQL expressions") {
     sqlContext.udf.register("foo", (_: Int) * 2)
     intercept[UnsupportedOperationException](new SQLBuilder(sql("SELECT foo(id) FROM t0")).toSQL)
