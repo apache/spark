@@ -179,26 +179,6 @@ abstract class AbstractCommandBuilder {
       addToClassPath(cp, join(File.separator, jarsDir, "*"));
     }
 
-    // Datanucleus jars must be included on the classpath. Datanucleus jars do not work if only
-    // included in the uber jar as plugin.xml metadata is lost. Both sbt and maven will populate
-    // "lib_managed/jars/" with the datanucleus jars when Spark is built with Hive
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
-    } else {
-      libdir = new File(sparkHome, "lib_managed/jars");
-    }
-
-    if (libdir.isDirectory()) {
-      for (File jar : libdir.listFiles()) {
-        if (jar.getName().startsWith("datanucleus-")) {
-          addToClassPath(cp, jar.getAbsolutePath());
-        }
-      }
-    } else {
-      checkState(isTesting, "Library directory '%s' does not exist.", libdir.getAbsolutePath());
-    }
-
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
@@ -312,16 +292,16 @@ abstract class AbstractCommandBuilder {
   }
 
   private String findJarsDir(boolean failIfNotFound) {
-    // TODO: change to the correct directory once the assembly build is changed.
     String sparkHome = getSparkHome();
     File libdir;
     if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
+      libdir = new File(sparkHome, "jars");
       checkState(!failIfNotFound || libdir.isDirectory(),
         "Library directory '%s' does not exist.",
         libdir.getAbsolutePath());
     } else {
-      libdir = new File(sparkHome, String.format("assembly/target/scala-%s", getScalaVersion()));
+      libdir = new File(sparkHome,
+        String.format("assembly/target/scala-%s/jars", getScalaVersion()));
       if (!libdir.isDirectory()) {
         checkState(!failIfNotFound,
           "Library directory '%s' does not exist; make sure Spark is built.",

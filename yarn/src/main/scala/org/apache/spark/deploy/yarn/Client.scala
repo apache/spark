@@ -432,9 +432,6 @@ private[spark] class Client(
      *
      * Note that the archive cannot be a "local" URI. If none of the above settings are found,
      * then upload all files found in $SPARK_HOME/jars.
-     *
-     * TODO: currently the code looks in $SPARK_HOME/lib while the work to replace assemblies
-     * with a directory full of jars is ongoing.
      */
     val sparkArchive = sparkConf.get(SPARK_ARCHIVE)
     if (sparkArchive.isDefined) {
@@ -468,7 +465,7 @@ private[spark] class Client(
           // No configuration, so fall back to uploading local jar files.
           logWarning(s"Neither ${SPARK_JARS.key} nor ${SPARK_ARCHIVE.key} is set, falling back " +
             "to uploading libraries under SPARK_HOME.")
-          val jarsDir = new File(sparkConf.getenv("SPARK_HOME"), "lib")
+          val jarsDir = new File(sparkConf.getenv("SPARK_HOME"), "jars")
           if (jarsDir.isDirectory()) {
             jarsDir.listFiles().foreach { f =>
               if (f.isFile() && f.getName().toLowerCase().endsWith(".jar")) {

@@ -56,11 +56,12 @@ object BuildCommons {
     Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
-    Seq("assembly", "network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
+  val assemblyProjects@Seq(networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
+    Seq("network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
 
-  val copyJarsProjects@Seq(examples) = Seq("examples").map(ProjectRef(buildLocation, _))
+  val copyJarsProjects@Seq(assembly, examples) = Seq("assembly", "examples")
+    .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
   // Root project.
@@ -517,8 +518,6 @@ object Assembly {
 
   val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
 
-  val deployDatanucleusJars = taskKey[Unit]("Deploy datanucleus jars to the spark/lib_managed/jars directory")
-
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
     hadoopVersion := {
@@ -537,27 +536,13 @@ object Assembly {
       s"${mName}-test-${v}.jar"
     },
     mergeStrategy in assembly := {
-      case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
       case "log4j.properties"                                  => MergeStrategy.discard
       case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
-    },
-    deployDatanucleusJars := {
-      val jars: Seq[File] = (fullClasspath in assembly).value.map(_.data)
-        .filter(_.getPath.contains("org.datanucleus"))
-      var libManagedJars = new File(BuildCommons.sparkHome, "lib_managed/jars")
-      libManagedJars.mkdirs()
-      jars.foreach { jar =>
-        val dest = new File(libManagedJars, jar.getName)
-        if (!dest.exists()) {
-          Files.copy(jar.toPath, dest.toPath)
-        }
-      }
-    },
-    assembly <<= assembly.dependsOn(deployDatanucleusJars)
+    }
   )
 }
 
