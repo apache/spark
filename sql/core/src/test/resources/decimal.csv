@@ -1,4 +1,4 @@
-~The first two rows are integers or double. and only the last rows are decimal
+~The first two rows are integers or doubles. and only the last rows are a decimal
 decimal-precision,decimal-scale
 1,1
 1,0.01
