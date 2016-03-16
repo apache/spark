@@ -21,9 +21,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 
-
 /**
- * Component that is responsible for selecting which [[Serializer]] to use for shuffles.
+ * Component that selects which [[Serializer]] to use for shuffles.
  */
 private[spark] class SerializerManager(defaultSerializer: Serializer, conf: SparkConf) {
 
@@ -59,12 +58,13 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
     }
   }
 
+  /**
+   * Pick the best serializer for shuffling an RDD of key-value pairs.
+   */
   def getSerializer(keyClassTag: ClassTag[_], valueClassTag: ClassTag[_]): Serializer = {
     if (canUseKryo(keyClassTag) && canUseKryo(valueClassTag)) {
-      println(s"USING Kryo for $keyClassTag $valueClassTag")
       kryoSerializer
     } else {
-      println(s"Not using Kryo for $keyClassTag $valueClassTag")
       defaultSerializer
     }
   }
