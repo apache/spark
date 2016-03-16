@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 import scala.language.postfixOps
 import scala.util.Random
@@ -343,7 +344,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
     checkAnswer(
-      sqlContext.range(2).limit(2147483638),
+      sqlContext.range(2).toDF().limit(2147483638),
       Row(0) :: Row(1) :: Nil
     )
   }
@@ -665,8 +666,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("showString: binary") {
     val df = Seq(
-      ("12".getBytes, "ABC.".getBytes),
-      ("34".getBytes, "12346".getBytes)
+      ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
+      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
     ).toDF()
     val expectedAnswer = """+-------+----------------+
                            ||     _1|              _2|
@@ -1311,7 +1312,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("reuse exchange") {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "2") {
-      val df = sqlContext.range(100)
+      val df = sqlContext.range(100).toDF()
       val join = df.join(df, "id")
       val plan = join.queryExecution.executedPlan
       checkAnswer(join, df)

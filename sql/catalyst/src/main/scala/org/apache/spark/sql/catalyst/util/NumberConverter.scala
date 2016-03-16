@@ -66,7 +66,7 @@ object NumberConverter {
    * negative digit is found, ignore the suffix starting there.
    *
    * @param radix  must be between MIN_RADIX and MAX_RADIX
-   * @param fromPos is the first element that should be conisdered
+   * @param fromPos is the first element that should be considered
    * @return the result should be treated as an unsigned 64-bit integer.
    */
   private def encode(radix: Int, fromPos: Int): Long = {
