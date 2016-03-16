@@ -27,10 +27,15 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 class ChunkedByteBufferSuite extends SparkFunSuite {
 
-  test("must have at least one chunk") {
-    intercept[IllegalArgumentException] {
-      new ChunkedByteBuffer(Array.empty[ByteBuffer])
-    }
+  test("no chunks") {
+    val emptyChunkedByteBuffer = new ChunkedByteBuffer(Array.empty[ByteBuffer])
+    assert(emptyChunkedByteBuffer.limit === 0)
+    assert(emptyChunkedByteBuffer.getChunks().isEmpty)
+    assert(emptyChunkedByteBuffer.toArray === Array.empty)
+    assert(emptyChunkedByteBuffer.toByteBuffer.capacity() === 0)
+    assert(emptyChunkedByteBuffer.toNetty.capacity() === 0)
+    emptyChunkedByteBuffer.toInputStream(dispose = false).close()
+    emptyChunkedByteBuffer.toInputStream(dispose = true).close()
   }
 
   test("chunks must be non-empty") {

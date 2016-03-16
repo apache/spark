@@ -29,7 +29,6 @@ import org.apache.spark.storage.BlockManager
 
 private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks != null, "chunks must not be null")
-  require(chunks.nonEmpty, "Cannot create a ChunkedByteBuffer with no chunks")
   require(chunks.forall(_.limit() > 0), "chunks must be non-empty")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
@@ -110,7 +109,13 @@ private class ChunkedByteBufferInputStream(
   extends InputStream {
 
   private[this] var chunks = chunkedByteBuffer.getChunks().iterator
-  private[this] var currentChunk: ByteBuffer = chunks.next()
+  private[this] var currentChunk: ByteBuffer = {
+    if (chunks.hasNext) {
+      chunks.next()
+    } else {
+      null
+    }
+  }
 
   override def read(): Int = {
     if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
