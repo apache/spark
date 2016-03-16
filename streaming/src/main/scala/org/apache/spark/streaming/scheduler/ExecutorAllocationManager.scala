@@ -98,7 +98,9 @@ private[streaming] class ExecutorAllocationManager(
 
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     logInfo("onBatchCompleted called: " + batchCompleted)
-    batchCompleted.batchInfo.processingDelay.foreach(addBatchProcTime)
+    if (!batchCompleted.batchInfo.outputOperationInfos.values.exists(_.failureReason.nonEmpty)) {
+      batchCompleted.batchInfo.processingDelay.foreach(addBatchProcTime)
+    }
   }
 }
 
