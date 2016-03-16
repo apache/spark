@@ -50,6 +50,11 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
     Unpooled.wrappedBuffer(getChunks(): _*)
   }
 
+  /**
+   * Copy this buffer into a new byte array.
+   *
+   * @throws UnsupportedOperationException if this buffer's size exceeds the maximum array size.
+   */
   def toArray: Array[Byte] = {
     if (limit >= Integer.MAX_VALUE) {
       throw new UnsupportedOperationException(
@@ -61,9 +66,14 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
     byteChannel.getData
   }
 
+  /**
+   * Copy this buffer into a new ByteBuffer.
+   *
+   * @throws UnsupportedOperationException if this buffer's size exceeds the max ByteBuffer size.
+   */
   def toByteBuffer: ByteBuffer = {
     if (chunks.length == 1) {
-      chunks.head
+      chunks.head.duplicate()
     } else {
       ByteBuffer.wrap(toArray)
     }
