@@ -23,7 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -92,6 +92,9 @@ case class BroadcastHashJoin(
             rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow, resultProj, numOutputRows)
           }
 
+        case LeftSemi =>
+          hashSemiJoin(streamedIter, hashTable, numOutputRows)
+
         case x =>
           throw new IllegalArgumentException(
             s"BroadcastHashJoin should not take $x as the JoinType")
@@ -108,11 +111,13 @@ case class BroadcastHashJoin(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
-    if (joinType == Inner) {
-      codegenInner(ctx, input)
-    } else {
-      // LeftOuter and RightOuter
-      codegenOuter(ctx, input)
+    joinType match {
+      case Inner => codegenInner(ctx, input)
+      case LeftOuter | RightOuter => codegenOuter(ctx, input)
+      case LeftSemi => codegenSemi(ctx, input)
+      case x =>
+        throw new IllegalArgumentException(
+          s"BroadcastHashJoin should not take $x as the JoinType")
     }
   }
 
@@ -319,6 +324,70 @@ case class BroadcastHashJoin(
          |  $numOutput.add(1);
          |  ${consume(ctx, resultVars)}
          |}
+       """.stripMargin
+    }
+  }
+
+  /**
+   * Generates the code for left semi join.
+   */
+  private def codegenSemi(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
+    val matched = ctx.freshName("matched")
+    val buildVars = genBuildSideVars(ctx, matched)
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
+    val checkCondition = if (condition.isDefined) {
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      // filter the output via condition
+      ctx.currentVars = input ++ buildVars
+      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).gen(ctx)
+      s"""
+         |$eval
+         |${ev.code}
+         |if (${ev.isNull} || !${ev.value}) continue;
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
+      s"""
+         |// generate join key for stream side
+         |${keyEv.code}
+         |// find matches from HashedRelation
+         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+         |if ($matched == null) continue;
+         |$checkCondition
+         |$numOutput.add(1);
+         |${consume(ctx, input)}
+       """.stripMargin
+    } else {
+      val matches = ctx.freshName("matches")
+      val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
+      val i = ctx.freshName("i")
+      val size = ctx.freshName("size")
+      val found = ctx.freshName("found")
+      s"""
+         |// generate join key for stream side
+         |${keyEv.code}
+         |// find matches from HashRelation
+         |$bufferType $matches = $anyNull ? null : ($bufferType)$relationTerm.get(${keyEv.value});
+         |if ($matches == null) continue;
+         |int $size = $matches.size();
+         |boolean $found = false;
+         |for (int $i = 0; $i < $size; $i++) {
+         |  UnsafeRow $matched = (UnsafeRow) $matches.apply($i);
+         |  $checkCondition
+         |  $found = true;
+         |  break;
+         |}
+         |if (!$found) continue;
+         |$numOutput.add(1);
+         |${consume(ctx, input)}
        """.stripMargin
     }
   }
