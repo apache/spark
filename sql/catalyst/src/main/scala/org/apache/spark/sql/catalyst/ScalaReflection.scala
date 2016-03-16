@@ -476,11 +476,17 @@ object ScalaReflection extends ScalaReflection {
             // For non-primitives, we can just extract the object from the Option and then recurse.
             case other =>
               val className = getClassNameFromType(optType)
-              val classObj = getClassFromType(optType)
-              val optionObjectType = ObjectType(classObj)
               val newPath = s"""- option value class: "$className"""" +: walkedTypePath
 
+              val optionObjectType: DataType = other match {
+                // Special handling is required for arrays, as getClassFromType(<Array>) will fail
+                // since Scala Arrays map to native Java constructs. E.g. "Array[Int]" will map to
+                // the Java type "[I".
+                case arr if arr <:< localTypeOf[Array[_]] => arrayClassFor(t)
+                case cls => ObjectType(getClassFromType(cls))
+              }
               val unwrapped = UnwrapOption(optionObjectType, inputObject)
+
               expressions.If(
                 IsNull(unwrapped),
                 expressions.Literal.create(null, silentSchemaFor(optType).dataType),
