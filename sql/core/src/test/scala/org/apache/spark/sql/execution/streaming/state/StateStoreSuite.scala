@@ -350,7 +350,16 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           eventually(timeout(4 seconds)) {
             assert(!StateStore.isLoaded(storeId))
           }
+
+          // Reload the store and verify
+          StateStore.get(storeId, dir, 20)
+          assert(StateStore.isLoaded(storeId))
         }
+      }
+
+      // Verify if instance is unloaded if SparkContext is stopped
+      eventually(timeout(4 seconds)) {
+        assert(!StateStore.isLoaded(storeId))
       }
     }
   }
