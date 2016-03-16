@@ -40,6 +40,12 @@ class NullFilteringSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("filter: do not push Null-filtering of compound expressions") {
+    val originalQuery = testRelation.where('a + 'b === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
+  }
+
   test("single inner join: filter out nulls on either side on equi-join keys") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
@@ -81,6 +87,15 @@ class NullFilteringSuite extends PlanTest {
       condition = Some("x.a".attr === "y.a".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("single inner join: no null filters are generated for compound expression") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery = x.join(y,
+      condition = Some("x.a".attr * 2 === "y.a".attr - 4)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
   }
 
   test("single outer join: no null filters are generated") {

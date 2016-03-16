@@ -46,22 +46,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
     // Currently we only propagate constraints if the condition consists of equality
     // and ranges. For all other cases, we return an empty set of constraints
-    constraints.map {
-      case EqualTo(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThan(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThanOrEqual(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case LessThan(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case LessThanOrEqual(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case Not(EqualTo(l, r)) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case _ =>
-        Set.empty[Expression]
-    }.foldLeft(Set.empty[Expression])(_ union _.toSet)
+    // Note: Almost all the subclasses of BinaryComparison (EqualTo, LessThan, LessThanOrEqual,
+    // GreaterThan and GreaterThanOrEqual) are NULL intolerant. The only exception is EqualNullSafe
+    var isNotNullConstraints = Set.empty[Expression]
+    constraints.collect {
+      case b @ BinaryComparison(l, r) if !b.isInstanceOf[EqualNullSafe] =>
+        if (l.isInstanceOf[AttributeReference]) isNotNullConstraints += IsNotNull(l)
+        if (r.isInstanceOf[AttributeReference]) isNotNullConstraints += IsNotNull(r)
+      case Not(b @ BinaryComparison(l, r)) if !b.isInstanceOf[EqualNullSafe] =>
+        if (l.isInstanceOf[AttributeReference]) isNotNullConstraints += IsNotNull(l)
+        if (r.isInstanceOf[AttributeReference]) isNotNullConstraints += IsNotNull(r)
+    }
+    isNotNullConstraints
   }
 
   /**
