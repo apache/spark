@@ -185,8 +185,7 @@ case class Alias(child: Expression, name: String)(
   override def sql: String = {
     val qualifiersString =
       if (qualifiers.isEmpty) "" else qualifiers.map(quoteIdentifier).mkString("", ".", ".")
-    val aliasName = if (isGenerated) s"$name#${exprId.id}" else s"$name"
-    s"${child.sql} AS $qualifiersString${quoteIdentifier(aliasName)}"
+    s"${child.sql} AS $qualifiersString${quoteIdentifier(name)}"
   }
 }
 
@@ -302,8 +301,7 @@ case class AttributeReference(
   override def sql: String = {
     val qualifiersString =
       if (qualifiers.isEmpty) "" else qualifiers.map(quoteIdentifier).mkString("", ".", ".")
-    val attrRefName = if (isGenerated) s"$name#${exprId.id}" else s"$name"
-    s"$qualifiersString${quoteIdentifier(attrRefName)}"
+    s"$qualifiersString${quoteIdentifier(name)}"
   }
 }
 
