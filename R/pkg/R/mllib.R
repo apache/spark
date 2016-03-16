@@ -42,7 +42,7 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' @rdname glm
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' data(iris)
@@ -71,7 +71,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 #' @rdname predict
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- glm(y ~ x, trainingData)
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
@@ -102,7 +102,7 @@ setMethod("predict", signature(object = "PipelineModel"),
 #' @rdname summary
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- glm(y ~ x, trainingData)
 #' summary(model)
 #'}
@@ -170,7 +170,7 @@ setMethod("summary", signature(object = "PipelineModel"),
 #' @rdname kmeans
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- kmeans(x, centers = 2, algorithm="random")
 #'}
 setMethod("kmeans", signature(x = "DataFrame"),
@@ -191,7 +191,7 @@ setMethod("kmeans", signature(x = "DataFrame"),
 #' @rdname fitted
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- kmeans(trainingData, 2)
 #' fitted.model <- fitted(model)
 #' showDF(fitted.model)
@@ -227,12 +227,11 @@ setMethod("fitted", signature(object = "PipelineModel"),
 #' @rdname naiveBayes
 #' @export
 #' @examples
-#'\dontrun{
-#' data(HouseVotes84, package = "mlbench")
+#' \dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- createDataFrame(sqlContext, HouseVotes84)
-#' model <- naiveBayes(Class ~ ., df, lambda = 1, modelType = "multinomial")
+#' df <- createDataFrame(sqlContext, infert)
+#' model <- naiveBayes(education ~ ., df, lambda = 1, modelType = "multinomial")
 #'}
 setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
           function(formula, data, lambda = 1, modelType = c("multinomial", "bernoulli"), ...) {

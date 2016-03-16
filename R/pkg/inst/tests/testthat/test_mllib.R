@@ -143,24 +143,24 @@ test_that("kmeans", {
 })
 
 test_that("naiveBayes", {
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- createDataFrame(sqlContext, infert)
 
-  model <- naiveBayes(Sepal_Width ~ ., data = training, lambda = 1, modelType = "multinomial")
+  model <- naiveBayes(education ~ ., data = training, lambda = 1, modelType = "multinomial")
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "double")
-  expect_equal(sample$prediction, 9)
+  expect_equal(sample$prediction, 2)
 
   # Test summary works on naiveBayes
   summary.model <- summary(model)
-  expect_equal(length(summary.model$pi), 23)
+  expect_equal(length(summary.model$pi), 3)
   expect_equal(sum(summary.model$pi), 1)
-  l1 <- summary(model)$theta[1,]
-  l2 <- summary(model)$theta[2,]
-  expect_true(all.equal(Reduce(`+`, l1), 1))
-  expect_true(all.equal(Reduce(`+`, l2), 1))
+  l1 <- summary.model$theta[1,]
+  l2 <- summary.model$theta[2,]
+  expect_equal(sum(unlist(l1)), 1)
+  expect_equal(sum(unlist(l2)), 1)
 
   # Test e1071::naiveBayes
   if (requireNamespace("e1071", quietly = TRUE)) {
-    expect_that(e1071::naiveBayes(Sepal.Width ~ ., data = iris), not(throws_error()))
+    expect_that(e1071::naiveBayes(education ~ ., data = infert), not(throws_error()))
   }
 })
