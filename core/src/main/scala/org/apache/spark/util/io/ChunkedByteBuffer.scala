@@ -82,7 +82,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 
   /**
    * Creates an input stream to read data from this ChunkedByteBuffer.
- *
+   *
    * @param dispose if true, [[dispose()]] will be called at the end of the stream
    *                in order to close any memory-mapped files which back this buffer.
    */
@@ -149,10 +149,37 @@ private class ChunkedByteBufferInputStream(
     }
   }
 
-  // TODO(josh): implement
-//  override def read(b: Array[Byte]): Int = super.read(b)
-//  override def read(b: Array[Byte], off: Int, len: Int): Int = super.read(b, off, len)
-//  override def skip(n: Long): Long = super.skip(n)
+  override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
+    if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
+      StorageUtils.dispose(currentChunk)
+      currentChunk = chunks.next()
+    }
+    if (currentChunk != null && currentChunk.hasRemaining) {
+      val amountToGet = math.min(currentChunk.remaining(), length)
+      currentChunk.get(dest, offset, amountToGet)
+      amountToGet
+    } else {
+      close()
+      -1
+    }
+  }
+
+  override def skip(bytes: Long): Long = {
+    if (currentChunk != null) {
+      val amountToSkip = math.min(bytes, currentChunk.remaining).toInt
+      currentChunk.position(currentChunk.position + amountToSkip)
+      if (currentChunk.remaining() == 0) {
+        if (chunks.hasNext) {
+          currentChunk = chunks.next()
+        } else {
+          close()
+        }
+      }
+      amountToSkip
+    } else {
+      0L
+    }
+  }
 
   override def close(): Unit = {
     if (currentChunk != null) {
