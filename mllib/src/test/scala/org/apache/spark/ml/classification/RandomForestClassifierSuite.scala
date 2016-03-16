@@ -180,7 +180,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
+    val dfs = MLTestingUtils.genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val rf = new RandomForestClassifier().setFeaturesCol("features")
 

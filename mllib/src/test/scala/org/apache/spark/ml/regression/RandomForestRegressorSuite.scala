@@ -96,7 +96,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
+    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val rf = new RandomForestRegressor().setFeaturesCol("features")
 

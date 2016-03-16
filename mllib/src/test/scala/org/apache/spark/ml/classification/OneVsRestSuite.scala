@@ -226,7 +226,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
+    val dfs = MLTestingUtils.genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val ovr = new OneVsRest()
       .setClassifier(new LogisticRegression)

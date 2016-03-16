@@ -336,7 +336,7 @@ class DecisionTreeClassifierSuite
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
+    val dfs = MLTestingUtils.genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val dt = new DecisionTreeClassifier().setFeaturesCol("features")
 

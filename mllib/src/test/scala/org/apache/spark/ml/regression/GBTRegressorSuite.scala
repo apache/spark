@@ -113,7 +113,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
+    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val gbt = new GBTRegressor().setFeaturesCol("features")
 

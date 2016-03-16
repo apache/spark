@@ -1009,7 +1009,7 @@ class LinearRegressionSuite
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
+    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val lr = new LinearRegression().setFeaturesCol("features")
 

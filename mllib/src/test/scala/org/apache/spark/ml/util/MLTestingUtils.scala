@@ -32,7 +32,7 @@ object MLTestingUtils {
     assert(copied.parent == model.parent)
   }
 
-  def generateDFWithNumericLabelCol(
+  def genClassifDFWithNumericLabelCol(
     sqlContext: SQLContext,
     labelColName: String,
     featuresColName: String
@@ -43,6 +43,24 @@ object MLTestingUtils {
       (0, Vectors.dense(0, 2, 2)),
       (1, Vectors.dense(0, 3, 9)),
       (0, Vectors.dense(0, 2, 6))
+    )).toDF(labelColName, featuresColName)
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+    types.map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName))).toMap
+  }
+
+  def genRegressionDFWithNumericLabelCol(
+    sqlContext: SQLContext,
+    labelColName: String,
+    featuresColName: String
+  ): Map[NumericType, DataFrame] = {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0)),
+      (1, Vectors.dense(1)),
+      (2, Vectors.dense(2)),
+      (3, Vectors.dense(3)),
+      (4, Vectors.dense(4))
     )).toDF(labelColName, featuresColName)
 
     val types =

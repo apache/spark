@@ -937,7 +937,7 @@ class LogisticRegressionSuite
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
+    val dfs = MLTestingUtils.genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val lr = new LogisticRegression().setFeaturesCol("features")
 

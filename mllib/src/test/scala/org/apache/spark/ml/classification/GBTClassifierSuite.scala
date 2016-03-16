@@ -103,7 +103,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.generateDFWithNumericLabelCol(sqlContext, "label", "features")
+    val dfs = MLTestingUtils.genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
 
     val gbt = new GBTClassifier().setFeaturesCol("features")
 
