@@ -31,7 +31,7 @@ PyOpenSSL
 PySmbClient
 psycopg2
 python-dateutil
-# pyhs2 -> not compatible with Python 3 because of sasl
+pyhs2
 redis
 requests
 setproctitle

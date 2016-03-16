@@ -180,13 +180,13 @@ def initdb():
     merge_conn(
         models.Connection(
             conn_id='airflow_db', conn_type='mysql',
-            host='localhost', login='root', password='',
+            host='localhost', login='root',
             schema='airflow'))
     merge_conn(
         models.Connection(
-            conn_id='beeline_default', conn_type='beeline',
-            host='localhost',
-            schema='airflow'))
+            conn_id='beeline_default', conn_type='beeline', port="10000",
+            host='localhost', extra="{\"use_beeline\": true, \"auth\": \"\"}",
+            schema='default'))
     merge_conn(
         models.Connection(
             conn_id='bigquery_default', conn_type='bigquery'))
