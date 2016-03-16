@@ -963,20 +963,37 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
+  test("SPARK-13764 Parse modes in JSON data source") {
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      // `FAILFAST` mode should throw an exception for corrupt records.
+      val exception = intercept[SparkException] {
+        sqlContext.read.option("mode", "FAILFAST").json(corruptRecords).collect()
+      }
+      assert(exception.getMessage.contains("Malformed line in FAILFAST mode: {"))
+
+      // `DROPMALFORMED` mode should skip corrupt records
+      // For `PERMISSIVE` mode, it is tested in "Corrupt records" test.
+      val jsonDF = sqlContext.read.option("mode", "DROPMALFORMED").json(corruptRecords)
+      val schema = StructType(
+        StructField("_unparsed", StringType, true) ::
+          StructField("a", StringType, true) ::
+          StructField("b", StringType, true) ::
+          StructField("c", StringType, true) :: Nil)
+      assert(schema === jsonDF.schema)
+
+      checkAnswer(
+        jsonDF,
+        Row(null, "str_a_4", "str_b_4", "str_c_4") :: Nil
+      )
+    }
+  }
+
   test("Corrupt records") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       withTempTable("jsonTable") {
         val jsonDF = sqlContext.read.json(corruptRecords)
         jsonDF.registerTempTable("jsonTable")
-        val jsonDFWithDropMalformed =
-          sqlContext.read.option("mode", "DROPMALFORMED").json(corruptRecords)
-        jsonDFWithDropMalformed.registerTempTable("jsonTableWithDropMalformed")
-        val exception = intercept[SparkException]{
-          sqlContext.read.option("mode", "FAILFAST").json(corruptRecords).collect()
-        }
-        assert(exception.getMessage.contains("Malformed line in FAILFAST mode: {"))
-
         val schema = StructType(
           StructField("_unparsed", StringType, true) ::
           StructField("a", StringType, true) ::
@@ -997,16 +1014,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
             Row(null, null, null, """{"a":{, b:3}""") ::
             Row("str_a_4", "str_b_4", "str_c_4", null) ::
             Row(null, null, null, "]") :: Nil
-        )
-
-        // Check if corrupt records are dropped.
-        checkAnswer(
-          sql(
-            """
-              |SELECT a, b, c, _unparsed
-              |FROM jsonTableWithDropMalformed
-            """.stripMargin),
-            Row("str_a_4", "str_b_4", "str_c_4", null) :: Nil
         )
 
         checkAnswer(
