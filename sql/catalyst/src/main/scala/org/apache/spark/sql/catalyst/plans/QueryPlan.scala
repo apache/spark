@@ -43,7 +43,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * For e.g., if an expression is of the form (`a > 5`), this returns a constraint of the form
    * `isNotNull(a)`
    */
-  private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
+  protected def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
     // Currently we only propagate constraints if the condition consists of equality
     // and ranges. For all other cases, we return an empty set of constraints
     constraints.map {

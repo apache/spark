@@ -250,33 +250,23 @@ case class Join(
     condition: Option[Expression])
   extends BinaryNode with PredicateHelper {
 
-  private def notNullsFromCondition: Set[Attribute] = condition.toSet.flatMap { (e: Expression) =>
-    e.collect {
-      case e @ EqualTo(_, _) => e.references
-      case g @ GreaterThan(_, _) => g.references
-      case g @ GreaterThanOrEqual(_, _) => g.references
-      case l @ LessThan(_, _) => l.references
-      case l @ LessThanOrEqual(_, _) => l.references
-      case n @ Not(EqualTo(_, _)) => n.references
-      case e @ IsNotNull(a: Attribute) => Set(a)
-    }
-  }.foldLeft(Set.empty[Attribute])(_ union _.toSet)
+  private def notNullsFromCondition: Set[Expression] =
+    constructIsNotNullConstraints(condition.toSet.flatMap(splitConjunctivePredicates))
+      .filter(_.references.nonEmpty)
 
-  private def leftNotNulls = left.constraints
+  private def leftNotNulls = left.constraints.union(notNullsFromCondition)
     .filter(_.isInstanceOf[IsNotNull])
     .filter(_.references.subsetOf(left.outputSet))
     .flatMap(_.references.map(_.exprId))
-    .union(notNullsFromCondition.map(_.exprId))
 
   private def notNullLeftOutput = left.output.map { o =>
     if (leftNotNulls.contains(o.exprId)) o.withNullability(false) else o
   }
 
-  private def rightNotNulls = right.constraints
+  private def rightNotNulls = right.constraints.union(notNullsFromCondition)
     .filter(_.isInstanceOf[IsNotNull])
     .filter(_.references.subsetOf(right.outputSet))
     .flatMap(_.references.map(_.exprId))
-    .union(notNullsFromCondition.map(_.exprId))
 
   private def notNullRightOutput = right.output.map { o =>
     if (rightNotNulls.contains(o.exprId)) o.withNullability(false) else o
