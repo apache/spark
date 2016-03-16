@@ -29,14 +29,14 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester {
-  type MapType = mutable.HashMap[InternalRow, InternalRow]
+  type MapType = mutable.HashMap[UnsafeRow, UnsafeRow]
 
   import StateStoreCoordinatorSuite._
   import StateStoreSuite._
@@ -433,31 +433,29 @@ private[state] object StateStoreSuite {
   case class Updated(key: String, value: Int) extends TestUpdate
   case class Removed(key: String) extends TestUpdate
 
-  def wrapValue(i: Int): InternalRow = {
-    new GenericInternalRow(Array[Any](i))
+  def wrapKey(s: String): UnsafeRow = {
+    val projection = UnsafeProjection.create(Array[DataType](StringType))
+    projection.apply(new GenericInternalRow(Array[Any](UTF8String.fromString(s))))
   }
 
-  def wrapKey(s: String): InternalRow = {
-    new GenericInternalRow(Array[Any](UTF8String.fromString(s)))
+  def wrapValue(i: Int): UnsafeRow = {
+    val projection = UnsafeProjection.create(Array[DataType](IntegerType))
+    projection.apply(new GenericInternalRow(Array[Any](i)))
   }
 
-  def unwrapKey(row: InternalRow): String = {
-    row.asInstanceOf[GenericInternalRow].getString(0)
+  def unwrapKey(row: UnsafeRow): String = {
+    row.getUTF8String(0).toString
   }
 
-  def unwrapValue(row: InternalRow): Int = {
-    row.asInstanceOf[GenericInternalRow].getInt(0)
+  def unwrapValue(row: UnsafeRow): Int = {
+    row.getInt(0)
   }
 
-  def unwrapKeyValue(row: (InternalRow, InternalRow)): (String, Int) = {
+  def unwrapKeyValue(row: (UnsafeRow, UnsafeRow)): (String, Int) = {
     (unwrapKey(row._1), unwrapValue(row._2))
   }
 
-  def unwrapKeyValue(row: InternalRow): (String, Int) = {
-    (row.getString(0), row.getInt(1))
-  }
-
-  def unwrapToSet(iterator: Iterator[InternalRow]): Set[(String, Int)] = {
+  def unwrapToSet(iterator: Iterator[(UnsafeRow, UnsafeRow)]): Set[(String, Int)] = {
     iterator.map(unwrapKeyValue).toSet
   }
 
