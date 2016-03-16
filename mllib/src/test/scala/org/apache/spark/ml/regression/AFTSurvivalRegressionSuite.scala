@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.sql.types.DoubleType
-
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
@@ -29,6 +27,7 @@ import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.types.DoubleType
 
 class AFTSurvivalRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
