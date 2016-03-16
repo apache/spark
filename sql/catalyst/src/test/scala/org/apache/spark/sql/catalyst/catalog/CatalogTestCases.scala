@@ -342,7 +342,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
 
   test("alter partitions") {
     val catalog = newBasicCatalog()
-    try{
+    try {
       // Note: Before altering table partitions in Hive, you *must* set the current database
       // to the one that contains the table of interest. Otherwise you will end up with the
       // most helpful error message ever: "Unable to alter partition. alter is not possible."
