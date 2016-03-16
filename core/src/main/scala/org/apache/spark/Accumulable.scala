@@ -231,7 +231,7 @@ class Accumulable[R, T] private[spark] (
    * not already been processed before updating.
    */
   private[spark] def mergePending(term: mutable.HashMap[(Int, Int, Int), R]) = {
-    term.foreach{case ((rddId, shuffleWriteId, splitId), v) =>
+    term.foreach { case ((rddId, shuffleWriteId, splitId), v) =>
       val splits = processed.getOrElseUpdate((rddId, shuffleWriteId), new mutable.BitSet())
       if (!splits.contains(splitId)) {
         splits += splitId
