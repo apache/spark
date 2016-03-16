@@ -19,11 +19,11 @@ package org.apache.spark.scheduler
 
 import java.io._
 import java.net.URI
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.base.Charsets
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -254,7 +254,7 @@ private[spark] object EventLoggingListener extends Logging {
   def initEventLog(logStream: OutputStream): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
     val metadataJson = compact(JsonProtocol.logStartToJson(metadata)) + "\n"
-    logStream.write(metadataJson.getBytes(Charsets.UTF_8))
+    logStream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
   }
 
   /**

@@ -194,7 +194,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(checkpointerMock, times(1)).checkpoint()
   }
 
-  test("retry failed after exhausing all retries") {
+  test("retry failed after exhausting all retries") {
     val expectedErrorMessage = "final try error message"
     when(checkpointerMock.checkpoint())
         .thenThrow(new ThrottlingException("error message"))

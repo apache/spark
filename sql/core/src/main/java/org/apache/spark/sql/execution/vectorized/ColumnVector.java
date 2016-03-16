@@ -536,9 +536,9 @@ public abstract class ColumnVector {
    */
   public final Decimal getDecimal(int rowId, int precision, int scale) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
-      return Decimal.apply(getInt(rowId), precision, scale);
+      return Decimal.createUnsafe(getInt(rowId), precision, scale);
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
-      return Decimal.apply(getLong(rowId), precision, scale);
+      return Decimal.createUnsafe(getLong(rowId), precision, scale);
     } else {
       // TODO: best perf?
       byte[] bytes = getBinary(rowId);
