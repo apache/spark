@@ -60,9 +60,13 @@ private[sql] object Dataset {
     new Dataset[Row](sqlContext, qe, RowEncoder(qe.analyzed.schema))
   }
 
+  def newNamedDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
+    newDataFrame(sqlContext, SubqueryAlias(newDataFrameName, logicalPlan))
+  }
+
   private[this] val nextDataFrameId = new AtomicLong(0)
 
-  def newDataFrameName: String = s"dataframe_${nextDataFrameId.getAndIncrement()}"
+  private def newDataFrameName: String = s"dataframe_${nextDataFrameId.getAndIncrement()}"
 }
 
 /**

@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
@@ -367,8 +367,7 @@ class SQLContext private[sql](
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    val relation = LogicalRDD(attributeSeq, rowRDD)(self)
-    Dataset.newDataFrame(self, SubqueryAlias(Dataset.newDataFrameName, relation))
+    Dataset.newNamedDataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
@@ -383,8 +382,7 @@ class SQLContext private[sql](
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    val relation = LocalRelation.fromProduct(attributeSeq, data)
-    Dataset.newDataFrame(self, SubqueryAlias(Dataset.newDataFrameName, relation))
+    Dataset.newNamedDataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
   /**
@@ -394,7 +392,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    Dataset.newDataFrame(this, LogicalRelation(baseRelation))
+    Dataset.newNamedDataFrame(this, LogicalRelation(baseRelation))
   }
 
   /**
@@ -448,8 +446,8 @@ class SQLContext private[sql](
     } else {
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
-    val relation = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    Dataset.newDataFrame(this, SubqueryAlias(Dataset.newDataFrameName, relation))
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    Dataset.newNamedDataFrame(this, logicalPlan)
   }
 
 
@@ -887,8 +885,7 @@ class SQLContext private[sql](
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
     val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
-    val relation = LogicalRDD(schema.toAttributes, rowRdd)(self)
-    Dataset.newDataFrame(self, SubqueryAlias(Dataset.newDataFrameName, relation))
+    Dataset.newNamedDataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**
