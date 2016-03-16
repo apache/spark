@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 
