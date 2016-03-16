@@ -17,30 +17,30 @@
 
 package org.apache.spark.ml.feature
 
+import scala.util.matching.Regex
+import scala.util.Try
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params, IntParam}
+import org.apache.spark.ml.param.{DoubleParam, IntParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.stat.Statistics
-import org.apache.spark.sql._
+import org.apache.spark.sql.{functions => f, Column, DataFrame}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.sql.{DataFrame, Column}
-import org.apache.spark.sql.{functions => f}
-import scala.util.Try
-import scala.util.matching.Regex
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.types._
+
 
 /**
  * Params for [[Word2Phrase]] and [[Word2PhraseModel]].
- */ 
+ */
 private[feature] trait Word2PhraseParams extends Params with HasInputCol with HasOutputCol {
 
   /**
@@ -118,14 +118,16 @@ class Word2Phrase(override val uid: String)
     import dataset.sqlContext.implicits._
     val sqlContext = dataset.sqlContext
 
-    val tokenizer = new RegexTokenizer().setInputCol($(inputCol)).setOutputCol("words").setPattern("\\W")
+    val tokenizer = new RegexTokenizer().setInputCol($(inputCol)).setOutputCol("words")
+                  .setPattern("\\W")
     val wordsData = tokenizer.transform(dataset)
 
     val inputColName = $(inputCol)
     val ind = wordsData.select(s"$inputColName")
 
     // counts the number of times each word appears
-    val counts = ind.rdd.flatMap(line => line(0).asInstanceOf[String].toLowerCase.split("\\s+")).map(word => (word, 1)).reduceByKey(_ + _).toDF("word", "count")
+    val counts = ind.rdd.flatMap(line => line(0).asInstanceOf[String].toLowerCase.split("\\s+"))
+                .map(word => (word, 1)).reduceByKey(_ + _).toDF("word", "count")
     val wordCountName = Identifiable.randomUID("wc")
     counts.registerTempTable(wordCountName)
 
@@ -133,7 +135,9 @@ class Word2Phrase(override val uid: String)
     val ngramDataFrame = ngram.transform(wordsData)
 
     // counts the number of bigrams (w1 w2, w2 w3, etc.)
-    val biGramCount = ngramDataFrame.select("ngrams").rdd.flatMap(line => line(0).asInstanceOf[Seq[String]]).map(word => (word, 1)).reduceByKey(_ + _).toDF("biGram", "count")
+    val biGramCount = ngramDataFrame.select("ngrams").rdd.flatMap(line => line(0).
+      asInstanceOf[Seq[String]]).map(word => (word, 1)).reduceByKey(_ + _).
+      toDF("biGram", "count")
     val biGramCountName = Identifiable.randomUID("bgc")
     biGramCount.registerTempTable(biGramCountName)
 
@@ -141,11 +145,19 @@ class Word2Phrase(override val uid: String)
     val deltaA = $(delta)
     val minWordsA = $(minWords)
     val biGramScoresName = Identifiable.randomUID("bgs")
-    sqlContext.sql(s"select biGram, (bigram_count - $deltaA)/(word1_count * word2_count) as score from (select biGrams.biGram as biGram, biGrams.count as bigram_count, wc1.word as word1, wc1.count as word1_count, wc2.word as word2, wc2.count as word2_count from (Select biGram, count, split(biGram,' ')[0] as word1, split(biGram,' ')[1] as word2 from $biGramCountName) biGrams inner join $wordCountName as wc1 on (wc1.word = biGrams.word1) inner join $wordCountName as wc2 on (wc2.word = biGrams.word2) ) biGramsStats where word2_count > $minWordsA and word1_count > $minWordsA order by score desc").registerTempTable(biGramScoresName)
+    sqlContext.sql(s"""select biGram, (bigram_count - $deltaA)/(word1_count * word2_count)
+      as score from (select biGrams.biGram as biGram, biGrams.count as bigram_count,
+      wc1.word as word1, wc1.count as word1_count, wc2.word as word2,
+      wc2.count as word2_count from (Select biGram, count, split(biGram,' ')[0] as word1,
+      split(biGram,' ')[1] as word2 from $biGramCountName) biGrams inner join $wordCountName
+      as wc1 on (wc1.word = biGrams.word1) inner join $wordCountName as wc2 on
+      (wc2.word = biGrams.word2)) biGramsStats where word2_count > $minWordsA and
+      word1_count > $minWordsA order by score desc""").registerTempTable(biGramScoresName)
 
     val thresholdA = $(threshold)
     // Scores > threshold
-    val biGrams = sqlContext.sql(s"select biGram from $biGramScoresName where score > $thresholdA").collect()
+    val biGrams = sqlContext.sql(s"""select biGram from $biGramScoresName where
+                                  score > $thresholdA""").collect()
     val bigramList = biGrams.map(row => (row(0).toString))
 
     copyValues(new Word2PhraseModel(uid, bigramList).setParent(this))
@@ -186,7 +198,8 @@ class Word2PhraseModel private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
 
-    var mapBiGrams = udf((t: String) => bigramList.foldLeft(t){case (z, r) => z.replaceAll("(?i)"+Regex.quote(r), r.split(" ").mkString("_"))})
+    var mapBiGrams = udf((t: String) => bigramList.foldLeft(t){case (z, r) =>
+                                z.replaceAll("(?i)" + Regex.quote(r), r.split(" ").mkString("_"))})
     dataset.withColumn($(outputCol), mapBiGrams(dataset($(inputCol))))
   }
 

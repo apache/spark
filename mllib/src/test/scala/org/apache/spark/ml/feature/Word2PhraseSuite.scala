@@ -19,9 +19,9 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class Word2PhraseSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -64,7 +64,7 @@ class Word2PhraseSuite extends SparkFunSuite with MLlibTestSparkContext with Def
     var t = new Word2Phrase().setInputCol("inputWords").setOutputCol("out")
 
     var model = t.fit(wordDataFrame)
-    
+
     val newInstance = testDefaultReadWrite(model)
     assert(newInstance.bigramList === model.bigramList)
   }
