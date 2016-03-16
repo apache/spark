@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.{LongType, TypeCollection, StringType}
+import org.apache.spark.sql.types.{LongType, StringType, TypeCollection}
 
 class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
@@ -41,7 +41,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       assertSuccess(expr)
     }
     assert(e.getMessage.contains(
-      s"cannot resolve '${expr.prettyString}' due to data type mismatch:"))
+      s"cannot resolve '${expr.sql}' due to data type mismatch:"))
     assert(e.getMessage.contains(errorMessage))
   }
 
@@ -52,7 +52,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   def assertErrorForDifferingTypes(expr: Expression): Unit = {
     assertError(expr,
-      s"differing types in '${expr.prettyString}'")
+      s"differing types in '${expr.sql}'")
   }
 
   test("check types for unary arithmetic") {
@@ -132,13 +132,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(If('booleanField, 'intField, 'booleanField))
 
     assertError(
-      CaseWhen(Seq('booleanField, 'intField, 'booleanField, 'mapField)),
+      CaseWhen(Seq(('booleanField.attr, 'intField.attr), ('booleanField.attr, 'mapField.attr))),
       "THEN and ELSE expressions should all be same type or coercible to a common type")
     assertError(
       CaseKeyWhen('intField, Seq('intField, 'stringField, 'intField, 'mapField)),
       "THEN and ELSE expressions should all be same type or coercible to a common type")
     assertError(
-      CaseWhen(Seq('booleanField, 'intField, 'intField, 'intField)),
+      CaseWhen(Seq(('booleanField.attr, 'intField.attr), ('intField.attr, 'intField.attr))),
       "WHEN expressions in CaseWhen should all be boolean type")
   }
 
@@ -163,6 +163,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Coalesce(Seq('intField, 'booleanField)),
       "input to function coalesce should all be the same type")
     assertError(Coalesce(Nil), "input to function coalesce cannot be empty")
+    assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
     assertError(Explode('intField),
       "input to function explode should be array or map type")
   }

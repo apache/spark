@@ -70,13 +70,14 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
    */
   override def fit(dataset: DataFrame): PCAModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v}
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v}
     val pca = new feature.PCA(k = $(k))
     val pcaModel = pca.fit(input)
     copyValues(new PCAModel(uid, pcaModel.pc, pcaModel.explainedVariance).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${$(inputCol)} must be a vector column")
@@ -101,6 +102,8 @@ object PCA extends DefaultParamsReadable[PCA] {
  * Model fitted by [[PCA]].
  *
  * @param pc A principal components Matrix. Each column is one principal component.
+ * @param explainedVariance A vector of proportions of variance explained by
+ *                          each principal component.
  */
 @Experimental
 class PCAModel private[ml] (
@@ -130,6 +133,7 @@ class PCAModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${$(inputCol)} must be a vector column")
@@ -167,14 +171,37 @@ object PCAModel extends MLReadable[PCAModel] {
 
     private val className = classOf[PCAModel].getName
 
+    /**
+     * Loads a [[PCAModel]] from data located at the input path. Note that the model includes an
+     * `explainedVariance` member that is not recorded by Spark 1.6 and earlier. A model
+     * can be loaded from such older data but will have an empty vector for
+     * `explainedVariance`.
+     *
+     * @param path path to serialized model data
+     * @return a [[PCAModel]]
+     */
     override def load(path: String): PCAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      // explainedVariance field is not present in Spark <= 1.6
+      val versionRegex = "([0-9]+)\\.([0-9]+).*".r
+      val hasExplainedVariance = metadata.sparkVersion match {
+        case versionRegex(major, minor) =>
+          (major.toInt >= 2 || (major.toInt == 1 && minor.toInt > 6))
+        case _ => false
+      }
+
       val dataPath = new Path(path, "data").toString
-      val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
-        sqlContext.read.parquet(dataPath)
-        .select("pc", "explainedVariance")
-        .head()
-      val model = new PCAModel(metadata.uid, pc, explainedVariance)
+      val model = if (hasExplainedVariance) {
+        val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
+          sqlContext.read.parquet(dataPath)
+            .select("pc", "explainedVariance")
+            .head()
+        new PCAModel(metadata.uid, pc, explainedVariance)
+      } else {
+        val Row(pc: DenseMatrix) = sqlContext.read.parquet(dataPath).select("pc").head()
+        new PCAModel(metadata.uid, pc, Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
+      }
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }

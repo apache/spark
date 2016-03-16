@@ -26,10 +26,10 @@ import org.apache.spark.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impl.{BaggedPoint, DTStatsAggregator, DecisionTreeMetadata,
+import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, DTStatsAggregator,
   TimeTracker}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
@@ -474,7 +474,7 @@ private[ml] object RandomForest extends Logging {
     val nodeToFeatures = getNodeToFeatures(treeToNodeToIndexInfo)
     val nodeToFeaturesBc = input.sparkContext.broadcast(nodeToFeatures)
 
-    val partitionAggregates : RDD[(Int, DTStatsAggregator)] = if (nodeIdCache.nonEmpty) {
+    val partitionAggregates: RDD[(Int, DTStatsAggregator)] = if (nodeIdCache.nonEmpty) {
       input.zip(nodeIdCache.get.nodeIdsForInstances).mapPartitions { points =>
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
@@ -650,7 +650,7 @@ private[ml] object RandomForest extends Logging {
    * @param binAggregates Bin statistics.
    * @return tuple for best split: (Split, information gain, prediction at node)
    */
-  private def binsToBestSplit(
+  private[tree] def binsToBestSplit(
       binAggregates: DTStatsAggregator,
       splits: Array[Array[Split]],
       featuresForNode: Option[Array[Int]],
@@ -720,32 +720,30 @@ private[ml] object RandomForest extends Logging {
            *
            * centroidForCategories is a list: (category, centroid)
            */
-          val centroidForCategories = if (binAggregates.metadata.isMulticlass) {
-            // For categorical variables in multiclass classification,
-            // the bins are ordered by the impurity of their corresponding labels.
-            Range(0, numCategories).map { case featureValue =>
-              val categoryStats =
-                binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
-              val centroid = if (categoryStats.count != 0) {
+          val centroidForCategories = Range(0, numCategories).map { case featureValue =>
+            val categoryStats =
+              binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
+            val centroid = if (categoryStats.count != 0) {
+              if (binAggregates.metadata.isMulticlass) {
+                // multiclass classification
+                // For categorical variables in multiclass classification,
+                // the bins are ordered by the impurity of their corresponding labels.
                 categoryStats.calculate()
+              } else if (binAggregates.metadata.isClassification) {
+                // binary classification
+                // For categorical variables in binary classification,
+                // the bins are ordered by the count of class 1.
+                categoryStats.stats(1)
               } else {
-                Double.MaxValue
-              }
-              (featureValue, centroid)
-            }
-          } else { // regression or binary classification
-            // For categorical variables in regression and binary classification,
-            // the bins are ordered by the centroid of their corresponding labels.
-            Range(0, numCategories).map { case featureValue =>
-              val categoryStats =
-                binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
-              val centroid = if (categoryStats.count != 0) {
+                // regression
+                // For categorical variables in regression and binary classification,
+                // the bins are ordered by the prediction.
                 categoryStats.predict
-              } else {
-                Double.MaxValue
               }
-              (featureValue, centroid)
+            } else {
+              Double.MaxValue
             }
+            (featureValue, centroid)
           }
 
           logDebug("Centroids for categorical variable: " + centroidForCategories.mkString(","))
@@ -825,7 +823,7 @@ private[ml] object RandomForest extends Logging {
   protected[tree] def findSplits(
       input: RDD[LabeledPoint],
       metadata: DecisionTreeMetadata,
-      seed : Long): Array[Array[Split]] = {
+      seed: Long): Array[Array[Split]] = {
 
     logDebug("isMulticlass = " + metadata.isMulticlass)
 
@@ -1091,12 +1089,9 @@ private[ml] object RandomForest extends Logging {
    *  - Average over trees:
    *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree based on total number of training instances used
-   *       to build tree.
+   *     - Normalize importances for tree to sum to 1.
    *  - Normalize feature importance vector to sum to 1.
    *
-   * Note: This should not be used with Gradient-Boosted Trees.  It only makes sense for
-   *       independently trained trees.
    * @param trees  Unweighted forest of trees
    * @param numFeatures  Number of features in model (even if not all are explicitly used by
    *                     the model).
@@ -1130,11 +1125,32 @@ private[ml] object RandomForest extends Logging {
       maxFeatureIndex + 1
     }
     if (d == 0) {
-      assert(totalImportances.size == 0, s"Unknown error in computing RandomForest feature" +
-        s" importance: No splits in forest, but some non-zero importances.")
+      assert(totalImportances.size == 0, s"Unknown error in computing feature" +
+        s" importance: No splits found, but some non-zero importances.")
     }
     val (indices, values) = totalImportances.iterator.toSeq.sortBy(_._1).unzip
     Vectors.sparse(d, indices.toArray, values.toArray)
+  }
+
+  /**
+   * Given a Decision Tree model, compute the importance of each feature.
+   * This generalizes the idea of "Gini" importance to other losses,
+   * following the explanation of Gini importance from "Random Forests" documentation
+   * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+   *
+   * This feature importance is calculated as follows:
+   *  - importance(feature j) = sum (over nodes which split on feature j) of the gain,
+   *    where gain is scaled by the number of instances passing through node
+   *  - Normalize importances for tree to sum to 1.
+   *
+   * @param tree  Decision tree to compute importances for.
+   * @param numFeatures  Number of features in model (even if not all are explicitly used by
+   *                     the model).
+   *                     If -1, then numFeatures is set based on the max feature index in all trees.
+   * @return  Feature importance values, of length numFeatures.
+   */
+  private[ml] def featureImportances(tree: DecisionTreeModel, numFeatures: Int): Vector = {
+    featureImportances(Array(tree), numFeatures)
   }
 
   /**

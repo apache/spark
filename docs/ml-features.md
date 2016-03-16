@@ -63,7 +63,7 @@ the [IDF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IDF) for mor
 `Word2VecModel`. The model maps each word to a unique fixed-size vector. The `Word2VecModel`
 transforms each document into a vector using the average of all words in the document; this vector
 can then be used for as features for prediction, document similarity calculations, etc.
-Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#Word2Vec) for more
+Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#word2vec) for more
 details.
 
 In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
@@ -185,7 +185,7 @@ for more details on the API.
 <div data-lang="python" markdown="1">
 
 Refer to the [Tokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Tokenizer) and
-the the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
+the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
 for more details on the API.
 
 {% include_example python/ml/tokenizer_example.py %}
@@ -411,7 +411,7 @@ for more details on the API.
 Refer to the [DCT Java docs](api/java/org/apache/spark/ml/feature/DCT.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaDCTExample.java %}}
+{% include_example java/org/apache/spark/examples/ml/JavaDCTExample.java %}
 </div>
 </div>
 
@@ -458,6 +458,42 @@ column, we should get the following:
 
 "a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
 index `2`.
+
+Additionally, there are two strategies regarding how `StringIndexer` will handle
+unseen labels when you have fit a `StringIndexer` on one dataset and then use it
+to transform another:
+
+- throw an exception (which is the default)
+- skip the row containing the unseen label entirely
+
+**Examples**
+
+Let's go back to our previous example but this time reuse our previously defined
+`StringIndexer` on the following dataset:
+
+~~~~
+ id | category
+----|----------
+ 0  | a
+ 1  | b
+ 2  | c
+ 3  | d
+~~~~
+
+If you've not set how `StringIndexer` handles unseen labels or set it to
+"error", an exception will be thrown.
+However, if you had called `setHandleInvalid("skip")`, the following dataset
+will be generated:
+
+~~~~
+ id | category | categoryIndex
+----|----------|---------------
+ 0  | a        | 0.0
+ 1  | b        | 2.0
+ 2  | c        | 1.0
+~~~~
+
+Notice that the row containing "d" does not appear.
 
 <div class="codetabs">
 
@@ -633,7 +669,7 @@ for more details on the API.
 The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^2$ norm and unit $L^\infty$ norm.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 
 Refer to the [Normalizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Normalizer)
 for more details on the API.
@@ -641,7 +677,7 @@ for more details on the API.
 {% include_example scala/org/apache/spark/examples/ml/NormalizerExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 
 Refer to the [Normalizer Java docs](api/java/org/apache/spark/ml/feature/Normalizer.html)
 for more details on the API.
@@ -649,7 +685,7 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaNormalizerExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 
 Refer to the [Normalizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Normalizer)
 for more details on the API.
@@ -673,7 +709,7 @@ Note that if the standard deviation of a feature is zero, it will return default
 The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 
 Refer to the [StandardScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StandardScaler)
 for more details on the API.
@@ -681,7 +717,7 @@ for more details on the API.
 {% include_example scala/org/apache/spark/examples/ml/StandardScalerExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 
 Refer to the [StandardScaler Java docs](api/java/org/apache/spark/ml/feature/StandardScaler.html)
 for more details on the API.
@@ -689,7 +725,7 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaStandardScalerExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 
 Refer to the [StandardScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StandardScaler)
 for more details on the API.
@@ -737,13 +773,45 @@ for more details on the API.
 </div>
 </div>
 
+
+## MaxAbsScaler
+
+`MaxAbsScaler` transforms a dataset of `Vector` rows, rescaling each feature to range [-1, 1] 
+by dividing through the maximum absolute value in each feature. It does not shift/center the 
+data, and thus does not destroy any sparsity.
+
+`MaxAbsScaler` computes summary statistics on a data set and produces a `MaxAbsScalerModel`. The 
+model can then transform each feature individually to range [-1, 1].
+
+The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [-1, 1].
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [MaxAbsScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScaler)
+and the [MaxAbsScalerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScalerModel)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/MaxAbsScalerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [MaxAbsScaler Java docs](api/java/org/apache/spark/ml/feature/MaxAbsScaler.html)
+and the [MaxAbsScalerModel Java docs](api/java/org/apache/spark/ml/feature/MaxAbsScalerModel.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaMaxAbsScalerExample.java %}
+</div>
+</div>
+
 ## Bucketizer
 
 `Bucketizer` transforms a column of continuous features to a column of feature buckets, where the buckets are specified by users. It takes a parameter:
 
 * `splits`: Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which also includes y. Splits should be strictly increasing. Values at -inf, inf must be explicitly provided to cover all Double values; Otherwise, values outside the splits specified will be treated as errors. Two examples of `splits` are `Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity)` and `Array(0.0, 1.0, 2.0)`.
 
-Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potenial out of Bucketizer bounds exception.
+Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potential out of Bucketizer bounds exception.
 
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
@@ -752,7 +820,7 @@ More details can be found in the API docs for [Bucketizer](api/scala/index.html#
 The following example demonstrates how to bucketize a column of `Double`s into another index-wised column.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 
 Refer to the [Bucketizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer)
 for more details on the API.
@@ -760,7 +828,7 @@ for more details on the API.
 {% include_example scala/org/apache/spark/examples/ml/BucketizerExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 
 Refer to the [Bucketizer Java docs](api/java/org/apache/spark/ml/feature/Bucketizer.html)
 for more details on the API.
@@ -768,7 +836,7 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaBucketizerExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 
 Refer to the [Bucketizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Bucketizer)
 for more details on the API.
@@ -1085,7 +1153,25 @@ for more details on the API.
 
 ## RFormula
 
-`RFormula` selects columns specified by an [R model formula](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html). It produces a vector column of features and a double column of labels. Like when formulas are used in R for linear regression, string input columns will be one-hot encoded, and numeric columns will be cast to doubles. If not already present in the DataFrame, the output label column will be created from the specified response variable in the formula.
+`RFormula` selects columns specified by an [R model formula](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html). 
+Currently we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'.
+The basic operators are:
+
+* `~` separate target and terms
+* `+` concat terms, "+ 0" means removing intercept
+* `-` remove a term, "- 1" means removing intercept
+* `:` interaction (multiplication for numeric values, or binarized categorical values)
+* `.` all columns except target
+
+Suppose `a` and `b` are double columns, we use the following simple examples to illustrate the effect of `RFormula`:
+
+* `y ~ a + b` means model `y ~ w0 + w1 * a + w2 * b` where `w0` is the intercept and `w1, w2` are coefficients.
+* `y ~ a + b + a:b - 1` means model `y ~ w1 * a + w2 * b + w3 * a * b` where `w1, w2, w3` are coefficients.
+
+`RFormula` produces a vector column of features and a double or string column of label. 
+Like when formulas are used in R for linear regression, string input columns will be one-hot encoded, and numeric columns will be cast to doubles.
+If the label column is of type string, it will be first transformed to double with `StringIndexer`.
+If the label column does not exist in the DataFrame, the output label column will be created from the specified response variable in the formula.
 
 **Examples**
 

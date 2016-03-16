@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.Serializable
 
-import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate._
+import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.OriginalType
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
@@ -208,10 +208,25 @@ private[sql] object ParquetFilters {
   }
 
   /**
+   * SPARK-11955: The optional fields will have metadata StructType.metadataKeyForOptionalField.
+   * These fields only exist in one side of merged schemas. Due to that, we can't push down filters
+   * using such fields, otherwise Parquet library will throw exception. Here we filter out such
+   * fields.
+   */
+  private def getFieldMap(dataType: DataType): Array[(String, DataType)] = dataType match {
+    case StructType(fields) =>
+      fields.filter { f =>
+        !f.metadata.contains(StructType.metadataKeyForOptionalField) ||
+          !f.metadata.getBoolean(StructType.metadataKeyForOptionalField)
+      }.map(f => f.name -> f.dataType) ++ fields.flatMap { f => getFieldMap(f.dataType) }
+    case _ => Array.empty[(String, DataType)]
+  }
+
+  /**
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
-    val dataTypeOf = schema.map(f => f.name -> f.dataType).toMap
+    val dataTypeOf = getFieldMap(schema).toMap
 
     relaxParquetValidTypeMap
 
@@ -219,7 +234,7 @@ private[sql] object ParquetFilters {
     //
     // For any comparison operator `cmp`, both `a cmp NULL` and `NULL cmp a` evaluate to `NULL`,
     // which can be casted to `false` implicitly. Please refer to the `eval` method of these
-    // operators and the `SimplifyFilters` rule for details.
+    // operators and the `PruneFilters` rule for details.
 
     // Hyukjin:
     // I added [[EqualNullSafe]] with [[org.apache.parquet.filter2.predicate.Operators.Eq]].
@@ -231,33 +246,46 @@ private[sql] object ParquetFilters {
     // Probably I missed something and obviously this should be changed.
 
     predicate match {
-      case sources.IsNull(name) =>
+      case sources.IsNull(name) if dataTypeOf.contains(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, null))
-      case sources.IsNotNull(name) =>
+      case sources.IsNotNull(name) if dataTypeOf.contains(name) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, null))
 
-      case sources.EqualTo(name, value) =>
+      case sources.EqualTo(name, value) if dataTypeOf.contains(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualTo(name, value)) =>
+      case sources.Not(sources.EqualTo(name, value)) if dataTypeOf.contains(name) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
-      case sources.EqualNullSafe(name, value) =>
+      case sources.EqualNullSafe(name, value) if dataTypeOf.contains(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualNullSafe(name, value)) =>
+      case sources.Not(sources.EqualNullSafe(name, value)) if dataTypeOf.contains(name) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
-      case sources.LessThan(name, value) =>
+      case sources.LessThan(name, value) if dataTypeOf.contains(name) =>
         makeLt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.LessThanOrEqual(name, value) =>
+      case sources.LessThanOrEqual(name, value) if dataTypeOf.contains(name) =>
         makeLtEq.lift(dataTypeOf(name)).map(_(name, value))
 
-      case sources.GreaterThan(name, value) =>
+      case sources.GreaterThan(name, value) if dataTypeOf.contains(name) =>
         makeGt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.GreaterThanOrEqual(name, value) =>
+      case sources.GreaterThanOrEqual(name, value) if dataTypeOf.contains(name) =>
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
 
+      case sources.In(name, valueSet) =>
+        makeInSet.lift(dataTypeOf(name)).map(_(name, valueSet.toSet))
+
       case sources.And(lhs, rhs) =>
-        (createFilter(schema, lhs) ++ createFilter(schema, rhs)).reduceOption(FilterApi.and)
+        // At here, it is not safe to just convert one side if we do not understand the
+        // other side. Here is an example used to explain the reason.
+        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+        // NOT(a = 2), which will generate wrong results.
+        // Pushing one side of AND down is only safe to do at the top level.
+        // You can see ParquetRelation's initializeLocalJobFunc method as an example.
+        for {
+          lhsFilter <- createFilter(schema, lhs)
+          rhsFilter <- createFilter(schema, rhs)
+        } yield FilterApi.and(lhsFilter, rhsFilter)
 
       case sources.Or(lhs, rhs) =>
         for {

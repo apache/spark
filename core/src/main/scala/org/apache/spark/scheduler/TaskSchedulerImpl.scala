@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.{TimerTask, Timer}
+import java.util.{Timer, TimerTask}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -32,9 +32,8 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
-import org.apache.spark.util.{ThreadUtils, Utils}
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -380,17 +379,17 @@ private[spark] class TaskSchedulerImpl(
    */
   override def executorHeartbeatReceived(
       execId: String,
-      taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
+      accumUpdates: Array[(Long, Seq[AccumulableInfo])],
       blockManagerId: BlockManagerId): Boolean = {
-
-    val metricsWithStageIds: Array[(Long, Int, Int, TaskMetrics)] = synchronized {
-      taskMetrics.flatMap { case (id, metrics) =>
+    // (taskId, stageId, stageAttemptId, accumUpdates)
+    val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = synchronized {
+      accumUpdates.flatMap { case (id, updates) =>
         taskIdToTaskSetManager.get(id).map { taskSetMgr =>
-          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, metrics)
+          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, updates)
         }
       }
     }
-    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
+    dagScheduler.executorHeartbeatReceived(execId, accumUpdatesWithTaskIds, blockManagerId)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {
@@ -621,10 +620,10 @@ private[spark] object TaskSchedulerImpl {
     while (found) {
       found = false
       for (key <- keyList) {
-        val containerList: ArrayBuffer[T] = map.get(key).getOrElse(null)
+        val containerList: ArrayBuffer[T] = map.getOrElse(key, null)
         assert(containerList != null)
         // Get the index'th entry for this host - if present
-        if (index < containerList.size){
+        if (index < containerList.size) {
           retval += containerList.apply(index)
           found = true
         }

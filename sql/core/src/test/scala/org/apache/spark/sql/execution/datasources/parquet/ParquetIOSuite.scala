@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.parquet.column.{Encoding, ParquetProperties}
-
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
-import org.apache.parquet.example.data.simple.SimpleGroup
+import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.example.data.{Group, GroupWriter}
+import org.apache.parquet.example.data.simple.SimpleGroup
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
@@ -37,8 +37,10 @@ import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -113,8 +115,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       val path = new Path(location.getCanonicalPath)
       val conf = sparkContext.hadoopConfiguration
       writeMetadata(parquetSchema, path, conf)
-      val sparkTypes = sqlContext.read.parquet(path.toString).schema.map(_.dataType)
-      assert(sparkTypes === expectedSparkTypes)
+      readParquetFile(path.toString)(df => {
+        val sparkTypes = df.schema.map(_.dataType)
+        assert(sparkTypes === expectedSparkTypes)
+      })
     }
   }
 
@@ -141,7 +145,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       withTempPath { dir =>
         val data = makeDecimalRDD(DecimalType(precision, scale))
         data.write.parquet(dir.getCanonicalPath)
-        checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
+        readParquetFile(dir.getCanonicalPath) { df => {
+          checkAnswer(df, data.collect().toSeq)
+        }}
       }
     }
   }
@@ -157,7 +163,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withTempPath { dir =>
       val data = makeDateRDD()
       data.write.parquet(dir.getCanonicalPath)
-      checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), data.collect().toSeq)
+      readParquetFile(dir.getCanonicalPath) { df =>
+        checkAnswer(df, data.collect().toSeq)
+      }
     }
   }
 
@@ -334,9 +342,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withTempDir { dir =>
       val path = new Path(dir.toURI.toString, "part-r-0.parquet")
       makeRawParquetFile(path)
-      checkAnswer(sqlContext.read.parquet(path.toString), (0 until 10).map { i =>
-        Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
-      })
+      readParquetFile(path.toString) { df =>
+        checkAnswer(df, (0 until 10).map { i =>
+          Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble) })
+      }
     }
   }
 
@@ -362,7 +371,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withParquetFile((1 to 10).map(i => (i, i.toString))) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
       newData.toDF().write.format("parquet").mode(SaveMode.Overwrite).save(file)
-      checkAnswer(sqlContext.read.parquet(file), newData.map(Row.fromTuple))
+      readParquetFile(file) { df =>
+        checkAnswer(df, newData.map(Row.fromTuple))
+      }
     }
   }
 
@@ -371,7 +382,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withParquetFile(data) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
       newData.toDF().write.format("parquet").mode(SaveMode.Ignore).save(file)
-      checkAnswer(sqlContext.read.parquet(file), data.map(Row.fromTuple))
+      readParquetFile(file) { df =>
+        checkAnswer(df, data.map(Row.fromTuple))
+      }
     }
   }
 
@@ -391,7 +404,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withParquetFile(data) { file =>
       val newData = (11 to 20).map(i => (i, i.toString))
       newData.toDF().write.format("parquet").mode(SaveMode.Append).save(file)
-      checkAnswer(sqlContext.read.parquet(file), (data ++ newData).map(Row.fromTuple))
+      readParquetFile(file) { df =>
+        checkAnswer(df, (data ++ newData).map(Row.fromTuple))
+      }
     }
   }
 
@@ -419,11 +434,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       val conf = sparkContext.hadoopConfiguration
       writeMetadata(parquetSchema, path, conf, extraMetadata)
 
-      assertResult(sqlContext.read.parquet(path.toString).schema) {
-        StructType(
-          StructField("a", BooleanType, nullable = false) ::
-          StructField("b", IntegerType, nullable = false) ::
-          Nil)
+      readParquetFile(path.toString) { df =>
+        assertResult(df.schema) {
+          StructType(
+            StructField("a", BooleanType, nullable = true) ::
+              StructField("b", IntegerType, nullable = true) ::
+              Nil)
+        }
       }
     }
   }
@@ -439,7 +456,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       sqlContext.udf.register("div0", (x: Int) => x / 0)
       withTempPath { dir =>
         intercept[org.apache.spark.SparkException] {
-          sqlContext.sql("select div0(1)").write.parquet(dir.getCanonicalPath)
+          sqlContext.sql("select div0(1) as div0").write.parquet(dir.getCanonicalPath)
         }
         val path = new Path(dir.getCanonicalPath, "_temporary")
         val fs = path.getFileSystem(hadoopConfiguration)
@@ -463,7 +480,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       sqlContext.udf.register("div0", (x: Int) => x / 0)
       withTempPath { dir =>
         intercept[org.apache.spark.SparkException] {
-          sqlContext.sql("select div0(1)").write.parquet(dir.getCanonicalPath)
+          sqlContext.sql("select div0(1) as div0").write.parquet(dir.getCanonicalPath)
         }
         val path = new Path(dir.getCanonicalPath, "_temporary")
         val fs = path.getFileSystem(hadoopConfiguration)
@@ -582,7 +599,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("null and non-null strings") {
     // Create a dataset where the first values are NULL and then some non-null values. The
     // number of non-nulls needs to be bigger than the ParquetReader batch size.
-    val data = sqlContext.range(200).map { i =>
+    val data = sqlContext.range(200).rdd.map { i =>
       if (i.getLong(0) < 150) Row(None)
       else Row("a")
     }
@@ -593,30 +610,137 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       val path = s"${dir.getCanonicalPath}/data"
       df.write.parquet(path)
 
-      val df2 = sqlContext.read.parquet(path)
-      assert(df2.agg("col" -> "count").collect().head.getLong(0) == 50)
+      readParquetFile(path) { df2 =>
+        assert(df2.agg("col" -> "count").collect().head.getLong(0) == 50)
+      }
     }
   }
 
   test("read dictionary encoded decimals written as INT32") {
-    checkAnswer(
-      // Decimal column in this file is encoded using plain dictionary
-      readResourceParquetFile("dec-in-i32.parquet"),
-      sqlContext.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
+    ("true" :: "false" :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // Decimal column in this file is encoded using plain dictionary
+          readResourceParquetFile("dec-in-i32.parquet"),
+          sqlContext.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
+      }
+    }
   }
 
   test("read dictionary encoded decimals written as INT64") {
-    checkAnswer(
-      // Decimal column in this file is encoded using plain dictionary
-      readResourceParquetFile("dec-in-i64.parquet"),
-      sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
+    ("true" :: "false" :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // Decimal column in this file is encoded using plain dictionary
+          readResourceParquetFile("dec-in-i64.parquet"),
+          sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
+      }
+    }
   }
 
   test("read dictionary encoded decimals written as FIXED_LEN_BYTE_ARRAY") {
-    checkAnswer(
-      // Decimal column in this file is encoded using plain dictionary
-      readResourceParquetFile("dec-in-fixed-len.parquet"),
-      sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
+    ("true" :: "false" :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // Decimal column in this file is encoded using plain dictionary
+          readResourceParquetFile("dec-in-fixed-len.parquet"),
+          sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
+      }
+    }
+  }
+
+  test("SPARK-12589 copy() on rows returned from reader works for strings") {
+    withTempPath { dir =>
+      val data = (1, "abc") ::(2, "helloabcde") :: Nil
+      data.toDF().write.parquet(dir.getCanonicalPath)
+      var hash1: Int = 0
+      var hash2: Int = 0
+      (false :: true :: Nil).foreach { v =>
+        withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> v.toString) {
+          val df = sqlContext.read.parquet(dir.getCanonicalPath)
+          val rows = df.queryExecution.toRdd.map(_.copy()).collect()
+          val unsafeRows = rows.map(_.asInstanceOf[UnsafeRow])
+          if (!v) {
+            hash1 = unsafeRows(0).hashCode()
+            hash2 = unsafeRows(1).hashCode()
+          } else {
+            assert(hash1 == unsafeRows(0).hashCode())
+            assert(hash2 == unsafeRows(1).hashCode())
+          }
+        }
+      }
+    }
+  }
+
+  test("UnsafeRowParquetRecordReader - direct path read") {
+    val data = (0 to 10).map(i => (i, ((i + 'a').toChar.toString)))
+    withTempPath { dir =>
+      sqlContext.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
+      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, null)
+          val result = mutable.ArrayBuffer.empty[(Int, String)]
+          while (reader.nextKeyValue()) {
+            val row = reader.getCurrentValue.asInstanceOf[InternalRow]
+            val v = (row.getInt(0), row.getString(1))
+            result += v
+          }
+          assert(data == result)
+        } finally {
+          reader.close()
+        }
+      }
+
+      // Project just one column
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, ("_2" :: Nil).asJava)
+          val result = mutable.ArrayBuffer.empty[(String)]
+          while (reader.nextKeyValue()) {
+            val row = reader.getCurrentValue.asInstanceOf[InternalRow]
+            result += row.getString(0)
+          }
+          assert(data.map(_._2) == result)
+        } finally {
+          reader.close()
+        }
+      }
+
+      // Project columns in opposite order
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
+          val result = mutable.ArrayBuffer.empty[(String, Int)]
+          while (reader.nextKeyValue()) {
+            val row = reader.getCurrentValue.asInstanceOf[InternalRow]
+            val v = (row.getString(0), row.getInt(1))
+            result += v
+          }
+          assert(data.map { x => (x._2, x._1) } == result)
+        } finally {
+          reader.close()
+        }
+      }
+
+      // Empty projection
+      {
+        val reader = new UnsafeRowParquetRecordReader
+        try {
+          reader.initialize(file, List[String]().asJava)
+          var result = 0
+          while (reader.nextKeyValue()) {
+            result += 1
+          }
+          assert(result == data.length)
+        } finally {
+          reader.close()
+        }
+      }
+    }
   }
 }
 

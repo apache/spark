@@ -19,7 +19,6 @@
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
-import org.apache.spark.HashPartitioner
 import org.apache.spark.streaming._
 
 /**

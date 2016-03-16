@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.util.MLUtils
@@ -70,13 +70,13 @@ class KMeans private (
   }
 
   /**
-   * Maximum number of iterations to run.
+   * Maximum number of iterations allowed.
    */
   @Since("1.4.0")
   def getMaxIterations: Int = maxIterations
 
   /**
-   * Set maximum number of iterations to run. Default: 20.
+   * Set maximum number of iterations allowed. Default: 20.
    */
   @Since("0.8.0")
   def setMaxIterations(maxIterations: Int): this.type = {
@@ -107,7 +107,7 @@ class KMeans private (
    * Number of runs of the algorithm to execute in parallel.
    */
   @Since("1.4.0")
-  @deprecated("Support for runs is deprecated. This param will have no effect in 1.7.0.", "1.6.0")
+  @deprecated("Support for runs is deprecated. This param will have no effect in 2.0.0.", "1.6.0")
   def getRuns: Int = runs
 
   /**
@@ -117,10 +117,19 @@ class KMeans private (
    * return the best clustering found over any run. Default: 1.
    */
   @Since("0.8.0")
-  @deprecated("Support for runs is deprecated. This param will have no effect in 1.7.0.", "1.6.0")
+  @deprecated("Support for runs is deprecated. This param will have no effect in 2.0.0.", "1.6.0")
   def setRuns(runs: Int): this.type = {
+    internalSetRuns(runs)
+  }
+
+  // Internal version of setRuns for Python API, this should be removed at the same time as setRuns
+  // this is done to avoid deprecation warnings in our build.
+  private[mllib] def internalSetRuns(runs: Int): this.type = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")
+    }
+    if (runs != 1) {
+      logWarning("Setting number of runs is deprecated and will have no effect in 2.0.0")
     }
     this.runs = runs
     this
@@ -301,6 +310,8 @@ class KMeans private (
         contribs.iterator
       }.reduceByKey(mergeContribs).collectAsMap()
 
+      bcActiveCenters.unpersist(blocking = false)
+
       // Update the cluster centers and costs for each active run
       for ((run, i) <- activeRuns.zipWithIndex) {
         var changed = false
@@ -419,14 +430,17 @@ class KMeans private (
             s0
           }
         )
+
+      bcNewCenters.unpersist(blocking = false)
       preCosts.unpersist(blocking = false)
+
       val chosen = data.zip(costs).mapPartitionsWithIndex { (index, pointsWithCosts) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
         pointsWithCosts.flatMap { case (p, c) =>
           val rs = (0 until runs).filter { r =>
             rand.nextDouble() < 2.0 * c(r) * k / sumCosts(r)
           }
-          if (rs.length > 0) Some(p, rs) else None
+          if (rs.length > 0) Some((p, rs)) else None
         }
       }.collect()
       mergeNewCenters()
@@ -448,6 +462,9 @@ class KMeans private (
         ((r, KMeans.findClosest(bcCenters.value(r), p)._1), 1.0)
       }
     }.reduceByKey(_ + _).collectAsMap()
+
+    bcCenters.unpersist(blocking = false)
+
     val finalCenters = (0 until runs).par.map { r =>
       val myCenters = centers(r).toArray
       val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), 0.0)).toArray
@@ -474,12 +491,15 @@ object KMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
-   * @param initializationMode initialization model, either "random" or "k-means||" (default).
-   * @param seed random seed value for cluster initialization
+   * @param data Training points as an `RDD` of `Vector` types.
+   * @param k Number of clusters to create.
+   * @param maxIterations Maximum number of iterations allowed.
+   * @param runs Number of runs to execute in parallel. The best model according to the cost
+   *             function will be returned. (default: 1)
+   * @param initializationMode The initialization algorithm. This can either be "random" or
+   *                           "k-means||". (default: "k-means||")
+   * @param seed Random seed for cluster initialization. Default is to generate seed based
+   *             on system time.
    */
   @Since("1.3.0")
   def train(
@@ -491,7 +511,7 @@ object KMeans {
       seed: Long): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
-      .setRuns(runs)
+      .internalSetRuns(runs)
       .setInitializationMode(initializationMode)
       .setSeed(seed)
       .run(data)
@@ -500,11 +520,13 @@ object KMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
-   * @param initializationMode initialization model, either "random" or "k-means||" (default).
+   * @param data Training points as an `RDD` of `Vector` types.
+   * @param k Number of clusters to create.
+   * @param maxIterations Maximum number of iterations allowed.
+   * @param runs Number of runs to execute in parallel. The best model according to the cost
+   *             function will be returned. (default: 1)
+   * @param initializationMode The initialization algorithm. This can either be "random" or
+   *                           "k-means||". (default: "k-means||")
    */
   @Since("0.8.0")
   def train(
@@ -515,7 +537,7 @@ object KMeans {
       initializationMode: String): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
-      .setRuns(runs)
+      .internalSetRuns(runs)
       .setInitializationMode(initializationMode)
       .run(data)
   }

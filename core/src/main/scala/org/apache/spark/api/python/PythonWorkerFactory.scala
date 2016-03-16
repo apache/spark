@@ -17,8 +17,9 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataOutputStream, DataInputStream, InputStream, OutputStreamWriter}
+import java.io.{DataInputStream, DataOutputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
+import java.nio.charset.StandardCharsets
 import java.util.Arrays
 
 import scala.collection.mutable
@@ -121,7 +122,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       redirectStreamsToStderr(worker.getInputStream, worker.getErrorStream)
 
       // Tell the worker our port
-      val out = new OutputStreamWriter(worker.getOutputStream)
+      val out = new  OutputStreamWriter(worker.getOutputStream, StandardCharsets.UTF_8)
       out.write(serverSocket.getLocalPort + "\n")
       out.flush()
 

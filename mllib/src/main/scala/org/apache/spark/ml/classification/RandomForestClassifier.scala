@@ -18,11 +18,11 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
+import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
@@ -230,10 +230,10 @@ final class RandomForestClassificationModel private[ml] (
    *  - Average over trees:
    *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree based on total number of training instances used
-   *       to build tree.
+   *     - Normalize importances for tree to sum to 1.
    *  - Normalize feature importance vector to sum to 1.
    */
+  @Since("1.5.0")
   lazy val featureImportances: Vector = RandomForest.featureImportances(trees, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */

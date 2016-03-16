@@ -19,13 +19,13 @@ package org.apache.spark.mllib.tree.impl
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.tree.configuration.FeatureType._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.tree.model.{Bin, Node, Split}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::

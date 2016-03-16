@@ -303,8 +303,28 @@ setMethod("colnames",
 #' @rdname columns
 #' @name colnames<-
 setMethod("colnames<-",
-          signature(x = "DataFrame", value = "character"),
+          signature(x = "DataFrame"),
           function(x, value) {
+
+            # Check parameter integrity
+            if (class(value) != "character") {
+              stop("Invalid column names.")
+            }
+
+            if (length(value) != ncol(x)) {
+              stop(
+                "Column names must have the same length as the number of columns in the dataset.")
+            }
+
+            if (any(is.na(value))) {
+              stop("Column names cannot be NA.")
+            }
+
+            # Check if the column names have . in it
+            if (any(regexec(".", value, fixed = TRUE)[[1]][1] != -1)) {
+              stop("Colum names cannot contain the '.' symbol.")
+            }
+
             sdf <- callJMethod(x@sdf, "toDF", as.list(value))
             dataFrame(sdf)
           })
@@ -331,7 +351,7 @@ setMethod("coltypes",
             types <- sapply(dtypes(x), function(x) {x[[2]]})
 
             # Map Spark data types into R's data types using DATA_TYPES environment
-            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
+            rTypes <- sapply(types, USE.NAMES = F, FUN = function(x) {
               # Check for primitive types
               type <- PRIMITIVE_TYPES[[x]]
 
@@ -458,7 +478,10 @@ setMethod("registerTempTable",
 setMethod("insertInto",
           signature(x = "DataFrame", tableName = "character"),
           function(x, tableName, overwrite = FALSE) {
-            callJMethod(x@sdf, "insertInto", tableName, overwrite)
+            jmode <- convertToJSaveMode(ifelse(overwrite, "overwrite", "append"))
+            write <- callJMethod(x@sdf, "write")
+            write <- callJMethod(write, "mode", jmode)
+            callJMethod(write, "insertInto", tableName)
           })
 
 #' Cache
@@ -596,17 +619,17 @@ setMethod("toJSON",
             RDD(jrdd, serializedMode = "string")
           })
 
-#' saveAsParquetFile
+#' write.json
 #'
-#' Save the contents of a DataFrame as a Parquet file, preserving the schema. Files written out
-#' with this method can be read back in as a DataFrame using parquetFile().
+#' Save the contents of a DataFrame as a JSON file (one object per line). Files written out
+#' with this method can be read back in as a DataFrame using read.json().
 #'
 #' @param x A SparkSQL DataFrame
 #' @param path The directory where the file is saved
 #'
 #' @family DataFrame functions
-#' @rdname saveAsParquetFile
-#' @name saveAsParquetFile
+#' @rdname write.json
+#' @name write.json
 #' @export
 #' @examples
 #'\dontrun{
@@ -614,12 +637,79 @@ setMethod("toJSON",
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(sqlContext, path)
-#' saveAsParquetFile(df, "/tmp/sparkr-tmp/")
+#' write.json(df, "/tmp/sparkr-tmp/")
 #'}
+setMethod("write.json",
+          signature(x = "DataFrame", path = "character"),
+          function(x, path) {
+            write <- callJMethod(x@sdf, "write")
+            invisible(callJMethod(write, "json", path))
+          })
+
+#' write.parquet
+#'
+#' Save the contents of a DataFrame as a Parquet file, preserving the schema. Files written out
+#' with this method can be read back in as a DataFrame using read.parquet().
+#'
+#' @param x A SparkSQL DataFrame
+#' @param path The directory where the file is saved
+#'
+#' @family DataFrame functions
+#' @rdname write.parquet
+#' @name write.parquet
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(sqlContext, path)
+#' write.parquet(df, "/tmp/sparkr-tmp1/")
+#' saveAsParquetFile(df, "/tmp/sparkr-tmp2/")
+#'}
+setMethod("write.parquet",
+          signature(x = "DataFrame", path = "character"),
+          function(x, path) {
+            write <- callJMethod(x@sdf, "write")
+            invisible(callJMethod(write, "parquet", path))
+          })
+
+#' @rdname write.parquet
+#' @name saveAsParquetFile
+#' @export
 setMethod("saveAsParquetFile",
           signature(x = "DataFrame", path = "character"),
           function(x, path) {
-            invisible(callJMethod(x@sdf, "saveAsParquetFile", path))
+            .Deprecated("write.parquet")
+            write.parquet(x, path)
+          })
+
+#' write.text
+#'
+#' Saves the content of the DataFrame in a text file at the specified path.
+#' The DataFrame must have only one column of string type with the name "value".
+#' Each row becomes a new line in the output file.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param path The directory where the file is saved
+#'
+#' @family DataFrame functions
+#' @rdname write.text
+#' @name write.text
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.txt"
+#' df <- read.text(sqlContext, path)
+#' write.text(df, "/tmp/sparkr-tmp/")
+#'}
+setMethod("write.text",
+          signature(x = "DataFrame", path = "character"),
+          function(x, path) {
+            write <- callJMethod(x@sdf, "write")
+            invisible(callJMethod(write, "text", path))
           })
 
 #' Distinct
@@ -662,6 +752,7 @@ setMethod("unique",
 #' @param x A SparkSQL DataFrame
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
+#' @param seed Randomness seed value
 #'
 #' @family DataFrame functions
 #' @rdname sample
@@ -677,13 +768,17 @@ setMethod("unique",
 #' collect(sample(df, TRUE, 0.5))
 #'}
 setMethod("sample",
-          # TODO : Figure out how to send integer as java.lang.Long to JVM so
-          # we can send seed as an argument through callJMethod
           signature(x = "DataFrame", withReplacement = "logical",
                     fraction = "numeric"),
-          function(x, withReplacement, fraction) {
+          function(x, withReplacement, fraction, seed) {
             if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
-            sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
+            if (!missing(seed)) {
+              # TODO : Figure out how to send integer as java.lang.Long to JVM so
+              # we can send seed as an argument through callJMethod
+              sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction, as.integer(seed))
+            } else {
+              sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
+            }
             dataFrame(sdf)
           })
 
@@ -692,8 +787,8 @@ setMethod("sample",
 setMethod("sample_frac",
           signature(x = "DataFrame", withReplacement = "logical",
                     fraction = "numeric"),
-          function(x, withReplacement, fraction) {
-            sample(x, withReplacement, fraction)
+          function(x, withReplacement, fraction, seed) {
+            sample(x, withReplacement, fraction, seed)
           })
 
 #' nrow
@@ -1117,23 +1212,10 @@ setMethod("$", signature(x = "DataFrame"),
 setMethod("$<-", signature(x = "DataFrame"),
           function(x, name, value) {
             stopifnot(class(value) == "Column" || is.null(value))
-            cols <- columns(x)
-            if (name %in% cols) {
-              if (is.null(value)) {
-                cols <- Filter(function(c) { c != name }, cols)
-              }
-              cols <- lapply(cols, function(c) {
-                if (c == name) {
-                  alias(value, name)
-                } else {
-                  col(c)
-                }
-              })
-              nx <- select(x, cols)
+
+            if (is.null(value)) {
+              nx <- drop(x, name)
             } else {
-              if (is.null(value)) {
-                return(x)
-              }
               nx <- withColumn(x, name, value)
             }
             x@sdf <- nx@sdf
@@ -1311,12 +1393,13 @@ setMethod("selectExpr",
 
 #' WithColumn
 #'
-#' Return a new DataFrame with the specified column added.
+#' Return a new DataFrame by adding a column or replacing the existing column
+#' that has the same name.
 #'
 #' @param x A DataFrame
-#' @param colName A string containing the name of the new column.
+#' @param colName A column name.
 #' @param col A Column expression.
-#' @return A DataFrame with the new column added.
+#' @return A DataFrame with the new column added or the existing column replaced.
 #' @family DataFrame functions
 #' @rdname withColumn
 #' @name withColumn
@@ -1329,12 +1412,16 @@ setMethod("selectExpr",
 #' path <- "path/to/file.json"
 #' df <- read.json(sqlContext, path)
 #' newDF <- withColumn(df, "newCol", df$col1 * 5)
+#' # Replace an existing column
+#' newDF2 <- withColumn(newDF, "newCol", newDF$col1)
 #' }
 setMethod("withColumn",
           signature(x = "DataFrame", colName = "character", col = "Column"),
           function(x, colName, col) {
-            select(x, x$"*", alias(col, colName))
+            sdf <- callJMethod(x@sdf, "withColumn", colName, col@jc)
+            dataFrame(sdf)
           })
+
 #' Mutate
 #'
 #' Return a new DataFrame with the specified columns added.
@@ -1570,6 +1657,36 @@ setMethod("where",
             filter(x, condition)
           })
 
+#' dropDuplicates
+#'
+#' Returns a new DataFrame with duplicate rows removed, considering only
+#' the subset of columns.
+#'
+#' @param x A DataFrame.
+#' @param colnames A character vector of column names.
+#' @return A DataFrame with duplicate rows removed.
+#' @family DataFrame functions
+#' @rdname dropduplicates
+#' @name dropDuplicates
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(sqlContext, path)
+#' dropDuplicates(df)
+#' dropDuplicates(df, c("col1", "col2"))
+#' }
+setMethod("dropDuplicates",
+          signature(x = "DataFrame"),
+          function(x, colNames = columns(x)) {
+            stopifnot(class(colNames) == "character")
+
+            sdf <- callJMethod(x@sdf, "dropDuplicates", as.list(colNames))
+            dataFrame(sdf)
+          })
+
 #' Join
 #'
 #' Join two DataFrames based on the given join expression.
@@ -1662,7 +1779,7 @@ setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y, by = intersect(names(x), names(y)), by.x = by, by.y = by,
                    all = FALSE, all.x = all, all.y = all,
-                   sort = TRUE, suffixes = c("_x","_y"), ... ) {
+                   sort = TRUE, suffixes = c("_x", "_y"), ... ) {
 
             if (length(suffixes) != 2) {
               stop("suffixes must have length 2")
@@ -1881,7 +1998,7 @@ setMethod("except",
 #' @param df A SparkSQL DataFrame
 #' @param path A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #'
 #' @family DataFrame functions
 #' @rdname write.df
@@ -1898,24 +2015,27 @@ setMethod("except",
 #' }
 setMethod("write.df",
           signature(df = "DataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "append", ...){
+          function(df, path, source = NULL, mode = "error", ...){
             if (is.null(source)) {
-              sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+              if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+              } else if (exists(".sparkRHivesc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRHivesc", envir = .sparkREnv)
+              } else {
+                stop("sparkRHive or sparkRSQL context has to be specified")
+              }
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
-            allModes <- c("append", "overwrite", "error", "ignore")
-            # nolint start
-            if (!(mode %in% allModes)) {
-              stop('mode should be one of "append", "overwrite", "error", "ignore"')
-            }
-            # nolint end
-            jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
+            jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
                 options[["path"]] <- path
             }
-            callJMethod(df@sdf, "save", source, jmode, options)
+            write <- callJMethod(df@sdf, "write")
+            write <- callJMethod(write, "format", source)
+            write <- callJMethod(write, "mode", jmode)
+            write <- callJMethod(write, "save", path)
           })
 
 #' @rdname write.df
@@ -1923,7 +2043,7 @@ setMethod("write.df",
 #' @export
 setMethod("saveDF",
           signature(df = "DataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "append", ...){
+          function(df, path, source = NULL, mode = "error", ...){
             write.df(df, path, source, mode, ...)
           })
 
@@ -1946,7 +2066,7 @@ setMethod("saveDF",
 #' @param df A SparkSQL DataFrame
 #' @param tableName A name for the table
 #' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #'
 #' @family DataFrame functions
 #' @rdname saveAsTable
@@ -1961,23 +2081,27 @@ setMethod("saveDF",
 #' saveAsTable(df, "myfile")
 #' }
 setMethod("saveAsTable",
-          signature(df = "DataFrame", tableName = "character", source = "character",
-                    mode = "character"),
-          function(df, tableName, source = NULL, mode="append", ...){
+          signature(df = "DataFrame", tableName = "character"),
+          function(df, tableName, source = NULL, mode="error", ...){
             if (is.null(source)) {
-              sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
-              source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
-                                    "org.apache.spark.sql.parquet")
+              if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
+              } else if (exists(".sparkRHivesc", envir = .sparkREnv)) {
+                sqlContext <- get(".sparkRHivesc", envir = .sparkREnv)
+              } else {
+                stop("sparkRHive or sparkRSQL context has to be specified")
+              }
+               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
+                                     "org.apache.spark.sql.parquet")
             }
-            allModes <- c("append", "overwrite", "error", "ignore")
-            # nolint start
-            if (!(mode %in% allModes)) {
-              stop('mode should be one of "append", "overwrite", "error", "ignore"')
-            }
-            # nolint end
-            jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
+            jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
-            callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)
+
+            write <- callJMethod(df@sdf, "write")
+            write <- callJMethod(write, "format", source)
+            write <- callJMethod(write, "mode", jmode)
+            write <- callJMethod(write, "options", options)
+            callJMethod(write, "saveAsTable", tableName)
           })
 
 #' summary
@@ -2175,7 +2299,7 @@ setMethod("as.data.frame",
           function(x, ...) {
             # Check if additional parameters have been passed
             if (length(list(...)) > 0) {
-              stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
+              stop(paste("Unused argument(s): ", paste(list(...), collapse = ", ")))
             }
             collect(x)
           })
@@ -2227,4 +2351,120 @@ setMethod("with",
           function(data, expr, ...) {
             newEnv <- assignNewEnv(data)
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
+          })
+
+#' Display the structure of a DataFrame, including column names, column types, as well as a
+#' a small sample of rows.
+#' @name str
+#' @title Compactly display the structure of a dataset
+#' @rdname str
+#' @family DataFrame functions
+#' @param object a DataFrame
+#' @examples \dontrun{
+#' # Create a DataFrame from the Iris dataset
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' 
+#' # Show the structure of the DataFrame
+#' str(irisDF)
+#' }
+setMethod("str",
+          signature(object = "DataFrame"),
+          function(object) {
+
+            # TODO: These could be made global parameters, though in R it's not the case
+            MAX_CHAR_PER_ROW <- 120
+            MAX_COLS <- 100
+
+            # Get the column names and types of the DataFrame
+            names <- names(object)
+            types <- coltypes(object)
+
+            # Get the first elements of the dataset. Limit number of columns accordingly
+            localDF <- if (ncol(object) > MAX_COLS) {
+              head(object[, c(1:MAX_COLS)])
+            } else {
+              head(object)
+            }
+
+            # The number of observations will not be displayed as computing the
+            # number of rows is a very expensive operation
+            cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
+
+            if (nrow(localDF) > 0) {
+              for (i in 1 : ncol(localDF)) {
+                # Get the first elements for each column
+
+                firstElements <- if (types[i] == "character") {
+                  paste(paste0("\"", localDF[, i], "\""), collapse = " ")
+                } else {
+                  paste(localDF[, i], collapse = " ")
+                }
+
+                # Add the corresponding number of spaces for alignment
+                spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse = "")
+
+                # Get the short type. For 'character', it would be 'chr';
+                # 'for numeric', it's 'num', etc.
+                dataType <- SHORT_TYPES[[types[i]]]
+                if (is.null(dataType)) {
+                  dataType <- substring(types[i], 1, 3)
+                }
+
+                # Concatenate the colnames, coltypes, and first
+                # elements of each column
+                line <- paste0(" $ ", names[i], spaces, ": ",
+                               dataType, " ", firstElements)
+
+                # Chop off extra characters if this is too long
+                cat(substr(line, 1, MAX_CHAR_PER_ROW))
+                cat("\n")
+              }
+
+              if (ncol(localDF) < ncol(object)) {
+                cat(paste0("\nDisplaying first ", ncol(localDF), " columns only."))
+              }
+            }
+          })
+
+#' drop
+#'
+#' Returns a new DataFrame with columns dropped.
+#' This is a no-op if schema doesn't contain column name(s).
+#' 
+#' @param x A SparkSQL DataFrame.
+#' @param cols A character vector of column names or a Column.
+#' @return A DataFrame
+#'
+#' @family DataFrame functions
+#' @rdname drop
+#' @name drop
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlCtx <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(sqlCtx, path)
+#' drop(df, "col1")
+#' drop(df, c("col1", "col2"))
+#' drop(df, df$col1)
+#' }
+setMethod("drop",
+          signature(x = "DataFrame"),
+          function(x, col) {
+            stopifnot(class(col) == "character" || class(col) == "Column")
+
+            if (class(col) == "Column") {
+              sdf <- callJMethod(x@sdf, "drop", col@jc)
+            } else {
+              sdf <- callJMethod(x@sdf, "drop", as.list(col))
+            }
+            dataFrame(sdf)
+          })
+
+# Expose base::drop
+setMethod("drop",
+          signature(x = "ANY"),
+          function(x) {
+            base::drop(x)
           })

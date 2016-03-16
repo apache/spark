@@ -19,27 +19,27 @@ package org.apache.spark.streaming.kafka
 
 import java.io.OutputStream
 import java.lang.{Integer => JInt, Long => JLong}
+import java.nio.charset.StandardCharsets
 import java.util.{List => JList, Map => JMap, Set => JSet}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import com.google.common.base.Charsets.UTF_8
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
-import kafka.serializer.{DefaultDecoder, Decoder, StringDecoder}
-import net.razorvine.pickle.{Opcodes, Pickler, IObjectPickler}
+import kafka.serializer.{Decoder, DefaultDecoder, StringDecoder}
+import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
-import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java._
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
+import org.apache.spark.streaming.util.WriteAheadLogUtils
 
 object KafkaUtils {
   /**
@@ -615,7 +615,7 @@ object KafkaUtils {
 /**
  * This is a helper class that wraps the KafkaUtils.createStream() into more
  * Python-friendly class and function so that it can be easily
- * instantiated and called from Python's KafkaUtils (see SPARK-6027).
+ * instantiated and called from Python's KafkaUtils.
  *
  * The zero-arg constructor helps instantiate this class from the Class object
  * classOf[KafkaUtilsPythonHelper].newInstance(), and the createStream()
@@ -787,7 +787,7 @@ private object KafkaUtilsPythonHelper {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler) {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write(s"$module\nKafkaMessageAndMetadata\n".getBytes(UTF_8))
+        out.write(s"$module\nKafkaMessageAndMetadata\n".getBytes(StandardCharsets.UTF_8))
       } else {
         pickler.save(this)
         val msgAndMetaData = obj.asInstanceOf[PythonMessageAndMetadata]

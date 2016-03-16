@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -31,7 +31,12 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  */
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
-  def assertAnalyzed(): Unit = sqlContext.analyzer.checkAnalysis(analyzed)
+  def assertAnalyzed(): Unit = try sqlContext.analyzer.checkAnalysis(analyzed) catch {
+    case e: AnalysisException =>
+      val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+      ae.setStackTrace(e.getStackTrace)
+      throw ae
+  }
 
   lazy val analyzed: LogicalPlan = sqlContext.analyzer.execute(logical)
 
@@ -44,7 +49,7 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
   lazy val sparkPlan: SparkPlan = {
     SQLContext.setActive(sqlContext)
-    sqlContext.planner.plan(optimizedPlan).next()
+    sqlContext.planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be

@@ -24,8 +24,8 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.rdd.{MapWithStateRDD, MapWithStateRDDRecord}
 import org.apache.spark.streaming.dstream.InternalMapWithStateDStream._
+import org.apache.spark.streaming.rdd.{MapWithStateRDD, MapWithStateRDDRecord}
 
 /**
  * :: Experimental ::
@@ -90,7 +90,7 @@ private[streaming] class MapWithStateDStreamImpl[
 }
 
 /**
- * A DStream that allows per-key state to be maintains, and arbitrary records to be generated
+ * A DStream that allows per-key state to be maintained, and arbitrary records to be generated
  * based on updates to the state. This is the main DStream that implements the `mapWithState`
  * operation on DStreams.
  *

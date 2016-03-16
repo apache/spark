@@ -67,7 +67,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * command line parsing works. This maps the class name to the resource to use when calling
    * spark-submit.
    */
-  private static final Map<String, String> specialClasses = new HashMap<String, String>();
+  private static final Map<String, String> specialClasses = new HashMap<>();
   static {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
@@ -87,12 +87,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private boolean allowsMixedArguments;
 
   SparkSubmitCommandBuilder() {
-    this.sparkArgs = new ArrayList<String>();
+    this.sparkArgs = new ArrayList<>();
     this.printInfo = false;
   }
 
   SparkSubmitCommandBuilder(List<String> args) {
-    this.sparkArgs = new ArrayList<String>();
+    this.sparkArgs = new ArrayList<>();
     List<String> submitArgs = args;
     if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
       this.allowsMixedArguments = true;
@@ -123,7 +123,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   List<String> buildSparkSubmitArgs() {
-    List<String> args = new ArrayList<String>();
+    List<String> args = new ArrayList<>();
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
 
     if (verbose) {
@@ -231,11 +231,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // the pyspark command line, then run it using spark-submit.
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".py")) {
       System.err.println(
-        "WARNING: Running python applications through 'pyspark' is deprecated as of Spark 1.0.\n" +
+        "Running python applications through 'pyspark' is not supported as of Spark 2.0.\n" +
         "Use ./bin/spark-submit <python file>");
-      appResource = appArgs.get(0);
-      appArgs.remove(0);
-      return buildCommand(env);
+      System.exit(-1);
     }
 
     checkArgument(appArgs.isEmpty(), "pyspark does not support any application options.");
@@ -246,7 +244,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     // The executable is the PYSPARK_DRIVER_PYTHON env variable set by the pyspark script,
     // followed by PYSPARK_DRIVER_PYTHON_OPTS.
-    List<String> pyargs = new ArrayList<String>();
+    List<String> pyargs = new ArrayList<>();
     pyargs.add(firstNonEmpty(System.getenv("PYSPARK_DRIVER_PYTHON"), "python"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
     if (!isEmpty(pyOpts)) {
@@ -258,9 +256,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".R")) {
-      appResource = appArgs.get(0);
-      appArgs.remove(0);
-      return buildCommand(env);
+      System.err.println(
+        "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
+        "Use ./bin/spark-submit <R file>");
+      System.exit(-1);
     }
     // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS
     // env variable.
@@ -271,7 +270,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     env.put("R_PROFILE_USER",
             join(File.separator, sparkHome, "R", "lib", "SparkR", "profile", "shell.R"));
 
-    List<String> args = new ArrayList<String>();
+    List<String> args = new ArrayList<>();
     args.add(firstNonEmpty(System.getenv("SPARKR_DRIVER_R"), "R"));
     return args;
   }
@@ -294,10 +293,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private boolean isClientMode(Map<String, String> userProps) {
     String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
-    // Default master is "local[*]", so assume client mode in that case.
+    String userDeployMode = firstNonEmpty(deployMode, userProps.get(SparkLauncher.DEPLOY_MODE));
+    // Default master is "local[*]", so assume client mode in that case
     return userMaster == null ||
-      "client".equals(deployMode) ||
-      (!userMaster.equals("yarn-cluster") && deployMode == null);
+      "client".equals(userDeployMode) ||
+      (!userMaster.equals("yarn-cluster") && userDeployMode == null);
   }
 
   /**

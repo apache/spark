@@ -102,7 +102,7 @@ private[spark] object UIWorkloadGenerator {
             try {
               setProperties(desc)
               job()
-              println("Job funished: " + desc)
+              println("Job finished: " + desc)
             } catch {
               case e: Exception =>
                 println("Job Failed: " + desc)

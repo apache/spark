@@ -25,17 +25,17 @@ import org.apache.commons.lang3.RandomUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapred.{FileSplit => OldFileSplit, InputSplit => OldInputSplit,
+  JobConf, LineRecordReader => OldLineRecordReader, RecordReader => OldRecordReader,
+  Reporter, TextInputFormat => OldTextInputFormat}
 import org.apache.hadoop.mapred.lib.{CombineFileInputFormat => OldCombineFileInputFormat,
   CombineFileRecordReader => OldCombineFileRecordReader, CombineFileSplit => OldCombineFileSplit}
-import org.apache.hadoop.mapred.{JobConf, Reporter, FileSplit => OldFileSplit,
-  InputSplit => OldInputSplit, LineRecordReader => OldLineRecordReader,
-  RecordReader => OldRecordReader, TextInputFormat => OldTextInputFormat}
+import org.apache.hadoop.mapreduce.{InputSplit => NewInputSplit, RecordReader => NewRecordReader,
+  TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat => NewCombineFileInputFormat,
   CombineFileRecordReader => NewCombineFileRecordReader, CombineFileSplit => NewCombineFileSplit,
   FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
-import org.apache.hadoop.mapreduce.{TaskAttemptContext, InputSplit => NewInputSplit,
-  RecordReader => NewRecordReader}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
@@ -98,14 +98,14 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
       rdd.coalesce(4).count()
     }
 
-    // for count and coelesce, the same bytes should be read.
+    // for count and coalesce, the same bytes should be read.
     assert(bytesRead != 0)
     assert(bytesRead2 == bytesRead)
   }
 
   /**
    * This checks the situation where we have interleaved reads from
-   * different sources. Currently, we only accumulate fron the first
+   * different sources. Currently, we only accumulate from the first
    * read method we find in the task. This test uses cartesian to create
    * the interleaved reads.
    *
@@ -183,7 +183,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     assert(records == numRecords)
   }
 
-  test("input metrics on recordsd read with cache") {
+  test("input metrics on records read with cache") {
     // prime the cache manager
     val rdd = sc.textFile(tmpFilePath, 4).cache()
     rdd.collect()
@@ -212,7 +212,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
         metrics.inputMetrics.foreach(inputRead += _.recordsRead)
         metrics.outputMetrics.foreach(outputWritten += _.recordsWritten)
         metrics.shuffleReadMetrics.foreach(shuffleRead += _.recordsRead)
-        metrics.shuffleWriteMetrics.foreach(shuffleWritten += _.shuffleRecordsWritten)
+        metrics.shuffleWriteMetrics.foreach(shuffleWritten += _.recordsWritten)
       }
     })
 

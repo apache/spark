@@ -18,18 +18,20 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.spark.sql.catalyst.expressions.JsonTuple
-import org.apache.spark.sql.catalyst.plans.logical.Generate
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.client.{ExternalTable, HiveColumn, HiveTable, ManagedTable}
-
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.parser.SimpleParserConf
+import org.apache.spark.sql.catalyst.plans.logical.Generate
 
 class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
-  private def extractTableDesc(sql: String): (HiveTable, Boolean) = {
-    HiveQl.createPlan(sql).collect {
+  val parser = new HiveQl(SimpleParserConf())
+
+  private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
+    parser.parsePlan(sql).collect {
       case CreateTableAsSelect(desc, child, allowExisting) => (desc, allowExisting)
     }.head
   }
@@ -51,28 +53,29 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
         |AS SELECT * FROM src""".stripMargin
 
     val (desc, exists) = extractTableDesc(s1)
-    assert(exists == true)
+    assert(exists)
     assert(desc.specifiedDatabase == Some("mydb"))
     assert(desc.name == "page_view")
-    assert(desc.tableType == ExternalTable)
-    assert(desc.location == Some("/user/external/page_view"))
+    assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
+    assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
-      HiveColumn("viewtime", "int", null) ::
-        HiveColumn("userid", "bigint", null) ::
-        HiveColumn("page_url", "string", null) ::
-        HiveColumn("referrer_url", "string", null) ::
-        HiveColumn("ip", "string", "IP Address of the User") ::
-        HiveColumn("country", "string", "country of origination") :: Nil)
+      CatalogColumn("viewtime", "int") ::
+      CatalogColumn("userid", "bigint") ::
+      CatalogColumn("page_url", "string") ::
+      CatalogColumn("referrer_url", "string") ::
+      CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
+      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
     assert(desc.partitionColumns ==
-      HiveColumn("dt", "string", "date type") ::
-        HiveColumn("hour", "string", "hour of the day") :: Nil)
-    assert(desc.serdeProperties ==
-      Map((serdeConstants.SERIALIZATION_FORMAT, "\054"), (serdeConstants.FIELD_DELIM, "\054")))
-    assert(desc.inputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(desc.outputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(desc.serde == Option("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
+      CatalogColumn("dt", "string", comment = Some("date type")) ::
+      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
+    assert(desc.storage.serdeProperties ==
+      Map((serdeConstants.SERIALIZATION_FORMAT, "\u002C"), (serdeConstants.FIELD_DELIM, "\u002C")))
+    assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+    assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+    assert(desc.storage.serde ==
+      Some("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
     assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
   }
 
@@ -96,27 +99,27 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
         |AS SELECT * FROM src""".stripMargin
 
     val (desc, exists) = extractTableDesc(s2)
-    assert(exists == true)
+    assert(exists)
     assert(desc.specifiedDatabase == Some("mydb"))
     assert(desc.name == "page_view")
-    assert(desc.tableType == ExternalTable)
-    assert(desc.location == Some("/user/external/page_view"))
+    assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
+    assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
-      HiveColumn("viewtime", "int", null) ::
-        HiveColumn("userid", "bigint", null) ::
-        HiveColumn("page_url", "string", null) ::
-        HiveColumn("referrer_url", "string", null) ::
-        HiveColumn("ip", "string", "IP Address of the User") ::
-        HiveColumn("country", "string", "country of origination") :: Nil)
+      CatalogColumn("viewtime", "int") ::
+      CatalogColumn("userid", "bigint") ::
+      CatalogColumn("page_url", "string") ::
+      CatalogColumn("referrer_url", "string") ::
+      CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
+      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
     assert(desc.partitionColumns ==
-      HiveColumn("dt", "string", "date type") ::
-        HiveColumn("hour", "string", "hour of the day") :: Nil)
-    assert(desc.serdeProperties == Map())
-    assert(desc.inputFormat == Option("parquet.hive.DeprecatedParquetInputFormat"))
-    assert(desc.outputFormat == Option("parquet.hive.DeprecatedParquetOutputFormat"))
-    assert(desc.serde == Option("parquet.hive.serde.ParquetHiveSerDe"))
+      CatalogColumn("dt", "string", comment = Some("date type")) ::
+      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
+    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
+    assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
+    assert(desc.storage.serde == Some("parquet.hive.serde.ParquetHiveSerDe"))
     assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
   }
 
@@ -126,14 +129,15 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(exists == false)
     assert(desc.specifiedDatabase == None)
     assert(desc.name == "page_view")
-    assert(desc.tableType == ManagedTable)
-    assert(desc.location == None)
-    assert(desc.schema == Seq.empty[HiveColumn])
+    assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
+    assert(desc.storage.locationUri == None)
+    assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.serdeProperties == Map())
-    assert(desc.inputFormat == Option("org.apache.hadoop.mapred.TextInputFormat"))
-    assert(desc.outputFormat == Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
-    assert(desc.serde.isEmpty)
+    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(desc.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+    assert(desc.storage.serde.isEmpty)
     assert(desc.properties == Map())
   }
 
@@ -160,21 +164,21 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(exists == false)
     assert(desc.specifiedDatabase == None)
     assert(desc.name == "ctas2")
-    assert(desc.tableType == ManagedTable)
-    assert(desc.location == None)
-    assert(desc.schema == Seq.empty[HiveColumn])
+    assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
+    assert(desc.storage.locationUri == None)
+    assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
-    assert(desc.inputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(desc.outputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(desc.serde == Option("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
+    assert(desc.storage.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
+    assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+    assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
     assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
   }
 
   test("Invalid interval term should throw AnalysisException") {
     def assertError(sql: String, errorMessage: String): Unit = {
       val e = intercept[AnalysisException] {
-        HiveQl.parseSql(sql)
+        parser.parsePlan(sql)
       }
       assert(e.getMessage.contains(errorMessage))
     }
@@ -187,7 +191,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {
-    val plan = HiveQl.parseSql(
+    val plan = parser.parsePlan(
       """
         |SELECT *
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
@@ -195,5 +199,33 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
       """.stripMargin)
 
     assert(plan.children.head.asInstanceOf[Generate].generator.isInstanceOf[JsonTuple])
+  }
+
+  test("use backticks in output of Script Transform") {
+    val plan = parser.parsePlan(
+      """SELECT `t`.`thing1`
+        |FROM (SELECT TRANSFORM (`parquet_t1`.`key`, `parquet_t1`.`value`)
+        |USING 'cat' AS (`thing1` int, `thing2` string) FROM `default`.`parquet_t1`) AS t
+      """.stripMargin)
+  }
+
+  test("use backticks in output of Generator") {
+    val plan = parser.parsePlan(
+      """
+        |SELECT `gentab2`.`gencol2`
+        |FROM `default`.`src`
+        |LATERAL VIEW explode(array(array(1, 2, 3))) `gentab1` AS `gencol1`
+        |LATERAL VIEW explode(`gentab1`.`gencol1`) `gentab2` AS `gencol2`
+      """.stripMargin)
+  }
+
+  test("use escaped backticks in output of Generator") {
+    val plan = parser.parsePlan(
+      """
+        |SELECT `gen``tab2`.`gen``col2`
+        |FROM `default`.`src`
+        |LATERAL VIEW explode(array(array(1, 2,  3))) `gen``tab1` AS `gen``col1`
+        |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
+      """.stripMargin)
   }
 }

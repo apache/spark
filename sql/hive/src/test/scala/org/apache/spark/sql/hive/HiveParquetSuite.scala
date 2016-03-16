@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.{QueryTest, Row}
 
 case class Cases(lower: String, UPPER: String)
 
@@ -61,7 +61,8 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
   }
 
   test("INSERT OVERWRITE TABLE Parquet table") {
-    withParquetTable((1 to 10).map(i => (i, s"val_$i")), "t") {
+    // Don't run with vectorized: currently relies on UnsafeRow.
+    withParquetTable((1 to 10).map(i => (i, s"val_$i")), "t", false) {
       withTempPath { file =>
         sql("SELECT * FROM t LIMIT 1").write.parquet(file.getCanonicalPath)
         hiveContext.read.parquet(file.getCanonicalPath).registerTempTable("p")

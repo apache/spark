@@ -25,7 +25,6 @@ import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkException, SparkFunSuite}
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -34,7 +33,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
-
+import org.apache.spark.util.Utils
 
 class ALSSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
@@ -343,11 +342,10 @@ class ALSSuite
       .setSeed(0)
     val alpha = als.getAlpha
     val model = als.fit(training.toDF())
-    val predictions = model.transform(test.toDF())
-      .select("rating", "prediction")
-      .map { case Row(rating: Float, prediction: Float) =>
+    val predictions = model.transform(test.toDF()).select("rating", "prediction").rdd.map {
+      case Row(rating: Float, prediction: Float) =>
         (rating.toDouble, prediction.toDouble)
-      }
+    }
     val rmse =
       if (implicitPrefs) {
         // TODO: Use a better (rank-based?) evaluation metric for implicit feedback.

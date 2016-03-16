@@ -19,8 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Types
 
-import org.apache.spark.sql.types.{BooleanType, LongType, DataType, MetadataBuilder}
-
+import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuilder}
 
 private case object MySQLDialect extends JdbcDialect {
 

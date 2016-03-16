@@ -17,7 +17,7 @@
 
 package org.apache.spark.repl
 
-import java.io.{IOException, ByteArrayOutputStream, InputStream}
+import java.io.{ByteArrayOutputStream, FilterInputStream, InputStream, IOException}
 import java.net.{HttpURLConnection, URI, URL, URLEncoder}
 import java.nio.channels.Channels
 
@@ -27,10 +27,9 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.xbean.asm5._
 import org.apache.xbean.asm5.Opcodes._
 
-import org.apache.spark.{SparkConf, SparkEnv, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
-import org.apache.spark.util.ParentClassLoader
+import org.apache.spark.util.{ParentClassLoader, Utils}
 
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
@@ -96,7 +95,24 @@ class ExecutorClassLoader(
 
   private def getClassFileInputStreamFromSparkRPC(path: String): InputStream = {
     val channel = env.rpcEnv.openChannel(s"$classUri/$path")
-    Channels.newInputStream(channel)
+    new FilterInputStream(Channels.newInputStream(channel)) {
+
+      override def read(): Int = toClassNotFound(super.read())
+
+      override def read(b: Array[Byte]): Int = toClassNotFound(super.read(b))
+
+      override def read(b: Array[Byte], offset: Int, len: Int) =
+        toClassNotFound(super.read(b, offset, len))
+
+      private def toClassNotFound(fn: => Int): Int = {
+        try {
+          fn
+        } catch {
+          case e: Exception =>
+            throw new ClassNotFoundException(path, e)
+        }
+      }
+    }
   }
 
   private def getClassFileInputStreamFromHttpServer(pathInDirectory: String): InputStream = {

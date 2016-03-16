@@ -24,9 +24,9 @@ import scala.util.control.ControlThrowable
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.scheduler._
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.util.{ThreadUtils, Clock, SystemClock, Utils}
+import org.apache.spark.scheduler._
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -231,6 +231,8 @@ private[spark] class ExecutorAllocationManager(
       }
     }
     executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+
+    client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
   }
 
   /**
@@ -423,7 +425,8 @@ private[spark] class ExecutorAllocationManager(
       executorsPendingToRemove.add(executorId)
       true
     } else {
-      logWarning(s"Unable to reach the cluster manager to kill executor $executorId!")
+      logWarning(s"Unable to reach the cluster manager to kill executor $executorId," +
+        s"or no executor eligible to kill!")
       false
     }
   }
@@ -524,7 +527,6 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorBusy(executorId: String): Unit = synchronized {
     logDebug(s"Clearing idle timer for $executorId because it is now running a task")
     removeTimes.remove(executorId)
-    executorsPendingToRemove.remove(executorId)
   }
 
   /**

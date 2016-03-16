@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{RoundingMode, MathContext}
+import java.math.{MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -340,6 +340,9 @@ object Decimal {
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
 
+  /** Maximum number of decimal digits a Int can represent */
+  val MAX_INT_DIGITS = 9
+
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18
 
@@ -372,6 +375,17 @@ object Decimal {
     new Decimal().set(unscaled, precision, scale)
 
   def apply(value: String): Decimal = new Decimal().set(BigDecimal(value))
+
+  /**
+   * Creates a decimal from unscaled, precision and scale without checking the bounds.
+   */
+  def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal = {
+    val dec = new Decimal()
+    dec.longVal = unscaled
+    dec._precision = precision
+    dec._scale = scale
+    dec
+  }
 
   // Evidence parameters for Decimal considered either as Fractional or Integral. We provide two
   // parameters inheriting from a common trait since both traits define mkNumericOps.

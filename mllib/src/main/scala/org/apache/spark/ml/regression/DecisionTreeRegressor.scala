@@ -20,7 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeRegressorParams}
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
@@ -29,6 +29,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => O
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
 
 /**
  * :: Experimental ::
@@ -40,7 +41,7 @@ import org.apache.spark.sql.DataFrame
 @Experimental
 final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
-  with DecisionTreeParams with TreeRegressorParams {
+  with DecisionTreeRegressorParams {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtr"))
@@ -72,6 +73,9 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   override def setSeed(value: Long): this.type = super.setSeed(value)
+
+  /** @group setParam */
+  def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
@@ -113,7 +117,10 @@ final class DecisionTreeRegressionModel private[ml] (
     override val rootNode: Node,
     override val numFeatures: Int)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
-  with DecisionTreeModel with Serializable {
+  with DecisionTreeModel with DecisionTreeRegressorParams with Serializable {
+
+  /** @group setParam */
+  def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
@@ -129,6 +136,29 @@ final class DecisionTreeRegressionModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
+  /** We need to update this function if we ever add other impurity measures. */
+  protected def predictVariance(features: Vector): Double = {
+    rootNode.predictImpl(features).impurityStats.calculate()
+  }
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    transformImpl(dataset)
+  }
+
+  override protected def transformImpl(dataset: DataFrame): DataFrame = {
+    val predictUDF = udf { (features: Vector) => predict(features) }
+    val predictVarianceUDF = udf { (features: Vector) => predictVariance(features) }
+    var output = dataset
+    if ($(predictionCol).nonEmpty) {
+      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    }
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
+      output = output.withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol))))
+    }
+    output
+  }
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {
     copyValues(new DecisionTreeRegressionModel(uid, rootNode, numFeatures), extra).setParent(parent)
@@ -138,6 +168,25 @@ final class DecisionTreeRegressionModel private[ml] (
   override def toString: String = {
     s"DecisionTreeRegressionModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
+
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * This generalizes the idea of "Gini" importance to other losses,
+   * following the explanation of Gini importance from "Random Forests" documentation
+   * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+   *
+   * This feature importance is calculated as follows:
+   *   - importance(feature j) = sum (over nodes which split on feature j) of the gain,
+   *     where gain is scaled by the number of instances passing through node
+   *   - Normalize importances for tree to sum to 1.
+   *
+   * Note: Feature importance for single decision trees can have high variance due to
+   *       correlated predictor variables. Consider using a [[RandomForestRegressor]]
+   *       to determine feature importance instead.
+   */
+  @Since("2.0.0")
+  lazy val featureImportances: Vector = RandomForest.featureImportances(this, numFeatures)
 
   /** Convert to a model in the old API */
   private[ml] def toOld: OldDecisionTreeModel = {

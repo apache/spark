@@ -17,11 +17,13 @@
 
 package org.apache.spark.streaming.dstream
 
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
-import java.io.{ObjectOutputStream, ObjectInputStream, IOException}
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.fs.FileSystem
+
+import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.Logging
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
@@ -37,7 +39,7 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   // in that batch's checkpoint data
   @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time]
 
-  @transient private var fileSystem : FileSystem = null
+  @transient private var fileSystem: FileSystem = null
   protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]]
 
   /**

@@ -19,6 +19,7 @@ package org.apache.spark.serializer
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 
@@ -29,7 +30,7 @@ import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.{SparkException, SparkEnv}
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 
 /**
@@ -86,7 +87,7 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
       schemaBytes.arrayOffset() + schemaBytes.position(),
       schemaBytes.remaining())
     val bytes = IOUtils.toByteArray(codec.compressedInputStream(bis))
-    new Schema.Parser().parse(new String(bytes, "UTF-8"))
+    new Schema.Parser().parse(new String(bytes, StandardCharsets.UTF_8))
   })
 
   /**
