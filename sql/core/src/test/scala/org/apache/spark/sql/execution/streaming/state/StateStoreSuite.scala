@@ -24,16 +24,21 @@ import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester {
   type MapType = mutable.HashMap[InternalRow, InternalRow]
 
+  import StateStoreCoordinatorSuite._
   import StateStoreSuite._
 
   private val tempDir = Utils.createTempDir().toString
@@ -263,32 +268,65 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   }
 
   test("StateStore.get") {
-    val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    quietly {
+      val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
+      val storeId = StateStoreId(0, 0)
+
+      // Verify that trying to get incorrect versions throw errors
+      intercept[IllegalArgumentException] {
+        StateStore.get(storeId, dir, -1)
+      }
+      intercept[IllegalStateException] {
+        StateStore.get(storeId, dir, 1)
+      }
+
+      // Increase version of the store
+      val store0 = StateStore.get(storeId, dir, 0)
+      assert(store0.version === 0)
+      update(store0, "a", 1)
+      store0.commit()
+
+      assert(StateStore.get(storeId, dir, 1).version == 1)
+      assert(StateStore.get(storeId, dir, 0).version == 0)
+
+      // Verify that you can remove the store and still reload and use it
+      StateStore.remove(storeId)
+      val store1 = StateStore.get(storeId, dir, 1)
+      update(store1, "a", 2)
+      assert(store1.commit() === 2)
+      assert(unwrapToSet(store1.iterator()) === Set("a" -> 2))
+    }
+  }
+
+  test("background management") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+      .set("spark.sql.streaming.stateStore.managementInterval", "10ms")
     val storeId = StateStoreId(0, 0)
+    val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    quietly {
+      withSpark(new SparkContext(conf)) { sc =>
+        withCoordinator(sc) { coordinator =>
+          for (i <- 1 to 20) {
+            val store = StateStore.get(storeId, dir, i - 1)
+            update(store, "a", i)
+            store.commit()
+          }
 
-    // Verify that trying to get incorrect versions throw errors
-    intercept[IllegalArgumentException] {
-      StateStore.get(storeId, dir, -1)
+          val provider = new HDFSBackedStateStoreProvider(storeId, dir)
+
+          eventually(timeout(4 seconds)) {
+            assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
+
+            val snapshotVersions = (0 to 20).filter { version =>
+              fileExists(provider, version, isSnapshot = true)
+            }
+            assert(snapshotVersions.nonEmpty, "no snapshot file found")
+          }
+        }
+      }
     }
-    intercept[IllegalStateException] {
-      StateStore.get(storeId, dir, 1)
-    }
-
-    // Increase version of the store
-    val store0 = StateStore.get(storeId, dir, 0)
-    assert(store0.version === 0)
-    update(store0, "a", 1)
-    store0.commit()
-
-    assert(StateStore.get(storeId, dir, 1).version == 1)
-    assert(StateStore.get(storeId, dir, 0).version == 0)
-
-    // Verify that you can remove the store and still reload and use it
-    StateStore.remove(storeId)
-    val store1 = StateStore.get(storeId, dir, 1)
-    update(store1, "a", 2)
-    assert(store1.commit() === 2)
-    assert(unwrapToSet(store1.iterator()) === Set("a" -> 2))
   }
 
   def getDataFromFiles(
@@ -303,8 +341,8 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   }
 
   def assertMap(
-    testMapOption: Option[MapType],
-    expectedMap: Map[String, Int]): Unit = {
+      testMapOption: Option[MapType],
+      expectedMap: Map[String, Int]): Unit = {
     assert(testMapOption.nonEmpty, "no map present")
     val convertedMap = testMapOption.get.map(unwrapKeyValue)
     assert(convertedMap === expectedMap)
