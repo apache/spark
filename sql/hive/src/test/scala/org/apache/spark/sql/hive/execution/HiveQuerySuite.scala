@@ -956,9 +956,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(checkAddFileRDD.first())
   }
 
-  case class LogEntry(filename: String, message: String)
-  case class LogFile(name: String)
-
   createQueryTest("dynamic_partition",
     """
       |DROP TABLE IF EXISTS dynamic_part_table;
@@ -1255,3 +1252,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
 // for SPARK-2180 test
 case class HavingRow(key: Int, value: String, attr: Int)
+
+case class LogEntry(filename: String, message: String)
+case class LogFile(name: String)
