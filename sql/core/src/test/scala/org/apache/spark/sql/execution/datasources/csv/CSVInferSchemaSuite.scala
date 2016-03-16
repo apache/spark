@@ -32,7 +32,7 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(NullType, "2015-08-20 15:57:00") == TimestampType)
     assert(CSVInferSchema.inferField(NullType, "True") == BooleanType)
     assert(CSVInferSchema.inferField(NullType, "FAlSE") == BooleanType)
-    val textValue = "21602730330000060100100000358582"
+    val textValue = "10000000000000000001"
     val decimalValue = new java.math.BigDecimal(textValue)
     val expectedType = DecimalType(decimalValue.precision, decimalValue.scale)
     assert(CSVInferSchema.inferField(NullType, textValue) == expectedType)
@@ -49,7 +49,7 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(LongType, "True") == BooleanType)
     assert(CSVInferSchema.inferField(IntegerType, "FALSE") == BooleanType)
     assert(CSVInferSchema.inferField(TimestampType, "FALSE") == BooleanType)
-    val textValue = "21602730330000060100100000358582"
+    val textValue = "1.00000000000000001"
     val decimalValue = new java.math.BigDecimal(textValue)
     val expectedType = DecimalType(decimalValue.precision, decimalValue.scale)
     assert(CSVInferSchema.inferField(DoubleType, textValue) == expectedType)
