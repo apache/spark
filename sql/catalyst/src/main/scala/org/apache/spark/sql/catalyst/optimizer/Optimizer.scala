@@ -895,11 +895,6 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
       // condition without nondeterministic expressions.
       val andConditions = splitConjunctivePredicates(condition)
 
-      val temp = andConditions.map{
-        _.collect {
-          case a: Attribute if aliasMap.contains(a) => aliasMap(a)
-        }
-      }
       val (deterministic, nondeterministic) = andConditions.partition(_.collect {
         case a: Attribute if aliasMap.contains(a) => aliasMap(a)
       }.forall(_.deterministic))
