@@ -124,14 +124,14 @@ class Accumulable[R, T] private[spark] (
   @volatile @transient private var value_ : R = initialValue // Current value on driver
 
   // For consistent accumulators pending and processed updates.
-  // Completed and processed are keyed by (rdd id, shuffle id, partition id)
+  // Pending and processed are keyed by (rdd id, shuffle id, partition id)
   @transient private[spark] lazy val pending = new mutable.HashMap[(Int, Int, Int), R]()
   // Completed contains the set of (rdd id, shuffle id, partition id) that have been
   // fully processed on the worker side. This is used to determine if the updates should
   // be sent back to the driver for a particular rdd/shuffle/partition combination.
   @transient private[spark] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
-  // processed is keyed by (rdd id, shuffle id) and bitset contains all partitions for that
-  // combination which have been merged into the value.
+  // Processed is keyed by (rdd id, shuffle id) and the value is a bitset containing all partitions
+  // for the given key which have been merged into the value. This is used on the driver.
   @transient private[spark] lazy val processed = new mutable.HashMap[(Int, Int), mutable.BitSet]()
 
   val zero = param.zero(initialValue) // Zero value to be passed to executors
