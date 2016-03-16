@@ -26,10 +26,14 @@ import org.apache.spark.rdd.RDD
  * Model fitted by [[IterativelyReweightedLeastSquares]].
  * @param coefficients model coefficients
  * @param intercept model intercept
+ * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
+ * @param numIterations number of iterations
  */
 private[ml] class IterativelyReweightedLeastSquaresModel(
     val coefficients: DenseVector,
-    val intercept: Double) extends Serializable
+    val intercept: Double,
+    val diagInvAtWA: DenseVector,
+    val numIterations: Int) extends Serializable
 
 /**
  * Implements the method of iteratively reweighted least squares (IRLS) which is used to solve
@@ -103,6 +107,7 @@ private[ml] class IterativelyReweightedLeastSquares(
 
     }
 
-    new IterativelyReweightedLeastSquaresModel(model.coefficients, model.intercept)
+    new IterativelyReweightedLeastSquaresModel(
+      model.coefficients, model.intercept, model.diagInvAtWA, iter)
   }
 }
