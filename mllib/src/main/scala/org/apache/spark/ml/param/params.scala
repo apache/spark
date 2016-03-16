@@ -101,7 +101,26 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
   }
 
   /** Decodes a param value from JSON. */
-  def jsonDecode(json: String): T = {
+  def jsonDecode(json: String): T = Param.jsonDecode[T](json)
+
+  private[this] val stringRepresentation = s"${parent}__$name"
+
+  override final def toString: String = stringRepresentation
+
+  override final def hashCode: Int = toString.##
+
+  override final def equals(obj: Any): Boolean = {
+    obj match {
+      case p: Param[_] => (p.parent == parent) && (p.name == name)
+      case _ => false
+    }
+  }
+}
+
+private[ml] object Param {
+
+  /** Decodes a param value from JSON. */
+  def jsonDecode[T](json: String): T = {
     parse(json) match {
       case JString(x) =>
         x.asInstanceOf[T]
@@ -114,19 +133,6 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
         throw new NotImplementedError(
           "The default jsonDecode only supports string and vector. " +
             s"${this.getClass.getName} must override jsonDecode to support its value type.")
-    }
-  }
-
-  private[this] val stringRepresentation = s"${parent}__$name"
-
-  override final def toString: String = stringRepresentation
-
-  override final def hashCode: Int = toString.##
-
-  override final def equals(obj: Any): Boolean = {
-    obj match {
-      case p: Param[_] => (p.parent == parent) && (p.name == name)
-      case _ => false
     }
   }
 }

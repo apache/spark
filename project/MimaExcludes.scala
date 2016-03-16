@@ -536,6 +536,10 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ShuffleDependency.this"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ShuffleDependency.serializer"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.Serializer$")
+      ) ++ Seq(
+        // SPARK-13927: add row/column iterator to local matrices
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix.rowIter"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix.colIter")
       )
     case v if v.startsWith("1.6") =>
       Seq(

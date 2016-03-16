@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
+import scala.tools.nsc.Properties
 
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
@@ -87,13 +88,17 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  ignore("SPARK-8489: MissingRequirementError during reflection") {
+  test("SPARK-8489: MissingRequirementError during reflection") {
     // This test uses a pre-built jar to test SPARK-8489. In a nutshell, this test creates
     // a HiveContext and uses it to create a data frame from an RDD using reflection.
     // Before the fix in SPARK-8470, this results in a MissingRequirementError because
     // the HiveContext code mistakenly overrides the class loader that contains user classes.
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
-    val testJar = "sql/hive/src/test/resources/regression-test-SPARK-8489/test.jar"
+    val version = Properties.versionNumberString match {
+      case v if v.startsWith("2.10") || v.startsWith("2.11") => v.substring(0, 4)
+      case x => throw new Exception(s"Unsupported Scala Version: $x")
+    }
+    val testJar = s"sql/hive/src/test/resources/regression-test-SPARK-8489/test-$version.jar"
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",

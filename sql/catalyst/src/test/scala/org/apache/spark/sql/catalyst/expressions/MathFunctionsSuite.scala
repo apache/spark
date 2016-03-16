@@ -444,7 +444,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Hex(Literal("helloHex".getBytes(StandardCharsets.UTF_8))), "68656C6C6F486578")
     // scalastyle:off
     // Turn off scala style for non-ascii chars
-    checkEvaluation(Hex(Literal("三重的".getBytes("UTF8"))), "E4B889E9878DE79A84")
+    checkEvaluation(Hex(Literal("三重的".getBytes(StandardCharsets.UTF_8))), "E4B889E9878DE79A84")
     // scalastyle:on
     Seq(LongType, BinaryType, StringType).foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Hex.apply _, dt)
@@ -460,7 +460,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Unhex(Literal("GG")), null)
     // scalastyle:off
     // Turn off scala style for non-ascii chars
-    checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes("UTF-8"))
+    checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Unhex(Literal("三重的")), null)
     // scalastyle:on
     checkConsistencyBetweenInterpretedAndCodegen(Unhex, StringType)

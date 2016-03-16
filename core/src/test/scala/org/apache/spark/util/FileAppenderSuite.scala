@@ -196,7 +196,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   test("file appender async close stream abruptly") {
     // Test FileAppender reaction to closing InputStream using a mock logging appender
     val mockAppender = mock(classOf[Appender])
-    val loggingEventCaptor = new ArgumentCaptor[LoggingEvent]
+    val loggingEventCaptor = ArgumentCaptor.forClass(classOf[LoggingEvent])
 
     // Make sure only logging errors
     val logger = Logger.getRootLogger
@@ -223,7 +223,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   test("file appender async close stream gracefully") {
     // Test FileAppender reaction to closing InputStream using a mock logging appender
     val mockAppender = mock(classOf[Appender])
-    val loggingEventCaptor = new ArgumentCaptor[LoggingEvent]
+    val loggingEventCaptor = ArgumentCaptor.forClass(classOf[LoggingEvent])
 
     // Make sure only logging errors
     val logger = Logger.getRootLogger
