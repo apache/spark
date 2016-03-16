@@ -21,8 +21,7 @@ import com.typesafe.tools.mima.core.ProblemFilters._
 /**
  * Additional excludes for checking of Spark's binary compatibility.
  *
- * The Mima build will automatically exclude @DeveloperApi and @Experimental classes. This acts
- * as an official audit of cases where we excluded other classes. Please use the narrowest
+ * This acts as an official audit of cases where we excluded other classes. Please use the narrowest
  * possible exclude here. MIMA will usually tell you what exclude to use, e.g.:
  *
  * ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.rdd.RDD.take")
