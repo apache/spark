@@ -328,7 +328,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testCountMinSketch() {
-    Dataset<Row> df = context.range(1000);
+    Dataset df = context.range(1000);
 
     CountMinSketch sketch1 = df.stat().countMinSketch("id", 10, 20, 42);
     Assert.assertEquals(sketch1.totalCount(), 1000);
@@ -353,7 +353,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testBloomFilter() {
-    Dataset<Row> df = context.range(1000);
+    Dataset df = context.range(1000);
 
     BloomFilter filter1 = df.stat().bloomFilter("id", 1000, 0.03);
     Assert.assertTrue(filter1.expectedFpp() - 0.03 < 1e-3);

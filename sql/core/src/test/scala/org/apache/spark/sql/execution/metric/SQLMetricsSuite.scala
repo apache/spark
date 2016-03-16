@@ -128,8 +128,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
     // TODO: update metrics in generated operators
-    val df = sqlContext.range(10).filter('id < 5)
-    testSparkPlanMetrics(df, 1, Map.empty)
+    val ds = sqlContext.range(10).filter('id < 5)
+    testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
   }
 
   test("TungstenAggregate metrics") {
@@ -157,8 +157,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   test("Sort metrics") {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
-    val df = sqlContext.range(10).sort('id)
-    testSparkPlanMetrics(df, 2, Map.empty)
+    val ds = sqlContext.range(10).sort('id)
+    testSparkPlanMetrics(ds.toDF(), 2, Map.empty)
   }
 
   test("SortMergeJoin metrics") {

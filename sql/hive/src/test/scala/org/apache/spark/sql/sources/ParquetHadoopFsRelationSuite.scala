@@ -126,7 +126,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = sqlContext.range(0, 5)
+      val df = sqlContext.range(0, 5).toDF()
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
       val summaryPath = new Path(path, "_metadata")

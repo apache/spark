@@ -60,6 +60,7 @@ import org.apache.spark.util.Utils
  * @groupname specificdata Specific Data Sources
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
+ * @groupname dataset Custom DataFrame Creation
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
@@ -716,53 +717,53 @@ class SQLContext private[sql](
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in an range from 0 to `end` (exclusive) with step value 1.
    *
-   * @since 1.4.1
-   * @group dataframe
+   * @since 2.0.0
+   * @group dataset
    */
   @Experimental
-  def range(end: Long): DataFrame = range(0, end)
+  def range(end: Long): Dataset[Long] = range(0, end)
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in an range from `start` to `end` (exclusive) with step value 1.
    *
-   * @since 1.4.0
-   * @group dataframe
+   * @since 2.0.0
+   * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long): DataFrame = {
+  def range(start: Long, end: Long): Dataset[Long] = {
     range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
   }
 
   /**
     * :: Experimental ::
-    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
     * in an range from `start` to `end` (exclusive) with an step value.
     *
     * @since 2.0.0
-    * @group dataframe
+    * @group dataset
     */
   @Experimental
-  def range(start: Long, end: Long, step: Long): DataFrame = {
+  def range(start: Long, end: Long, step: Long): Dataset[Long] = {
     range(start, end, step, numPartitions = sparkContext.defaultParallelism)
   }
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in an range from `start` to `end` (exclusive) with an step value, with partition number
    * specified.
    *
-   * @since 1.4.0
-   * @group dataframe
+   * @since 2.0.0
+   * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
-    Dataset.newDataFrame(this, Range(start, end, step, numPartitions))
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Long] = {
+    new Dataset(this, Range(start, end, step, numPartitions), implicits.newLongEncoder)
   }
 
   /**

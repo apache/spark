@@ -1425,7 +1425,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("run sql directly on files") {
-    val df = sqlContext.range(100)
+    val df = sqlContext.range(100).toDF()
     withTempPath(f => {
       df.write.parquet(f.getCanonicalPath)
       checkAnswer(sql(s"select id from parquet.`${f.getCanonicalPath}`"),
@@ -1582,7 +1582,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         withView("v") {
           sql("CREATE VIEW v AS SELECT * FROM add_col")
           sqlContext.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("add_col")
-          checkAnswer(sql("SELECT * FROM v"), sqlContext.range(10))
+          checkAnswer(sql("SELECT * FROM v"), sqlContext.range(10).toDF())
         }
       }
     }

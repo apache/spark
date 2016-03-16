@@ -599,11 +599,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("null and non-null strings") {
     // Create a dataset where the first values are NULL and then some non-null values. The
     // number of non-nulls needs to be bigger than the ParquetReader batch size.
-    val data = sqlContext.range(200).rdd.map { i =>
-      if (i.getLong(0) < 150) Row(None)
-      else Row("a")
-    }
-    val df = sqlContext.createDataFrame(data, StructType(StructField("col", StringType) :: Nil))
+    val data: Dataset[String] = sqlContext.range(200).map (i =>
+      if (i < 150) null
+      else "a"
+    )
+    val df = data.toDF("col")
     assert(df.agg("col" -> "count").collect().head.getLong(0) == 50)
 
     withTempPath { dir =>

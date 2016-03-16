@@ -344,7 +344,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
     checkAnswer(
-      sqlContext.range(2).limit(2147483638),
+      sqlContext.range(2).toDF().limit(2147483638),
       Row(0) :: Row(1) :: Nil
     )
   }
@@ -1312,7 +1312,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("reuse exchange") {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "2") {
-      val df = sqlContext.range(100)
+      val df = sqlContext.range(100).toDF()
       val join = df.join(df, "id")
       val plan = join.queryExecution.executedPlan
       checkAnswer(join, df)
