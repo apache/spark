@@ -217,6 +217,9 @@ private[ml] object TreeClassifierParams {
   final val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
 }
 
+private[ml] trait DecisionTreeClassifierParams
+  extends DecisionTreeParams with TreeClassifierParams
+
 /**
  * Parameters for Decision Tree-based regression algorithms.
  */
