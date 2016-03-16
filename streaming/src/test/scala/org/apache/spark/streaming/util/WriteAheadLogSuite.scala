@@ -453,7 +453,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
 
   test("BatchedWriteAheadLog - serializing and deserializing batched records") {
     val events = Seq(
-      BlockAdditionEvent(ReceivedBlockInfo(0, None, None, null)),
+      BlockAdditionEvent(ReceivedBlockInfo(0, None, None, None, null)),
       BatchAllocationEvent(null, null),
       BatchCleanupEvent(Nil)
     )
