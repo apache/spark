@@ -773,25 +773,26 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
 @Since("2.0.0")
 @Experimental
 class GeneralizedLinearRegressionSummary private[regression] (
-    @transient val predictions: DataFrame,
-    val predictionCol: String,
-    val model: GeneralizedLinearRegressionModel,
+    @Since("2.0.0") @transient val predictions: DataFrame,
+    @Since("2.0.0") val predictionCol: String,
+    @Since("2.0.0") val model: GeneralizedLinearRegressionModel,
     private val diagInvAtWA: Array[Double],
-    val numIterations: Int) extends Serializable {
+    @Since("2.0.0") val numIterations: Int) extends Serializable {
 
   import GeneralizedLinearRegression._
 
-  lazy val family = Family.fromName(model.getFamily)
-  lazy val link = if (model.isDefined(model.getParam("link"))) {
+  private lazy val family = Family.fromName(model.getFamily)
+  private lazy val link = if (model.isDefined(model.getParam("link"))) {
     Link.fromName(model.getLink)
   } else {
     family.defaultLink
   }
 
   /** Number of instances in DataFrame predictions */
-  lazy val numInstances: Long = predictions.count()
+  private lazy val numInstances: Long = predictions.count()
 
   /** The numeric rank of the fitted linear model */
+  @Since("2.0.0")
   lazy val rank: Long = if (model.getFitIntercept) {
     model.coefficients.size + 1
   } else {
@@ -799,14 +800,17 @@ class GeneralizedLinearRegressionSummary private[regression] (
   }
 
   /** Degrees of freedom */
+  @Since("2.0.0")
   lazy val degreesOfFreedom: Long = {
     numInstances - rank
   }
 
   /** The residual degrees of freedom */
+  @Since("2.0.0")
   lazy val residualDegreeOfFreedom: Long = degreesOfFreedom
 
   /** The residual degrees of freedom for the null model */
+  @Since("2.0.0")
   lazy val residualDegreeOfFreedomNull: Long = if (model.getFitIntercept) {
     numInstances - 1
   } else {
@@ -842,6 +846,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /**
    * Get the default residuals(deviance residuals) of the fitted model.
    */
+  @Since("2.0.0")
   def residuals(): DataFrame = devianceResiduals
 
   /**
@@ -849,6 +854,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
    * @param residualsType The type of residuals which should be returned.
    *                      Supported options: deviance, pearson, working and response.
    */
+  @Since("2.0.0")
   def residuals(residualsType: String): DataFrame = {
     residualsType match {
       case "deviance" => devianceResiduals
@@ -863,6 +869,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /**
    * The deviance for the null model.
    */
+  @Since("2.0.0")
   lazy val nullDeviance: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     val wtdmu: Double = if (model.getFitIntercept) {
@@ -880,6 +887,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /**
    * The deviance for the fitted model.
    */
+  @Since("2.0.0")
   lazy val deviance: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
@@ -894,6 +902,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
    * estimated by the residual Pearson's Chi-Squared statistic(which is defined as
    * sum of the squares of the Pearson residuals) divided by the residual degrees of freedom.
    */
+  @Since("2.0.0")
   lazy val dispersion: Double = if (
     model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
     1.0
@@ -903,6 +912,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   }
 
   /** Akaike's "An Information Criterion"(AIC) for the fitted model. */
+  @Since("2.0.0")
   lazy val aic: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     val weightSum = predictions.select(w).agg(sum(w)).first().getDouble(0)
@@ -916,6 +926,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /**
    * Standard error of estimated coefficients and intercept.
    */
+  @Since("2.0.0")
   lazy val coefficientStandardErrors: Array[Double] = {
     diagInvAtWA.map(_ * dispersion).map(math.sqrt)
   }
@@ -923,6 +934,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /**
    * T-statistic of estimated coefficients and intercept.
    */
+  @Since("2.0.0")
   lazy val tValues: Array[Double] = {
     val estimate = if (model.getFitIntercept) {
       Array.concat(model.coefficients.toArray, Array(model.intercept))
@@ -935,6 +947,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /**
    * Two-sided p-value of estimated coefficients and intercept.
    */
+  @Since("2.0.0")
   lazy val pValues: Array[Double] = {
     if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
       tValues.map { x => 2.0 * (1.0 - dist.Gaussian(0.0, 1.0).cdf(math.abs(x))) }
