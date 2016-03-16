@@ -213,7 +213,8 @@ case class SortMergeJoin(
   }
 
   override def supportCodegen: Boolean = {
-    joinType == Inner
+    // TODO: support full outer join
+    joinType != FullOuter
   }
 
   override def upstreams(): Seq[RDD[InternalRow]] = {
@@ -341,17 +342,107 @@ case class SortMergeJoin(
   }
 
   /**
-    * Creates variables for left part of result row.
+   * Generate a function to scan both sides to find a match for outer join, returns the
+   * term for matched one row from stream side or nulls, and buffered rows from right side with
+   * nulls at the end.
+   */
+  private def genOuterScanner(ctx: CodegenContext): (String, String) = {
+    val stream = if (joinType == LeftOuter) left else right
+    val outer = if (joinType == LeftOuter) right else left
+    val streamKeys = if (joinType == LeftOuter) leftKeys else rightKeys
+    val outerKeys = if (joinType == LeftOuter) rightKeys else leftKeys
+
+    // Create class member for next row from both sides.
+    val streamRow = ctx.freshName("streamRow")
+    ctx.addMutableState("InternalRow", streamRow, "")
+    val outerRow = ctx.freshName("outerRow")
+    ctx.addMutableState("InternalRow", outerRow, s"$outerRow = null;")
+
+    // empty rows for outer side
+    val rowCls = classOf[GenericInternalRow].getName
+    val emptyRow = ctx.freshName("empty")
+    ctx.addMutableState("InternalRow", emptyRow,
+      s"$emptyRow = new $rowCls(${outer.output.length});")
+
+    // Create variables for join keys from both sides.
+    val streamKeyVars = createJoinKey(ctx, streamRow, streamKeys, stream.output)
+    val streamNotNull = streamKeyVars.map(x => s"!${x.isNull}").mkString(" && ")
+    val outerKeyTmpVars = createJoinKey(ctx, outerRow, outerKeys, outer.output)
+    val outerAnyNull = outerKeyTmpVars.map(_.isNull).mkString(" || ")
+    // Copy the right key as class members so they could be used in next function call.
+    val outerKeyVars = copyKeys(ctx, outerKeyTmpVars)
+
+    // A list to hold all matched rows from right side.
+    val matches = ctx.freshName("matches")
+    val clsName = classOf[java.util.ArrayList[InternalRow]].getName
+    ctx.addMutableState(clsName, matches, s"$matches = new $clsName();")
+    // Copy the stream keys as class members so they could be used in next function call.
+    val matchedKeyVars = copyKeys(ctx, streamKeyVars)
+
+    ctx.addNewFunction("findNextOuterJoinRows",
+      s"""
+         |private boolean findNextOuterJoinRows(
+         |    scala.collection.Iterator streamIter,
+         |    scala.collection.Iterator outerIter) {
+         |  if (!streamIter.hasNext()) return false;
+         |
+         |  $streamRow = (InternalRow) streamIter.next();
+         |  ${streamKeyVars.map(_.code).mkString("\n")}
+         |
+         |  int comp = 0;
+         |  if (!$matches.isEmpty()) {
+         |    ${genComparision(ctx, streamKeyVars, matchedKeyVars)}
+         |    if (comp == 0) {
+         |      return true;
+         |    }
+         |    $matches.clear();
+         |  }
+         |
+         |  if ($streamNotNull) {
+         |    // find all the matched rows on outer side
+         |    while ($outerRow != null || outerIter.hasNext()) {
+         |      if ($outerRow == null) {
+         |        $outerRow = (InternalRow) outerIter.next();
+         |        ${evaluateVariables(outerKeyTmpVars)}
+         |        if ($outerAnyNull) {
+         |          $outerRow = null;
+         |          continue;
+         |        }
+         |        ${evaluateVariables(outerKeyVars)}
+         |      }
+         |      ${genComparision(ctx, streamKeyVars, outerKeyVars)}
+         |      if (comp > 0) {
+         |        $outerRow = null;
+         |      } else if (comp < 0) {
+         |        break;
+         |      } else {
+         |        $matches.add($outerRow.copy());
+         |        $outerRow = null;;
+         |      }
+         |    }
+         |  }
+         |  // Add a empty row at the end
+         |  ${evaluateVariables(matchedKeyVars)}
+         |  $matches.add($emptyRow);
+         |  return true;
+         |}
+       """.stripMargin)
+
+    (streamRow, matches)
+  }
+
+  /**
+    * Creates variables for stream part of result row.
     *
     * In order to defer the access after condition and also only access once in the loop,
     * the variables should be declared separately from accessing the columns, we can't use the
     * codegen of BoundReference here.
     */
-  private def createLeftVars(ctx: CodegenContext, leftRow: String): Seq[ExprCode] = {
-    ctx.INPUT_ROW = leftRow
-    left.output.zipWithIndex.map { case (a, i) =>
+  private def createStreamVars(ctx: CodegenContext, plan: SparkPlan, row: String): Seq[ExprCode] = {
+    ctx.INPUT_ROW = row
+    plan.output.zipWithIndex.map { case (a, i) =>
       val value = ctx.freshName("value")
-      val valueCode = ctx.getValue(leftRow, a.dataType, i.toString)
+      val valueCode = ctx.getValue(row, a.dataType, i.toString)
       // declare it as class member, so we can access the column before or in the loop.
       ctx.addMutableState(ctx.javaType(a.dataType), value, "")
       if (a.nullable) {
@@ -359,7 +450,7 @@ case class SortMergeJoin(
         ctx.addMutableState("boolean", isNull, "")
         val code =
           s"""
-             |$isNull = $leftRow.isNullAt($i);
+             |$isNull = $row.isNullAt($i);
              |$value = $isNull ? ${ctx.defaultValue(a.dataType)} : ($valueCode);
            """.stripMargin
         ExprCode(code, isNull, value)
@@ -373,9 +464,12 @@ case class SortMergeJoin(
     * Creates the variables for right part of result row, using BoundReference, since the right
     * part are accessed inside the loop.
     */
-  private def createRightVar(ctx: CodegenContext, rightRow: String): Seq[ExprCode] = {
-    ctx.INPUT_ROW = rightRow
-    right.output.zipWithIndex.map { case (a, i) =>
+  private def createVars(
+      ctx: CodegenContext,
+      attributes: Seq[Attribute],
+      row: String): Seq[ExprCode] = {
+    ctx.INPUT_ROW = row
+    attributes.zipWithIndex.map { case (a, i) =>
       BoundReference(i, a.dataType, a.nullable).gen(ctx)
     }
   }
@@ -408,13 +502,21 @@ case class SortMergeJoin(
     ctx.addMutableState("scala.collection.Iterator", leftInput, s"$leftInput = inputs[0];")
     val rightInput = ctx.freshName("rightInput")
     ctx.addMutableState("scala.collection.Iterator", rightInput, s"$rightInput = inputs[1];")
+    joinType match {
+      case Inner => doProduceInner(ctx, leftInput, rightInput)
+      case LeftOuter => doProduceOuter(ctx, leftInput, rightInput)
+      case RightOuter => doProduceOuter(ctx, rightInput, leftInput)
+      case _ => throw new UnsupportedOperationException
+    }
+  }
 
+  private def doProduceInner(ctx: CodegenContext, leftInput: String, rightInput: String): String = {
     val (leftRow, matches) = genScanner(ctx)
 
     // Create variables for row from both sides.
-    val leftVars = createLeftVars(ctx, leftRow)
+    val leftVars = createStreamVars(ctx, left, leftRow)
     val rightRow = ctx.freshName("rightRow")
-    val rightVars = createRightVar(ctx, rightRow)
+    val rightVars = createVars(ctx, right.output, rightRow)
 
     val size = ctx.freshName("size")
     val i = ctx.freshName("i")
@@ -457,6 +559,66 @@ case class SortMergeJoin(
        |    ${condCheck.trim}
        |    $numOutput.add(1);
        |    ${consume(ctx, leftVars ++ rightVars)}
+       |  }
+       |  if (shouldStop()) return;
+       |}
+     """.stripMargin
+  }
+
+  private def doProduceOuter(
+      ctx: CodegenContext,
+      streamInput: String,
+      outerInput: String): String = {
+    val stream = if (joinType == LeftOuter) left else right
+    val outer = if (joinType == LeftOuter) right else left
+
+    val (streamRow, matches) = genOuterScanner(ctx)
+
+    // Create variables for row from both sides.
+    val streamVars = createStreamVars(ctx, stream, streamRow)
+    // The stream rows will be accessed at least once, so we evaluate them before the loop.
+    val evaluateStreamVars = evaluateVariables(streamVars)
+    val outerRow = ctx.freshName("outerRow")
+    // outer row could be nulls
+    val outerOutput = outer.output.map(_.withNullability(true))
+    val outerVars = createVars(ctx, outerOutput, outerRow)
+
+    val size = ctx.freshName("size")
+    val i = ctx.freshName("i")
+    val condCheck = if (condition.isDefined) {
+      val evaluate = evaluateRequiredVariables(outerOutput, outerVars, condition.get.references)
+      ctx.currentVars = streamVars ++ outerVars
+      val cond = BindReferences.bindReference(condition.get, stream.output ++ outerOutput).gen(ctx)
+      s"""
+        |$evaluate
+        |if ($i < $size) {
+        |  ${cond.code}
+        |  if (${cond.isNull} || !${cond.value}) continue;
+        |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    val found = ctx.freshName("found")
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val resultVars = if (joinType == LeftOuter) {
+      streamVars ++ outerVars
+    } else {
+      outerVars ++ streamVars
+    }
+    s"""
+       |while (findNextOuterJoinRows($streamInput, $outerInput)) {
+       |  int $size = $matches.size() - 1;  // last row is nulls
+       |  $evaluateStreamVars
+       |  boolean $found = false;
+       |  for (int $i = 0; $i <= $size; $i ++) {
+       |    InternalRow $outerRow = (InternalRow) $matches.get($i);
+       |    ${condCheck.trim}
+       |    if ($i == $size && $found) continue;  // emit the nulls only when no rows emitted
+       |    $found = true;
+       |    $numOutput.add(1);
+       |    ${consume(ctx, resultVars)}
        |  }
        |  if (shouldStop()) return;
        |}
@@ -664,11 +826,11 @@ private[joins] class SortMergeJoinScanner(
  * An iterator for outputting rows in left outer join.
  */
 private class LeftOuterIterator(
-  smjScanner: SortMergeJoinScanner,
-  rightNullRow: InternalRow,
-  boundCondition: InternalRow => Boolean,
-  resultProj: InternalRow => InternalRow,
-  numOutputRows: LongSQLMetric)
+    smjScanner: SortMergeJoinScanner,
+    rightNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric)
   extends OneSideOuterIterator(
     smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows) {
 
@@ -680,11 +842,11 @@ private class LeftOuterIterator(
  * An iterator for outputting rows in right outer join.
  */
 private class RightOuterIterator(
-  smjScanner: SortMergeJoinScanner,
-  leftNullRow: InternalRow,
-  boundCondition: InternalRow => Boolean,
-  resultProj: InternalRow => InternalRow,
-  numOutputRows: LongSQLMetric)
+    smjScanner: SortMergeJoinScanner,
+    leftNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric)
   extends OneSideOuterIterator(
     smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
 
@@ -709,11 +871,11 @@ private class RightOuterIterator(
  * @param numOutputRows an accumulator metric for the number of rows output
  */
 private abstract class OneSideOuterIterator(
-  smjScanner: SortMergeJoinScanner,
-  bufferedSideNullRow: InternalRow,
-  boundCondition: InternalRow => Boolean,
-  resultProj: InternalRow => InternalRow,
-  numOutputRows: LongSQLMetric) extends RowIterator {
+    smjScanner: SortMergeJoinScanner,
+    bufferedSideNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric) extends RowIterator {
 
   // A row to store the joined result, reused many times
   protected[this] val joinedRow: JoinedRow = new JoinedRow()
@@ -776,14 +938,14 @@ private abstract class OneSideOuterIterator(
 }
 
 private class SortMergeFullOuterJoinScanner(
-  leftKeyGenerator: Projection,
-  rightKeyGenerator: Projection,
-  keyOrdering: Ordering[InternalRow],
-  leftIter: RowIterator,
-  rightIter: RowIterator,
-  boundCondition: InternalRow => Boolean,
-  leftNullRow: InternalRow,
-  rightNullRow: InternalRow)  {
+    leftKeyGenerator: Projection,
+    rightKeyGenerator: Projection,
+    keyOrdering: Ordering[InternalRow],
+    leftIter: RowIterator,
+    rightIter: RowIterator,
+    boundCondition: InternalRow => Boolean,
+    leftNullRow: InternalRow,
+    rightNullRow: InternalRow)  {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
   private[this] var leftRow: InternalRow = _
   private[this] var leftRowKey: InternalRow = _
@@ -949,10 +1111,9 @@ private class SortMergeFullOuterJoinScanner(
 }
 
 private class FullOuterIterator(
-  smjScanner: SortMergeFullOuterJoinScanner,
-  resultProj: InternalRow => InternalRow,
-  numRows: LongSQLMetric
-) extends RowIterator {
+    smjScanner: SortMergeFullOuterJoinScanner,
+    resultProj: InternalRow => InternalRow,
+    numRows: LongSQLMetric) extends RowIterator {
   private[this] val joinedRow: JoinedRow = smjScanner.getJoinedRow()
 
   override def advanceNext(): Boolean = {
