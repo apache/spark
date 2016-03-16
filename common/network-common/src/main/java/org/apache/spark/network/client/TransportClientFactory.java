@@ -194,8 +194,8 @@ public class TransportClientFactory implements Closeable {
       .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
       .option(ChannelOption.ALLOCATOR, pooledAllocator);
 
-    final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
-    final AtomicReference<Channel> channelRef = new AtomicReference<Channel>();
+    final AtomicReference<TransportClient> clientRef = new AtomicReference<>();
+    final AtomicReference<Channel> channelRef = new AtomicReference<>();
 
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override

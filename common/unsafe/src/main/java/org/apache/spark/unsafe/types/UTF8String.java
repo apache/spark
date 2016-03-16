@@ -21,6 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -44,7 +45,8 @@ import static org.apache.spark.unsafe.Platform.*;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
-public final class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable {
+public final class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable,
+  Cloneable {
 
   // These are only updated by readExternal() or read()
   @Nonnull
@@ -824,14 +826,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public String toString() {
-    try {
-      return new String(getBytes(), "utf-8");
-    } catch (UnsupportedEncodingException e) {
-      // Turn the exception into unchecked so we can find out about it at runtime, but
-      // don't need to add lots of boilerplate code everywhere.
-      throwException(e);
-      return "unknown";  // we will never reach here.
-    }
+    return new String(getBytes(), StandardCharsets.UTF_8);
   }
 
   @Override

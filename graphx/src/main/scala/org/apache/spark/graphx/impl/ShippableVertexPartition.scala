@@ -49,7 +49,7 @@ object ShippableVertexPartition {
   /**
    * Construct a `ShippableVertexPartition` from the given vertices with the specified routing
    * table, filling in missing vertices mentioned in the routing table using `defaultVal`,
-   * and merging duplicate vertex atrribute with mergeFunc.
+   * and merging duplicate vertex attribute with mergeFunc.
    */
   def apply[VD: ClassTag](
       iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD,

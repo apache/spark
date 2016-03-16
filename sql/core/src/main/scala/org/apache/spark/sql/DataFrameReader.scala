@@ -26,7 +26,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
@@ -122,12 +122,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def load(): DataFrame = {
-    val resolved = ResolvedDataSource(
-      sqlContext,
-      userSpecifiedSchema = userSpecifiedSchema,
-      provider = source,
-      options = extraOptions.toMap)
-    DataFrame(sqlContext, LogicalRelation(resolved.relation))
+    val dataSource =
+      DataSource(
+        sqlContext,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = extraOptions.toMap)
+    Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -152,12 +153,12 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       sqlContext.emptyDataFrame
     } else {
       sqlContext.baseRelationToDataFrame(
-        ResolvedDataSource.apply(
+        DataSource.apply(
           sqlContext,
           paths = paths,
           userSpecifiedSchema = userSpecifiedSchema,
-          provider = source,
-          options = extraOptions.toMap).relation)
+          className = source,
+          options = extraOptions.toMap).resolveRelation())
     }
   }
 
@@ -168,12 +169,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 2.0.0
    */
   def stream(): DataFrame = {
-    val resolved = ResolvedDataSource.createSource(
-      sqlContext,
-      userSpecifiedSchema = userSpecifiedSchema,
-      providerName = source,
-      options = extraOptions.toMap)
-    DataFrame(sqlContext, StreamingRelation(resolved))
+    val dataSource =
+      DataSource(
+        sqlContext,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = extraOptions.toMap)
+    Dataset.newDataFrame(sqlContext, StreamingRelation(dataSource.createSource()))
   }
 
   /**
@@ -343,7 +345,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)
     }
 
-    new DataFrame(
+    Dataset.newDataFrame(
       sqlContext,
       LogicalRDD(
         schema.toAttributes,
@@ -391,13 +393,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    DataFrame(sqlContext,
-      sqlContext.catalog.lookupRelation(sqlContext.sqlParser.parseTableIdentifier(tableName)))
+    Dataset.newDataFrame(sqlContext,
+      sqlContext.sessionState.catalog.lookupRelation(
+        sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName)))
   }
 
   /**
-   * Loads a text file and returns a [[DataFrame]] with a single string column named "value".
-   * Each line in the text file is a new row in the resulting DataFrame. For example:
+   * Loads a text file and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * Each line in the text file is a new row in the resulting Dataset. For example:
    * {{{
    *   // Scala:
    *   sqlContext.read.text("/path/to/spark/README.md")
@@ -407,10 +412,12 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * }}}
    *
    * @param paths input path
-   * @since 1.6.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  def text(paths: String*): Dataset[String] = {
+    format("text").load(paths : _*).as[String](sqlContext.implicits.newStringEncoder)
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

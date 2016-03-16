@@ -205,7 +205,7 @@ class CheckpointWriter(
       // also use the latest checkpoint time as the file name, so that we can recovery from the
       // latest checkpoint file.
       //
-      // Note: there is only one thread writting the checkpoint files, so we don't need to worry
+      // Note: there is only one thread writing the checkpoint files, so we don't need to worry
       // about thread-safety.
       val checkpointFile = Checkpoint.checkpointFile(checkpointDir, latestCheckpointTime)
       val backupFile = Checkpoint.checkpointBackupFile(checkpointDir, latestCheckpointTime)
@@ -230,7 +230,7 @@ class CheckpointWriter(
           // If the checkpoint file exists, back it up
           // If the backup exists as well, just delete it, otherwise rename will fail
           if (fs.exists(checkpointFile)) {
-            if (fs.exists(backupFile)){
+            if (fs.exists(backupFile)) {
               fs.delete(backupFile, true) // just in case it exists
             }
             if (!fs.rename(checkpointFile, backupFile)) {

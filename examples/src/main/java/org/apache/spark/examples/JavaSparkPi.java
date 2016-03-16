@@ -38,7 +38,7 @@ public final class JavaSparkPi {
 
     int slices = (args.length == 1) ? Integer.parseInt(args[0]) : 2;
     int n = 100000 * slices;
-    List<Integer> l = new ArrayList<Integer>(n);
+    List<Integer> l = new ArrayList<>(n);
     for (int i = 0; i < n; i++) {
       l.add(i);
     }

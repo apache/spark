@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStr
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -28,7 +29,6 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
@@ -268,7 +268,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val tmpDir2 = Utils.createTempDir()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
-    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
+    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
     f1.close()
 
     // Read first few bytes
@@ -295,9 +295,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("reading offset bytes across multiple files") {
     val tmpDir = Utils.createTempDir()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
-    Files.write("0123456789", files(0), UTF_8)
-    Files.write("abcdefghij", files(1), UTF_8)
-    Files.write("ABCDEFGHIJ", files(2), UTF_8)
+    Files.write("0123456789", files(0), StandardCharsets.UTF_8)
+    Files.write("abcdefghij", files(1), StandardCharsets.UTF_8)
+    Files.write("ABCDEFGHIJ", files(2), StandardCharsets.UTF_8)
 
     // Read first few bytes in the 1st file
     assert(Utils.offsetBytes(files, 0, 5) === "01234")
@@ -529,7 +529,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     try {
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
-        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
+        "spark.test.fileNameLoadB 1\n", outFile, StandardCharsets.UTF_8)
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
         .filter { case (k, v) => k.startsWith("spark.")}
@@ -559,7 +559,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
     val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
     val targetDir = new File(tempDir, "target-dir")
-    Files.write("some text", sourceFile, UTF_8)
+    Files.write("some text", sourceFile, StandardCharsets.UTF_8)
 
     val path =
       if (Utils.isWindows) {
@@ -801,7 +801,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
              |trap "" SIGTERM
              |sleep 10
            """.stripMargin
-        Files.write(cmd.getBytes(), file)
+        Files.write(cmd.getBytes(StandardCharsets.UTF_8), file)
         file.getAbsoluteFile.setExecutable(true)
 
         val process = new ProcessBuilder(file.getAbsolutePath).start()
