@@ -79,6 +79,11 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
     }
   }
 
+  /**
+   * Creates an input stream to read data from this ChunkedByteBuffer.
+   * @param dispose if true, [[dispose()]] will be called at the end of the stream
+   *                in order to close any memory-mapped files which back this buffer.
+   */
   def toInputStream(dispose: Boolean = false): InputStream = {
     new ChunkedByteBufferInputStream(this, dispose)
   }
@@ -110,8 +115,10 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 }
 
 /**
- * Reads data from a ChunkedByteBuffer, and optionally cleans it up using StorageUtils.dispose()
- * at the end of the stream (e.g. to close a memory-mapped file).
+ * Reads data from a ChunkedByteBuffer.
+ *
+ * @param dispose if true, [[ChunkedByteBuffer.dispose()]] will be called at the end of the stream
+ *                in order to close any memory-mapped files which back the buffer.
  */
 private class ChunkedByteBufferInputStream(
     var chunkedByteBuffer: ChunkedByteBuffer,
