@@ -126,9 +126,9 @@ private[spark] class TaskContextImpl(
 
   private var rddPartitionInfo: (Int, Int, Int) = null
 
-  private[spark] def setRDDPartitionInfo(rddId: Int, shuffleId: Int, index: Int):
+  private[spark] def setRDDPartitionInfo(rddId: Int, shuffleWriteId: Int, index: Int):
       Unit = {
-    rddPartitionInfo = (rddId, shuffleId, index)
+    rddPartitionInfo = (rddId, shuffleWriteId, index)
   }
 
   private[spark] override def getRDDPartitionInfo(): (Int, Int, Int) = {

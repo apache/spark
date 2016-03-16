@@ -75,18 +75,18 @@ private[spark] class ShuffleMapTask(
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
       val data = rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]]
-      val shuffleId = dep.shuffleHandle.shuffleId
+      val shuffleWriteId = dep.shuffleHandle.shuffleId
       val wrappedData = data.map{x =>
-        context.setRDDPartitionInfo(rdd.id, shuffleId, partition.index)
+        context.setRDDPartitionInfo(rdd.id, shuffleWriteId, partition.index)
         if (data.isEmpty) {
-          context.taskMetrics.markFullyProcessed(rdd.id, shuffleId, partition.index)
+          context.taskMetrics.markFullyProcessed(rdd.id, shuffleWriteId, partition.index)
         }
         x
       }
-      context.setRDDPartitionInfo(rdd.id, shuffleId, partition.index)
+      context.setRDDPartitionInfo(rdd.id, shuffleWriteId, partition.index)
       writer.write(wrappedData)
       if (data.isEmpty) {
-        context.taskMetrics.markFullyProcessed(rdd.id, shuffleId, partition.index)
+        context.taskMetrics.markFullyProcessed(rdd.id, shuffleWriteId, partition.index)
       }
       writer.stop(success = true).get
     } catch {

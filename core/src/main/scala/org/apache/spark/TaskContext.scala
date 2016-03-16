@@ -185,12 +185,12 @@ abstract class TaskContext extends Serializable {
   private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
 
   /**
-   * Set the current RDD, shuffle id (or -1 for no shuffle), and partition being processed.
+   * Set the current RDD, shuffle write id (or -1 for no shuffle), and partition being processed.
    */
-  private[spark] def setRDDPartitionInfo(rddId: Int, shuffleId: Int, index: Int): Unit
+  private[spark] def setRDDPartitionInfo(rddId: Int, shuffleWriteId: Int, index: Int): Unit
 
   /**
-   * Returns the current RDD id, shuffle id (or -1 for no shuffle), and partition id.
+   * Returns the current RDD id, shuffle write id (or -1 for no shuffle), and partition id.
    * This can be used to track of if an RDD has been previously computed, the IDs will be the same
    * during a recompute.
    */

@@ -55,8 +55,8 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val b = a.map{x => ((x % buckets), x)}
     val inputs = List(b, b.repartition(10), b.partitionBy(new HashPartitioner(5))).map(_.cache())
     val mapSideCombines = List(true, false)
-    inputs.foreach{input =>
-      mapSideCombines.foreach{mapSideCombine =>
+    inputs.foreach { input =>
+      mapSideCombines.foreach { mapSideCombine =>
         val accs = 1.to(4).map(x => sc.accumulator(0, consistent = true)).toList
         val raccs = 1.to(4).map(x => sc.accumulator(0, consistent = false)).toList
         val List(acc, acc1, acc2, acc3) = accs

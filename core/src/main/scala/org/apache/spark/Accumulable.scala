@@ -126,6 +126,9 @@ class Accumulable[R, T] private[spark] (
   // For consistent accumulators pending and processed updates.
   // Completed and processed are keyed by (rdd id, shuffle id, partition id)
   @transient private[spark] lazy val pending = new mutable.HashMap[(Int, Int, Int), R]()
+  // Completed contains the set of (rdd id, shuffle id, partition id) that have been
+  // fully processed on the worker side. This is used to determine if the updates should
+  // be sent back to the driver for a particular rdd/shuffle/partition combination.
   @transient private[spark] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
   // processed is keyed by (rdd id, shuffle id) and bitset contains all partitions for that
   // combination which have been merged into the value.
@@ -189,9 +192,9 @@ class Accumulable[R, T] private[spark] (
    * Mark a specific rdd/shuffle/partition as completely processed. This is a noop for
    * non-consistent accumuables.
    */
-  private[spark] def markFullyProcessed(rddId: Int, shuffleId: Int, partitionId: Int): Unit = {
+  private[spark] def markFullyProcessed(rddId: Int, shuffleWriteId: Int, partitionId: Int): Unit = {
     if (consistent) {
-      completed += ((rddId, shuffleId, partitionId))
+      completed += ((rddId, shuffleWriteId, partitionId))
     }
   }
 
@@ -228,8 +231,8 @@ class Accumulable[R, T] private[spark] (
    * not already been processed before updating.
    */
   private[spark] def mergePending(term: mutable.HashMap[(Int, Int, Int), R]) = {
-    term.foreach{case ((rddId, shuffleId, splitId), v) =>
-      val splits = processed.getOrElseUpdate((rddId, shuffleId), new mutable.BitSet())
+    term.foreach{case ((rddId, shuffleWriteId, splitId), v) =>
+      val splits = processed.getOrElseUpdate((rddId, shuffleWriteId), new mutable.BitSet())
       if (!splits.contains(splitId)) {
         splits += splitId
         value_ = param.addInPlace(value_, v)

@@ -43,14 +43,20 @@ private[spark] object Utils {
    * iterator is empty when, calls func right away.
    */
   def signalWhenEmpty[T](itr: Iterator[T], func: () => Unit): Iterator[T] = {
-    if (itr.isEmpty) {
-      func()
-    }
-    itr.map{x =>
-      if (itr.isEmpty) {
+    new SignalWhenEmptyIterator(itr, func)
+  }
+
+  private class SignalWhenEmptyIterator[T](sub: Iterator[T], func: () => Unit) extends Iterator[T] {
+    def hasNext: Boolean = {
+      val r = sub.hasNext
+      if (!r) {
         func()
       }
-      x
+      r
     }
+    def next(): T = {
+      sub.next()
+    }
+
   }
 }
