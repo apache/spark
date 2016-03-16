@@ -72,6 +72,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       LimitPushDown,
       ColumnPruning,
       EliminateOperators,
+      InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -79,7 +80,6 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       CombineLimits,
       CombineUnions,
       // Constant folding and strength reduction
-      NullFiltering,
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
@@ -607,50 +607,40 @@ object NullPropagation extends Rule[LogicalPlan] {
 }
 
 /**
- * Attempts to eliminate reading (unnecessary) NULL values if they are not required for correctness
- * by inserting isNotNull filters in the query plan. These filters are currently inserted beneath
- * existing Filters and Join operators and are inferred based on their data constraints.
+ * Generate a list of additional filters from an operator's existing constraint but remove those
+ * that are either already part of the operator's condition or are part of the operator's child
+ * constraints. These filters are currently inserted to the existing conditions in the Filter
+ * operators and on either side of Join operators.
  *
  * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
  * LeftSemi joins.
  */
-object NullFiltering extends Rule[LogicalPlan] with PredicateHelper {
+object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
-      // We generate a list of additional isNotNull filters from the operator's existing constraints
-      // but remove those that are either already part of the filter condition or are part of the
-      // operator's child constraints.
-      val newIsNotNullConstraints = filter.constraints.filter(_.isInstanceOf[IsNotNull]) --
+      val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
-      if (newIsNotNullConstraints.nonEmpty) {
-        Filter(And(newIsNotNullConstraints.reduce(And), condition), child)
+      if (newFilters.nonEmpty) {
+        Filter(And(newFilters.reduce(And), condition), child)
       } else {
         filter
       }
 
-    case join @ Join(left, right, joinType, condition) =>
-      val leftIsNotNullConstraints = join.constraints
-        .filter(_.isInstanceOf[IsNotNull])
-        .filter(_.references.subsetOf(left.outputSet)) -- left.constraints
-      val rightIsNotNullConstraints =
-        join.constraints
-          .filter(_.isInstanceOf[IsNotNull])
-          .filter(_.references.subsetOf(right.outputSet)) -- right.constraints
-      val newLeftChild = if (leftIsNotNullConstraints.nonEmpty) {
-        Filter(leftIsNotNullConstraints.reduce(And), left)
-      } else {
-        left
+    case join @ Join(left, right, joinType, conditionOpt) =>
+      // Only consider constraints that can be pushed down completely to either the left or the
+      // right child
+      val constraints = join.constraints.filter { c =>
+        c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)}
+      // Remove those constraints that are already enforced by either the left or the right child
+      val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
+      val newConditionOpt = conditionOpt match {
+        case Some(condition) =>
+          val newFilters = additionalConstraints -- splitConjunctivePredicates(condition)
+          if (newFilters.nonEmpty) Option(And(newFilters.reduce(And), condition)) else None
+        case None =>
+          additionalConstraints.reduceOption(And)
       }
-      val newRightChild = if (rightIsNotNullConstraints.nonEmpty) {
-        Filter(rightIsNotNullConstraints.reduce(And), right)
-      } else {
-        right
-      }
-      if (newLeftChild != left || newRightChild != right) {
-        Join(newLeftChild, newRightChild, joinType, condition)
-      } else {
-        join
-      }
+      if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
   }
 }
 
