@@ -103,7 +103,16 @@ case class Generate(
 
 case class Filter(condition: Expression, child: LogicalPlan)
   extends UnaryNode with PredicateHelper {
-  override def output: Seq[Attribute] = child.output
+
+  private def notNulls =
+    constructIsNotNullConstraints(splitConjunctivePredicates(condition).toSet)
+      .filter(x => x.isInstanceOf[IsNotNull] && x.references.nonEmpty)
+      .filter(_.references.subsetOf(child.outputSet))
+      .flatMap(_.references.map(_.exprId))
+
+  override def output: Seq[Attribute] = child.output.map { o =>
+    if (notNulls.contains(o.exprId)) o.withNullability(false) else o
+  }
 
   override def maxRows: Option[Long] = child.maxRows
 

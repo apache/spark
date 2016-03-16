@@ -53,6 +53,9 @@ class NullFilteringSuite extends PlanTest {
     val correctAnswer = testRelation.where(IsNotNull('a) && 'a === 1).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+    checkNullability(originalQuery)
+    checkNullability(correctAnswer)
+    checkNullability(optimized)
   }
 
   test("single inner join: filter out nulls on either side on equi-join keys") {
