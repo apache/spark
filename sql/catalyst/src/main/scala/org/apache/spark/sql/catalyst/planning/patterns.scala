@@ -104,7 +104,8 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     case join @ Join(left, right, joinType, cond) =>
       val attributeRewrites = join.output.map(o => o.exprId -> o).toMap
       val condition = cond.map(_.transform {
-        case a: AttributeReference => attributeRewrites(a.exprId)
+        case a: AttributeReference if attributeRewrites.contains(a.exprId) =>
+          attributeRewrites(a.exprId)
       })
 
       logDebug(s"Considering join on: $condition")
