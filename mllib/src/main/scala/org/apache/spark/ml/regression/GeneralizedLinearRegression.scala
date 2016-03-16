@@ -339,11 +339,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     def deviance(y: Double, mu: Double, weight: Double): Double
 
     /**
-     * Akaike's 'An Information Criterion'(AIC) value of the family.
-     * @param predictions an RDD of (y, mu, weight) of instances
-     * @param deviance the deviance for the fitted model
-     * @param numInstances number of instances in DataFrame predictions
-     * @param weightSum weights sum of instances in DataFrame predictions
+     * Akaike's 'An Information Criterion'(AIC) value of the family for a given dataset.
+     * @param predictions an RDD of (y, mu, weight) of instances in evaluation dataset
+     * @param deviance the deviance for the fitted model in evaluation dataset
+     * @param numInstances number of instances in evaluation dataset
+     * @param weightSum weights sum of instances in evaluation dataset
      */
     def aic(
         predictions: RDD[(Double, Double, Double)],
@@ -840,11 +840,16 @@ class GeneralizedLinearRegressionSummary private[regression] (
   }
 
   /**
+   * Get the default residuals(deviance residuals) of the fitted model.
+   */
+  def residuals(): DataFrame = devianceResiduals
+
+  /**
    * Get the residuals of the fitted model by type.
    * @param residualsType The type of residuals which should be returned.
-   *                      Supported options: deviance(default), pearson, working and response.
+   *                      Supported options: deviance, pearson, working and response.
    */
-  def residuals(residualsType: String = "deviance"): DataFrame = {
+  def residuals(residualsType: String): DataFrame = {
     residualsType match {
       case "deviance" => devianceResiduals
       case "pearson" => pearsonResiduals
@@ -897,7 +902,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
     rss / degreesOfFreedom
   }
 
-  /** Akaike's "An Information Criterion"(AIC) for the fitted model */
+  /** Akaike's "An Information Criterion"(AIC) for the fitted model. */
   lazy val aic: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     val weightSum = predictions.select(w).agg(sum(w)).first().getDouble(0)
