@@ -1218,7 +1218,7 @@ setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
 #' @rdname subset
 #' @name [
 setMethod("[", signature(x = "DataFrame"),
-          function(x, i, j, ..., drop=T) {
+          function(x, i, j, ..., drop = T) {
             # Perform filtering first if needed
             filtered <- if (missing(i)) {
               x
@@ -1258,6 +1258,8 @@ setMethod("[", signature(x = "DataFrame"),
 #' @param x A DataFrame
 #' @param subset (Optional) A logical expression to filter on rows
 #' @param select expression for the single Column or a list of columns to select from the DataFrame
+#' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
+#' Otherwise, a DataFrame will always be returned.
 #' @return A new DataFrame containing only the rows that meet the condition with selected columns
 #' @export
 #' @family DataFrame functions
@@ -1280,7 +1282,7 @@ setMethod("[", signature(x = "DataFrame"),
 #'   subset(df, select = c(1,2))
 #' }
 setMethod("subset", signature(x = "DataFrame"),
-          function(x, subset, select, drop=T, ...) {
+          function(x, subset, select, drop = T, ...) {
             x[subset, select, drop=drop]
           })
 
