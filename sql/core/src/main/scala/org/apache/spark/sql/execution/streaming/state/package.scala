@@ -23,16 +23,17 @@ import org.apache.spark.rdd.RDD
 
 package object state {
 
-  implicit class StateStoreOps[INPUT: ClassTag](dataRDD: RDD[INPUT]) {
-    def withStateStores[OUTPUT: ClassTag](
-      storeUpdateFunction: (StateStore, Iterator[INPUT]) => Iterator[OUTPUT],
+  implicit class StateStoreOps[T: ClassTag](dataRDD: RDD[T]) {
+    def withStateStores[U: ClassTag](
+      storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
       operatorId: Long,
       storeVersion: Long,
       storeDirectory: String,
       storeCoordinator: Option[StateStoreCoordinator] = None
-    ): StateStoreRDD[INPUT, OUTPUT] = {
+    ): StateStoreRDD[T, U] = {
+      val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       new StateStoreRDD(
-        dataRDD, storeUpdateFunction, operatorId, storeVersion, storeDirectory, storeCoordinator)
+        dataRDD, cleanedF, operatorId, storeVersion, storeDirectory, storeCoordinator)
     }
   }
 }

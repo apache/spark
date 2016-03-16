@@ -28,13 +28,14 @@ import org.apache.spark.util.Utils
  * uses the [[StateStoreCoordinator]] to use the locations of loaded state stores as
  * preferred locations.
  */
-class StateStoreRDD[INPUT: ClassTag, OUTPUT: ClassTag](
-    dataRDD: RDD[INPUT],
-    storeUpdateFunction: (StateStore, Iterator[INPUT]) => Iterator[OUTPUT],
+class StateStoreRDD[T: ClassTag, U: ClassTag](
+    dataRDD: RDD[T],
+    storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
     operatorId: Long,
     storeVersion: Long,
     storeDirectory: String,
-    storeCoordinator: Option[StateStoreCoordinator]) extends RDD[OUTPUT](dataRDD) {
+    @transient private val storeCoordinator: Option[StateStoreCoordinator])
+  extends RDD[U](dataRDD) {
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
@@ -43,7 +44,7 @@ class StateStoreRDD[INPUT: ClassTag, OUTPUT: ClassTag](
     storeCoordinator.flatMap(_.getLocation(storeId)).toSeq
   }
 
-  override def compute(partition: Partition, ctxt: TaskContext): Iterator[OUTPUT] = {
+  override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     var store: StateStore = null
 
     Utils.tryWithSafeFinally {

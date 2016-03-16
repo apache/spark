@@ -125,6 +125,8 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
         assert(
           rdd.preferredLocations(rdd.partitions(1)) ===
             Seq(ExecutorCacheTaskLocation("host2", "exec2").toString))
+
+        rdd.collect()
       }
     }
   }
