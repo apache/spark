@@ -72,7 +72,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("Read/write binary data") {
-    withOrcFile(BinaryData("test".getBytes("utf8")) :: Nil) { file =>
+    withOrcFile(BinaryData("test".getBytes(StandardCharsets.UTF_8)) :: Nil) { file =>
       val bytes = read.orc(file).head().getAs[Array[Byte]](0)
       assert(new String(bytes, StandardCharsets.UTF_8) === "test")
     }
