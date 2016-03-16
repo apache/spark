@@ -895,27 +895,34 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
       // condition without nondeterministic expressions.
       val andConditions = splitConjunctivePredicates(condition)
 
+      val temp = andConditions.map{
+        _.collect {
+          case a: Attribute if aliasMap.contains(a) => aliasMap(a)
+        }
+      }
       val (deterministic, nondeterministic) = andConditions.partition(_.collect {
         case a: Attribute if aliasMap.contains(a) => aliasMap(a)
       }.forall(_.deterministic))
 
-      // If there is no nondeterministic conditions, push down the whole condition.
-      if (nondeterministic.isEmpty) {
-        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      // Only pushed the conditions that do not exist in the project's constraints.
+      val pushedConditions =
+        deterministic.map(replaceAlias(_, aliasMap)).filterNot {
+          c => project.child.constraints.contains(c) || c.references.isEmpty
+        }
+
+      // If no condition can be pushed down, leave it un-changed.
+      if (pushedConditions.isEmpty) {
+        filter
       } else {
-        // If they are all nondeterministic conditions, leave it un-changed.
-        if (deterministic.isEmpty) {
-          filter
+        val newConditions = pushedConditions.reduce(And)
+        if (nondeterministic.isEmpty) {
+          project.copy(child = Filter(newConditions, grandChild))
         } else {
-          // Push down the small conditions without nondeterministic expressions.
-          val pushedCondition =
-            deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
           Filter(nondeterministic.reduce(And),
-            project.copy(child = Filter(pushedCondition, grandChild)))
+            project.copy(child = Filter(newConditions, grandChild)))
         }
       }
   }
-
 }
 
 /**
