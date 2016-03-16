@@ -324,7 +324,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   /*
    *                               <--------------------
    *                             /                       \
-   * [A] <--(1)-- [B] <--(2)-- [C] <--(3)-- [D] <--(4)-- [E]
+   * [A] <--(1)-- [B] <--(2)-- [C] <--(3)-- [D] <--(4)-- [E] <--(5)-- [F]
    *                \                       /
    *                  <--------------------
    */
@@ -342,24 +342,30 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       tracker = mapOutputTracker)
 
     val shuffleDef4 = new ShuffleDependency(rddD, new HashPartitioner(1))
-    val rddE = new MyRDD(sc, 1, List(shuffleDef4, new OneToOneDependency(rddC)),
+    val rddE = new MyRDD(sc, 1, List(new OneToOneDependency(rddC), shuffleDef4),
       tracker = mapOutputTracker)
-    submit(rddE, Array(0))
 
-    assert(scheduler.shuffleToMapStage.size === 4)
+    val shuffleDef5 = new ShuffleDependency(rddE, new HashPartitioner(1))
+    val rddF = new MyRDD(sc, 1, List(shuffleDef5),
+      tracker = mapOutputTracker)
+    submit(rddF, Array(0))
+
+    assert(scheduler.shuffleToMapStage.size === 5)
     assert(scheduler.activeJobs.size === 1)
 
     val mapStage1 = scheduler.shuffleToMapStage(shuffleDef1.shuffleId)
     val mapStage2 = scheduler.shuffleToMapStage(shuffleDef2.shuffleId)
     val mapStage3 = scheduler.shuffleToMapStage(shuffleDef3.shuffleId)
     val mapStage4 = scheduler.shuffleToMapStage(shuffleDef4.shuffleId)
+    val mapStage5 = scheduler.shuffleToMapStage(shuffleDef5.shuffleId)
     val finalStage = scheduler.activeJobs.head.finalStage
 
     assert(mapStage1.parents.isEmpty)
     assert(mapStage2.parents === List(mapStage1))
     assert(mapStage3.parents === List(mapStage2))
     assert(mapStage4.parents === List(mapStage1, mapStage3))
-    assert(finalStage.parents === List(mapStage2, mapStage4))
+    assert(mapStage5.parents === List(mapStage2, mapStage4))
+    assert(finalStage.parents === List(mapStage5))
   }
 
   test("zero split job") {
