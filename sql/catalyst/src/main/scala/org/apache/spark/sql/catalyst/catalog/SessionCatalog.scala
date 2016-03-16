@@ -458,6 +458,8 @@ class SessionCatalog(externalCatalog: ExternalCatalog) {
     }
   }
 
+  // TODO: implement lookupFunction that returns something from the registry itself
+
   /**
    * List all matching functions in the current database, including temporary functions.
    */
