@@ -37,7 +37,7 @@ import org.apache.spark.annotation.DeveloperApi
  * The conversion via `deserialize` occurs when reading from a `DataFrame`.
  */
 @DeveloperApi
-abstract class UserDefinedType[UserType] extends DataType with Serializable {
+abstract class UserDefinedType[UserType >: Null] extends DataType with Serializable {
 
   /** Underlying storage type for this UDT */
   def sqlType: DataType
@@ -50,11 +50,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
 
   /**
    * Convert the user type to a SQL datum
-   *
-   * TODO: Can we make this take obj: UserType?  The issue is in
-   *       CatalystTypeConverters.convertToCatalyst, where we need to convert Any to UserType.
    */
-  def serialize(obj: Any): Any
+  def serialize(obj: UserType): Any
 
   /** Convert a SQL datum to the user type */
   def deserialize(datum: Any): UserType

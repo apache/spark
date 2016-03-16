@@ -177,7 +177,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
       ))
   }
 
-  override def serialize(obj: Any): InternalRow = {
+  override def serialize(obj: Matrix): InternalRow = {
     val row = new GenericMutableRow(7)
     obj match {
       case sm: SparseMatrix =>

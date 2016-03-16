@@ -36,11 +36,7 @@ private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
 
   override def sqlType: DataType = IntegerType
 
-  override def serialize(obj: Any): Int = {
-    obj match {
-      case groupableData: GroupableData => groupableData.data
-    }
-  }
+  override def serialize(groupableData: GroupableData): Int = groupableData.data
 
   override def deserialize(datum: Any): GroupableData = {
     datum match {
@@ -60,13 +56,10 @@ private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
 
   override def sqlType: DataType = MapType(IntegerType, IntegerType)
 
-  override def serialize(obj: Any): MapData = {
-    obj match {
-      case groupableData: UngroupableData =>
-        val keyArray = new GenericArrayData(groupableData.data.keys.toSeq)
-        val valueArray = new GenericArrayData(groupableData.data.values.toSeq)
-        new ArrayBasedMapData(keyArray, valueArray)
-    }
+  override def serialize(ungroupableData: UngroupableData): MapData = {
+    val keyArray = new GenericArrayData(ungroupableData.data.keys.toSeq)
+    val valueArray = new GenericArrayData(ungroupableData.data.values.toSeq)
+    new ArrayBasedMapData(keyArray, valueArray)
   }
 
   override def deserialize(datum: Any): UngroupableData = {
