@@ -365,7 +365,6 @@ case class BroadcastHashJoin(
          |$numOutput.add(1);
          |${consume(ctx, input)}
        """.stripMargin
-
     } else {
       val matches = ctx.freshName("matches")
       val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
@@ -390,7 +389,6 @@ case class BroadcastHashJoin(
          |$numOutput.add(1);
          |${consume(ctx, input)}
        """.stripMargin
-
     }
   }
 }
