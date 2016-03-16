@@ -465,7 +465,18 @@ class SessionCatalog(externalCatalog: ExternalCatalog) {
     val functionsInCurrentDb = externalCatalog.listFunctions(currentDb, pattern).map { f =>
       FunctionIdentifier(f, Some(currentDb))
     }
-    functionsInCurrentDb ++ tempFunctions.keys.asScala.map { f => FunctionIdentifier(f) }
+    val regex = pattern.replaceAll("\\*", ".*").r
+    val _tempFunctions = tempFunctions.keys().asScala
+      .filter { f => regex.pattern.matcher(f).matches() }
+      .map { f => FunctionIdentifier(f) }
+    functionsInCurrentDb ++ _tempFunctions
+  }
+
+  /**
+   * Return a temporary function. For testing only.
+   */
+  private[catalog] def getTempFunction(name: String): Option[CatalogFunction] = {
+    Option(tempFunctions.get(name))
   }
 
 }
