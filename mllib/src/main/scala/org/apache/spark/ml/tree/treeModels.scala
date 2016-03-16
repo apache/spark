@@ -205,7 +205,7 @@ private[ml] object DecisionTreeModelReadWrite {
     }
 
     val dataPath = new Path(path, "data").toString
-    val data = sqlContext.read.format("parquet").load(dataPath).as[NodeData]
+    val data = sqlContext.read.parquet(dataPath).as[NodeData]
 
     // Load all nodes, sorted by ID.
     val nodes: Array[NodeData] = data.collect().sortBy(_.id)
