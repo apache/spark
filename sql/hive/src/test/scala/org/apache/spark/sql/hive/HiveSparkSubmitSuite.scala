@@ -94,9 +94,10 @@ class HiveSparkSubmitSuite
     // Before the fix in SPARK-8470, this results in a MissingRequirementError because
     // the HiveContext code mistakenly overrides the class loader that contains user classes.
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
-    import Properties.versionString
-    val version = versionString.substring(versionString.indexOf(" ") + 1,
-      versionString.lastIndexOf("."))
+    val version = Properties.versionNumberString match {
+      case v if v.startsWith("2.10") || v.startsWith("2.11") => v.substring(0, 4)
+      case x => throw new Exception(s"Unsupported Scala Version: $x")
+    }
     val testJar = s"sql/hive/src/test/resources/regression-test-SPARK-8489/test-$version.jar"
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
