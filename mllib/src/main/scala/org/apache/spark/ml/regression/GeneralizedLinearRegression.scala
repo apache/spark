@@ -46,8 +46,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * to be used in the model.
    * Supported options: "gaussian", "binomial", "poisson" and "gamma".
    * Default is "gaussian".
-    *
-    * @group param
+   *
+   * @group param
    */
   @Since("2.0.0")
   final val family: Param[String] = new Param(this, "family",
@@ -80,7 +80,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   import GeneralizedLinearRegression._
 
   @Since("2.0.0")
-  override def validateAndTransformSchema(schema: StructType,
+  override def validateAndTransformSchema(
+      schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     if ($(solver) == "irls") {

@@ -548,9 +548,9 @@ trait Params extends Identifiable with Serializable {
    * Parameter value checks which do not depend on other parameters are handled by
    * [[Param.validate()]].  This method does not handle input/output column parameters;
    * those are checked during schema validation.
-   * @deprecated All the checks should be merged into transformSchema
+   * @deprecated Will be removed in 2.1.0. All the checks should be merged into transformSchema
    */
-  @deprecated("All the checks should be merged into transformSchema", "2.0.0")
+  @deprecated("Will be removed in 2.1.0. Checks should be merged into transformSchema.", "2.0.0")
   def validateParams(): Unit = {
     // Do nothing by default.  Override to handle Param interactions.
   }
