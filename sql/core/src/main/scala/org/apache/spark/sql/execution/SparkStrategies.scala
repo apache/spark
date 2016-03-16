@@ -49,7 +49,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             logical.Project(projectList, logical.Sort(order, true, child))) =>
           execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
         case logical.Limit(IntegerLiteral(limit), child) =>
-          execution.CollectLimit(limit, planLater(child)) :: Nil
+          execution.CollectLimit(limit, execution.LocalLimit(limit, planLater(child))) :: Nil
         case other => planLater(other) :: Nil
       }
       case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
