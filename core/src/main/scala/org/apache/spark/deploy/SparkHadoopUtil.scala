@@ -237,6 +237,8 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
+  def pathExists( p: Path, config: Configuration): Boolean = p.getFileSystem(config).exists(p)
+
   /**
    * Lists all the files in a directory with the specified prefix, and does not end with the
    * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of
