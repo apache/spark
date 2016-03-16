@@ -24,25 +24,23 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 /**
-  * Created by tdas on 3/9/16.
-  */
+ * An RDD that allows computations to be executed against [[StateStore]]s. It
+ * uses the [[StateStoreCoordinator]] to use the locations of loaded state stores as
+ * preferred locations.
+ */
 class StateStoreRDD[INPUT: ClassTag, OUTPUT: ClassTag](
     dataRDD: RDD[INPUT],
     storeUpdateFunction: (StateStore, Iterator[INPUT]) => Iterator[OUTPUT],
     operatorId: Long,
     storeVersion: Long,
     storeDirectory: String,
-    storeCoordinator: StateStoreCoordinator) extends RDD[OUTPUT](dataRDD) {
-
-  val nextVersion = storeVersion + 1
+    storeCoordinator: Option[StateStoreCoordinator]) extends RDD[OUTPUT](dataRDD) {
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
+
   override def getPreferredLocations(partition: Partition): Seq[String] = {
-    Seq.empty
-    /*
-    storeCoordinator.getLocation(
-      StateStoreId(operatorId, partition.index)).toSeq
-    */
+    val storeId = StateStoreId(operatorId, partition.index)
+    storeCoordinator.flatMap(_.getLocation(storeId)).toSeq
   }
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[OUTPUT] = {

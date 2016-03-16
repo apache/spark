@@ -65,12 +65,12 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
         }
         val opId = 0
         val rdd1 = makeRDD(sc, Seq("a", "b", "a"))
-          .withStateStores(increment, opId, storeVersion = 0, path, null)
+          .withStateStores(increment, opId, storeVersion = 0, path)
         assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
 
         // Generate next version of stores
         val rdd2 = makeRDD(sc, Seq("a", "c"))
-          .withStateStores(increment, opId, storeVersion = 1, path, null)
+          .withStateStores(increment, opId, storeVersion = 1, path)
         assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
 
         // Make sure the previous RDD still has the same data.
@@ -88,7 +88,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
           sc: SparkContext,
           seq: Seq[String],
           storeVersion: Int): RDD[(String, Int)] = {
-        makeRDD(sc, Seq("a")).withStateStores(increment, opId, storeVersion, path, null)
+        makeRDD(sc, Seq("a")).withStateStores(increment, opId, storeVersion, path)
       }
 
       // Generate RDDs and state store data
@@ -115,15 +115,15 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
         coordinator.reportActiveInstance(StateStoreId(opId, 1), "host2", "exec2")
 
         val rdd = makeRDD(sc, Seq("a", "b", "a"))
-          .withStateStores(increment, opId, storeVersion = 0, path, coordinator)
+          .withStateStores(increment, opId, storeVersion = 0, path, Some(coordinator))
         require(rdd.partitions.size === 2)
 
         assert(
-          rdd.preferredLocations(rdd.partitions(0)) !=
+          rdd.preferredLocations(rdd.partitions(0)) ===
             Seq(ExecutorCacheTaskLocation("host1", "exec1").toString))
 
         assert(
-          rdd.preferredLocations(rdd.partitions(1)) !=
+          rdd.preferredLocations(rdd.partitions(1)) ===
             Seq(ExecutorCacheTaskLocation("host2", "exec2").toString))
       }
     }

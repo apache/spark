@@ -29,7 +29,7 @@ package object state {
       operatorId: Long,
       storeVersion: Long,
       storeDirectory: String,
-      storeCoordinator: StateStoreCoordinator
+      storeCoordinator: Option[StateStoreCoordinator] = None
     ): StateStoreRDD[INPUT, OUTPUT] = {
       new StateStoreRDD(
         dataRDD, storeUpdateFunction, operatorId, storeVersion, storeDirectory, storeCoordinator)
