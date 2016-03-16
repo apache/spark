@@ -73,7 +73,10 @@ private[spark] class ApplicationMaster(
       } else {
         sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)
       }
-    val defaultMaxNumExecutorFailures = math.max(3, 2 * effectiveNumExecutors)
+    // By default, effectiveNumExecutors is Int.MaxValue if dynamic allocation is enabled. We need
+    // avoid the integer overflow here.
+    val defaultMaxNumExecutorFailures = math.max(3,
+      if (effectiveNumExecutors > Int.MaxValue / 2) Int.MaxValue else (2 * effectiveNumExecutors))
 
     sparkConf.get(MAX_EXECUTOR_FAILURES).getOrElse(defaultMaxNumExecutorFailures)
   }
