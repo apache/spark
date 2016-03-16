@@ -502,7 +502,7 @@ class PersistenceTest(PySparkTestCase):
     def test_logistic_regression(self):
         lr = LogisticRegression(maxIter=1)
         path = tempfile.mkdtemp()
-        lr_path = path + "/lr"
+        lr_path = path + "/logreg"
         lr.save(lr_path)
         lr2 = LogisticRegression.load(lr_path)
         self.assertEqual(lr2.uid, lr2.maxIter.parent,
