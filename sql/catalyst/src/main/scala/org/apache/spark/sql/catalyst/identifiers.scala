@@ -24,7 +24,8 @@ package org.apache.spark.sql.catalyst
  * Format (unquoted): "name" or "db.name"
  * Format (quoted): "`name`" or "`db`.`name`"
  */
-private[sql] abstract class IdentifierWithDatabase(name: String) {
+sealed trait IdentifierWithDatabase {
+  val name: String
   def database: Option[String]
   def quotedString: String = database.map(db => s"`$db`.`$name`").getOrElse(s"`$name`")
   def unquotedString: String = database.map(db => s"$db.$name").getOrElse(name)
@@ -36,15 +37,16 @@ private[sql] abstract class IdentifierWithDatabase(name: String) {
  * Identifies a table in a database.
  * If `database` is not defined, the current database is used.
  */
-private[sql] case class TableIdentifier(
-    table: String,
-    database: Option[String])
-  extends IdentifierWithDatabase(table) {
+case class TableIdentifier(table: String, database: Option[String])
+  extends IdentifierWithDatabase {
+
+  override val name: String = table
 
   def this(name: String) = this(name, None)
+
 }
 
-private[sql] object TableIdentifier {
+object TableIdentifier {
   def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)
 }
 
@@ -53,14 +55,14 @@ private[sql] object TableIdentifier {
  * Identifies a function in a database.
  * If `database` is not defined, the current database is used.
  */
-private[sql] case class FunctionIdentifier(
-    funcName: String,
-    database: Option[String])
-  extends IdentifierWithDatabase(funcName) {
+case class FunctionIdentifier(funcName: String, database: Option[String])
+  extends IdentifierWithDatabase {
+
+  override val name: String = funcName
 
   def this(name: String) = this(name, None)
 }
 
-private[sql] object FunctionIdentifier {
+object FunctionIdentifier {
   def apply(funcName: String): FunctionIdentifier = new FunctionIdentifier(funcName)
 }
