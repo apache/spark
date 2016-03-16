@@ -764,8 +764,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Long] = {
-    import this.implicits._
-    Dataset[Long](this, Range(start, end, step, numPartitions))
+    new Dataset(this, Range(start, end, step, numPartitions), implicits.newLongEncoder)
   }
 
   /**
