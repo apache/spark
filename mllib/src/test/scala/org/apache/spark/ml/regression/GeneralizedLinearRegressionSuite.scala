@@ -20,6 +20,7 @@ package org.apache.spark.ml.regression
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
@@ -29,6 +30,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
 
 class GeneralizedLinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -464,6 +466,461 @@ class GeneralizedLinearRegressionSuite
         idx += 1
       }
     }
+  }
+
+  test("glm summary: gaussian family with weight") {
+    /*
+       R code:
+
+       A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
+       b <- c(17, 19, 23, 29)
+       w <- c(1, 2, 3, 4)
+       df <- as.data.frame(cbind(A, b))
+     */
+    val datasetWithWeight = sqlContext.createDataFrame(sc.parallelize(Seq(
+      Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
+    ), 2))
+    /*
+       R code:
+
+       model <- glm(formula = "b ~ .", family="gaussian", data = df, weights = w)
+       summary(model)
+
+       Deviance Residuals:
+           1       2       3       4
+       1.920  -1.358  -1.109   0.960
+
+       Coefficients:
+                   Estimate Std. Error t value Pr(>|t|)
+       (Intercept)   18.080      9.608   1.882    0.311
+       V1             6.080      5.556   1.094    0.471
+       V2            -0.600      1.960  -0.306    0.811
+
+       (Dispersion parameter for gaussian family taken to be 7.68)
+
+           Null deviance: 202.00  on 3  degrees of freedom
+       Residual deviance:   7.68  on 1  degrees of freedom
+       AIC: 18.783
+
+       Number of Fisher Scoring iterations: 2
+
+       residuals(model, type="pearson")
+              1         2         3         4
+       1.920000 -1.357645 -1.108513  0.960000
+
+       residuals(model, type="working")
+          1     2     3     4
+       1.92 -0.96 -0.64  0.48
+
+       residuals(model, type="response")
+          1     2     3     4
+       1.92 -0.96 -0.64  0.48
+     */
+    val trainer = new GeneralizedLinearRegression()
+      .setWeightCol("weight")
+
+    val model = trainer.fit(datasetWithWeight)
+
+    val coefficientsR = Vectors.dense(Array(6.080, -0.600))
+    val interceptR = 18.080
+    val devianceResidualsR = Array(1.920, -1.358, -1.109, 0.960)
+    val pearsonResidualsR = Array(1.920000, -1.357645, -1.108513, 0.960000)
+    val workingResidualsR = Array(1.92, -0.96, -0.64, 0.48)
+    val responseResidualsR = Array(1.92, -0.96, -0.64, 0.48)
+    val seCoefR = Array(5.556, 1.960, 9.608)
+    val tValsR = Array(1.094, -0.306, 1.882)
+    val pValsR = Array(0.471, 0.811, 0.311)
+    val dispersionR = 7.68
+    val nullDevianceR = 202.00
+    val residualDevianceR = 7.68
+    val residualDegreeOfFreedomNullR = 3
+    val residualDegreeOfFreedomR = 1
+    val aicR = 18.783
+
+    val summary = model.summary
+
+    val devianceResiduals = summary.residuals()
+      .select(col("devianceResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val pearsonResiduals = summary.residuals("pearson")
+      .select(col("pearsonResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val workingResiduals = summary.residuals("working")
+      .select(col("workingResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val responseResiduals = summary.residuals("response")
+      .select(col("responseResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+
+    assert(model.coefficients ~== coefficientsR absTol 1E-3)
+    assert(model.intercept ~== interceptR absTol 1E-3)
+    devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    pearsonResiduals.zip(pearsonResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    workingResiduals.zip(workingResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    responseResiduals.zip(responseResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    assert(summary.dispersion ~== dispersionR absTol 1E-3)
+    assert(summary.nullDeviance ~== nullDevianceR absTol 1E-3)
+    assert(summary.deviance ~== residualDevianceR absTol 1E-3)
+    assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
+    assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
+    assert(summary.aic ~== aicR absTol 1E-3)
+  }
+
+  test("glm summary: binomial family with weight") {
+    /*
+       R code:
+
+       A <- matrix(c(0, 1, 2, 3, 5, 2, 1, 3), 4, 2)
+       b <- c(1, 0, 1, 0)
+       w <- c(1, 2, 3, 4)
+       df <- as.data.frame(cbind(A, b))
+     */
+    val datasetWithWeight = sqlContext.createDataFrame(sc.parallelize(Seq(
+      Instance(1.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(0.0, 2.0, Vectors.dense(1.0, 2.0)),
+      Instance(1.0, 3.0, Vectors.dense(2.0, 1.0)),
+      Instance(0.0, 4.0, Vectors.dense(3.0, 3.0))
+    ), 2))
+    /*
+       R code:
+
+       model <- glm(formula = "b ~ . -1", family="binomial", data = df, weights = w)
+       summary(model)
+
+       Deviance Residuals:
+           1       2       3       4
+       1.273  -1.437   2.533  -1.556
+
+       Coefficients:
+          Estimate Std. Error z value Pr(>|z|)
+       V1 -0.30217    0.46242  -0.653    0.513
+       V2 -0.04452    0.37124  -0.120    0.905
+
+       (Dispersion parameter for binomial family taken to be 1)
+
+           Null deviance: 13.863  on 4  degrees of freedom
+       Residual deviance: 12.524  on 2  degrees of freedom
+       AIC: 16.524
+
+       Number of Fisher Scoring iterations: 5
+
+       residuals(model, type="pearson")
+              1         2         3         4
+       1.117731 -1.162962  2.395838 -1.189005
+
+       residuals(model, type="working")
+              1         2         3         4
+       2.249324 -1.676240  2.913346 -1.353433
+
+       residuals(model, type="response")
+               1          2          3          4
+       0.5554219 -0.4034267  0.6567520 -0.2611382
+     */
+    val trainer = new GeneralizedLinearRegression()
+      .setFamily("binomial")
+      .setWeightCol("weight")
+      .setFitIntercept(false)
+
+    val model = trainer.fit(datasetWithWeight)
+
+    val coefficientsR = Vectors.dense(Array(-0.30217, -0.04452))
+    val interceptR = 0.0
+    val devianceResidualsR = Array(1.273, -1.437, 2.533, -1.556)
+    val pearsonResidualsR = Array(1.117731, -1.162962, 2.395838, -1.189005)
+    val workingResidualsR = Array(2.249324, -1.676240, 2.913346, -1.353433)
+    val responseResidualsR = Array(0.5554219, -0.4034267, 0.6567520, -0.2611382)
+    val seCoefR = Array(0.46242, 0.37124)
+    val tValsR = Array(-0.653, -0.120)
+    val pValsR = Array(0.513, 0.905)
+    val dispersionR = 1.0
+    val nullDevianceR = 13.863
+    val residualDevianceR = 12.524
+    val residualDegreeOfFreedomNullR = 4
+    val residualDegreeOfFreedomR = 2
+    val aicR = 16.524
+
+    val summary = model.summary
+    val devianceResiduals = summary.residuals()
+      .select(col("devianceResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val pearsonResiduals = summary.residuals("pearson")
+      .select(col("pearsonResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val workingResiduals = summary.residuals("working")
+      .select(col("workingResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val responseResiduals = summary.residuals("response")
+      .select(col("responseResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+
+    assert(model.coefficients ~== coefficientsR absTol 1E-3)
+    assert(model.intercept ~== interceptR absTol 1E-3)
+    devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    pearsonResiduals.zip(pearsonResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    workingResiduals.zip(workingResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    responseResiduals.zip(responseResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    assert(summary.dispersion ~== dispersionR absTol 1E-3)
+    assert(summary.nullDeviance ~== nullDevianceR absTol 1E-3)
+    assert(summary.deviance ~== residualDevianceR absTol 1E-3)
+    assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
+    assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
+    assert(summary.aic ~== aicR absTol 1E-3)
+  }
+
+  test("glm summary: poisson family with weight") {
+    /*
+       R code:
+
+       A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
+       b <- c(2, 8, 3, 9)
+       w <- c(1, 2, 3, 4)
+       df <- as.data.frame(cbind(A, b))
+     */
+    val datasetWithWeight = sqlContext.createDataFrame(sc.parallelize(Seq(
+      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(9.0, 4.0, Vectors.dense(3.0, 13.0))
+    ), 2))
+    /*
+       R code:
+
+       model <- glm(formula = "b ~ .", family="poisson", data = df, weights = w)
+       summary(model)
+
+       Deviance Residuals:
+              1         2         3         4
+       -0.28952   0.11048   0.14839  -0.07268
+
+       Coefficients:
+                   Estimate Std. Error z value Pr(>|z|)
+       (Intercept)   6.2999     1.6086   3.916 8.99e-05 ***
+       V1            3.3241     1.0184   3.264  0.00110 **
+       V2           -1.0818     0.3522  -3.071  0.00213 **
+       ---
+       Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+       (Dispersion parameter for poisson family taken to be 1)
+
+           Null deviance: 15.38066  on 3  degrees of freedom
+       Residual deviance:  0.12333  on 1  degrees of freedom
+       AIC: 41.803
+
+       Number of Fisher Scoring iterations: 3
+
+       residuals(model, type="pearson")
+                 1           2           3           4
+       -0.28043145  0.11099310  0.14963714 -0.07253611
+
+       residuals(model, type="working")
+                 1           2           3           4
+       -0.17960679  0.02813593  0.05113852 -0.01201650
+
+       residuals(model, type="response")
+                1          2          3          4
+       -0.4378554  0.2189277  0.1459518 -0.1094638
+     */
+    val trainer = new GeneralizedLinearRegression()
+      .setFamily("poisson")
+      .setWeightCol("weight")
+      .setFitIntercept(true)
+
+    val model = trainer.fit(datasetWithWeight)
+
+    val coefficientsR = Vectors.dense(Array(3.3241, -1.0818))
+    val interceptR = 6.2999
+    val devianceResidualsR = Array(-0.28952, 0.11048, 0.14839, -0.07268)
+    val pearsonResidualsR = Array(-0.28043145, 0.11099310, 0.14963714, -0.07253611)
+    val workingResidualsR = Array(-0.17960679, 0.02813593, 0.05113852, -0.01201650)
+    val responseResidualsR = Array(-0.4378554, 0.2189277, 0.1459518, -0.1094638)
+    val seCoefR = Array(1.0184, 0.3522, 1.6086)
+    val tValsR = Array(3.264, -3.071, 3.916)
+    val pValsR = Array(0.00110, 0.00213, 0.00009)
+    val dispersionR = 1.0
+    val nullDevianceR = 15.38066
+    val residualDevianceR = 0.12333
+    val residualDegreeOfFreedomNullR = 3
+    val residualDegreeOfFreedomR = 1
+    val aicR = 41.803
+
+    val summary = model.summary
+    val devianceResiduals = summary.residuals()
+      .select(col("devianceResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val pearsonResiduals = summary.residuals("pearson")
+      .select(col("pearsonResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val workingResiduals = summary.residuals("working")
+      .select(col("workingResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val responseResiduals = summary.residuals("response")
+      .select(col("responseResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+
+    assert(model.coefficients ~== coefficientsR absTol 1E-3)
+    assert(model.intercept ~== interceptR absTol 1E-3)
+    devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    pearsonResiduals.zip(pearsonResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    workingResiduals.zip(workingResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    responseResiduals.zip(responseResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    assert(summary.dispersion ~== dispersionR absTol 1E-3)
+    assert(summary.nullDeviance ~== nullDevianceR absTol 1E-3)
+    assert(summary.deviance ~== residualDevianceR absTol 1E-3)
+    assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
+    assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
+    assert(summary.aic ~== aicR absTol 1E-3)
+  }
+
+  test("glm summary: gamma family with weight") {
+    /*
+       R code:
+
+       A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
+       b <- c(2, 8, 3, 9)
+       w <- c(1, 2, 3, 4)
+       df <- as.data.frame(cbind(A, b))
+     */
+    val datasetWithWeight = sqlContext.createDataFrame(sc.parallelize(Seq(
+      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(9.0, 4.0, Vectors.dense(3.0, 13.0))
+    ), 2))
+    /*
+       R code:
+
+       model <- glm(formula = "b ~ .", family="Gamma", data = df, weights = w)
+       summary(model)
+
+       Deviance Residuals:
+              1         2         3         4
+       -0.26343   0.05761   0.12818  -0.03484
+
+       Coefficients:
+                   Estimate Std. Error t value Pr(>|t|)
+       (Intercept) -0.81511    0.23449  -3.476    0.178
+       V1          -0.72730    0.16137  -4.507    0.139
+       V2           0.23894    0.05481   4.359    0.144
+
+       (Dispersion parameter for Gamma family taken to be 0.07986091)
+
+           Null deviance: 2.937462  on 3  degrees of freedom
+       Residual deviance: 0.090358  on 1  degrees of freedom
+       AIC: 23.202
+
+       Number of Fisher Scoring iterations: 4
+
+       residuals(model, type="pearson")
+                 1           2           3           4
+       -0.24082508  0.05839241  0.13135766 -0.03463621
+
+       residuals(model, type="working")
+                 1            2            3            4
+       0.091414181 -0.005374314 -0.027196998  0.001890910
+
+       residuals(model, type="response")
+                1          2          3          4
+       -0.6344390  0.3172195  0.2114797 -0.1586097
+     */
+    val trainer = new GeneralizedLinearRegression()
+      .setFamily("gamma")
+      .setWeightCol("weight")
+
+    val model = trainer.fit(datasetWithWeight)
+
+    val coefficientsR = Vectors.dense(Array(-0.72730, 0.23894))
+    val interceptR = -0.81511
+    val devianceResidualsR = Array(-0.26343, 0.05761, 0.12818, -0.03484)
+    val pearsonResidualsR = Array(-0.24082508, 0.05839241, 0.13135766, -0.03463621)
+    val workingResidualsR = Array(0.091414181, -0.005374314, -0.027196998, 0.001890910)
+    val responseResidualsR = Array(-0.6344390, 0.3172195, 0.2114797, -0.1586097)
+    val seCoefR = Array(0.16137, 0.05481, 0.23449)
+    val tValsR = Array(-4.507, 4.359, -3.476)
+    val pValsR = Array(0.139, 0.144, 0.178)
+    val dispersionR = 0.07986091
+    val nullDevianceR = 2.937462
+    val residualDevianceR = 0.090358
+    val residualDegreeOfFreedomNullR = 3
+    val residualDegreeOfFreedomR = 1
+    val aicR = 23.202
+
+    val summary = model.summary
+    val devianceResiduals = summary.residuals()
+      .select(col("devianceResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val pearsonResiduals = summary.residuals("pearson")
+      .select(col("pearsonResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val workingResiduals = summary.residuals("working")
+      .select(col("workingResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val responseResiduals = summary.residuals("response")
+      .select(col("responseResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+
+    assert(model.coefficients ~== coefficientsR absTol 1E-3)
+    assert(model.intercept ~== interceptR absTol 1E-3)
+    devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    pearsonResiduals.zip(pearsonResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    workingResiduals.zip(workingResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    responseResiduals.zip(responseResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    assert(summary.dispersion ~== dispersionR absTol 1E-3)
+    assert(summary.nullDeviance ~== nullDevianceR absTol 1E-3)
+    assert(summary.deviance ~== residualDevianceR absTol 1E-3)
+    assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
+    assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
+    assert(summary.aic ~== aicR absTol 1E-3)
   }
 
   test("read/write") {

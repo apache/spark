@@ -87,6 +87,14 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
+  /** (private[ml]) Train a decision tree on an RDD */
+  private[ml] def train(data: RDD[LabeledPoint],
+      oldStrategy: OldStrategy): DecisionTreeRegressionModel = {
+    val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
+      seed = 0L, parentUID = Some(uid))
+    trees.head.asInstanceOf[DecisionTreeRegressionModel]
+  }
+
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
     super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity,
