@@ -21,14 +21,14 @@ import breeze.linalg.{Vector => BV}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{MLTestingUtils, DefaultReadWriteTest}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.mllib.classification.NaiveBayesSuite._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DoubleType
 
 class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -87,7 +87,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       model: NaiveBayesModel,
       modelType: String): Unit = {
     featureAndProbabilities.collect().foreach {
-      case Row(features: Vector, probability: Vector) => {
+      case Row(features: Vector, probability: Vector) =>
         assert(probability.toArray.sum ~== 1.0 relTol 1.0e-10)
         val expected = modelType match {
           case Multinomial =>
@@ -98,7 +98,6 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
             throw new UnknownError(s"Invalid modelType: $modelType.")
         }
         assert(probability ~== expected relTol 1.0e-10)
-      }
     }
   }
 

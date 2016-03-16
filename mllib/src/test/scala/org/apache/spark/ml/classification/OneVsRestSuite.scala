@@ -74,7 +74,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(ovaModel)
 
-    assert(ovaModel.models.size === numClasses)
+    assert(ovaModel.models.length === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
 
     // check for label metadata in prediction col
