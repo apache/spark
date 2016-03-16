@@ -104,6 +104,11 @@ object PageRank extends Logging {
       graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15,
       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
+    require(numIter > 0, s"Number of iterations must be greater than 0," +
+      s" but got ${numIter}")
+    require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
+      s" to [0, 1], but got ${resetProb}")
+
     val personalized = srcId isDefined
     val src: VertexId = srcId.getOrElse(-1L)
 
@@ -197,6 +202,10 @@ object PageRank extends Logging {
       graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15,
       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
+    require(tol >= 0, s"Tolerance must be no less than 0, but got ${tol}")
+    require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
+      s" to [0, 1], but got ${resetProb}")
+
     val personalized = srcId.isDefined
     val src: VertexId = srcId.getOrElse(-1L)
 
