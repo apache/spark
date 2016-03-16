@@ -25,7 +25,7 @@ import com.google.common.primitives.UnsignedBytes
 import io.netty.buffer.{ByteBuf, Unpooled}
 
 import org.apache.spark.network.util.ByteArrayWritableChannel
-import org.apache.spark.storage.BlockManager
+import org.apache.spark.storage.StorageUtils
 
 private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks != null, "chunks must not be null")
@@ -105,12 +105,12 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    * unfortunately no standard API to do this.
    */
   def dispose(): Unit = {
-    chunks.foreach(BlockManager.dispose)
+    chunks.foreach(StorageUtils.dispose)
   }
 }
 
 /**
- * Reads data from a ChunkedByteBuffer, and optionally cleans it up using BlockManager.dispose()
+ * Reads data from a ChunkedByteBuffer, and optionally cleans it up using StorageUtils.dispose()
  * at the end of the stream (e.g. to close a memory-mapped file).
  */
 private class ChunkedByteBufferInputStream(
@@ -129,7 +129,7 @@ private class ChunkedByteBufferInputStream(
 
   override def read(): Int = {
     if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
-      BlockManager.dispose(currentChunk)
+      StorageUtils.dispose(currentChunk)
       currentChunk = chunks.next()
     }
     if (currentChunk != null && currentChunk.hasRemaining) {
