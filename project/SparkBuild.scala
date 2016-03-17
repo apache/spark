@@ -124,6 +124,7 @@ object SparkBuild extends PomBuild {
       // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
       // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
       System.setProperty("scala-2.10", "true")
+      System.setProperty("scalac.patmat.analysisBudget", "512")
     }
     profiles
   }
