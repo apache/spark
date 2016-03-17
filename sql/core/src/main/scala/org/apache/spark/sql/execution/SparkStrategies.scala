@@ -165,12 +165,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, condition, left, right)
-         if canBuildHashMap(right) && muchSmaller(right, left) || !RowOrdering.isOrderable(leftKeys) =>
+         if canBuildHashMap(right) && muchSmaller(right, left) ||
+           !RowOrdering.isOrderable(leftKeys) =>
         Seq(joins.ShuffledHashJoin(
           leftKeys, rightKeys, LeftOuter, BuildRight, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(RightOuter, leftKeys, rightKeys, condition, left, right)
-         if canBuildHashMap(left) && muchSmaller(left, right) || !RowOrdering.isOrderable(leftKeys) =>
+         if canBuildHashMap(left) && muchSmaller(left, right) ||
+           !RowOrdering.isOrderable(leftKeys) =>
         Seq(joins.ShuffledHashJoin(
           leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
 
