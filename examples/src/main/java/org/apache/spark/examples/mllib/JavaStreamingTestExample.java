@@ -17,19 +17,21 @@
 
 package org.apache.spark.examples.mllib;
 
+
 import org.apache.spark.Accumulator;
-import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.stat.test.BinarySample;
 import org.apache.spark.mllib.stat.test.StreamingTest;
 import org.apache.spark.mllib.stat.test.StreamingTestResult;
+import org.apache.spark.SparkConf;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.Seconds;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.util.Utils;
-import org.apache.spark.api.java.function.VoidFunction;
+
 
 /**
  * Perform streaming testing using Welch's 2-sample t-test on a stream of data, where the data
