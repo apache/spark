@@ -66,6 +66,6 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
 
   /** Fails the test if the two expressions do not match */
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
-    comparePlans(Filter(e1, OneRowRelation()), Filter(e2, OneRowRelation()))
+    comparePlans(Filter(e1, OneRowRelation), Filter(e2, OneRowRelation))
   }
 }

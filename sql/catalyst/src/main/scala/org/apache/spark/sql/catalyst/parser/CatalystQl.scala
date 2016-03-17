@@ -201,7 +201,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
           val relations = fromClause match {
             case Some(f) => nodeToRelation(f)
-            case None => OneRowRelation()
+            case None => OneRowRelation
           }
 
           val withLateralView = lateralViewClause.map { lv =>

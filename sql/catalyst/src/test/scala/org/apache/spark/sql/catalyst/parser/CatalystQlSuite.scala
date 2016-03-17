@@ -29,7 +29,7 @@ class CatalystQlSuite extends PlanTest {
   val parser = new CatalystQl()
 
   test("test case insensitive") {
-    val result = Project(UnresolvedAlias(Literal(1)):: Nil, OneRowRelation())
+    val result = Project(UnresolvedAlias(Literal(1)):: Nil, OneRowRelation)
     assert(result === parser.parsePlan("seLect 1"))
     assert(result === parser.parsePlan("select 1"))
     assert(result === parser.parsePlan("SELECT 1"))
@@ -42,7 +42,7 @@ class CatalystQlSuite extends PlanTest {
         Not(
           GreaterThan(Literal(true), Literal(true)))
       ) :: Nil,
-      OneRowRelation())
+      OneRowRelation)
     comparePlans(parsed, expected)
   }
 
@@ -82,7 +82,7 @@ class CatalystQlSuite extends PlanTest {
         UnresolvedAlias(
           Literal(result)
         ) :: Nil,
-        OneRowRelation())
+        OneRowRelation)
       comparePlans(parsed, expected)
     }
 
@@ -133,7 +133,7 @@ class CatalystQlSuite extends PlanTest {
         UnresolvedAlias(
           Literal(output)
         ) :: Nil,
-        OneRowRelation())
+        OneRowRelation)
       comparePlans(parsed, expected)
     }
 
