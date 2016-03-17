@@ -78,6 +78,16 @@ class CodegenContext {
   var currentVars: Seq[ExprCode] = null
 
   /**
+   * Whether should we copy the result rows or not.
+   *
+   * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
+   * example, Join), this should be true.
+   *
+   * If an operator starts a new pipeline, this should be reset to false before calling `consume()`.
+   */
+  var copyResult: Boolean = false
+
+  /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
    * 3-tuple: java type, variable name, code to init it.
    * As an example, ("int", "count", "count = 0;") will produce code:

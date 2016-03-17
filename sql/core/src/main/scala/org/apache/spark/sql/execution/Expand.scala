@@ -187,6 +187,7 @@ case class Expand(
     val i = ctx.freshName("i")
     // these column have to declared before the loop.
     val evaluate = evaluateVariables(outputColumns)
+    ctx.copyResult = true
     s"""
        |$evaluate
        |for (int $i = 0; $i < ${projections.length}; $i ++) {

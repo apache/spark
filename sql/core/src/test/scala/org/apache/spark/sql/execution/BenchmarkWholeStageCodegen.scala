@@ -457,12 +457,12 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
 
     /**
-     * Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     collect:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    collect 1 million                          775 / 1170          1.4         738.9       1.0X
-    collect 2 millions                        1153 / 1758          0.9        1099.3       0.7X
-    collect 4 millions                        4451 / 5124          0.2        4244.9       0.2X
+    collect 1 million                         439 /  654          2.4         418.7       1.0X
+    collect 2 millions                        961 / 1907          1.1         916.4       0.5X
+    collect 4 millions                       3193 / 3895          0.3        3044.7       0.1X
      */
   }
 }
