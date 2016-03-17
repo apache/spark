@@ -61,11 +61,11 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       RemoveLiteralFromGroupExpressions) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
-      SetOperationPushDown,
       SamplePushDown,
       ReorderJoin,
       OuterJoinElimination,
       PushPredicateThroughProject,
+      SetOperationPushDown,
       PushPredicateThroughJoin,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
