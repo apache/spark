@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -45,12 +46,28 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       .select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
       .write
       .saveAsTable("parquet_t2")
+
+    def createArray(id: Column): Column = {
+      when(id % 3 === 0, lit(null)).otherwise(array('id, 'id + 1))
+    }
+
+    sqlContext
+      .range(10)
+      .select(
+        createArray('id).as("arr"),
+        array(array('id), createArray('id)).as("arr2"),
+        lit("""{"f1": "1", "f2": "2", "f3": 3}""").as("json"),
+        'id
+      )
+      .write
+      .saveAsTable("parquet_t3")
   }
 
   override protected def afterAll(): Unit = {
     sql("DROP TABLE IF EXISTS parquet_t0")
     sql("DROP TABLE IF EXISTS parquet_t1")
     sql("DROP TABLE IF EXISTS parquet_t2")
+    sql("DROP TABLE IF EXISTS parquet_t3")
     sql("DROP TABLE IF EXISTS t0")
   }
 
@@ -623,6 +640,101 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM parquet_t1 a, parquet_t1 b
         |GROUP BY a.KEY, b.KEY
         |HAVING MAX(a.KEY) > 0
+      """.stripMargin)
+  }
+
+  test("generator in project list without FROM clause") {
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3))")
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) AS val")
+  }
+
+  test("generator in project list with non-referenced table") {
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) FROM t0")
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) AS val FROM t0")
+  }
+
+  test("generator in project list with referenced table") {
+    checkHiveQl("SELECT EXPLODE(arr) FROM parquet_t3")
+    checkHiveQl("SELECT EXPLODE(arr) AS val FROM parquet_t3")
+  }
+
+  test("generator in project list with non-UDTF expressions") {
+    checkHiveQl("SELECT EXPLODE(arr), id FROM parquet_t3")
+    checkHiveQl("SELECT EXPLODE(arr) AS val, id as a FROM parquet_t3")
+  }
+
+  test("generator in lateral view") {
+    checkHiveQl("SELECT val, id FROM parquet_t3 LATERAL VIEW EXPLODE(arr) exp AS val")
+    checkHiveQl("SELECT val, id FROM parquet_t3 LATERAL VIEW OUTER EXPLODE(arr) exp AS val")
+  }
+
+  test("generator in lateral view with ambiguous names") {
+    checkHiveQl(
+      """
+        |SELECT exp.id, parquet_t3.id
+        |FROM parquet_t3
+        |LATERAL VIEW EXPLODE(arr) exp AS id
+      """.stripMargin)
+    checkHiveQl(
+      """
+        |SELECT exp.id, parquet_t3.id
+        |FROM parquet_t3
+        |LATERAL VIEW OUTER EXPLODE(arr) exp AS id
+      """.stripMargin)
+  }
+
+  test("use JSON_TUPLE as generator") {
+    checkHiveQl(
+      """
+        |SELECT c0, c1, c2
+        |FROM parquet_t3
+        |LATERAL VIEW JSON_TUPLE(json, 'f1', 'f2', 'f3') jt
+      """.stripMargin)
+    checkHiveQl(
+      """
+        |SELECT a, b, c
+        |FROM parquet_t3
+        |LATERAL VIEW JSON_TUPLE(json, 'f1', 'f2', 'f3') jt AS a, b, c
+      """.stripMargin)
+  }
+
+  test("nested generator in lateral view") {
+    checkHiveQl(
+      """
+        |SELECT val, id
+        |FROM parquet_t3
+        |LATERAL VIEW EXPLODE(arr2) exp1 AS nested_array
+        |LATERAL VIEW EXPLODE(nested_array) exp1 AS val
+      """.stripMargin)
+
+    checkHiveQl(
+      """
+        |SELECT val, id
+        |FROM parquet_t3
+        |LATERAL VIEW EXPLODE(arr2) exp1 AS nested_array
+        |LATERAL VIEW OUTER EXPLODE(nested_array) exp1 AS val
+      """.stripMargin)
+  }
+
+  test("generate with other operators") {
+    checkHiveQl(
+      """
+        |SELECT EXPLODE(arr) AS val, id
+        |FROM parquet_t3
+        |WHERE id > 2
+        |ORDER BY val, id
+        |LIMIT 5
+      """.stripMargin)
+
+    checkHiveQl(
+      """
+        |SELECT val, id
+        |FROM parquet_t3
+        |LATERAL VIEW EXPLODE(arr2) exp1 AS nested_array
+        |LATERAL VIEW EXPLODE(nested_array) exp1 AS val
+        |WHERE val > 2
+        |ORDER BY val, id
+        |LIMIT 5
       """.stripMargin)
   }
 }
