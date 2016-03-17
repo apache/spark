@@ -61,7 +61,6 @@ private[sql] object Dataset {
 }
 
 /**
- * :: Experimental ::
  * A [[Dataset]] is a strongly typed collection of objects that can be transformed in parallel
  * using functional or relational operations.
  *
@@ -138,7 +137,6 @@ private[sql] object Dataset {
  *
  * @since 1.6.0
  */
-@Experimental
 class Dataset[T] private[sql](
     @transient override val sqlContext: SQLContext,
     @DeveloperApi @transient override val queryExecution: QueryExecution,
@@ -650,6 +648,7 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * Joins this [[Dataset]] returning a [[Tuple2]] for each pair where `condition` evaluates to
    * true.
    *
@@ -668,6 +667,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
+  @Experimental
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     val left = this.logicalPlan
     val right = other.logicalPlan
@@ -696,6 +696,7 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * Using inner equi-join to join this [[Dataset]] returning a [[Tuple2]] for each pair
    * where `condition` evaluates to true.
    *
@@ -705,6 +706,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
+  @Experimental
   def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
     joinWith(other, condition, "inner")
   }
@@ -895,6 +897,7 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * Returns a new [[Dataset]] by computing the given [[Column]] expression for each element.
    *
    * {{{
@@ -905,6 +908,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
+  @Experimental
   def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = {
     new Dataset[U1](
       sqlContext,
@@ -931,20 +935,24 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
+  @Experimental
   def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): Dataset[(U1, U2)] =
     selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
 
   /**
+   * :: Experimental ::
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
+  @Experimental
   def select[U1, U2, U3](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
@@ -952,11 +960,13 @@ class Dataset[T] private[sql](
     selectUntyped(c1, c2, c3).asInstanceOf[Dataset[(U1, U2, U3)]]
 
   /**
+   * :: Experimental ::
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
+  @Experimental
   def select[U1, U2, U3, U4](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
@@ -965,11 +975,13 @@ class Dataset[T] private[sql](
     selectUntyped(c1, c2, c3, c4).asInstanceOf[Dataset[(U1, U2, U3, U4)]]
 
   /**
+   * :: Experimental ::
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
+  @Experimental
   def select[U1, U2, U3, U4, U5](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
@@ -1128,32 +1140,38 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * (Scala-specific)
    * Reduces the elements of this [[Dataset]] using the specified binary function. The given `func`
    * must be commutative and associative or the result may be non-deterministic.
    *
-   * @group func
+   * @group action
    * @since 1.6.0
    */
+  @Experimental
   def reduce(func: (T, T) => T): T = rdd.reduce(func)
 
   /**
+   * :: Experimental ::
    * (Java-specific)
    * Reduces the elements of this Dataset using the specified binary function.  The given `func`
    * must be commutative and associative or the result may be non-deterministic.
    *
-   * @group func
+   * @group action
    * @since 1.6.0
    */
+  @Experimental
   def reduce(func: ReduceFunction[T]): T = reduce(func.call(_, _))
 
   /**
+   * :: Experimental ::
    * (Scala-specific)
    * Returns a [[GroupedDataset]] where the data is grouped by the given key `func`.
    *
    * @group typedrel
    * @since 2.0.0
    */
+  @Experimental
   def groupByKey[K: Encoder](func: T => K): GroupedDataset[K, T] = {
     val inputPlan = logicalPlan
     val withGroupingKey = AppendColumns(func, inputPlan)
@@ -1168,11 +1186,13 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * Returns a [[GroupedDataset]] where the data is grouped by the given [[Column]] expressions.
    *
    * @group typedrel
    * @since 2.0.0
    */
+  @Experimental
   @scala.annotation.varargs
   def groupByKey(cols: Column*): GroupedDataset[Row, T] = {
     val withKeyColumns = logicalPlan.output ++ cols.map(_.expr).map(UnresolvedAlias(_))
@@ -1191,12 +1211,14 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * (Java-specific)
    * Returns a [[GroupedDataset]] where the data is grouped by the given key `func`.
    *
    * @group typedrel
    * @since 2.0.0
    */
+  @Experimental
   def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): GroupedDataset[K, T] =
     groupByKey(func.call(_))(encoder)
 
@@ -1781,49 +1803,59 @@ class Dataset[T] private[sql](
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
 
   /**
+   * :: Experimental ::
    * (Scala-specific)
    * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
    *
    * @group func
    * @since 1.6.0
    */
+  @Experimental
   def filter(func: T => Boolean): Dataset[T] = mapPartitions(_.filter(func))
 
   /**
+   * :: Experimental ::
    * (Java-specific)
    * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
    *
    * @group func
    * @since 1.6.0
    */
+  @Experimental
   def filter(func: FilterFunction[T]): Dataset[T] = filter(t => func.call(t))
 
   /**
+   * :: Experimental ::
    * (Scala-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    *
    * @group func
    * @since 1.6.0
    */
+  @Experimental
   def map[U : Encoder](func: T => U): Dataset[U] = mapPartitions(_.map(func))
 
   /**
+   * :: Experimental ::
    * (Java-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    *
    * @group func
    * @since 1.6.0
    */
+  @Experimental
   def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] =
     map(t => func.call(t))(encoder)
 
   /**
+   * :: Experimental ::
    * (Scala-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each partition.
    *
    * @group func
    * @since 1.6.0
    */
+  @Experimental
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     new Dataset[U](
       sqlContext,
@@ -1832,18 +1864,21 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * (Java-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each partition.
    *
    * @group func
    * @since 1.6.0
    */
+  @Experimental
   def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
     mapPartitions(func)(encoder)
   }
 
   /**
+   * :: Experimental ::
    * (Scala-specific)
    * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
    * and then flattening the results.
@@ -1851,10 +1886,12 @@ class Dataset[T] private[sql](
    * @group func
    * @since 1.6.0
    */
+  @Experimental
   def flatMap[U : Encoder](func: T => TraversableOnce[U]): Dataset[U] =
     mapPartitions(_.flatMap(func))
 
   /**
+   * :: Experimental ::
    * (Java-specific)
    * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
    * and then flattening the results.
@@ -1862,6 +1899,7 @@ class Dataset[T] private[sql](
    * @group func
    * @since 1.6.0
    */
+  @Experimental
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     val func: (T) => Iterator[U] = x => f.call(x).asScala
     flatMap(func)(encoder)
