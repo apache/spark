@@ -106,15 +106,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Creates an UTF8String from String.
    */
   public static UTF8String fromString(String str) {
-    if (str == null) return null;
-    try {
-      return fromBytes(str.getBytes("utf-8"));
-    } catch (UnsupportedEncodingException e) {
-      // Turn the exception into unchecked so we can find out about it at runtime, but
-      // don't need to add lots of boilerplate code everywhere.
-      throwException(e);
-      return null;
-    }
+    return str == null ? null : fromBytes(str.getBytes(StandardCharsets.UTF_8));
   }
 
   /**
