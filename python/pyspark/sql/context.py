@@ -31,8 +31,9 @@ from py4j.protocol import Py4JError
 from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
-from pyspark.sql.types import Row, DataType, StringType, StructType, _verify_type, \
-    _infer_schema, _has_nulltype, _merge_type, _create_converter, _parse_datatype_string
+from pyspark.sql.types import Row, DataType, StringType, StructType, WrappedJStructType, \
+    _verify_type, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
+    _parse_datatype_string
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.utils import install_exception_handler
@@ -418,7 +419,9 @@ class SQLContext(object):
                 schema = [str(x) for x in data.columns]
             data = [r.tolist() for r in data.to_records(index=False)]
 
-        if isinstance(schema, StructType):
+        if isinstance(schema, WrappedJStructType):
+            prepare = lambda obj: obj
+        elif isinstance(schema, StructType):
             def prepare(obj):
                 _verify_type(obj, schema)
                 return obj
@@ -432,12 +435,21 @@ class SQLContext(object):
         else:
             prepare = lambda obj: obj
 
-        if isinstance(data, RDD):
-            rdd, schema = self._createFromRDD(data.map(prepare), schema, samplingRatio)
+        # So that we can convert WrappedJStructTypes we need to get a
+        # serilizable versions of toInternal.
+        if isinstance(schema, WrappedJStructType):
+            java_schema = schema._jstructtype
+            python_schema = schema.unWrap()
         else:
-            rdd, schema = self._createFromLocal(map(prepare, data), schema)
+            java_schema = schema.json()
+            python_schema = schema
+
+        if isinstance(data, RDD):
+            rdd, schema = self._createFromRDD(data.map(prepare), python_schema, samplingRatio)
+        else:
+            rdd, schema = self._createFromLocal(map(prepare, data), python_schema)
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
-        jdf = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
+        jdf = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), java_schema)
         df = DataFrame(jdf, self)
         df._schema = schema
         return df

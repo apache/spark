@@ -579,6 +579,7 @@ class StructType(DataType):
 class WrappedJStructType(StructType):
     """Struct type, consisting of a list of :class:`StructField`.
     This version wraps a Java object (for large > 100k elem schemas).
+    Note since this wraps a Java object it is not serializable.
 
     This is the data type representing a :class:`Row`.
     .. note:: WARN: Spark Internal Use Only
@@ -669,6 +670,12 @@ class WrappedJStructType(StructType):
             values = obj
         return _create_row(self.names, values)
 
+    def unWrap(self):
+        """Convert the wrapped JStructType into a regular StructType.
+        Note: this serializes the data to JSON and may fail for large
+        schemas.
+        """
+        return _parse_datatype_json_string(self.json())
 
 class UserDefinedType(DataType):
     """User-defined type (UDT).
