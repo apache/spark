@@ -71,10 +71,11 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val right = y.where(IsNotNull('a) && IsNotNull('c) && "y.c".attr > 5 && "y.a".attr === 1)
     val correctAnswer = left.join(right, condition = Some("x.a".attr === "y.a".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
-    //comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, correctAnswer)
     checkNullability(optimized)
+    checkNullability(correctAnswer)
   }
-  /*
+
   test("single inner join: filter out nulls on either side on non equal keys") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
@@ -152,5 +153,4 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     checkNullability(correctAnswer)
     checkNullability(optimized)
   }
-  */
 }

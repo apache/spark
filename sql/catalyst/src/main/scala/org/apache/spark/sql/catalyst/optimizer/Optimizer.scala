@@ -827,7 +827,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
       (ExpressionSet(splitConjunctivePredicates(fc)) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
-          Filter(And(ac, nc), grandChild)
+          Filter(RewriteAttributes.execute(grandChild.outputSet, And(ac, nc)), grandChild)
         case None =>
           nf
       }
@@ -1113,29 +1113,36 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       joinType match {
         case Inner =>
           // push down the single side `where` condition into respective sides
-          val newLeft = leftFilterConditions.
-            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-          val newRight = rightFilterConditions.
-            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          val newLeft = leftFilterConditions.reduceLeftOption(And)
+            .map(x => Filter(RewriteAttributes.execute(left.outputSet, x), left))
+            .getOrElse(left)
+          val newRight = rightFilterConditions.reduceLeftOption(And)
+            .map(x => Filter(RewriteAttributes.execute(right.outputSet, x), right))
+            .getOrElse(right)
           val newJoinCond = (commonFilterCondition ++ joinCondition).reduceLeftOption(And)
+            .map(RewriteAttributes.execute(newLeft.outputSet ++ newRight.outputSet, _))
 
           Join(newLeft, newRight, Inner, newJoinCond)
         case RightOuter =>
           // push down the right side only `where` condition
           val newLeft = left
-          val newRight = rightFilterConditions.
-            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          val newRight = rightFilterConditions.reduceLeftOption(And)
+            .map(x => Filter(RewriteAttributes.execute(right.outputSet, x), right))
+            .getOrElse(right)
           val newJoinCond = joinCondition
+            .map(RewriteAttributes.execute(newLeft.outputSet ++ newRight.outputSet, _))
           val newJoin = Join(newLeft, newRight, RightOuter, newJoinCond)
 
           (leftFilterConditions ++ commonFilterCondition).
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
         case _ @ (LeftOuter | LeftSemi) =>
           // push down the left side only `where` condition
-          val newLeft = leftFilterConditions.
-            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+          val newLeft = leftFilterConditions.reduceLeftOption(And)
+            .map(x => Filter(RewriteAttributes.execute(left.outputSet, x), left))
+            .getOrElse(left)
           val newRight = right
           val newJoinCond = joinCondition
+            .map(RewriteAttributes.execute(newLeft.outputSet ++ newRight.outputSet, _))
           val newJoin = Join(newLeft, newRight, joinType, newJoinCond)
 
           (rightFilterConditions ++ commonFilterCondition).
@@ -1152,27 +1159,34 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       joinType match {
         case _ @ (Inner | LeftSemi) =>
           // push down the single side only join filter for both sides sub queries
-          val newLeft = leftJoinConditions.
-            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-          val newRight = rightJoinConditions.
-            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          val newLeft = leftJoinConditions.reduceLeftOption(And)
+            .map(x => Filter(RewriteAttributes.execute(left.outputSet, x), left))
+            .getOrElse(left)
+          val newRight = rightJoinConditions.reduceLeftOption(And)
+            .map(x => Filter(RewriteAttributes.execute(right.outputSet, x), right))
+            .getOrElse(right)
           val newJoinCond = commonJoinCondition.reduceLeftOption(And)
+            .map(RewriteAttributes.execute(newLeft.outputSet ++ newRight.outputSet, _))
 
           Join(newLeft, newRight, joinType, newJoinCond)
         case RightOuter =>
           // push down the left side only join filter for left side sub query
-          val newLeft = leftJoinConditions.
-            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+          val newLeft = leftJoinConditions.reduceLeftOption(And)
+            .map(x => Filter(RewriteAttributes.execute(left.outputSet, x), left))
+            .getOrElse(left)
           val newRight = right
           val newJoinCond = (rightJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
+            .map(RewriteAttributes.execute(newLeft.outputSet ++ newRight.outputSet, _))
 
           Join(newLeft, newRight, RightOuter, newJoinCond)
         case LeftOuter =>
           // push down the right side only join filter for right sub query
           val newLeft = left
-          val newRight = rightJoinConditions.
-            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          val newRight = rightJoinConditions.reduceLeftOption(And)
+            .map(x => Filter(RewriteAttributes.execute(right.outputSet, x), right))
+            .getOrElse(right)
           val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
+            .map(RewriteAttributes.execute(newLeft.outputSet ++ newRight.outputSet, _))
 
           Join(newLeft, newRight, LeftOuter, newJoinCond)
         case FullOuter => f
@@ -1328,6 +1342,16 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     plan transformAllExpressions {
       case CurrentDate() => currentDate
       case CurrentTimestamp() => currentTime
+    }
+  }
+}
+
+object RewriteAttributes {
+  def execute(outputs: AttributeSet, expr: Expression) = {
+    val attributeRewrites = outputs.map(o => o.exprId -> o).toMap
+    expr.transform {
+      case a: AttributeReference if attributeRewrites.contains(a.exprId) =>
+        attributeRewrites(a.exprId)
     }
   }
 }
