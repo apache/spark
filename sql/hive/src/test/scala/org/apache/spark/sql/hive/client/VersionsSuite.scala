@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -129,8 +130,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: createTable") {
       val table =
         CatalogTable(
-          specifiedDatabase = Option("default"),
-          name = "src",
+          name = TableIdentifier("src", Some("default")),
           tableType = CatalogTableType.MANAGED_TABLE,
           schema = Seq(CatalogColumn("key", "int")),
           storage = CatalogStorageFormat(

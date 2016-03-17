@@ -54,8 +54,8 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val (desc, exists) = extractTableDesc(s1)
     assert(exists)
-    assert(desc.specifiedDatabase == Some("mydb"))
-    assert(desc.name == "page_view")
+    assert(desc.name.database == Some("mydb"))
+    assert(desc.name.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
@@ -100,8 +100,8 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val (desc, exists) = extractTableDesc(s2)
     assert(exists)
-    assert(desc.specifiedDatabase == Some("mydb"))
-    assert(desc.name == "page_view")
+    assert(desc.name.database == Some("mydb"))
+    assert(desc.name.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
@@ -127,8 +127,8 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
     val (desc, exists) = extractTableDesc(s3)
     assert(exists == false)
-    assert(desc.specifiedDatabase == None)
-    assert(desc.name == "page_view")
+    assert(desc.name.database == None)
+    assert(desc.name.table == "page_view")
     assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
@@ -162,8 +162,8 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
                |   ORDER BY key, value""".stripMargin
     val (desc, exists) = extractTableDesc(s5)
     assert(exists == false)
-    assert(desc.specifiedDatabase == None)
-    assert(desc.name == "ctas2")
+    assert(desc.name.database == None)
+    assert(desc.name.table == "ctas2")
     assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])

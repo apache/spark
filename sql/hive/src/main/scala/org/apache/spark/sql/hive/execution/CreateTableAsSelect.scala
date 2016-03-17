@@ -38,7 +38,7 @@ case class CreateTableAsSelect(
     allowExisting: Boolean)
   extends RunnableCommand {
 
-  val tableIdentifier = TableIdentifier(tableDesc.name, Some(tableDesc.database))
+  private val tableIdentifier = tableDesc.name
 
   override def children: Seq[LogicalPlan] = Seq(query)
 
@@ -93,6 +93,6 @@ case class CreateTableAsSelect(
   }
 
   override def argString: String = {
-    s"[Database:${tableDesc.database}}, TableName: ${tableDesc.name}, InsertIntoHiveTable]"
+    s"[Database:${tableDesc.database}}, TableName: ${tableDesc.name.table}, InsertIntoHiveTable]"
   }
 }

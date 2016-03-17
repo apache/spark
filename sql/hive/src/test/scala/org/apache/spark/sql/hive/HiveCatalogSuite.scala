@@ -36,15 +36,12 @@ class HiveCatalogSuite extends CatalogTestCases {
       sparkConf = new SparkConf()).createClient()
   }
 
-  protected override val tableInputFormat: String =
-    "org.apache.hadoop.mapred.SequenceFileInputFormat"
-  protected override val tableOutputFormat: String =
-    "org.apache.hadoop.mapred.SequenceFileOutputFormat"
-
-  protected override def newUriForDatabase(): String = Utils.createTempDir().getAbsolutePath
+  protected override val utils: CatalogTestUtils = new CatalogTestUtils {
+    override val tableInputFormat: String = "org.apache.hadoop.mapred.SequenceFileInputFormat"
+    override val tableOutputFormat: String = "org.apache.hadoop.mapred.SequenceFileOutputFormat"
+    override def newEmptyCatalog(): ExternalCatalog = new HiveCatalog(client)
+  }
 
   protected override def resetState(): Unit = client.reset()
-
-  protected override def newEmptyCatalog(): ExternalCatalog = new HiveCatalog(client)
 
 }
