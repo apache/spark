@@ -21,6 +21,7 @@ import java.io.{InputStream, NotSerializableException}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
+import scala.collection.mutable
 import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -269,6 +270,35 @@ class StreamingContext private[streaming] (
     RDDOperationScope.withScope(sc, name, allowNesting = false, ignoreParent = false)(body)
   }
 
+  private[streaming] val recoverableAccuNameToAcc: mutable.Map[String, Accumulable[_, _]] =
+    mutable.Map.empty
+
+  /**
+    * Different from accumulator in SparkContext, it will first try to recover from Checkpoint
+    * if it exist.
+    *
+    * @param initialValue initial value of accumulator. It will be ignored when recovering from
+    *                     checkpoint
+    * @param name name is required as identity to find corresponding accumulator.
+    */
+  def getOrCreateRecoverableAccumulator[T](initialValue: T, name: String)
+    (implicit param: AccumulatorParam[T]): Accumulator[T] = {
+
+    def registerNewAccumulator(_initialV: T) : Accumulator[T] = {
+      val acc = sc.accumulator(_initialV, name)
+      recoverableAccuNameToAcc(name) = acc
+      acc
+    }
+
+    val newInitialValue: T = if (isCheckpointPresent) {
+      _cp.trackedAccs.find(_.name == name).map(_.value).getOrElse(initialValue).asInstanceOf[T]
+    } else {
+      initialValue
+    }
+
+    registerNewAccumulator(newInitialValue)
+  }
+
   /**
    * Create an input stream with any arbitrary user implemented receiver.
    * Find more details at http://spark.apache.org/docs/latest/streaming-custom-receivers.html
@@ -284,10 +314,10 @@ class StreamingContext private[streaming] (
    * Create a input stream from TCP source hostname:port. Data is received using
    * a TCP socket and the receive bytes is interpreted as UTF8 encoded `\n` delimited
    * lines.
-   * @param hostname      Hostname to connect to for receiving data
-   * @param port          Port to connect to for receiving data
-   * @param storageLevel  Storage level to use for storing the received objects
-   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
+   * @param hostname Hostname to connect to for receiving data
+   * @param port Port to connect to for receiving data
+   * @param storageLevel Storage level to use for storing the received objects
+   *                     (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
   def socketTextStream(
       hostname: String,
@@ -301,11 +331,11 @@ class StreamingContext private[streaming] (
    * Create a input stream from TCP source hostname:port. Data is received using
    * a TCP socket and the receive bytes it interpreted as object using the given
    * converter.
-   * @param hostname      Hostname to connect to for receiving data
-   * @param port          Port to connect to for receiving data
-   * @param converter     Function to convert the byte stream to objects
-   * @param storageLevel  Storage level to use for storing the received objects
-   * @tparam T            Type of the objects received (after converting bytes to objects)
+   * @param hostname Hostname to connect to for receiving data
+   * @param port Port to connect to for receiving data
+   * @param converter Function to convert the byte stream to objects
+   * @param storageLevel Storage level to use for storing the received objects
+   * @tparam T Type of the objects received (after converting bytes to objects)
    */
   def socketStream[T: ClassTag](
       hostname: String,
@@ -321,11 +351,11 @@ class StreamingContext private[streaming] (
    * as serialized blocks (serialized using the Spark's serializer) that can be directly
    * pushed into the block manager without deserializing them. This is the most efficient
    * way to receive data.
-   * @param hostname      Hostname to connect to for receiving data
-   * @param port          Port to connect to for receiving data
-   * @param storageLevel  Storage level to use for storing the received objects
-   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
-   * @tparam T            Type of the objects in the received blocks
+   * @param hostname Hostname to connect to for receiving data
+   * @param port Port to connect to for receiving data
+   * @param storageLevel Storage level to use for storing the received objects
+   *                     (default: StorageLevel.MEMORY_AND_DISK_SER_2)
+   * @tparam T Type of the objects in the received blocks
    */
   def rawSocketStream[T: ClassTag](
       hostname: String,
@@ -445,9 +475,9 @@ class StreamingContext private[streaming] (
    * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
    *
-   * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
+   * @param queue Queue of RDDs. Modifications to this data structure must be synchronized.
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
-   * @tparam T         Type of objects in the RDD
+   * @tparam T Type of objects in the RDD
    */
   def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
@@ -463,11 +493,11 @@ class StreamingContext private[streaming] (
    * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
    *
-   * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
+   * @param queue Queue of RDDs. Modifications to this data structure must be synchronized.
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @param defaultRDD Default RDD is returned by the DStream when the queue is empty.
    *                   Set as null if no RDD should be returned when empty
-   * @tparam T         Type of objects in the RDD
+   * @tparam T Type of objects in the RDD
    */
   def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
@@ -756,7 +786,7 @@ object StreamingContext extends Logging {
    *
    * Either return the "active" StreamingContext (that is, started but not stopped), or create a
    * new StreamingContext that is
-   * @param creatingFunc   Function to create a new StreamingContext
+   * @param creatingFunc Function to create a new StreamingContext
    */
   @Experimental
   def getActiveOrCreate(creatingFunc: () => StreamingContext): StreamingContext = {
@@ -774,12 +804,12 @@ object StreamingContext extends Logging {
    * `creatingFunc`.
    *
    * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
-   * @param creatingFunc   Function to create a new StreamingContext
-   * @param hadoopConf     Optional Hadoop configuration if necessary for reading from the
-   *                       file system
-   * @param createOnError  Optional, whether to create a new StreamingContext if there is an
-   *                       error in reading checkpoint data. By default, an exception will be
-   *                       thrown on error.
+   * @param creatingFunc Function to create a new StreamingContext
+   * @param hadoopConf Optional Hadoop configuration if necessary for reading from the
+   *                   file system
+   * @param createOnError Optional, whether to create a new StreamingContext if there is an
+   *                      error in reading checkpoint data. By default, an exception will be
+   *                      thrown on error.
    */
   @Experimental
   def getActiveOrCreate(
@@ -800,12 +830,12 @@ object StreamingContext extends Logging {
    * will be created by called the provided `creatingFunc`.
    *
    * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
-   * @param creatingFunc   Function to create a new StreamingContext
-   * @param hadoopConf     Optional Hadoop configuration if necessary for reading from the
-   *                       file system
-   * @param createOnError  Optional, whether to create a new StreamingContext if there is an
-   *                       error in reading checkpoint data. By default, an exception will be
-   *                       thrown on error.
+   * @param creatingFunc Function to create a new StreamingContext
+   * @param hadoopConf Optional Hadoop configuration if necessary for reading from the
+   *                   file system
+   * @param createOnError Optional, whether to create a new StreamingContext if there is an
+   *                      error in reading checkpoint data. By default, an exception will be
+   *                      thrown on error.
    */
   def getOrCreate(
       checkpointPath: String,
