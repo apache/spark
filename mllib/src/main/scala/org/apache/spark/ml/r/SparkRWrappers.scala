@@ -31,23 +31,16 @@ private[r] object SparkRWrappers {
       value: String,
       df: DataFrame,
       family: String,
+      link: String,
       lambda: Double,
       solver: String): PipelineModel = {
-    if (solver.trim != "irls") throw new SparkException("Currently only support irls")
-
     val formula = new RFormula().setFormula(value)
-    val regex = "^\\s*(\\w+)\\s*(\\(\\s*link\\s*=\\s*\"(\\w+)\"\\s*\\))?\\s*$".r
-    val estimator = family match {
-      case regex(familyName, group2, linkName) =>
-        val estimator = new GeneralizedLinearRegression()
-          .setFamily(familyName)
-          .setRegParam(lambda)
-          .setFitIntercept(formula.hasIntercept)
-        if (linkName != null) estimator.setLink(linkName)
-        estimator
-      case _ => throw new SparkException(s"Could not parse family: $family")
-    }
+    val estimator = new GeneralizedLinearRegression()
+      .setFamily(family)
+      .setRegParam(lambda)
+      .setFitIntercept(formula.hasIntercept)
 
+    if (link != null) estimator.setLink(link)
     val pipeline = new Pipeline().setStages(Array(formula, estimator))
     pipeline.fit(df)
   }
@@ -117,12 +110,6 @@ private[r] object SparkRWrappers {
       }
       case m: KMeansModel =>
         m.clusterCenters.flatMap(_.toArray)
-      case m: GeneralizedLinearRegressionModel =>
-        if (m.getFitIntercept) {
-          Array(m.intercept) ++ m.coefficients.toArray
-        } else {
-          m.coefficients.toArray
-        }
     }
   }
 
@@ -183,14 +170,6 @@ private[r] object SparkRWrappers {
         val attrs = AttributeGroup.fromStructField(
           m.summary.predictions.schema(m.summary.featuresCol))
         attrs.attributes.get.map(_.name.get)
-      case m: GeneralizedLinearRegressionModel =>
-        val attrs = AttributeGroup.fromStructField(
-          m.summary.predictions.schema(m.summary.featuresCol))
-        if (m.getFitIntercept) {
-          Array("(Intercept)") ++ attrs.attributes.get.map(_.name.get)
-        } else {
-          attrs.attributes.get.map(_.name.get)
-        }
     }
   }
 
@@ -202,8 +181,6 @@ private[r] object SparkRWrappers {
         "LogisticRegressionModel"
       case m: KMeansModel =>
         "KMeansModel"
-      case m: GeneralizedLinearRegressionModel =>
-        "GeneralizedLinearRegressionModel"
     }
   }
 }

@@ -29,7 +29,8 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data DataFrame for training
-#' @param family a description of the error distribution and link function to be used in the model..
+#' @param family a description of the error distribution and link function to be used in the model,
+#'               as in [[https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html]]
 #' @param lambda Regularization parameter
 #' @param solver Currently only support "irls" which is also the default solver.
 #' @return a fitted MLlib model
@@ -45,12 +46,12 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
-          function(formula, family = c("gaussian", "binomial", "poisson", "gamma"), data,
-              lambda = 0, solver = "irls") {
-            family <- match.arg(family)
+          function(formula, family = gaussian(), data, lambda = 0, solver = "auto") {
+            familyName <- family$family
+            linkName <- family$link
             formula <- paste(deparse(formula), collapse = "")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                 "fitGLM", formula, data@sdf, family, lambda, solver)
+                                 "fitGLM", formula, data@sdf, familyName, linkName, lambda, solver)
             return(new("PipelineModel", model = model))
           })
 
@@ -117,11 +118,6 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
               return(list(coefficients = coefficients))
-            } else if (modelName == "GeneralizedLinearRegressionModel") {
-                coefficients <- as.matrix(unlist(coefficients))
-                colnames(coefficients) <- c("Estimate")
-                rownames(coefficients) <- unlist(features)
-                return(list(coefficients = coefficients))
             } else if (modelName == "KMeansModel") {
               modelSize <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                        "getKMeansModelSize", object@model)
