@@ -122,7 +122,7 @@ class CrossValidator(Estimator, HasSeed):
         Params._dummy(), "evaluator",
         "evaluator used to select hyper-parameters that maximize the cross-validated metric")
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
-                     typeConverter=TypeConverters.convertToInt)
+                     typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,

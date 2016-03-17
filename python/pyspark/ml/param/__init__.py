@@ -22,7 +22,7 @@ import warnings
 
 from pyspark import since
 from pyspark.ml.util import Identifiable
-from pyspark.mllib.linalg import DenseVector, Vector
+from pyspark.mllib.linalg import DenseVector, Vector, _convert_to_vector
 
 
 __all__ = ['Param', 'Params', 'TypeConverters']
@@ -31,6 +31,9 @@ __all__ = ['Param', 'Params', 'TypeConverters']
 class Param(object):
     """
     A param with self-contained documentation.
+
+    Note: `expectedType` is deprecated and will be removed in 2.1.0, use typeConverter instead,
+          as a keyword argument.
 
     .. versionadded:: 1.3.0
     """
@@ -44,7 +47,7 @@ class Param(object):
         self.expectedType = expectedType
         if expectedType is not None:
             warnings.warn("expectedType is deprecated and will be removed in 2.1.0, " +
-                          "use typeConverter instead.")
+                          "use typeConverter instead, as a keyword argument.")
         self.typeConverter = TypeConverters.identity if typeConverter is None else typeConverter
 
     def _copy_new_parent(self, parent):
@@ -84,13 +87,25 @@ class TypeConverters(object):
     @staticmethod
     def _is_numeric(value):
         vtype = type(value)
-        return vtype == int or vtype == float or vtype == np.float64 \
-            or vtype == np.int64 or vtype.__name__ == 'long'
+        return vtype in [int, float, np.float64, np.int64] or vtype.__name__ == 'long'
+
+    @staticmethod
+    def _is_integer(value):
+        if TypeConverters._is_numeric(value):
+            value = float(value)
+            return value.is_integer()
+        else:
+            return False
 
     @staticmethod
     def _can_convert_to_list(value):
         vtype = type(value)
         return vtype == list or vtype == np.ndarray or isinstance(value, Vector)
+
+    @staticmethod
+    def _is_string(value):
+        vtype = type(value)
+        return vtype in [str, np.unicode_, np.string_, np.str_] or type(value).__name__ == 'unicode'
 
     @staticmethod
     def identity(value):
@@ -100,7 +115,7 @@ class TypeConverters(object):
         return value
 
     @staticmethod
-    def convertToList(value):
+    def toList(value):
         """
         Convert a value to a list, if possible.
         """
@@ -109,50 +124,58 @@ class TypeConverters(object):
         elif type(value) == np.ndarray:
             return list(value)
         elif isinstance(value, Vector):
-            return value.toArray()
+            return list(value.toArray())
         else:
             raise TypeError("Could not convert %s to list" % value)
 
     @staticmethod
-    def convertToListFloat(value):
+    def toListFloat(value):
         """
         Convert a value to list of floats, if possible.
         """
-        if TypeConverters._can_convert_to_list(value) and \
-                all(map(lambda v: TypeConverters._is_numeric(v), value)):
-            value = TypeConverters.convertToList(value)
-            return list(map(lambda v: float(v), value))
-        else:
-            raise TypeError("Could not convert %s to list of floats" % value)
+        if TypeConverters._can_convert_to_list(value):
+            value = TypeConverters.toList(value)
+            if all(map(lambda v: TypeConverters._is_numeric(v), value)):
+                return list(map(lambda v: float(v), value))
+        raise TypeError("Could not convert %s to list of floats" % value)
 
     @staticmethod
-    def convertToListInt(value):
+    def toListInt(value):
         """
         Convert a value to list of ints, if possible.
         """
-        if TypeConverters._can_convert_to_list(value) and \
-                all(map(lambda v: TypeConverters._is_numeric(v), value)):
-            value = TypeConverters.convertToList(value)
-            return list(map(lambda v: int(v), value))
-        else:
-            raise TypeError("Could not convert %s to list of ints" % value)
+        if TypeConverters._can_convert_to_list(value):
+            value = TypeConverters.toList(value)
+            if all(map(lambda v: TypeConverters._is_integer(v), value)):
+                return list(map(lambda v: int(v), value))
+        raise TypeError("Could not convert %s to list of ints" % value)
 
     @staticmethod
-    def convertToVector(value):
+    def toListString(value):
+        """
+        Convert a value to list of strings, if possible.
+        """
+        if TypeConverters._can_convert_to_list(value):
+            value = TypeConverters.toList(value)
+            if all(map(lambda v: TypeConverters._is_string(v), value)):
+                return list(map(lambda v: str(v), value))
+        raise TypeError("Could not convert %s to list of strings" % value)
+
+    @staticmethod
+    def toVector(value):
         """
         Convert a value to a MLlib Vector, if possible.
         """
         if isinstance(value, Vector):
             return value
-        elif TypeConverters._can_convert_to_list(value) and \
-                all(map(lambda v: TypeConverters._is_numeric(v), value)):
-            value = DenseVector(value)
-        else:
-            raise TypeError("Could not convert %s to vector" % value)
-        return value
+        elif TypeConverters._can_convert_to_list(value):
+            value = TypeConverters.toList(value)
+            if all(map(lambda v: TypeConverters._is_numeric(v), value)):
+                return DenseVector(value)
+        raise TypeError("Could not convert %s to vector" % value)
 
     @staticmethod
-    def convertToFloat(value):
+    def toFloat(value):
         """
         Convert a value to a float, if possible.
         """
@@ -162,14 +185,34 @@ class TypeConverters(object):
             raise TypeError("Could not convert %s to float" % value)
 
     @staticmethod
-    def convertToInt(value):
+    def toInt(value):
         """
         Convert a value to an int, if possible.
         """
-        if TypeConverters._is_numeric(value):
+        if TypeConverters._is_integer(value):
             return int(value)
         else:
             raise TypeError("Could not convert %s to int" % value)
+
+    @staticmethod
+    def toString(value):
+        """
+        Convert a value to a string, if possible.
+        """
+        if TypeConverters._is_string(value):
+            return str(value)
+        else:
+            raise TypeError("Could not convert %s to string" % value)
+
+    @staticmethod
+    def toBoolean(value):
+        """
+        Convert a value to a boolean, if possible.
+        """
+        if type(value) == bool:
+            return value
+        else:
+            raise TypeError("Could not convert %s to bool" % value)
 
 
 class Params(Identifiable):
@@ -384,7 +427,7 @@ class Params(Identifiable):
             p = getattr(self, param)
             if value is not None:
                 value = p.typeConverter(value)
-            self._paramMap[getattr(self, param)] = value
+            self._paramMap[p] = value
         return self
 
     def _setDefault(self, **kwargs):

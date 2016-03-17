@@ -88,13 +88,13 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     """
 
     k = Param(Params._dummy(), "k", "number of clusters to create",
-              typeConverter=TypeConverters.convertToInt)
+              typeConverter=TypeConverters.toInt)
     initMode = Param(Params._dummy(), "initMode",
                      "the initialization algorithm. This can be either \"random\" to " +
                      "choose random points as initial cluster centers, or \"k-means||\" " +
-                     "to use a parallel variant of k-means++")
+                     "to use a parallel variant of k-means++", TypeConverters.toString)
     initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode",
-                      typeConverter=TypeConverters.convertToInt)
+                      typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -230,11 +230,11 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     """
 
     k = Param(Params._dummy(), "k", "number of clusters to create",
-              typeConverter=TypeConverters.convertToInt)
+              typeConverter=TypeConverters.toInt)
     minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
                                     "the minimum number of points (if >= 1.0) " +
                                     "or the minimum proportion",
-                                    typeConverter=TypeConverters.convertToFloat)
+                                    typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,

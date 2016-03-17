@@ -43,13 +43,13 @@ from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import *
-from pyspark.ml.param import Param, Params
+from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaWrapper
-from pyspark.mllib.linalg import DenseVector
+from pyspark.mllib.linalg import DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
@@ -110,6 +110,7 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertEqual(lr.getMaxIter(), 5)
         self.assertTrue(type(lr.getMaxIter()) == int)
         self.assertRaises(TypeError, lambda: LogisticRegression(maxIter="notAnInt"))
+        self.assertRaises(TypeError, lambda: LogisticRegression(maxIter=5.1))
 
     def test_float(self):
         lr = LogisticRegression(tol=1)
@@ -124,23 +125,45 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertEqual(ewp.getScalingVec(), DenseVector([1.2, 3.4]))
         self.assertRaises(TypeError, lambda: ElementwiseProduct(scalingVec=["a", "b"]))
 
+    def test_list(self):
+        l = [1, 2]
+        for lst_like in [l, np.array(l), DenseVector(l), SparseVector(len(l), range(len(l)), l)]:
+            converted = TypeConverters.toList(lst_like)
+            self.assertEqual(type(converted), list)
+            self.assertListEqual(converted, l)
+
     def test_list_int(self):
-        vs = VectorSlicer(indices=[1.0, 4.0])
-        self.assertListEqual(vs.getIndices(), [1, 4])
-        self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
-        vs = VectorSlicer(indices=np.array([1.0, 4.0]))
-        self.assertListEqual(vs.getIndices(), [1, 4])
-        self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
-        vs = VectorSlicer(indices=DenseVector([1.0, 4.0]))
-        self.assertListEqual(vs.getIndices(), [1, 4])
-        self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
+        for indices in [[1.0, 4.0], np.array([1.0, 4.0]), DenseVector([1.0, 4.0]),
+                        SparseVector(2, {0: 1.0, 1: 4.0})]:
+            vs = VectorSlicer(indices=indices)
+            self.assertListEqual(vs.getIndices(), [1, 4])
+            self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
         self.assertRaises(TypeError, lambda: VectorSlicer(indices=["a", "b"]))
 
     def test_list_float(self):
         b = Bucketizer(splits=[1, 4])
         self.assertEqual(b.getSplits(), [1.0, 4.0])
         self.assertTrue(all([type(v) == float for v in b.getSplits()]))
-        self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", "b"]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", 1.0]))
+
+    def test_list_string(self):
+        for labels in [np.array(['a', u'b']), ['a', u'b'], np.array(['a', 'b'])]:
+            idx_to_string = IndexToString(labels=labels)
+            self.assertListEqual(idx_to_string.getLabels(), ['a', 'b'])
+            self.assertTrue(all(map(lambda x: type(x) == str, idx_to_string.getLabels())))
+        self.assertRaises(TypeError, lambda: IndexToString(labels=['a', 2]))
+
+    def test_string(self):
+        lr = LogisticRegression()
+        for col in ['features', u'features', np.str_('features')]:
+            lr.setFeaturesCol(col)
+            self.assertEqual(lr.getFeaturesCol(), 'features')
+            self.assertTrue(type(lr.getFeaturesCol() == str))
+        self.assertRaises(TypeError, lambda: LogisticRegression(featuresCol=2.3))
+
+    def test_bool(self):
+        self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept=1))
+        self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept="false"))
 
 
 class PipelineTests(PySparkTestCase):

@@ -101,19 +101,22 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     """
 
     rank = Param(Params._dummy(), "rank", "rank of the factorization",
-                 typeConverter=TypeConverters.convertToInt)
+                 typeConverter=TypeConverters.toInt)
     numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks",
-                          typeConverter=TypeConverters.convertToInt)
+                          typeConverter=TypeConverters.toInt)
     numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks",
-                          typeConverter=TypeConverters.convertToInt)
-    implicitPrefs = Param(Params._dummy(), "implicitPrefs", "whether to use implicit preference")
+                          typeConverter=TypeConverters.toInt)
+    implicitPrefs = Param(Params._dummy(), "implicitPrefs", "whether to use implicit preference",
+                          TypeConverters.toBoolean)
     alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference",
-                  typeConverter=TypeConverters.convertToFloat)
-    userCol = Param(Params._dummy(), "userCol", "column name for user ids")
-    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids")
-    ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings")
+                  typeConverter=TypeConverters.toFloat)
+    userCol = Param(Params._dummy(), "userCol", "column name for user ids", TypeConverters.toString)
+    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids", TypeConverters.toString)
+    ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings",
+                      TypeConverters.toString)
     nonnegative = Param(Params._dummy(), "nonnegative",
-                        "whether to use nonnegative constraint for least squares")
+                        "whether to use nonnegative constraint for least squares",
+                        TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
