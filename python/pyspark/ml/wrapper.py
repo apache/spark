@@ -21,7 +21,7 @@ from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.param import Params
-from pyspark.ml.util import _jvm
+from pyspark.ml.util import _jvm, JavaMLReader
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 
 
@@ -55,9 +55,13 @@ class JavaWrapper(Params):
         """
         Makes a Java parm pair.
         """
+        return self._param_py2java(param, value, self, self._java_obj)
+
+    @staticmethod
+    def _param_py2java(param, value, py_stage, java_stage):
         sc = SparkContext._active_spark_context
-        param = self._resolveParam(param)
-        java_param = self._java_obj.getParam(param.name)
+        param = py_stage._resolveParam(param)
+        java_param = java_stage.getParam(param.name)
         java_value = _py2java(sc, value)
         return java_param.w(java_value)
 
@@ -65,23 +69,31 @@ class JavaWrapper(Params):
         """
         Transforms the embedded params to the companion Java object.
         """
-        paramMap = self.extractParamMap()
-        for param in self.params:
+        self._params_py2java(self, self._java_obj)
+
+    @staticmethod
+    def _params_py2java(py_stage, java_stage):
+        paramMap = py_stage.extractParamMap()
+        for param in py_stage.params:
             if param in paramMap:
-                pair = self._make_java_param_pair(param, paramMap[param])
-                self._java_obj.set(pair)
+                pair = JavaWrapper._param_py2java(param, paramMap[param], py_stage, java_stage)
+                java_stage.set(pair)
 
     def _transfer_params_from_java(self):
         """
         Transforms the embedded params from the companion Java object.
         """
+        self._params_java2py(self, self._java_obj)
+
+    @staticmethod
+    def _params_java2py(py_stage, java_stage):
         sc = SparkContext._active_spark_context
-        for param in self.params:
-            if self._java_obj.hasParam(param.name):
-                java_param = self._java_obj.getParam(param.name)
-                if self._java_obj.isDefined(java_param):
-                    value = _java2py(sc, self._java_obj.getOrDefault(java_param))
-                    self._paramMap[param] = value
+        for param in py_stage.params:
+            if java_stage.hasParam(param.name):
+                java_param = java_stage.getParam(param.name)
+                if java_stage.isDefined(java_param):
+                    value = _java2py(sc, java_stage.getOrDefault(java_param))
+                    py_stage._paramMap[param] = value
 
     @staticmethod
     def _empty_java_param_map():
@@ -90,9 +102,16 @@ class JavaWrapper(Params):
         """
         return _jvm().org.apache.spark.ml.param.ParamMap()
 
-    def _transfer_stage_to_java(self):
-        self._transfer_params_to_java()
-        return self._java_obj
+    @staticmethod
+    def _transfer_stage_to_java(py_stage):
+        if isinstance(py_stage, JavaWrapper):
+            py_stage._transfer_params_to_java()
+            return py_stage._java_obj
+        else:
+            java_stage = JavaWrapper.\
+                _new_java_obj(JavaMLReader._java_loader_class(py_stage.__class__), py_stage.uid)
+            JavaWrapper._params_py2java(py_stage, java_stage)
+            return java_stage
 
     @staticmethod
     def _transfer_stage_from_java(java_stage):
@@ -109,12 +128,14 @@ class JavaWrapper(Params):
         stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.
         py_stage = __get_class(stage_name)()
-        assert(isinstance(py_stage, JavaWrapper),
-               "Python side implementation is not supported in the meta-PipelineStage currently.")
         # Load information from java_stage to the instance.
-        py_stage._java_obj = java_stage
-        py_stage._resetUid(java_stage.uid())
-        py_stage._transfer_params_from_java()
+        if isinstance(py_stage, JavaWrapper):
+            py_stage._java_obj = java_stage
+            py_stage._resetUid(java_stage.uid())
+            py_stage._transfer_params_from_java()
+        else:
+            py_stage._resetUid(java_stage.uid())
+            JavaWrapper._params_java2py(py_stage, java_stage)
         return py_stage
 
 

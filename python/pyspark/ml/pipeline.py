@@ -52,7 +52,7 @@ def _stages_py2java(py_stages, cls):
     gateway = SparkContext._gateway
     java_stages = gateway.new_array(cls, len(py_stages))
     for idx, stage in enumerate(py_stages):
-        java_stages[idx] = stage._transfer_stage_to_java()
+        java_stages[idx] = JavaWrapper._transfer_stage_to_java(stage)
     return java_stages
 
 
