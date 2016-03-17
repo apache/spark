@@ -25,6 +25,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.ShuffleWriter
+import org.apache.spark.util.collection.Utils
 
 /**
  * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
@@ -74,20 +75,21 @@ private[spark] class ShuffleMapTask(
     try {
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
-      val data = rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]]
-      val shuffleWriteId = dep.shuffleHandle.shuffleId
-      val wrappedData = data.map{x =>
-        context.setRDDPartitionInfo(rdd.id, shuffleWriteId, partition.index)
-        if (data.isEmpty) {
-          context.taskMetrics.markFullyProcessed(rdd.id, shuffleWriteId, partition.index)
+      val input = rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]]
+      // If our task has consistent accumulators we wrap the iterator to keep track of
+      // the rdd/shuffle/and partition being processed and signal when/if fully processed.
+      val data = if (context.taskMetrics.hasConsistentAccumulators()) {
+        val shuffleWriteId = dep.shuffleHandle.shuffleId
+        val data = input.map { x =>
+          context.setRDDPartitionInfo(rdd.id, shuffleWriteId, partition.index)
+          x
         }
-        x
+        Utils.signalWhenEmpty(data,
+          () => context.taskMetrics.markFullyProcessed(rdd.id, shuffleWriteId, partition.index))
+      } else {
+        input
       }
-      context.setRDDPartitionInfo(rdd.id, shuffleWriteId, partition.index)
-      writer.write(wrappedData)
-      if (data.isEmpty) {
-        context.taskMetrics.markFullyProcessed(rdd.id, shuffleWriteId, partition.index)
-      }
+      writer.write(data)
       writer.stop(success = true).get
     } catch {
       case e: Exception =>

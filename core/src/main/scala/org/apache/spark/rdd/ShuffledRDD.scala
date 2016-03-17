@@ -96,14 +96,24 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[(K, C)] = {
     // Use -1 for our Shuffle ID since we are on the read side of the shuffle.
     val shuffleWriteId = -1
-    context.setRDDPartitionInfo(id, shuffleWriteId, split.index)
+    // If our task has consistent accumulators we need to keep track of which partitions
+    // we are processing.
+    if (context.taskMetrics.hasConsistentAccumulators()) {
+      context.setRDDPartitionInfo(id, shuffleWriteId, split.index)
+    }
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
     val itr = SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1,
       context)
       .read()
       .asInstanceOf[Iterator[(K, C)]]
-    Utils.signalWhenEmpty(itr,
-      () => context.taskMetrics.markFullyProcessed(id, shuffleWriteId, split.index))
+    // If our task has consistent accumulators we need to keep track of which partitions
+    // are fully processed.
+    if (context.taskMetrics.hasConsistentAccumulators()) {
+      Utils.signalWhenEmpty(itr,
+        () => context.taskMetrics.markFullyProcessed(id, shuffleWriteId, split.index))
+    } else {
+      itr
+    }
   }
 
   override def clearDependencies() {

@@ -60,6 +60,11 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
   accums ++= initialAccums
 
   /**
+   * All consistent accumulators registered with this task.
+   */
+  private val consistentAccums = new ArrayBuffer[Accumulable[_, _]]
+
+  /**
    * A map for quickly accessing the initial set of accumulators by name.
    */
   private val initialAccumsMap: Map[String, Accumulator[_]] = {
@@ -328,13 +333,20 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
 
   private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
     accums += a
+    if (a.consistent) {
+      consistentAccums += a
+    }
+  }
+
+  private[spark] def hasConsistentAccumulators(): Boolean = {
+    !consistentAccums.isEmpty
   }
 
   /**
    * Mark an rdd/shuffle/and partition as fully processed for all consistent accumulators.
    */
   private[spark] def markFullyProcessed(rddId: Int, shuffleWriteId: Int, partitionId: Int) = {
-    accums.filter(_.isConsistent).map(_.markFullyProcessed(rddId, shuffleWriteId, partitionId))
+    consistentAccums.map(_.markFullyProcessed(rddId, shuffleWriteId, partitionId))
   }
 
   /**
