@@ -555,9 +555,9 @@ private[spark] class TaskSetManager(
         // Jump to the next locality level, and reset lastLaunchTime so that the next locality
         // wait timer doesn't immediately expire
         lastLaunchTime += localityWaits(currentLocalityIndex)
-        currentLocalityIndex += 1
-        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex)} after waiting for " +
+        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
+        currentLocalityIndex += 1
       } else {
         return myLocalityLevels(currentLocalityIndex)
       }
