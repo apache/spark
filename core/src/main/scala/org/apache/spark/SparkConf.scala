@@ -17,15 +17,15 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -57,21 +57,32 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   private val settings = new ConcurrentHashMap[String, String]()
 
   if (loadDefaults) {
+    loadFromSystemProperties(false)
+  }
+
+  private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
     // Load any spark.* system properties
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
-      set(key, value)
+      set(key, value, silent)
     }
+    this
   }
 
   /** Set a configuration variable. */
   def set(key: String, value: String): SparkConf = {
+    set(key, value, false)
+  }
+
+  private[spark] def set(key: String, value: String, silent: Boolean): SparkConf = {
     if (key == null) {
       throw new NullPointerException("null key")
     }
     if (value == null) {
       throw new NullPointerException("null value for " + key)
     }
-    logDeprecationWarning(key)
+    if (!silent) {
+      logDeprecationWarning(key)
+    }
     settings.put(key, value)
     this
   }
@@ -388,11 +399,18 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getAppId: String = get("spark.app.id")
 
   /** Does the configuration contain a given parameter? */
-  def contains(key: String): Boolean = settings.containsKey(key)
+  def contains(key: String): Boolean = {
+    settings.containsKey(key) ||
+      configsWithAlternatives.get(key).toSeq.flatten.exists { alt => contains(alt.key) }
+  }
 
   /** Copy this object */
   override def clone: SparkConf = {
-    new SparkConf(false).setAll(getAll)
+    val cloned = new SparkConf(false)
+    settings.entrySet().asScala.foreach { e =>
+      cloned.set(e.getKey(), e.getValue(), true)
+    }
+    cloned
   }
 
   /**
@@ -653,7 +671,9 @@ private[spark] object SparkConf extends Logging {
     "spark.memory.offHeap.enabled" -> Seq(
       AlternateConfig("spark.unsafe.offHeap", "1.6")),
     "spark.rpc.message.maxSize" -> Seq(
-      AlternateConfig("spark.akka.frameSize", "1.6"))
+      AlternateConfig("spark.akka.frameSize", "1.6")),
+    "spark.yarn.jars" -> Seq(
+      AlternateConfig("spark.yarn.jar", "2.0"))
     )
 
   /**
@@ -715,7 +735,7 @@ private[spark] object SparkConf extends Logging {
     allAlternatives.get(key).foreach { case (newKey, cfg) =>
       logWarning(
         s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-        s"and may be removed in the future. Please use the new key '$newKey' instead.")
+        s"may be removed in the future. Please use the new key '$newKey' instead.")
       return
     }
     if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {

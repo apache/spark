@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
 import scala.collection.Map
 import scala.collection.mutable.{HashMap, HashSet, Stack}
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -36,6 +35,7 @@ import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
@@ -613,7 +613,12 @@ class DAGScheduler(
       properties: Properties): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
-    Await.ready(waiter.completionFuture, atMost = Duration.Inf)
+    // Note: Do not call Await.ready(future) because that calls `scala.concurrent.blocking`,
+    // which causes concurrent SQL executions to fail if a fork-join pool is used. Note that
+    // due to idiosyncrasies in Scala, `awaitPermission` is not actually used anywhere so it's
+    // safe to pass in null here. For more detail, see SPARK-13747.
+    val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
+    waiter.completionFuture.ready(Duration.Inf)(awaitPermission)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
         logInfo("Job %d finished: %s, took %f s".format
@@ -1143,13 +1148,13 @@ class DAGScheduler(
         null
       }
 
-    // The success case is dealt with separately below.
-    // TODO: Why post it only for failed tasks in cancelled stages? Clarify semantics here.
-    if (event.reason != Success) {
-      val attemptId = task.stageAttemptId
-      listenerBus.post(SparkListenerTaskEnd(
-        stageId, attemptId, taskType, event.reason, event.taskInfo, taskMetrics))
-    }
+    // The stage may have already finished when we get this event -- eg. maybe it was a
+    // speculative task. It is important that we send the TaskEnd event in any case, so listeners
+    // are properly notified and can chose to handle it. For instance, some listeners are
+    // doing their own accounting and if they don't get the task end event they think
+    // tasks are still running when they really aren't.
+    listenerBus.post(SparkListenerTaskEnd(
+       stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
 
     if (!stageIdToStage.contains(task.stageId)) {
       // Skip all the actions if the stage has been cancelled.
@@ -1159,8 +1164,6 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     event.reason match {
       case Success =>
-        listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
-          event.reason, event.taskInfo, taskMetrics))
         stage.pendingPartitions -= task.partitionId
         task match {
           case rt: ResultTask[_, _] =>

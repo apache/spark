@@ -20,7 +20,8 @@ package org.apache.spark.rpc
 import scala.concurrent.Future
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.RpcUtils
 
 /**

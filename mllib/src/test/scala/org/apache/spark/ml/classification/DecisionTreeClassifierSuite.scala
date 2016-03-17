@@ -18,10 +18,10 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
@@ -30,7 +30,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 
-class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
+class DecisionTreeClassifierSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import DecisionTreeClassifierSuite.compareAPIs
 
@@ -313,29 +314,59 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     }
   }
 
+  test("Feature importance with toy data") {
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("gini")
+      .setMaxDepth(3)
+      .setSeed(123)
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val numFeatures = data.first().features.size
+    val categoricalFeatures = (0 to numFeatures).map(i => (i, 2)).toMap
+    val df = TreeTests.setMetadata(data, categoricalFeatures, 2)
+
+    val model = dt.fit(df)
+
+    val importances = model.featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
+    assert(importances.toArray.sum === 1.0)
+    assert(importances.toArray.forall(_ >= 0.0))
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented   SPARK-6725
-  /*
-  test("model save/load") {
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-
-    val oldModel = OldDecisionTreeSuite.createModel(OldAlgo.Classification)
-    val newModel = DecisionTreeClassificationModel.fromOld(oldModel)
-
-    // Save model, load it back, and compare.
-    try {
-      newModel.save(sc, path)
-      val sameNewModel = DecisionTreeClassificationModel.load(sc, path)
-      TreeTests.checkEqual(newModel, sameNewModel)
-    } finally {
-      Utils.deleteRecursively(tempDir)
+  test("read/write") {
+    def checkModelData(
+        model: DecisionTreeClassificationModel,
+        model2: DecisionTreeClassificationModel): Unit = {
+      TreeTests.checkEqual(model, model2)
+      assert(model.numFeatures === model2.numFeatures)
+      assert(model.numClasses === model2.numClasses)
     }
+
+    val dt = new DecisionTreeClassifier()
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+
+    val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
+
+    // Categorical splits with tree depth 2
+    val categoricalData: DataFrame =
+      TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
+    testEstimatorAndModelReadWrite(dt, categoricalData, allParamSettings, checkModelData)
+
+    // Continuous splits with tree depth 2
+    val continuousData: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
+    testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings, checkModelData)
+
+    // Continuous splits with tree depth 0
+    testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings ++ Map("maxDepth" -> 0),
+      checkModelData)
   }
-  */
 }
 
 private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {

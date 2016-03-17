@@ -94,7 +94,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      inputFiles: Array[FileStatus],
+      inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
     verifySchema(dataSchema)
@@ -140,7 +140,7 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.txt$extension")
       }
     }.getRecordWriter(context)
   }

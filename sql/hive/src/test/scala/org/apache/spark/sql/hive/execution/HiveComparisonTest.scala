@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.util.control.NonFatal
 
@@ -127,7 +128,7 @@ abstract class HiveComparisonTest
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
     val digest = java.security.MessageDigest.getInstance("MD5")
-    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes("utf-8"))
+    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes(StandardCharsets.UTF_8))
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 
@@ -143,7 +144,7 @@ abstract class HiveComparisonTest
         0D
       }
 
-      s"""SQLBuiler statistics:
+      s"""SQLBuilder statistics:
          |- Total query number:                $numTotalQueries
          |- Number of convertible queries:     $numConvertibleQueries
          |- Percentage of convertible queries: $percentage%
@@ -449,6 +450,7 @@ abstract class HiveComparisonTest
                   |Failed to execute query using catalyst:
                   |Error: ${e.getMessage}
                   |${stackTraceToString(e)}
+                  |$queryString
                   |$query
                   |== HIVE - ${hive.size} row(s) ==
                   |${hive.mkString("\n")}

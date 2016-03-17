@@ -846,8 +846,9 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
                   " as the dictionary was missing for encoding " + dataEncoding);
         }
         if (vectorizedDecode()) {
-          if (dataEncoding != Encoding.PLAIN_DICTIONARY &&
-              dataEncoding != Encoding.RLE_DICTIONARY) {
+          @SuppressWarnings("deprecation")
+          Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
+          if (dataEncoding != plainDict && dataEncoding != Encoding.RLE_DICTIONARY) {
             throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
           }
           this.dataColumn = new VectorizedRleValuesReader();
