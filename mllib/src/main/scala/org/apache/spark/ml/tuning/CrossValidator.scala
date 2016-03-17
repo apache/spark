@@ -131,19 +131,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   }
 
   @Since("1.4.0")
-  override def transformSchema(schema: StructType): StructType = {
-    validateParams()
-    $(estimator).transformSchema(schema)
-  }
-
-  @Since("1.4.0")
-  override def validateParams(): Unit = {
-    super.validateParams()
-    val est = $(estimator)
-    for (paramMap <- $(estimatorParamMaps)) {
-      est.copy(paramMap).validateParams()
-    }
-  }
+  override def transformSchema(schema: StructType): StructType = transformSchemaImpl(schema)
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidator = {
@@ -332,11 +320,6 @@ class CrossValidatorModel private[ml] (
   extends Model[CrossValidatorModel] with CrossValidatorParams with MLWritable {
 
   @Since("1.4.0")
-  override def validateParams(): Unit = {
-    bestModel.validateParams()
-  }
-
-  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
@@ -344,7 +327,6 @@ class CrossValidatorModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     bestModel.transformSchema(schema)
   }
 
