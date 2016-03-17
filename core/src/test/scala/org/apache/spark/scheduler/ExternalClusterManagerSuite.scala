@@ -17,21 +17,20 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 
-class ExternalClusterManagerSuite extends SparkFunSuite
+class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext
 {
   test("launch of backend and scheduler") {
     val conf = new SparkConf().setMaster("myclusterManager").
         setAppName("testcm").set("spark.driver.allowMultipleContexts", "true")
-    val sc = new SparkContext(conf)
+    sc = new SparkContext(conf)
     // check if the scheduler components are created
     assert(sc.schedulerBackend.isInstanceOf[FakeSchedulerBackend])
     assert(sc.taskScheduler.isInstanceOf[FakeScheduler])
-    sc.stop
   }
 }
 
