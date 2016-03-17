@@ -25,6 +25,7 @@ import org.apache.spark.{Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -466,5 +467,31 @@ class BlockMatrix @Since("1.3.0") (
       throw new SparkException("colsPerBlock of A doesn't match rowsPerBlock of B. " +
         s"A.colsPerBlock: $colsPerBlock, B.rowsPerBlock: ${other.rowsPerBlock}")
     }
+  }
+}
+
+@Since("1.6.0")
+object BlockMatrix {
+  /** A Java-friendly auxiliary factory. */
+  @Since("1.6.0")
+  def from[M <: Matrix](
+      blocks: JavaRDD[((Integer, Integer), M)],
+      rowsPerBlock: Int,
+      colsPerBlock: Int,
+      nRows: Long,
+      nCols: Long): BlockMatrix = {
+    val rdd = blocks.rdd.map { case ((blockRowIndex, blockColIndex), subMatrix) =>
+      ((blockRowIndex.toInt, blockColIndex.toInt), subMatrix.asInstanceOf[Matrix])
+    }
+    new BlockMatrix(rdd, rowsPerBlock, colsPerBlock, nRows, nCols)
+  }
+
+  /** A Java-friendly auxiliary factory without the input of the number of rows and columns. */
+  @Since("1.6.0")
+  def from[M <: Matrix](
+      blocks: JavaRDD[((Integer, Integer), M)],
+      rowsPerBlock: Int,
+      colsPerBlock: Int): BlockMatrix = {
+    from(blocks, rowsPerBlock, colsPerBlock, 0L, 0L)
   }
 }

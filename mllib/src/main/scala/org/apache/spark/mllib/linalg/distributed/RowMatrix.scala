@@ -27,6 +27,7 @@ import breeze.numerics.{sqrt => brzSqrt}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Since
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD
@@ -693,6 +694,25 @@ class RowMatrix @Since("1.0.0") (
 
 @Since("1.0.0")
 object RowMatrix {
+
+  /** A Java-friendly auxiliary factory. */
+  @Since("1.6.0")
+  def from[V <: Vector](
+      rows: JavaRDD[V],
+      nRows: Long,
+      nCols: Int): RowMatrix = {
+    val rdd = rows.rdd.map(_.asInstanceOf[Vector])
+    new RowMatrix(rdd, nRows, nCols)
+  }
+
+  /**
+   * Alternative Java-friendly auxiliary factory
+   * leaving matrix dimensions to be determined automatically.
+   */
+  @Since("1.6.0")
+  def from[V <: Vector](rows: JavaRDD[V]): RowMatrix = {
+    from(rows, 0L, 0)
+  }
 
   /**
    * Fills a full square matrix from its upper triangular part.
