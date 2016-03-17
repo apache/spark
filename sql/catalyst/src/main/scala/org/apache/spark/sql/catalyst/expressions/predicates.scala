@@ -350,59 +350,22 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
         }
       """
     } else {
-      if (!left.nullable) {
-        s"""
-          ${eval1.code}
-          boolean ${ev.isNull} = false;
-          boolean ${ev.value} = true;
+      s"""
+        ${eval1.code}
+        boolean ${ev.isNull} = false;
+        boolean ${ev.value} = true;
 
-          if (!${eval1.value}) {
-            ${eval2.code}
-            if (!${eval2.isNull} && ${eval2.value}) {
-            } else if (!${eval2.isNull}) {
-              ${ev.value} = false;
-            } else {
-              ${ev.isNull} = true;
-            }
-          }
-        """
-      } else {
-        if (!right.nullable) {
-          s"""
-            ${eval1.code}
-            boolean ${ev.isNull} = false;
-            boolean ${ev.value} = true;
-
-            if (!${eval1.isNull} && ${eval1.value}) {
-            } else {
-              ${eval2.code}
-              if (${eval2.value}) {
-              } else if (!${eval1.isNull}) {
-                ${ev.value} = false;
-              } else {
-                ${ev.isNull} = true;
-              }
-            }
-          """
+        if (!${eval1.isNull} && ${eval1.value}) {
         } else {
-          s"""
-            ${eval1.code}
-            boolean ${ev.isNull} = false;
-            boolean ${ev.value} = true;
-
-            if (!${eval1.isNull} && ${eval1.value}) {
-            } else {
-              ${eval2.code}
-              if (!${eval2.isNull} && ${eval2.value}) {
-              } else if (!${eval1.isNull} && !${eval2.isNull}) {
-                ${ev.value} = false;
-              } else {
-                ${ev.isNull} = true;
-              }
-            }
-          """
+          ${eval2.code}
+          if (!${eval2.isNull} && ${eval2.value}) {
+          } else if (!${eval1.isNull} && !${eval2.isNull}) {
+            ${ev.value} = false;
+          } else {
+            ${ev.isNull} = true;
+          }
         }
-      }
+      """
     }
   }
 }
