@@ -40,7 +40,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.serializer.{Serializer, SerializerInstance}
+import org.apache.spark.serializer.{Serializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
 import org.apache.spark.util._
@@ -61,7 +61,7 @@ private[spark] class BlockManager(
     executorId: String,
     rpcEnv: RpcEnv,
     val master: BlockManagerMaster,
-    defaultSerializer: Serializer,
+    serializerManager: SerializerManager,
     val conf: SparkConf,
     memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
@@ -1283,7 +1283,7 @@ private[spark] class BlockManager(
       outputStream: OutputStream,
       values: Iterator[Any]): Unit = {
     val byteStream = new BufferedOutputStream(outputStream)
-    val ser = defaultSerializer.newInstance()
+    val ser = serializerManager.getSerializer(ClassTag.Any).newInstance()
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
   }
 
@@ -1311,7 +1311,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       inputStream: InputStream): Iterator[T] = {
     val stream = new BufferedInputStream(inputStream)
-    defaultSerializer
+    serializerManager.getSerializer(ClassTag.Any)
       .newInstance()
       .deserializeStream(wrapForCompression(blockId, stream))
       .asIterator.asInstanceOf[Iterator[T]]
