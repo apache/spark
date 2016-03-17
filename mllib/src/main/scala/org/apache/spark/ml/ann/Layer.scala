@@ -41,10 +41,11 @@ private[ann] trait Layer extends Serializable {
   /**
    * Returns the output size given the input size (not counting the stack size).
    * Output size is used to allocate memory for the output.
+   *
    * @param inputSize input size
    * @return output size
    */
-  def outputSize(inputSize: Int): Int
+  def getOutputSize(inputSize: Int): Int
 
   /**
    * If true, the memory is not allocated for the output of this layer.
@@ -58,12 +59,14 @@ private[ann] trait Layer extends Serializable {
   /**
    * Returns the instance of the layer based on weights provided.
    * Size of weights must be equal to weightSize
-   * @param weights vector with layer weights
+   *
+   * @param initialWeights vector with layer weights
    * @return the layer model
    */
-  def model(weights: BDV[Double]): LayerModel
+  def createModel(initialWeights: BDV[Double]): LayerModel
   /**
    * Returns the instance of the layer with random generated weights
+   *
    * @param weights vector for weights initialization, must be equal to weightSize
    * @param random random number generator
    * @return the layer model
@@ -81,32 +84,45 @@ private[ann] trait LayerModel extends Serializable {
   val weights: BDV[Double]
   /**
    * Evaluates the data (process the data through the layer)
+   * Output is allocated based on the size provided by the
+   * LayerModel implementation and the stack (batch) size
+   * Developer is responsible for checking the size of output
+   * when writing to it
+ *
    * @param data data
-   * @param output output to write to
+   * @param output output (modified in place)
    */
   def eval(data: BDM[Double], output: BDM[Double]): Unit
 
   /**
    * Computes the delta for back propagation
-   * @param delta delta of this layer
+   * Delta is allocated based on the size provided by the
+   * LayerModel implementation and the stack (batch) size
+   * Developer is responsible for checking the size of
+   * prevDelta when writing to it
+    *
+    * @param delta delta of this layer
    * @param output output of this layer
-   * @param pDelta storage for the result, the previous delta
-   * @return delta
+   * @param prevDelta the previous delta (modified in place)
    */
-  def prevDelta(delta: BDM[Double], output: BDM[Double], pDelta: BDM[Double]): Unit
+  def computePrevDelta(delta: BDM[Double], output: BDM[Double], prevDelta: BDM[Double]): Unit
 
   /**
    * Computes the gradient
+   * cumGrad is a wrapper on the part of the weight vector
+   * size of cumGrad is based on weightSize provided by
+   * implementation of LayerModel
+   *
    * @param delta delta for this layer
    * @param input input data
-   * @param cumGrad cumulative gradient
-   * @return gradient
+   * @param cumGrad cumulative gradient (modified in place)
    */
   def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit
 }
 
 /**
  * Layer properties of affine transformations, that is y=A*x+b
+ *
  * @param numIn number of inputs
  * @param numOut number of outputs
  */
@@ -114,11 +130,11 @@ private[ann] class AffineLayer(val numIn: Int, val numOut: Int) extends Layer {
 
   override val weightSize = numIn * numOut + numOut
 
-  override def outputSize(inputSize: Int): Int = numOut
+  override def getOutputSize(inputSize: Int): Int = numOut
 
   override val inPlace = false
 
-  override def model(weights: BDV[Double]): LayerModel = new AffineLayerModel(weights, this)
+  override def createModel(weights: BDV[Double]): LayerModel = new AffineLayerModel(weights, this)
 
   override def initModel(weights: BDV[Double], random: Random): LayerModel =
     AffineLayerModel(this, weights, random)
@@ -126,6 +142,7 @@ private[ann] class AffineLayer(val numIn: Int, val numOut: Int) extends Layer {
 
 /**
  * Model of Affine layer
+ *
  * @param weights weights
  * @param layer layer properties
  */
@@ -143,8 +160,11 @@ private[ann] class AffineLayerModel private[ann] (
     BreezeUtil.dgemm(1.0, w, data, 1.0, output)
   }
 
-  override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {
-    BreezeUtil.dgemm(1.0, w.t, nextDelta, 0.0, delta)
+  override def computePrevDelta(
+    delta: BDM[Double],
+    output: BDM[Double],
+    prevDelta: BDM[Double]): Unit = {
+    BreezeUtil.dgemm(1.0, w.t, delta, 0.0, prevDelta)
   }
 
   override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {
@@ -165,6 +185,7 @@ private[ann] object AffineLayerModel {
 
   /**
    * Creates a model of Affine layer
+ *
    * @param layer layer properties
    * @param weights vector for weights initialization
    * @param random random number generator
@@ -176,8 +197,13 @@ private[ann] object AffineLayerModel {
   }
 
   /**
-   * Initialize weights
-   * @param numIn number of inputs
+   * Initialize weights randomly in the interval
+   * Uses [Bottou-88] heuristic [-a/sqrt(in); a/sqrt(in)]
+   * where a is chosen in a such way that the weight variance corresponds
+   * to the points to the maximal curvature of the activation function
+   * (which is approximately 2.38 for a standard sigmoid)
+    *
+    * @param numIn number of inputs
    * @param numOut number of outputs
    * @param weights vector for weights initialization
    * @param random random number generator
@@ -188,8 +214,9 @@ private[ann] object AffineLayerModel {
     weights: BDV[Double],
     random: Random): Unit = {
     var i = 0
+    val sqrtIn = math.sqrt(numIn)
     while (i < weights.length) {
-      weights(i) = (random.nextDouble * 4.8 - 2.4) / numIn
+      weights(i) = (random.nextDouble * 4.8 - 2.4) / sqrtIn
       i += 1
     }
   }
@@ -214,7 +241,7 @@ private[ann] trait ActivationFunction extends Serializable {
 /**
  * Implements in-place application of functions in the arrays
  */
-private[ann] object UniversalFunction {
+private[ann] object ApplyInPlace {
 
   // TODO: use Breeze UFunc
   def apply(x: BDM[Double], y: BDM[Double], func: Double => Double): Unit = {
@@ -252,31 +279,33 @@ private[ann] object UniversalFunction {
  */
 private[ann] class SigmoidFunction extends ActivationFunction {
 
-  override def eval: (Double) => Double = x => 1.0 / (1 + Math.exp(-x))
+  override def eval: (Double) => Double = x => 1.0 / (1 + math.exp(-x))
 
   override def derivative: (Double) => Double = z => (1 - z) * z
 }
 
 /**
  * Functional layer properties, y = f(x)
+ *
  * @param activationFunction activation function
  */
 private[ann] class FunctionalLayer (val activationFunction: ActivationFunction) extends Layer {
 
   override val weightSize = 0
 
-  override def outputSize(inputSize: Int): Int = inputSize
+  override def getOutputSize(inputSize: Int): Int = inputSize
 
   override val inPlace = true
 
-  override def model(weights: BDV[Double]): LayerModel = new FunctionalLayerModel(this)
+  override def createModel(weights: BDV[Double]): LayerModel = new FunctionalLayerModel(this)
 
   override def initModel(weights: BDV[Double], random: Random): LayerModel =
-    model(weights)
+    createModel(weights)
 }
 
 /**
  * Functional layer model. Holds no weights.
+ *
  * @param layer functiona layer
  */
 private[ann] class FunctionalLayerModel private[ann] (val layer: FunctionalLayer)
@@ -286,11 +315,14 @@ private[ann] class FunctionalLayerModel private[ann] (val layer: FunctionalLayer
   val weights = new BDV[Double](0)
 
   override def eval(data: BDM[Double], output: BDM[Double]): Unit = {
-    UniversalFunction(data, output, layer.activationFunction.eval)
+    ApplyInPlace(data, output, layer.activationFunction.eval)
   }
 
-  override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {
-    UniversalFunction(input, delta, layer.activationFunction.derivative)
+  override def computePrevDelta(
+    nextDelta: BDM[Double],
+    input: BDM[Double],
+    delta: BDM[Double]): Unit = {
+    ApplyInPlace(input, delta, layer.activationFunction.derivative)
     delta :*= nextDelta
   }
 
@@ -322,6 +354,7 @@ private[ann] trait TopologyModel extends Serializable {
   val layerModels: Array[LayerModel]
   /**
    * Forward propagation
+ *
    * @param data input data
    * @return array of outputs for each of the layers
    */
@@ -329,6 +362,7 @@ private[ann] trait TopologyModel extends Serializable {
 
   /**
    * Prediction of the model
+ *
    * @param data input data
    * @return prediction
    */
@@ -336,6 +370,7 @@ private[ann] trait TopologyModel extends Serializable {
 
   /**
    * Computes gradient for the network
+ *
    * @param data input data
    * @param target target output
    * @param cumGradient cumulative gradient
@@ -348,6 +383,7 @@ private[ann] trait TopologyModel extends Serializable {
 
 /**
  * Feed forward ANN
+ *
  * @param layers
  */
 private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends Topology {
@@ -362,6 +398,7 @@ private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends
 private[ml] object FeedForwardTopology {
   /**
    * Creates a feed forward topology from the array of layers
+ *
    * @param layers array of layers
    * @return feed forward topology
    */
@@ -371,6 +408,7 @@ private[ml] object FeedForwardTopology {
 
   /**
    * Creates a multi-layer perceptron
+ *
    * @param layerSizes sizes of layers including input and output size
    * @param softmaxOnTop wether to use SoftMax or Sigmoid function for an output layer.
    *                Softmax is default
@@ -380,7 +418,7 @@ private[ml] object FeedForwardTopology {
     layerSizes: Array[Int],
     softmaxOnTop: Boolean = true): FeedForwardTopology = {
     val layers = new Array[Layer]((layerSizes.length - 1) * 2)
-    for(i <- 0 until layerSizes.length - 1){
+    for (i <- 0 until layerSizes.length - 1) {
       layers(i * 2) = new AffineLayer(layerSizes(i), layerSizes(i + 1))
       layers(i * 2 + 1) =
         if (i == layerSizes.length - 2) {
@@ -401,6 +439,7 @@ private[ml] object FeedForwardTopology {
 /**
  * Model of Feed Forward Neural Network.
  * Implements forward, gradient computation and can return weights in vector format.
+ *
  * @param weights network weights
  * @param topology network topology
  */
@@ -412,7 +451,7 @@ private[ml] class FeedForwardModel private(
   val layerModels = new Array[LayerModel](layers.length)
   private var offset = 0
   for (i <- 0 until layers.length) {
-    layerModels(i) = layers(i).model(
+    layerModels(i) = layers(i).createModel(
       new BDV[Double](weights.toArray, offset, 1, layers(i).weightSize))
     offset += layers(i).weightSize
   }
@@ -430,7 +469,7 @@ private[ml] class FeedForwardModel private(
         if (layers(i).inPlace) {
           outputs(i) = outputs(i - 1)
         } else {
-          val outputSize = layers(i).outputSize(inputSize)
+          val outputSize = layers(i).getOutputSize(inputSize)
           outputs(i) = new BDM[Double](outputSize, currentBatchSize)
           inputSize = outputSize
         }
@@ -455,7 +494,7 @@ private[ml] class FeedForwardModel private(
       deltas = new Array[BDM[Double]](layerModels.length)
       var inputSize = data.rows
       for (i <- 0 until layerModels.length - 1) {
-        val outputSize = layers(i).outputSize(inputSize)
+        val outputSize = layers(i).getOutputSize(inputSize)
         deltas(i) = new BDM[Double](outputSize, currentBatchSize)
         inputSize = outputSize
       }
@@ -468,7 +507,7 @@ private[ml] class FeedForwardModel private(
         throw new UnsupportedOperationException("Top layer is required to have objective.")
     }
     for (i <- (L - 2) to (0, -1)) {
-      layerModels(i + 1).prevDelta(deltas(i + 1), outputs(i + 1), deltas(i))
+      layerModels(i + 1).computePrevDelta(deltas(i + 1), outputs(i + 1), deltas(i))
     }
     val cumGradientArray = cumGradient.toArray
     var offset = 0
@@ -495,6 +534,7 @@ private[ann] object FeedForwardModel {
 
   /**
    * Creates a model from a topology and weights
+ *
    * @param topology topology
    * @param weights weights
    * @return model
@@ -506,6 +546,7 @@ private[ann] object FeedForwardModel {
 
   /**
    * Creates a model given a topology and seed
+ *
    * @param topology topology
    * @param seed seed for generating the weights
    * @return model
@@ -517,10 +558,10 @@ private[ann] object FeedForwardModel {
     for (i <- 0 until topology.layers.length) {
       totalSize += topology.layers(i).weightSize
     }
-    val weights = new BDV[Double](new Array[Double](totalSize))
+    val weights = BDV.zeros[Double](totalSize)
     var offset = 0
     val random = new XORShiftRandom(seed)
-    for(i <- 0 until layers.length){
+    for (i <- 0 until layers.length) {
       layerModels(i) = layers(i).
         initModel(new BDV[Double](weights.data, offset, 1, layers(i).weightSize), random)
       offset += layers(i).weightSize
@@ -531,6 +572,7 @@ private[ann] object FeedForwardModel {
 
 /**
  * Neural network gradient. Does nothing but calling Model's gradient
+ *
  * @param topology topology
  * @param dataStacker data stacker
  */
@@ -558,6 +600,7 @@ private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) ext
  * through Optimizer/Gradient interfaces. If stackSize is more than one, makes blocks
  * or matrices of inputs and outputs and then stack them in one vector.
  * This can be used for further batch computations after unstacking.
+ *
  * @param stackSize stack size
  * @param inputSize size of the input vectors
  * @param outputSize size of the output vectors
@@ -567,6 +610,7 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
 
   /**
    * Stacks the data
+ *
    * @param data RDD of vector pairs
    * @return RDD of double (always zero) and vector that contains the stacked vectors
    */
@@ -599,6 +643,7 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
 
   /**
    * Unstack the stacked vectors into matrices for batch operations
+ *
    * @param data stacked vector
    * @return pair of matrices holding input and output data and the real stack size
    */
@@ -631,6 +676,7 @@ private[ann] class ANNUpdater extends Updater {
 
 /**
  * MLlib-style trainer class that trains a network given the data and topology
+ *
  * @param topology topology of ANN
  * @param inputSize input size
  * @param outputSize output size
@@ -640,7 +686,7 @@ private[ml] class FeedForwardTrainer(
     val inputSize: Int,
     val outputSize: Int) extends Serializable {
 
-  private var _seed = 11L
+  private var _seed = this.getClass.getName.hashCode.toLong
   private var _weights: Vector = null
   private var _stackSize = 128
   private var dataStacker = new DataStacker(_stackSize, inputSize, outputSize)
@@ -650,42 +696,40 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Returns seed
-   * @return seed
    */
   def getSeed: Long = _seed
 
   /**
    * Sets seed
-   * @param value seed
-   * @return trainer
    */
-  def setSeed(value: Long): FeedForwardTrainer = {
+  def setSeed(value: Long): this.type = {
     _seed = value
     this
   }
 
   /**
    * Returns weights
-   * @return weights
    */
   def getWeights: Vector = _weights
 
   /**
    * Sets weights
+ *
    * @param value weights
    * @return trainer
    */
-  def setWeights(value: Vector): FeedForwardTrainer = {
+  def setWeights(value: Vector): this.type = {
     _weights = value
     this
   }
 
   /**
    * Sets the stack size
+ *
    * @param value stack size
    * @return trainer
    */
-  def setStackSize(value: Int): FeedForwardTrainer = {
+  def setStackSize(value: Int): this.type = {
     _stackSize = value
     dataStacker = new DataStacker(value, inputSize, outputSize)
     this
@@ -693,6 +737,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the SGD optimizer
+ *
    * @return SGD optimizer
    */
   def SGDOptimizer: GradientDescent = {
@@ -703,6 +748,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the LBFGS optimizer
+ *
    * @return LBGS optimizer
    */
   def LBFGSOptimizer: LBFGS = {
@@ -713,10 +759,11 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the updater
+ *
    * @param value updater
    * @return trainer
    */
-  def setUpdater(value: Updater): FeedForwardTrainer = {
+  def setUpdater(value: Updater): this.type = {
     _updater = value
     updateUpdater(value)
     this
@@ -724,10 +771,11 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the gradient
+ *
    * @param value gradient
    * @return trainer
    */
-  def setGradient(value: Gradient): FeedForwardTrainer = {
+  def setGradient(value: Gradient): this.type = {
     _gradient = value
     updateGradient(value)
     this
@@ -753,6 +801,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Trains the ANN
+ *
    * @param data RDD of input and output vector pairs
    * @return model
    */

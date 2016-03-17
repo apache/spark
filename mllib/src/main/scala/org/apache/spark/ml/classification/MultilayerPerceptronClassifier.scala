@@ -25,7 +25,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasTol}
+import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasStepSize, HasTol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -33,11 +33,12 @@ import org.apache.spark.sql.DataFrame
 
 /** Params for Multilayer Perceptron. */
 private[ml] trait MultilayerPerceptronParams extends PredictorParams
-  with HasSeed with HasMaxIter with HasTol {
+  with HasSeed with HasMaxIter with HasTol with HasStepSize {
   /**
    * Layer sizes including input size and output size.
    * Default: Array(1, 1)
-   * @group param
+    *
+    * @group param
    */
   final val layers: IntArrayParam = new IntArrayParam(this, "layers",
     "Sizes of layers from input layer to output layer" +
@@ -55,7 +56,8 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    * a partition then it is adjusted to the size of this data.
    * Recommended size is between 10 and 1000.
    * Default: 128
-   * @group expertParam
+    *
+    * @group expertParam
    */
   final val blockSize: IntParam = new IntParam(this, "blockSize",
     "Block size for stacking input data in matrices. Data is stacked within partitions." +
@@ -67,31 +69,23 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   final def getBlockSize: Int = $(blockSize)
 
   /**
-   * Optimizer setup.
+   * Allows setting the solver: minibatch gradient descent (gd) or l-bfgs.
+   * l-bfgs is the default one.
+ *
    * @group expertParam
    */
-  final val optimizer: Param[String] = new Param[String](this, "optimizer",
-    " Allows setting the optimizer: minibatch gradient descent (GD) or LBFGS. " +
-      " The latter is recommended one. ",
-    ParamValidators.inArray[String](Array("GD", "LBFGS")))
+  final val solver: Param[String] = new Param[String](this, "solver",
+    " Allows setting the solver: minibatch gradient descent (gd) or l-bfgs. " +
+      " l-bfgs is the default one.",
+    ParamValidators.inArray[String](Array("gd", "l-bfgs")))
 
   /** @group getParam */
-  final def getOptimizer: String = $(optimizer)
-
-  /**
-   * Learning rate.
-   * @group expertParam
-   */
-  final val learningRate: DoubleParam = new DoubleParam(this, "learning rate",
-    " Sets the learning rate for gradient descent optimizer ",
-    ParamValidators.inRange(0, 1))
-
-  /** @group getParam */
-  final def getLearningRate: Double = $(learningRate)
+  final def getOptimizer: String = $(solver)
 
   /**
    * Model weights. Can be returned either after training or after explicit setting
-   * @group expertParam
+    *
+    * @group expertParam
    */
   final val weights: Param[Vector] = new Param[Vector](this, "weights",
     " Sets the weights of the model ")
@@ -100,8 +94,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   final def getWeights: Vector = $(weights)
 
 
-  setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 128,
-    optimizer -> "LBFGS", learningRate -> 0.03, weights -> null)
+  setDefault(maxIter -> 100, tol -> 1e-4, blockSize -> 128, solver -> "l-bfgs", stepSize -> 0.03)
 }
 
 /** Label to vector converter. */
@@ -163,7 +156,8 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   /**
    * Set the maximum number of iterations.
    * Default is 100.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.5.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -172,21 +166,24 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    * Set the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-4.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.5.0")
   def setTol(value: Double): this.type = set(tol, value)
 
   /**
    * Set the seed for weights initialization if weights are not set
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * Set the model weights.
-   * @group setParam
+   * Sets the model weights.
+    *
+    * @group expertParam
    */
   @Since("2.0.0")
   def setWeights(value: Vector): this.type = set(weights, value)
@@ -209,7 +206,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
     val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, true)
     val trainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
-    if ($(weights) != null) {
+    if (isDefined(weights)) {
       trainer.setWeights($(weights))
     } else {
       trainer.setSeed($(seed))
@@ -235,7 +232,8 @@ object MultilayerPerceptronClassifier
  * :: Experimental ::
  * Classification model based on the Multilayer Perceptron.
  * Each layer has sigmoid activation function, output layer has softmax.
- * @param uid uid
+  *
+  * @param uid uid
  * @param layers array of layer sizes including input and output layers
  * @param weights vector of initial weights for the model that consists of the weights of layers
  * @return prediction model
