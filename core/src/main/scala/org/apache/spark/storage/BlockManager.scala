@@ -296,8 +296,12 @@ private[spark] class BlockManager(
   /**
    * Put the block locally, using the given storage level.
    */
-  override def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Boolean = {
-    putBytes(blockId, data.nioByteBuffer(), level)
+  override def putBlockData(
+      blockId: BlockId,
+      data: ManagedBuffer,
+      level: StorageLevel,
+      classTag: ClassTag[_]): Boolean = {
+    putBytes(blockId, data.nioByteBuffer(), level)(classTag)
   }
 
   /**
@@ -504,9 +508,8 @@ private[spark] class BlockManager(
    *
    * This does not acquire a lock on this block in this JVM.
    */
-  def getRemoteValues(blockId: BlockId): Option[BlockResult] = {
+  private def getRemoteValues(blockId: BlockId): Option[BlockResult] = {
     getRemoteBytes(blockId).map { data =>
-      // TODO(josh): read class tag?
       new BlockResult(dataDeserialize(blockId, data), DataReadMethod.Network, data.limit())
     }
   }
@@ -744,7 +747,7 @@ private[spark] class BlockManager(
         Future {
           // This is a blocking action and should run in futureExecutionContext which is a cached
           // thread pool
-          replicate(blockId, bufferView, level)
+          replicate(blockId, bufferView, level, classTag)
         }(futureExecutionContext)
       } else {
         null
@@ -927,7 +930,7 @@ private[spark] class BlockManager(
           val remoteStartTime = System.currentTimeMillis
           val bytesToReplicate = doGetLocalBytes(blockId, info)
           try {
-            replicate(blockId, bytesToReplicate, level)
+            replicate(blockId, bytesToReplicate, level, classTag)
           } finally {
             BlockManager.dispose(bytesToReplicate)
           }
@@ -1040,7 +1043,11 @@ private[spark] class BlockManager(
    * Replicate block to another node. Not that this is a blocking call that returns after
    * the block has been replicated.
    */
-  private def replicate(blockId: BlockId, data: ByteBuffer, level: StorageLevel): Unit = {
+  private def replicate(
+      blockId: BlockId,
+      data: ByteBuffer,
+      level: StorageLevel,
+      classTag: ClassTag[_]): Unit = {
     val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
     val numPeersToReplicateTo = level.replication - 1
     val peersForReplication = new ArrayBuffer[BlockManagerId]
@@ -1096,7 +1103,13 @@ private[spark] class BlockManager(
             data.rewind()
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             blockTransferService.uploadBlockSync(
-              peer.host, peer.port, peer.executorId, blockId, new NioManagedBuffer(data), tLevel)
+              peer.host,
+              peer.port,
+              peer.executorId,
+              blockId,
+              new NioManagedBuffer(data),
+              tLevel,
+              classTag)
             logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %s ms"
               .format(System.currentTimeMillis - onePeerStartTime))
             peersReplicatedTo += peer

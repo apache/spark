@@ -1345,7 +1345,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         port: Int, execId: String,
         blockId: BlockId,
         blockData: ManagedBuffer,
-        level: StorageLevel): Future[Unit] = {
+        level: StorageLevel,
+        classTag: ClassTag[_]): Future[Unit] = {
       import scala.concurrent.ExecutionContext.Implicits.global
       Future {}
     }
