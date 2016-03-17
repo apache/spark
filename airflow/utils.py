@@ -951,7 +951,7 @@ class GCSLog(object):
                     from tempfile import NamedTemporaryFile
                     with NamedTemporaryFile(mode='w+') as tmpfile:
                         tmpfile.write(log)
-                        gcs_hook.upload(bkt, blob, tmpfile.name)
+                        self.hook.upload(bkt, blob, tmpfile.name)
                     return
             except:
                 pass
