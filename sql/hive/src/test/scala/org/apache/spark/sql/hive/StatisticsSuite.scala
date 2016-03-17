@@ -73,7 +73,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
-      hiveContext.sessionState.catalog.lookupRelation(
+      hiveContext.sessionState.sessionCatalog.lookupRelation(
         TableIdentifier(tableName)).statistics.sizeInBytes
 
     // Non-partitioned table
@@ -121,7 +121,8 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
     intercept[UnsupportedOperationException] {
       hiveContext.analyze("tempTable")
     }
-    hiveContext.sessionState.catalog.unregisterTable(TableIdentifier("tempTable"))
+    hiveContext.sessionState.sessionCatalog.dropTable(
+      TableIdentifier("tempTable"), ignoreIfNotExists = true)
   }
 
   test("estimates the size of a test MetastoreRelation") {

@@ -210,6 +210,8 @@ class InMemoryCatalog extends ExternalCatalog {
     filterPattern(listTables(db), pattern)
   }
 
+  override def refreshTable(db: String, table: String): Unit = { /* no-op */ }
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------

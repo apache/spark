@@ -17,11 +17,25 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 
 
-// TODO: implement me
-private[hive] class HiveSessionCatalog(
-    hiveContext: HiveContext,
-    externalCatalog: ExternalCatalog)
-  extends SessionCatalog(externalCatalog)
+class HiveSessionCatalog(hiveCatalog: HiveCatalog) extends SessionCatalog(hiveCatalog) {
+
+  override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
+    val table = formatTableName(name.table)
+    if (name.database.isDefined || !tempTables.containsKey(table)) {
+      val newName = name.copy(table = table)
+      hiveCatalog.lookupRelation(newName, alias)
+    } else {
+      val relation = tempTables.get(table)
+      val tableWithQualifiers = SubqueryAlias(table, relation)
+      // If an alias was specified by the lookup, wrap the plan in a subquery so that
+      // attributes are properly qualified with this alias.
+      alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+    }
+  }
+
+}

@@ -52,7 +52,7 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
   private val b: Expression = UnresolvedAttribute("b")
 
   before {
-    catalog.createTempTable("table", relation, ignoreIfExists = false)
+    catalog.createTempTable("table", relation, ignoreIfExists = true)
   }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {

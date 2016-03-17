@@ -34,8 +34,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 class SessionCatalog(externalCatalog: ExternalCatalog, caseSensitiveAnalysis: Boolean = true) {
   import ExternalCatalog._
 
-  private[this] val tempTables = new ConcurrentHashMap[String, LogicalPlan]
-  private[this] val tempFunctions = new ConcurrentHashMap[String, CatalogFunction]
+  protected[this] val tempTables = new ConcurrentHashMap[String, LogicalPlan]
+  protected[this] val tempFunctions = new ConcurrentHashMap[String, CatalogFunction]
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
@@ -46,7 +46,7 @@ class SessionCatalog(externalCatalog: ExternalCatalog, caseSensitiveAnalysis: Bo
   /**
    * Format table name, taking into account case sensitivity.
    */
-  private def formatTableName(name: String): String = {
+  protected[this] def formatTableName(name: String): String = {
     if (caseSensitiveAnalysis) name else name.toLowerCase
   }
 
@@ -259,6 +259,15 @@ class SessionCatalog(externalCatalog: ExternalCatalog, caseSensitiveAnalysis: Bo
       .filter { t => regex.pattern.matcher(t).matches() }
       .map { t => TableIdentifier(t) }
     dbTables ++ _tempTables
+  }
+
+  /**
+   * Refresh the cache entry for a metastore table, if any.
+   */
+  def refreshTable(name: TableIdentifier): Unit = {
+    val db = name.database.getOrElse(currentDb)
+    val table = formatTableName(name.table)
+    externalCatalog.refreshTable(db, table)
   }
 
   /**

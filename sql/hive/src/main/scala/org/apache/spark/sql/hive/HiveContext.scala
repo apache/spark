@@ -45,7 +45,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalog
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -70,7 +69,7 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def eval(input: InternalRow): Any = {
-    UTF8String.fromString(ctx.metadataHive.currentDatabase)
+    UTF8String.fromString(ctx.sessionState.sessionCatalog.getCurrentDatabase)
   }
 }
 
@@ -87,8 +86,8 @@ class HiveContext private[hive](
     @transient protected[hive] val executionHive: HiveClientImpl,
     @transient protected[hive] val metadataHive: HiveClient,
     isRootContext: Boolean,
-    externalCatalog: ExternalCatalog)
-  extends SQLContext(sc, cacheManager, listener, isRootContext, externalCatalog) with Logging {
+    private[sql] val hiveCatalog: HiveCatalog)
+  extends SQLContext(sc, cacheManager, listener, isRootContext, hiveCatalog) with Logging {
   self =>
 
   private[hive] def this(sc: SparkContext, execHive: HiveClientImpl, metaHive: HiveClient) {
@@ -115,6 +114,9 @@ class HiveContext private[hive](
 
   logDebug("create HiveContext")
 
+  // Initialize catalog after context creation to avoid initialization ordering issues
+  hiveCatalog.initialize(this)
+
   /**
    * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
    * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
@@ -128,7 +130,7 @@ class HiveContext private[hive](
       executionHive = executionHive.newSession(),
       metadataHive = metadataHive.newSession(),
       isRootContext = false,
-      externalCatalog = externalCatalog)
+      hiveCatalog = hiveCatalog)
   }
 
   @transient
@@ -209,12 +211,12 @@ class HiveContext private[hive](
    */
   def refreshTable(tableName: String): Unit = {
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    sessionState.catalog.refreshTable(tableIdent)
+    hiveCatalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    sessionState.catalog.invalidateTable(tableIdent)
+    hiveCatalog.invalidateTable(tableIdent)
   }
 
   /**
@@ -228,7 +230,7 @@ class HiveContext private[hive](
    */
   def analyze(tableName: String) {
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
+    val relation = EliminateSubqueryAliases(sessionState.sessionCatalog.lookupRelation(tableIdent))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -289,7 +291,7 @@ class HiveContext private[hive](
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          sessionState.catalog.client.alterTable(
+          sessionState.sessionCatalog.alterTable(
             relation.table.copy(
               properties = relation.table.properties +
                 (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))

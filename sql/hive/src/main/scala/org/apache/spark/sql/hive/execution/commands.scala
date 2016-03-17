@@ -71,7 +71,8 @@ case class DropTable(
     }
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.sessionState.catalog.unregisterTable(TableIdentifier(tableName))
+    hiveContext.sessionState.sessionCatalog.dropTable(
+      TableIdentifier(tableName), ignoreIfNotExists = true)
     Seq.empty[Row]
   }
 }
@@ -130,7 +131,7 @@ case class CreateMetastoreDataSource(
     val tableName = tableIdent.unquotedString
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
-    if (hiveContext.sessionState.catalog.tableExists(tableIdent)) {
+    if (hiveContext.sessionState.sessionCatalog.tableExists(tableIdent)) {
       if (allowExisting) {
         return Seq.empty[Row]
       } else {
@@ -142,7 +143,7 @@ case class CreateMetastoreDataSource(
     val optionsWithPath =
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
-        options + ("path" -> hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" -> hiveContext.hiveCatalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
@@ -155,7 +156,7 @@ case class CreateMetastoreDataSource(
       bucketSpec = None,
       options = optionsWithPath).resolveRelation()
 
-    hiveContext.sessionState.catalog.createDataSourceTable(
+    hiveContext.hiveCatalog.createDataSourceTable(
       tableIdent,
       userSpecifiedSchema,
       Array.empty[String],
@@ -200,7 +201,7 @@ case class CreateMetastoreDataSourceAsSelect(
     val optionsWithPath =
       if (!options.contains("path")) {
         isExternal = false
-        options + ("path" -> hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" -> hiveContext.hiveCatalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
@@ -268,7 +269,7 @@ case class CreateMetastoreDataSourceAsSelect(
       // We will use the schema of resolved.relation as the schema of the table (instead of
       // the schema of df). It is important since the nullability may be changed by the relation
       // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
-      hiveContext.sessionState.catalog.createDataSourceTable(
+      hiveContext.hiveCatalog.createDataSourceTable(
         tableIdent,
         Some(result.schema),
         partitionColumns,
@@ -279,7 +280,7 @@ case class CreateMetastoreDataSourceAsSelect(
     }
 
     // Refresh the cache of the table in the catalog.
-    hiveContext.sessionState.catalog.refreshTable(tableIdent)
+    hiveContext.hiveCatalog.refreshTable(tableIdent)
     Seq.empty[Row]
   }
 }

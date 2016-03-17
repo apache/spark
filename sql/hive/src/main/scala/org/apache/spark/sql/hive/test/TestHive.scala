@@ -435,9 +435,8 @@ class TestHiveContext private[hive](
 
       cacheManager.clearCache()
       loadedTables.clear()
-      sessionState.catalog.cachedDataSourceTables.invalidateAll()
-      sessionState.catalog.client.reset()
-      sessionState.catalog.unregisterAllTables()
+      hiveCatalog.invalidateCache()
+      metadataHive.reset()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }

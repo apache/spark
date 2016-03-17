@@ -31,7 +31,7 @@ trait AnalysisTest extends PlanTest {
   private def makeAnalyzer(caseSensitive: Boolean): Analyzer = {
     val conf = new SimpleCatalystConf(caseSensitive)
     val catalog = new SessionCatalog(new InMemoryCatalog, caseSensitive)
-    catalog.createTempTable("TaBlE", TestRelations.testRelation, ignoreIfExists = false)
+    catalog.createTempTable("TaBlE", TestRelations.testRelation, ignoreIfExists = true)
     new Analyzer(catalog, EmptyFunctionRegistry, conf) {
       override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     }

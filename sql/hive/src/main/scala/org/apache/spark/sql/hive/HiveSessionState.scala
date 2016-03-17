@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.execution.{python, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
@@ -37,13 +37,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Internal catalog for managing table and database states.
    */
-  override lazy val sessionCatalog = new HiveSessionCatalog(ctx, ctx.externalCatalog)
-
-  /**
-   * A metadata catalog that points to the Hive metastore.
-   */
-  // TODO: remove this
-  override lazy val catalog = new HiveMetastoreCatalog(ctx.metadataHive, ctx) with OverrideCatalog
+  override lazy val sessionCatalog = new HiveSessionCatalog(ctx.hiveCatalog)
 
   /**
    * Internal catalog for managing functions registered by the user.
@@ -59,9 +53,9 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   override lazy val analyzer: Analyzer = {
     new Analyzer(sessionCatalog, functionRegistry, conf) {
       override val extendedResolutionRules =
-        catalog.ParquetConversions ::
-        catalog.CreateTables ::
-        catalog.PreInsertionCasts ::
+        ctx.hiveCatalog.ParquetConversions ::
+        ctx.hiveCatalog.CreateTables ::
+        ctx.hiveCatalog.PreInsertionCasts ::
         python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::

@@ -67,7 +67,7 @@ class SQLContext private[sql](
     @transient protected[sql] val cacheManager: CacheManager,
     @transient private[sql] val listener: SQLListener,
     val isRootContext: Boolean,
-    val externalCatalog: ExternalCatalog)
+    private[sql] val externalCatalog: ExternalCatalog)
   extends Logging with Serializable {
 
   self =>

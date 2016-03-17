@@ -34,7 +34,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
 
   after {
     sqlContext.sessionState.sessionCatalog.dropTable(
-      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = false)
+      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
   }
 
   test("get all tables") {
@@ -47,7 +47,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
       Row("ListTablesSuiteTable", true))
 
     sqlContext.sessionState.sessionCatalog.dropTable(
-      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = false)
+      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
     assert(sqlContext.tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
   }
 
@@ -61,7 +61,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
       Row("ListTablesSuiteTable", true))
 
     sqlContext.sessionState.sessionCatalog.dropTable(
-      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = false)
+      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
     assert(sqlContext.tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
   }
 
