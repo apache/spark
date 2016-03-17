@@ -33,3 +33,11 @@ case class SingularValueDecomposition[UType, VType](U: UType, s: Vector, V: VTyp
 @Experimental
 case class QRDecomposition[QType, RType](Q: QType, R: RType)
 
+
+/**
+ * :: Experimental ::
+ * Represents Non-Negative Matrix Factorization (NMF) factors.
+ */
+@Since("2.0.0")
+@Experimental
+case class NMFDecomposition[WType, HType](W: WType, H: HType)
