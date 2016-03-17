@@ -779,7 +779,7 @@ class Airflow(BaseView):
                     f.close()
                     log_loaded = True
                 except:
-                    log = "*** Log file isn't where expected.\n".format(loc)
+                    log = "*** Local log file not found.\n".format(loc)
             else:
                 WORKER_LOG_SERVER_PORT = \
                     conf.get('celery', 'WORKER_LOG_SERVER_PORT')
@@ -796,22 +796,23 @@ class Airflow(BaseView):
                     log += "*** Failed to fetch log file from worker.\n".format(
                         **locals())
 
-            # try to load log backup from S3
-            s3_log_folder = conf.get('core', 'S3_LOG_FOLDER')
-            if not log_loaded and s3_log_folder.startswith('s3:'):
-                import boto
-                s3 = boto.connect_s3()
-                s3_log_loc = os.path.join(
-                    conf.get('core', 'S3_LOG_FOLDER'), log_relative)
-                log += '*** Fetching log from S3: {}\n'.format(s3_log_loc)
-                log += ('*** Note: S3 logs are only available once '
-                        'tasks have completed.\n')
-                bucket, key = s3_log_loc.lstrip('s3:/').split('/', 1)
-                s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
-                if s3_key.exists():
-                    log += '\n' + s3_key.get_contents_as_string().decode()
-                else:
-                    log += '*** No log found on S3.\n'
+            if not log_loaded:
+                # load remote logs
+                remote_log_base = conf.get('core', 'REMOTE_BASE_LOG_FOLDER')
+                remote_log = os.path.join(remote_log_base, log_relative)
+                log += '\n*** Reading remote logs...\n'.format(remote_log)
+
+                # S3
+                if remote_log.startswith('s3:/'):
+                    log += utils.S3Log().read(remote_log, return_error=True)
+
+                # GCS
+                elif remote_log.startswith('gs:/'):
+                    log += utils.GCSLog().read(remote_log, return_error=True)
+
+                # unsupported
+                elif remote_log:
+                    log += '*** Unsupported remote log location.'
 
             session.commit()
             session.close()
