@@ -481,14 +481,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     }
 
     private def addSubqueryIfNeeded(plan: LogicalPlan): LogicalPlan = plan match {
-      case _: SubqueryAlias => plan
-      case _: Filter => plan
-      case _: Join => plan
-      case _: LocalLimit => plan
-      case _: GlobalLimit => plan
-      case _: SQLTable => plan
-      case _: Generate => plan
-      case _: OneRowRelation => plan
+      case _: SubqueryAlias |
+           _: Filter |
+           _: Join |
+           _: LocalLimit |
+           _: GlobalLimit |
+           _: SQLTable |
+           _: Generate |
+           OneRowRelation => plan
       case _ => addSubquery(plan)
     }
   }
