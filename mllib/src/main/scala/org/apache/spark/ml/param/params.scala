@@ -58,9 +58,8 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
   /**
    * Assert that the given value is valid for this parameter.
    *
-   * Note: Parameter checks involving interactions between multiple parameters should be
-   *       implemented in [[Params.validateParams()]].  Checks for input/output columns should be
-   *       implemented in [[org.apache.spark.ml.PipelineStage.transformSchema()]].
+   * Note: Parameter checks involving interactions between multiple parameters and input/output
+   * columns should be implemented in [[org.apache.spark.ml.PipelineStage.transformSchema()]].
    *
    * DEVELOPERS: This method is only called by [[ParamPair]], which means that all parameters
    *             should be specified via [[ParamPair]].
@@ -101,7 +100,26 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
   }
 
   /** Decodes a param value from JSON. */
-  def jsonDecode(json: String): T = {
+  def jsonDecode(json: String): T = Param.jsonDecode[T](json)
+
+  private[this] val stringRepresentation = s"${parent}__$name"
+
+  override final def toString: String = stringRepresentation
+
+  override final def hashCode: Int = toString.##
+
+  override final def equals(obj: Any): Boolean = {
+    obj match {
+      case p: Param[_] => (p.parent == parent) && (p.name == name)
+      case _ => false
+    }
+  }
+}
+
+private[ml] object Param {
+
+  /** Decodes a param value from JSON. */
+  def jsonDecode[T](json: String): T = {
     parse(json) match {
       case JString(x) =>
         x.asInstanceOf[T]
@@ -114,19 +132,6 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
         throw new NotImplementedError(
           "The default jsonDecode only supports string and vector. " +
             s"${this.getClass.getName} must override jsonDecode to support its value type.")
-    }
-  }
-
-  private[this] val stringRepresentation = s"${parent}__$name"
-
-  override final def toString: String = stringRepresentation
-
-  override final def hashCode: Int = toString.##
-
-  override final def equals(obj: Any): Boolean = {
-    obj match {
-      case p: Param[_] => (p.parent == parent) && (p.name == name)
-      case _ => false
     }
   }
 }
@@ -549,7 +554,9 @@ trait Params extends Identifiable with Serializable {
    * Parameter value checks which do not depend on other parameters are handled by
    * [[Param.validate()]].  This method does not handle input/output column parameters;
    * those are checked during schema validation.
+   * @deprecated Will be removed in 2.1.0. All the checks should be merged into transformSchema
    */
+  @deprecated("Will be removed in 2.1.0. Checks should be merged into transformSchema.", "2.0.0")
   def validateParams(): Unit = {
     // Do nothing by default.  Override to handle Param interactions.
   }

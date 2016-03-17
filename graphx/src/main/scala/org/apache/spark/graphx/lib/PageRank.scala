@@ -20,8 +20,8 @@ package org.apache.spark.graphx.lib
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
 import org.apache.spark.graphx._
+import org.apache.spark.internal.Logging
 
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
