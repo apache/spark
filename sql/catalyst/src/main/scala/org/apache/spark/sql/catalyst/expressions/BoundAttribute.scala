@@ -65,7 +65,9 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       val oev = ctx.currentVars(ordinal)
       ev.isNull = oev.isNull
       ev.value = oev.value
-      oev.code
+      val code = oev.code
+      oev.code = ""
+      code
     } else if (nullable) {
       s"""
         boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
