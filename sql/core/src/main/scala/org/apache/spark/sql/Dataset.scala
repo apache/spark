@@ -329,6 +329,7 @@ class Dataset[T] private[sql](
   /**
    * Prints the physical plan to the console for debugging purposes.
    *
+   * @group basic
    * @since 1.6.0
    */
   override def explain(): Unit = explain(extended = false)
