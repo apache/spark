@@ -537,6 +537,14 @@ object MimaExcludes {
         // SPARK-13927: add row/column iterator to local matrices
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix.rowIter"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix.colIter")
+      ) ++ Seq(
+        // [SPARK-13928] Move org.apache.spark.Logging into org.apache.spark.internal.Logging
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Logging"),
+        (problem: Problem) => problem match {
+          case MissingTypesProblem(_, missing)
+            if missing.map(_.fullName).sameElements(Seq("org.apache.spark.Logging")) => false
+          case _ => true
+        }
       )
     case v if v.startsWith("1.6") =>
       Seq(
