@@ -110,6 +110,8 @@ class CrossValidatorSuite
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)
 
+    cv.transformSchema(new StructType()) // This should pass.
+
     val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")
     cv.setEstimatorParamMaps(invalidParamMaps)
     intercept[IllegalArgumentException] {

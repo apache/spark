@@ -120,10 +120,6 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   override def transformSchema(schema: StructType): StructType = transformSchemaImpl(schema)
 
   @Since("1.5.0")
-  override def validateParams(): Unit = {
-  }
-
-  @Since("1.5.0")
   override def copy(extra: ParamMap): TrainValidationSplit = {
     val copied = defaultCopy(extra).asInstanceOf[TrainValidationSplit]
     if (copied.isDefined(estimator)) {
