@@ -19,9 +19,7 @@ package org.apache.spark.examples.mllib;
 
 
 import org.apache.spark.Accumulator;
-// $example on$
 import org.apache.spark.api.java.function.VoidFunction;
-// $example off$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
 // $example on$
