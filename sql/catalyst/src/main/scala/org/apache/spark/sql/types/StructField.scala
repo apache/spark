@@ -24,7 +24,9 @@ import org.json4s.JsonDSL._
  * A field inside a StructType.
  * @param name The name of this field.
  * @param dataType The data type of this field.
- * @param nullable Indicates if values of this field can be `null` values.
+ * @param nullable Indicates if values of this field can be `null` values. Note that this ONLY A HINT to the 
+ *                 optimiser, the calling code is responsible for ensuring that there is no null. It is NOT 
+ *                 a constraint that will be checked by the engine.
  * @param metadata The metadata of this field. The metadata should be preserved during
  *                 transformation if the content of the column is not modified, e.g, in selection.
  */
