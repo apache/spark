@@ -247,7 +247,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       */
   }
 
-  test("shuffle hash join") {
+  ignore("shuffle hash join") {
     val N = 2 << 20
     sqlContext.setConf("spark.sql.shuffle.partitions", "2")
     sqlContext.setConf("spark.sql.autoBroadcastJoinThreshold", "10000000")

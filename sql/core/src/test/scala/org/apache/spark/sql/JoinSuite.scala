@@ -46,6 +46,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: BroadcastHashJoin => j
+      case j: ShuffledHashJoin => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
       case j: SortMergeJoin => j
