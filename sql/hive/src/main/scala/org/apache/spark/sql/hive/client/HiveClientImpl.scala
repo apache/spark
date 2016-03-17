@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -298,8 +299,7 @@ private[hive] class HiveClientImpl(
     logDebug(s"Looking up $dbName.$tableName")
     Option(client.getTable(dbName, tableName, false)).map { h =>
       CatalogTable(
-        specifiedDatabase = Option(h.getDbName),
-        name = h.getTableName,
+        name = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL_TABLE
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED_TABLE
@@ -545,13 +545,13 @@ private[hive] class HiveClientImpl(
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
-    val catalogFunc = getFunction(db, oldName).copy(name = newName)
+    val catalogFunc = getFunction(db, oldName).copy(name = FunctionIdentifier(newName, Some(db)))
     val hiveFunc = toHiveFunction(catalogFunc, db)
     client.alterFunction(db, oldName, hiveFunc)
   }
 
   override def alterFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    client.alterFunction(db, func.name, toHiveFunction(func, db))
+    client.alterFunction(db, func.name.funcName, toHiveFunction(func, db))
   }
 
   override def getFunctionOption(
@@ -612,7 +612,7 @@ private[hive] class HiveClientImpl(
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
     new HiveFunction(
-      f.name,
+      f.name.funcName,
       db,
       f.className,
       null,
@@ -623,7 +623,8 @@ private[hive] class HiveClientImpl(
   }
 
   private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
-    new CatalogFunction(hf.getFunctionName, hf.getClassName)
+    val name = FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName))
+    new CatalogFunction(name, hf.getClassName)
   }
 
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {
@@ -639,7 +640,7 @@ private[hive] class HiveClientImpl(
   }
 
   private def toHiveTable(table: CatalogTable): HiveTable = {
-    val hiveTable = new HiveTable(table.database, table.name)
+    val hiveTable = new HiveTable(table.database, table.name.table)
     hiveTable.setTableType(table.tableType match {
       case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE
       case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE
