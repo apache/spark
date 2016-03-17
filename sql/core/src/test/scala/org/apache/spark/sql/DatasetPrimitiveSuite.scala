@@ -23,6 +23,10 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 case class IntClass(value: Int)
 
+package object packageobject {
+  case class PackageClass(value: Int)
+}
+
 class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
@@ -127,4 +131,10 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(Array("test")).toDS(), Array("test"))
     checkDataset(Seq(Array(Tuple1(1))).toDS(), Array(Tuple1(1)))
   }
+
+  test("package objects") {
+    import packageobject._
+    checkDataset(Seq(PackageClass(1)).toDS(), PackageClass(1))
+  }
+
 }
