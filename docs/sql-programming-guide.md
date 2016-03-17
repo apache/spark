@@ -122,13 +122,6 @@ Spark build. If these dependencies are not a problem for your application then u
 is recommended for the 1.3 release of Spark. Future releases will focus on bringing `SQLContext` up
 to feature parity with a `HiveContext`.
 
-The specific variant of SQL that is used to parse queries can also be selected using the
-`spark.sql.dialect` option. This parameter can be changed using either the `setConf` method on
-a `SQLContext` or by using a `SET key=value` command in SQL. For a `SQLContext`, the only dialect
-available is "sql" which uses a simple SQL parser provided by Spark SQL. In a `HiveContext`, the
-default is "hiveql", though "sql" is also available. Since the HiveQL parser is much more complete,
-this is recommended for most use cases.
-
 
 ## Creating DataFrames
 

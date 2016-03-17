@@ -80,7 +80,7 @@ class SQLContext private[sql](
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
-  // wants to create a new root SQLContext (a SLQContext that is not created by newSession).
+  // wants to create a new root SQLContext (a SQLContext that is not created by newSession).
   private val allowMultipleContexts =
     sparkContext.conf.getBoolean(
       SQLConf.ALLOW_MULTIPLE_CONTEXTS.key,
