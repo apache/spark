@@ -22,12 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Since, Experimental}
-import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
-import org.apache.spark.ml.param.{Param, ParamMap}
-import org.apache.spark.ml.util._
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
+import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types._
@@ -199,8 +199,8 @@ object RFormula extends DefaultParamsReadable[RFormula] {
 @Experimental
 class RFormulaModel private[feature](
     override val uid: String,
-    val resolvedFormula: ResolvedRFormula,
-    val pipelineModel: PipelineModel)
+    private[ml] val resolvedFormula: ResolvedRFormula,
+    private[ml] val pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {
 
   override def transform(dataset: DataFrame): DataFrame = {
@@ -333,17 +333,13 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
 
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
 
-  @Since("2.0.0")
   override def write: MLWriter = new ColumnPruner.ColumnPrunerWriter(this)
 }
 
-@Since("2.0.0")
 private object ColumnPruner extends MLReadable[ColumnPruner] {
 
-  @Since("2.0.0")
   override def read: MLReader[ColumnPruner] = new ColumnPrunerReader
 
-  @Since("2.0.0")
   override def load(path: String): ColumnPruner = super.load(path)
 
   /** [[MLWriter]] instance for [[ColumnPruner]] */
@@ -360,6 +356,7 @@ private object ColumnPruner extends MLReadable[ColumnPruner] {
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
+
   private class ColumnPrunerReader extends MLReader[ColumnPruner] {
 
     /** Checked against metadata when loading model */
@@ -430,17 +427,13 @@ private class VectorAttributeRewriter(
 
   override def copy(extra: ParamMap): VectorAttributeRewriter = defaultCopy(extra)
 
-  @Since("2.0.0")
   override def write: MLWriter = new VectorAttributeRewriter.VectorAttributeRewriterWriter(this)
 }
 
-@Since("2.0.0")
 private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewriter] {
 
-  @Since("2.0.0")
   override def read: MLReader[VectorAttributeRewriter] = new VectorAttributeRewriterReader
 
-  @Since("2.0.0")
   override def load(path: String): VectorAttributeRewriter = super.load(path)
 
   /** [[MLWriter]] instance for [[VectorAttributeRewriter]] */
@@ -458,6 +451,7 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
+
   private class VectorAttributeRewriterReader extends MLReader[VectorAttributeRewriter] {
 
     /** Checked against metadata when loading model */

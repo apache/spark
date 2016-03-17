@@ -271,7 +271,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       assert(model.resolvedFormula.terms === model2.resolvedFormula.terms)
       assert(model.resolvedFormula.hasIntercept === model2.resolvedFormula.hasIntercept)
 
-      assert(model.pipelineModel.uid === model.pipelineModel.uid)
+      assert(model.pipelineModel.uid === model2.pipelineModel.uid)
 
       model.pipelineModel.stages.zip(model2.pipelineModel.stages).foreach {
         case (transformer1, transformer2) =>
