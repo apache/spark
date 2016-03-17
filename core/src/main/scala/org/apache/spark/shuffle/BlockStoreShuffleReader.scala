@@ -55,8 +55,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       blockManager.wrapForCompression(blockId, inputStream)
     }
 
-    val ser = Serializer.getSerializer(dep.serializer)
-    val serializerInstance = ser.newInstance()
+    val serializerInstance = dep.serializer.newInstance()
 
     // Create a key/value iterator for each stream
     val recordIter = wrappedStreams.flatMap { wrappedStream =>
@@ -101,7 +100,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
         // Create an ExternalSorter to sort the data. Note that if spark.shuffle.spill is disabled,
         // the ExternalSorter won't spill to disk.
         val sorter =
-          new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = Some(ser))
+          new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = dep.serializer)
         sorter.insertAll(aggregatedIter)
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
