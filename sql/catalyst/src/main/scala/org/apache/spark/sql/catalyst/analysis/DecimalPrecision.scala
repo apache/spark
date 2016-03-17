@@ -61,7 +61,9 @@ import org.apache.spark.sql.types._
 object DecimalPrecision extends Rule[LogicalPlan] {
   import scala.math.{max, min}
 
-  private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
+  private def isNumericType(t: DataType): Boolean =
+    t == FloatType || t == DoubleType || t == ByteType ||
+      t == IntegerType || t == ShortType || t == LongType
 
   // Returns the wider decimal type that's wider than both of them
   def widerDecimalType(d1: DecimalType, d2: DecimalType): DecimalType = {
@@ -244,14 +246,10 @@ object DecimalPrecision extends Rule[LogicalPlan] {
     // and fixed-precision decimals in an expression with floats / doubles to doubles
     case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
       (left.dataType, right.dataType) match {
-        case (t: IntegralType, DecimalType.Fixed(p, s)) =>
+        case (t: NumericType, DecimalType.Fixed(p, s)) if isNumericType(t) =>
           b.makeCopy(Array(Cast(left, DecimalType.forType(t)), right))
-        case (DecimalType.Fixed(p, s), t: IntegralType) =>
+        case (DecimalType.Fixed(p, s), t: NumericType) if isNumericType(t) =>
           b.makeCopy(Array(left, Cast(right, DecimalType.forType(t))))
-        case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
-          b.makeCopy(Array(left, Cast(right, DoubleType)))
-        case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
-          b.makeCopy(Array(Cast(left, DoubleType), right))
         case _ =>
           b
       }
