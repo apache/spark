@@ -49,7 +49,9 @@ private[ml] trait PredictorParams extends Params
       featuresDataType: DataType): StructType = {
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
-    if (fitting) SchemaUtils.checkNumericType(schema, $(labelCol))
+    if (fitting) {
+      SchemaUtils.checkNumericType(schema, $(labelCol))
+    }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
 }

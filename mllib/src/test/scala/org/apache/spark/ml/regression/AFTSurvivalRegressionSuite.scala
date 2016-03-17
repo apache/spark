@@ -351,7 +351,9 @@ class AFTSurvivalRegressionSuite
   test("should support all NumericType labels") {
     val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
 
-    val aft = new AFTSurvivalRegression().setFeaturesCol("features")
+    val aft = new AFTSurvivalRegression()
+      .setFeaturesCol("features")
+      .setCensorCol("censor")
 
     val expected = aft.setLabelCol("label").fit(dfs(DoubleType))
     dfs.keys.filter(_ != DoubleType).foreach { t =>
@@ -368,6 +370,7 @@ class AFTSurvivalRegressionSuite
     val aft = new AFTSurvivalRegression()
       .setLabelCol("label")
       .setFeaturesCol("features")
+      .setCensorCol("censor")
 
     val thrown = intercept[IllegalArgumentException] {
       aft.fit(dfWithStringLabels)
