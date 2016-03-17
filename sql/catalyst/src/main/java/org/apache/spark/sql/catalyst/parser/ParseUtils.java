@@ -18,6 +18,8 @@
 
 package org.apache.spark.sql.catalyst.parser;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * A couple of utility methods that help with parsing ASTs.
  *
@@ -76,7 +78,7 @@ public final class ParseUtils {
           byte bVal = (byte) ((i3 - '0') + ((i2 - '0') * 8) + ((i1 - '0') * 8 * 8));
           byte[] bValArr = new byte[1];
           bValArr[0] = bVal;
-          String tmp = new String(bValArr);
+          String tmp = new String(bValArr, StandardCharsets.UTF_8);
           sb.append(tmp);
           i += 3;
           continue;

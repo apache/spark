@@ -56,7 +56,7 @@ import static org.mockito.Mockito.*;
 
 public class UnsafeExternalSorterSuite {
 
-  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
+  final LinkedList<File> spillFilesCreated = new LinkedList<>();
   final TestMemoryManager memoryManager =
     new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
@@ -80,7 +80,6 @@ public class UnsafeExternalSorterSuite {
     }
   };
 
-  SparkConf sparkConf;
   File tempDir;
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
@@ -99,7 +98,6 @@ public class UnsafeExternalSorterSuite {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    sparkConf = new SparkConf();
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
     spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);

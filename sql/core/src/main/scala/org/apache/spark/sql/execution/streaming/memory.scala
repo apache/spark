@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row, SQLContext}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, RowEncoder}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -55,11 +56,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   def schema: StructType = encoder.schema
 
   def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
-    new Dataset(sqlContext, logicalPlan)
+    Dataset(sqlContext, logicalPlan)
   }
 
   def toDF()(implicit sqlContext: SQLContext): DataFrame = {
-    new DataFrame(sqlContext, logicalPlan)
+    Dataset.newDataFrame(sqlContext, logicalPlan)
   }
 
   def addData(data: A*): Offset = {
@@ -100,7 +101,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
- * tests and does not provide durablility.
+ * tests and does not provide durability.
  */
 class MemorySink(schema: StructType) extends Sink with Logging {
   /** An order list of batches that have been written to this [[Sink]]. */

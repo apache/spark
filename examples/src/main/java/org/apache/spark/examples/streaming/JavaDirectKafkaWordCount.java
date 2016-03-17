@@ -63,8 +63,8 @@ public final class JavaDirectKafkaWordCount {
     SparkConf sparkConf = new SparkConf().setAppName("JavaDirectKafkaWordCount");
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.seconds(2));
 
-    HashSet<String> topicsSet = new HashSet<String>(Arrays.asList(topics.split(",")));
-    HashMap<String, String> kafkaParams = new HashMap<String, String>();
+    HashSet<String> topicsSet = new HashSet<>(Arrays.asList(topics.split(",")));
+    HashMap<String, String> kafkaParams = new HashMap<>();
     kafkaParams.put("metadata.broker.list", brokers);
 
     // Create direct kafka stream with brokers and topics
@@ -95,7 +95,7 @@ public final class JavaDirectKafkaWordCount {
       new PairFunction<String, String, Integer>() {
         @Override
         public Tuple2<String, Integer> call(String s) {
-          return new Tuple2<String, Integer>(s, 1);
+          return new Tuple2<>(s, 1);
         }
       }).reduceByKey(
         new Function2<Integer, Integer, Integer>() {

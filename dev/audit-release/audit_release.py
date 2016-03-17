@@ -116,8 +116,7 @@ original_dir = os.getcwd()
 # dependencies within those projects.
 modules = [
     "spark-core", "spark-mllib", "spark-streaming", "spark-repl",
-    "spark-graphx", "spark-streaming-flume", "spark-streaming-kafka",
-    "spark-streaming-mqtt", "spark-streaming-twitter", "spark-streaming-zeromq",
+    "spark-graphx", "spark-streaming-kafka",
     "spark-catalyst", "spark-sql", "spark-hive", "spark-streaming-kinesis-asl"
 ]
 modules = map(lambda m: "%s_%s" % (m, SCALA_BINARY_VERSION), modules)

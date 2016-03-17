@@ -49,8 +49,9 @@ public class JavaLatentDirichletAllocationExample {
         public Vector call(String s) {
           String[] sarray = s.trim().split(" ");
           double[] values = new double[sarray.length];
-          for (int i = 0; i < sarray.length; i++)
+          for (int i = 0; i < sarray.length; i++) {
             values[i] = Double.parseDouble(sarray[i]);
+          }
           return Vectors.dense(values);
         }
       }

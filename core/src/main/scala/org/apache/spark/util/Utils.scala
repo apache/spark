@@ -22,6 +22,7 @@ import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
@@ -49,6 +50,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
@@ -1529,7 +1531,7 @@ private[spark] object Utils extends Logging {
     rawMod + (if (rawMod < 0) mod else 0)
   }
 
-  // Handles idiosyncracies with hash (add more as required)
+  // Handles idiosyncrasies with hash (add more as required)
   // This method should be kept in sync with
   // org.apache.spark.network.util.JavaUtils#nonNegativeHash().
   def nonNegativeHash(obj: AnyRef): Int = {
@@ -1599,7 +1601,7 @@ private[spark] object Utils extends Logging {
    * @param f function to be executed. If prepare is not None, the running time of each call to f
    *          must be an order of magnitude longer than one millisecond for accurate timing.
    * @param prepare function to be executed before each call to f. Its running time doesn't count.
-   * @return the total time across all iterations (not couting preparation time)
+   * @return the total time across all iterations (not counting preparation time)
    */
   def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
     if (prepare.isEmpty) {
@@ -1819,15 +1821,6 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  lazy val isInInterpreter: Boolean = {
-    try {
-      val interpClass = classForName("org.apache.spark.repl.Main")
-      interpClass.getMethod("interp").invoke(null) != null
-    } catch {
-      case _: ClassNotFoundException => false
-    }
-  }
-
   /**
    * Return a well-formed URI for the file described by a user input string.
    *
@@ -1904,7 +1897,7 @@ private[spark] object Utils extends Logging {
     require(file.exists(), s"Properties file $file does not exist")
     require(file.isFile(), s"Properties file $file is not a normal file")
 
-    val inReader = new InputStreamReader(new FileInputStream(file), "UTF-8")
+    val inReader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)
     try {
       val properties = new Properties()
       properties.load(inReader)
@@ -2014,8 +2007,10 @@ private[spark] object Utils extends Logging {
       } catch {
         case e: Exception if isBindCollision(e) =>
           if (offset >= maxRetries) {
-            val exceptionMessage =
-              s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
+            val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
+              s"$maxRetries retries! Consider explicitly setting the appropriate port for the " +
+              s"service$serviceString (for example spark.ui.port for SparkUI) to an available " +
+              "port or increasing spark.port.maxRetries."
             val exception = new BindException(exceptionMessage)
             // restore original stack trace
             exception.setStackTrace(e.getStackTrace)
@@ -2342,7 +2337,7 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
 
       def read(): Int = if (iterator.hasNext) iterator.next() else -1
     }
-    val reader = new BufferedReader(new InputStreamReader(input))
+    val reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
     val stringBuilder = new StringBuilder
     var line = reader.readLine()
     while (line != null) {

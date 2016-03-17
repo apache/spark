@@ -16,8 +16,7 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.util.Arrays;
-import java.util.Iterator;
+import java.util.*;
 
 import org.apache.commons.lang.NotImplementedException;
 
@@ -56,6 +55,9 @@ public final class ColumnarBatch {
 
   // True if the row is filtered.
   private final boolean[] filteredRows;
+
+  // Column indices that cannot have null values.
+  private final Set<Integer> nullFilteredColumns;
 
   // Total number of rows that have been filtered.
   private int numRowsFiltered = 0;
@@ -254,6 +256,9 @@ public final class ColumnarBatch {
         while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
           ++rowId;
         }
+        if (rowId >= maxRows) {
+          throw new NoSuchElementException();
+        }
         row.rowId = rowId++;
         return row;
       }
@@ -280,11 +285,23 @@ public final class ColumnarBatch {
   }
 
   /**
-   * Sets the number of rows that are valid.
+   * Sets the number of rows that are valid. Additionally, marks all rows as "filtered" if one or
+   * more of their attributes are part of a non-nullable column.
    */
   public void setNumRows(int numRows) {
     assert(numRows <= this.capacity);
     this.numRows = numRows;
+
+    for (int ordinal : nullFilteredColumns) {
+      if (columns[ordinal].numNulls != 0) {
+        for (int rowId = 0; rowId < numRows; rowId++) {
+          if (!filteredRows[rowId] && columns[ordinal].getIsNull(rowId)) {
+            filteredRows[rowId] = true;
+            ++numRowsFiltered;
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -316,6 +333,17 @@ public final class ColumnarBatch {
   public ColumnVector column(int ordinal) { return columns[ordinal]; }
 
   /**
+   * Sets (replaces) the column at `ordinal` with column. This can be used to do very efficient
+   * projections.
+   */
+  public void setColumn(int ordinal, ColumnVector column) {
+    if (column instanceof OffHeapColumnVector) {
+      throw new NotImplementedException("Need to ref count columns.");
+    }
+    columns[ordinal] = column;
+  }
+
+  /**
    * Returns the row in this batch at `rowId`. Returned row is reused across calls.
    */
   public ColumnarBatch.Row getRow(int rowId) {
@@ -330,15 +358,24 @@ public final class ColumnarBatch {
    * in this batch will not include this row.
    */
   public final void markFiltered(int rowId) {
-    assert(filteredRows[rowId] == false);
+    assert(!filteredRows[rowId]);
     filteredRows[rowId] = true;
     ++numRowsFiltered;
+  }
+
+  /**
+   * Marks a given column as non-nullable. Any row that has a NULL value for the corresponding
+   * attribute is filtered out.
+   */
+  public final void filterNullsInColumn(int ordinal) {
+    nullFilteredColumns.add(ordinal);
   }
 
   private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
     this.schema = schema;
     this.capacity = maxRows;
     this.columns = new ColumnVector[schema.size()];
+    this.nullFilteredColumns = new HashSet<>();
     this.filteredRows = new boolean[maxRows];
 
     for (int i = 0; i < schema.fields().length; ++i) {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import org.junit.Assert;
@@ -41,7 +42,7 @@ public class UnsafeInMemorySorterSuite {
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int length) {
     final byte[] strBytes = new byte[length];
     Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, length);
-    return new String(strBytes);
+    return new String(strBytes, StandardCharsets.UTF_8);
   }
 
   @Test
@@ -79,7 +80,7 @@ public class UnsafeInMemorySorterSuite {
     // Write the records into the data page:
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
-      final byte[] strBytes = str.getBytes("utf-8");
+      final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
       Platform.putInt(baseObject, position, strBytes.length);
       position += 4;
       Platform.copyMemory(
