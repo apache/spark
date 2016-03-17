@@ -133,7 +133,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private val replayExecutor: ExecutorService = {
     if (!conf.contains("spark.testing")) {
-      ThreadUtils.newDaemonSingleThreadExecutor("log-replay-executor")
+      val numProcessors = Runtime.getRuntime.availableProcessors()
+      ThreadUtils.newDaemonFixedThreadPool(numProcessors, "log-replay-executor")
     } else {
       MoreExecutors.sameThreadExecutor()
     }
@@ -297,8 +298,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       if (logInfos.nonEmpty) {
         logDebug(s"New/updated attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
       }
-      logInfos.grouped(20)
-        .map { batch =>
+      logInfos.map { batch =>
           replayExecutor.submit(new Runnable {
             override def run(): Unit = mergeApplicationListing(batch)
           })
@@ -385,9 +385,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Replay the log files in the list and merge the list of old applications with new ones
    */
-  private def mergeApplicationListing(logs: Seq[FileStatus]): Unit = {
-    val newAttempts = logs.flatMap { fileStatus =>
-      try {
+  private def mergeApplicationListing(fileStatus: FileStatus): Unit = {
+    val newAttempts = try {
         val bus = new ReplayListenerBus()
         val res = replay(fileStatus, bus)
         res match {
@@ -403,7 +402,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             e)
           None
       }
-    }
 
     if (newAttempts.isEmpty) {
       return
@@ -413,45 +411,48 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // contains both the new app attempt, and those that were already loaded in the existing apps
     // map. If an attempt has been updated, it replaces the old attempt in the list.
     val newAppMap = new mutable.HashMap[String, FsApplicationHistoryInfo]()
-    newAttempts.foreach { attempt =>
-      val appInfo = newAppMap.get(attempt.appId)
-        .orElse(applications.get(attempt.appId))
-        .map { app =>
-          val attempts =
-            app.attempts.filter(_.attemptId != attempt.attemptId).toList ++ List(attempt)
-          new FsApplicationHistoryInfo(attempt.appId, attempt.name,
-            attempts.sortWith(compareAttemptInfo))
+
+    applications.synchronized {
+      newAttempts.foreach { attempt =>
+        val appInfo = newAppMap.get(attempt.appId)
+          .orElse(applications.get(attempt.appId))
+          .map { app =>
+            val attempts =
+              app.attempts.filter(_.attemptId != attempt.attemptId) ++ List(attempt)
+            new FsApplicationHistoryInfo(attempt.appId, attempt.name,
+              attempts.sortWith(compareAttemptInfo))
+          }
+          .getOrElse(new FsApplicationHistoryInfo(attempt.appId, attempt.name, List(attempt)))
+        newAppMap(attempt.appId) = appInfo
+      }
+
+      // Merge the new app list with the existing one, maintaining the expected ordering (descending
+      // end time). Maintaining the order is important to avoid having to sort the list every time
+      // there is a request for the log list.
+      val newApps = newAppMap.values.toSeq.sortWith(compareAppInfo)
+      val mergedApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
+      def addIfAbsent(info: FsApplicationHistoryInfo): Unit = {
+        if (!mergedApps.contains(info.id)) {
+          mergedApps += (info.id -> info)
         }
-        .getOrElse(new FsApplicationHistoryInfo(attempt.appId, attempt.name, List(attempt)))
-      newAppMap(attempt.appId) = appInfo
-    }
-
-    // Merge the new app list with the existing one, maintaining the expected ordering (descending
-    // end time). Maintaining the order is important to avoid having to sort the list every time
-    // there is a request for the log list.
-    val newApps = newAppMap.values.toSeq.sortWith(compareAppInfo)
-    val mergedApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
-    def addIfAbsent(info: FsApplicationHistoryInfo): Unit = {
-      if (!mergedApps.contains(info.id)) {
-        mergedApps += (info.id -> info)
       }
-    }
 
-    val newIterator = newApps.iterator.buffered
-    val oldIterator = applications.values.iterator.buffered
-    while (newIterator.hasNext && oldIterator.hasNext) {
-      if (newAppMap.contains(oldIterator.head.id)) {
-        oldIterator.next()
-      } else if (compareAppInfo(newIterator.head, oldIterator.head)) {
-        addIfAbsent(newIterator.next())
-      } else {
-        addIfAbsent(oldIterator.next())
+      val newIterator = newApps.iterator.buffered
+      val oldIterator = applications.values.iterator.buffered
+      while (newIterator.hasNext && oldIterator.hasNext) {
+        if (newAppMap.contains(oldIterator.head.id)) {
+          oldIterator.next()
+        } else if (compareAppInfo(newIterator.head, oldIterator.head)) {
+          addIfAbsent(newIterator.next())
+        } else {
+          addIfAbsent(oldIterator.next())
+        }
       }
-    }
-    newIterator.foreach(addIfAbsent)
-    oldIterator.foreach(addIfAbsent)
+      newIterator.foreach(addIfAbsent)
+      oldIterator.foreach(addIfAbsent)
 
-    applications = mergedApps
+      applications = mergedApps
+    }
   }
 
   /**
