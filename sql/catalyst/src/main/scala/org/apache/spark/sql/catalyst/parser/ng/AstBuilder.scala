@@ -109,8 +109,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case nCtx =>
           val namedQuery = visitNamedQuery(nCtx)
           (namedQuery.alias, namedQuery)
-      }.toMap
-      With(query, ctes)
+      }
+
+      // Check for duplicate names.
+      ctes.groupBy(_._1).filter(_._2.size > 1).foreach {
+        case (name, _) =>
+          throw new ParseException(
+            s"Name '$name' is used for multiple common table expressions", ctx)
+      }
+
+      With(query, ctes.toMap)
     }
   }
 
@@ -186,7 +194,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       _.partitionVal.asScala.map {
         pVal =>
           val name = pVal.identifier.getText
-          val value = Option(pVal.constant).map(c => unescapeSQLString(c.getText))
+          val value = Option(pVal.constant).map(c => expression(c).toString)
           name -> value
       }
     }.toMap
@@ -239,13 +247,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported", ctx)
     }
 
-    // LIMIT
-    val withLimit = withOrder.optional(limit) {
-      Limit(typedVisit(limit), withOrder)
-    }
-
     // WINDOWS
-    withLimit.optionalMap(windows)(withWindows)
+    val withWindow = withOrder.optionalMap(windows)(withWindows)
+
+    // LIMIT
+    withWindow.optional(limit) {
+      Limit(typedVisit(limit), withWindow)
+    }
   }
 
   /**
@@ -275,10 +283,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     def filter(ctx: BooleanExpressionContext, plan: LogicalPlan): LogicalPlan = {
       Filter(expression(ctx), plan)
     }
-    val withFilter = relation.optionalMap(where)(filter)
 
     // Expressions.
     val expressions = namedExpression.asScala.map(visit).map {
+      case e: NamedExpression => e
       case e: Expression => UnresolvedAlias(e)
     }
 
@@ -286,6 +294,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     kind.getType match {
       case SqlBaseParser.MAP | SqlBaseParser.REDUCE | SqlBaseParser.TRANSFORM =>
         // Transform
+
+        // Add where.
+        val withFilter = relation.optionalMap(where)(filter)
 
         // Create the attributes.
         val attributes = if (colTypeList != null) {
@@ -312,13 +323,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // Regular select
 
         // Add lateral views.
-        val withLateralView = ctx.lateralView.asScala.foldLeft(withFilter)(withGenerate)
+        val withLateralView = ctx.lateralView.asScala.foldLeft(relation)(withGenerate)
+
+        // Add where.
+        val withFilter = withLateralView.optionalMap(where)(filter)
 
         // Add aggregation or a project.
         val withProject = if (aggregation != null) {
-          withAggregation(aggregation, expressions, withLateralView)
+          withAggregation(aggregation, expressions, withFilter)
         } else {
-          Project(expressions, withLateralView)
+          Project(expressions, withFilter)
         }
 
         // Having
@@ -349,7 +363,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * separated) relations here, these get converted into a single plan by condition-less inner join.
    */
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
-    ctx.relation.asScala.map(plan).reduceLeft(Join(_, _, Inner, None))
+    val from = ctx.relation.asScala.map(plan).reduceLeft(Join(_, _, Inner, None))
+    ctx.lateralView.asScala.foldLeft(from)(withGenerate)
   }
 
   /**
@@ -398,7 +413,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     //               range between 2 preceding and 2 following),
     //        w2 as w1
     val windowMap = baseWindowMap.mapValues {
-      case WindowSpecReference(name) => baseWindowMap(name).asInstanceOf[WindowSpecDefinition]
+      case WindowSpecReference(name) =>
+        baseWindowMap.get(name) match {
+          case Some(spec: WindowSpecDefinition) =>
+            spec
+          case Some(ref) =>
+            throw new ParseException(s"Window reference '$name' is not a window specification", ctx)
+          case None =>
+            throw new ParseException(s"Cannot resolve window reference '$name'", ctx)
+        }
       case spec: WindowSpecDefinition => spec
     }
     WithWindowDefinition(windowMap, query)
@@ -416,7 +439,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     if (GROUPING != null) {
       // GROUP BY .... GROUPING SETS (...)
-      // TODO use new expression set here?
       val expressionMap = groupByExpressions.zipWithIndex.toMap
       val numExpressions = expressionMap.size
       val mask = (1 << numExpressions) - 1
@@ -456,14 +478,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val expressions = expressionList(ctx.expression)
 
     // Create the generator.
-    // TODO Add support for other generators.
     val generator = ctx.qualifiedName.getText.toLowerCase match {
       case "explode" if expressions.size == 1 =>
         Explode(expressions.head)
       case "json_tuple" =>
         JsonTuple(expressions)
       case other =>
-        throw new ParseException(s"Generator function '$other' is not supported", ctx)
+        withGenerator(other, expressions, ctx)
     }
 
     Generate(
@@ -473,6 +494,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       Some(ctx.tblName.getText.toLowerCase),
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),
       query)
+  }
+
+  /**
+   * Create a [[Generator]]. Override this method in order to support custom Generators.
+   */
+  protected def withGenerator(
+      name: String,
+      expressions: Seq[Expression],
+      ctx: LateralViewContext): Generator = {
+    throw new ParseException(s"Generator function '$name' is not supported", ctx)
   }
 
   /**
@@ -577,7 +608,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitInlineTable(ctx: InlineTableContext): LogicalPlan = withOrigin(ctx) {
     // Get the backing expressions.
-    val expressions = ctx.expression.asScala.map(expression)
+    val expressions = ctx.expression.asScala.map { eCtx =>
+      val e = expression(eCtx)
+      assert(e.foldable, "All expressions in an inline table must be constants.", eCtx)
+      e
+    }
 
     // Validate and evaluate the rows.
     val (structType, structConstructor) = expressions.head.dataType match {
@@ -589,13 +624,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
     val rows = expressions.map {
       case expression =>
-        assert(expression.foldable, "All expressions in an inline table must be constants.", ctx)
         val safe = Cast(structConstructor(expression), structType)
         safe.eval().asInstanceOf[InternalRow]
     }
 
     // Construct attributes.
-    val baseAttributes = structType.toAttributes
+    val baseAttributes = structType.toAttributes.map(_.withNullability(true))
     val attributes = if (ctx.columnAliases != null) {
       val aliases = visitColumnAliases(ctx.columnAliases)
       assert(aliases.size == baseAttributes.size,
@@ -605,7 +639,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       baseAttributes
     }
 
-    LocalRelation(attributes, rows)
+    // Create plan and add an alias if a name has been defined.
+    LocalRelation(attributes, rows).optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**
@@ -614,7 +649,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedRelation(ctx: AliasedRelationContext): LogicalPlan = withOrigin(ctx) {
-    aliasPlan(ctx.identifier, plan(ctx.relation()))
+    plan(ctx.relation).optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**
@@ -623,16 +658,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    aliasPlan(ctx.identifier, plan(ctx.queryNoWith))
+    plan(ctx.queryNoWith).optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**
-   * Create an alias (SubqueryAlias) for a LogicalPlan. The alias is allowed to be optional.
+   * Create an alias (SubqueryAlias) for a LogicalPlan.
    */
   private def aliasPlan(alias: IdentifierContext, plan: LogicalPlan): LogicalPlan = {
-    plan.optional(alias) {
-      SubqueryAlias(alias.getText, plan)
-    }
+    SubqueryAlias(alias.getText, plan)
   }
 
   /**
@@ -1016,7 +1049,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[CreateStruct]] expression.
    */
   override def visitRowConstructor(ctx: RowConstructorContext): Expression = withOrigin(ctx) {
-    CreateStruct(ctx.expression().asScala.map(expression))
+    CreateStruct(ctx.expression.asScala.map(expression))
   }
 
   /**

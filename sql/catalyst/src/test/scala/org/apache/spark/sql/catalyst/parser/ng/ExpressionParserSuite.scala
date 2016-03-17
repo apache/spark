@@ -27,14 +27,25 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Test basic expression parsing. If a type of expression is supported it should be tested here.
+ *
+ * Please note that some of the expressions test don't have to be sound expressions, only their
+ * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
+ * CheckAnalysis classes.
  */
-class ExpressionParseSuite extends PlanTest {
+class ExpressionParserSuite extends PlanTest {
   import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
   def assertEqual(sqlCommand: String, e: Expression): Unit = {
     compareExpressions(parseExpression(sqlCommand), e)
+  }
+
+  def intercept(sqlCommand: String, messages: String*): Unit = {
+    val e = intercept[ParseException](parseExpression(sqlCommand))
+    messages.foreach { message =>
+      assert(e.message.contains(message))
+    }
   }
 
   test("star expressions") {
@@ -91,10 +102,7 @@ class ExpressionParseSuite extends PlanTest {
   }
 
   test("exists expression") {
-    val e = intercept[ParseException] {
-      parseExpression("exists (select 1 from b where b.x = a.x)")
-    }
-    assert(e.message.contains("EXISTS clauses are not supported"))
+    intercept("exists (select 1 from b where b.x = a.x)", "EXISTS clauses are not supported")
   }
 
   test("comparison expressions") {
@@ -120,10 +128,7 @@ class ExpressionParseSuite extends PlanTest {
   }
 
   test("in sub-query") {
-    val e = intercept[ParseException] {
-      parseExpression("a in (select b from c)")
-    }
-    assert(e.getMessage.contains("IN with a Sub-query is currently not supported"))
+    intercept("a in (select b from c)", "IN with a Sub-query is currently not supported")
   }
 
   test("like expressions") {
@@ -225,22 +230,15 @@ class ExpressionParseSuite extends PlanTest {
     }
 
     // We cannot use non integer constants.
-    val e1 = intercept[ParseException] {
-      parseExpression("foo(*) over (partition by a order by b rows 10.0 preceding)")
-    }
-    assert(e1.message.contains("Frame bound value must be a constant integer."))
+    intercept("foo(*) over (partition by a order by b rows 10.0 preceding)",
+      "Frame bound value must be a constant integer.")
 
     // We cannot use an arbitrary expression.
-    val e2 = intercept[ParseException] {
-      parseExpression("foo(*) over (partition by a order by b rows exp(b) preceding)")
-    }
-    assert(e2.message.contains("Frame bound value must be a constant integer."))
+    intercept("foo(*) over (partition by a order by b rows exp(b) preceding)",
+      "Frame bound value must be a constant integer.")
 
     // We cannot have a frame without an order by clause.
-    val e3 = intercept[ParseException] {
-      parseExpression("foo(*) over (partition by a rows 10 preceding)")
-    }
-    assert(e3.message.contains("mismatched input 'rows'"))
+    intercept("foo(*) over (partition by a rows 10 preceding)", "mismatched input 'rows'")
   }
 
   test("row constructor") {
@@ -280,7 +278,7 @@ class ExpressionParseSuite extends PlanTest {
     // Quoted using a keyword.
     assertEqual("`select`", 'select)
 
-    // Unqouted using an unreserved keyword.
+    // Unquoted using an unreserved keyword.
     assertEqual("columns", 'columns)
   }
 
@@ -310,10 +308,7 @@ class ExpressionParseSuite extends PlanTest {
     }
 
     // Unsupported datatype.
-    val e = intercept[ParseException] {
-      parseExpression("GEO '(10,-6)'")
-    }
-    assert(e.message.contains("Literals of type 'GEO' are currently not supported."))
+    intercept("GEO '(10,-6)'", "Literals of type 'GEO' are currently not supported.")
   }
 
   test("literals") {
@@ -341,27 +336,19 @@ class ExpressionParseSuite extends PlanTest {
     assertEqual("900e-1", 90d)
     assertEqual("900.0E-1", 90d)
     assertEqual("9.e+1", 90d)
-    intercept[ParseException] {
-      parseExpression(".e3")
-    }
+    intercept(".e3")
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))
-    intercept[ParseException] {
-      parseExpression("-1000Y")
-    }
+    intercept("-1000Y")
 
     // Small Int Literal
     assertEqual("10S", Literal(10.toShort))
-    intercept[ParseException] {
-      parseExpression("40000S")
-    }
+    intercept("40000S")
 
     // Long Int Literal
     assertEqual("10L", Literal(10L))
-    intercept[ParseException] {
-      parseExpression("78732472347982492793712334L")
-    }
+    intercept("78732472347982492793712334L")
 
     // Double Literal
     assertEqual("10.0D", Literal(10.0D))
@@ -410,10 +397,7 @@ class ExpressionParseSuite extends PlanTest {
     }
 
     // Empty interval statement
-    val e1 = intercept[ParseException] {
-      parseExpression("interval")
-    }
-    assert(e1.message.contains("at least one time unit should be given for interval literal"))
+    intercept("interval", "at least one time unit should be given for interval literal")
 
     // Single Intervals.
     val units = Seq(
@@ -443,10 +427,7 @@ class ExpressionParseSuite extends PlanTest {
     assertEqual("interval -13.123456789 second", intervalLiteral("second", "-13.123456789"))
 
     // Non Existing unit
-    val e2 = intercept[ParseException] {
-      parseExpression("interval 10 nanoseconds")
-    }
-    assert(e2.message.contains("No interval can be constructed"))
+    intercept("interval 10 nanoseconds", "No interval can be constructed")
 
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
@@ -469,10 +450,7 @@ class ExpressionParseSuite extends PlanTest {
     }
 
     // Unknown FROM TO intervals
-    val e3 = intercept[ParseException] {
-      parseExpression("interval 10 month to second")
-    }
-    assert(e3.message.contains("Intervals FROM month TO second are not supported."))
+    intercept("interval 10 month to second", "Intervals FROM month TO second are not supported.")
 
     // Composed intervals.
     assertEqual(

@@ -161,7 +161,7 @@ sortItem
     ;
 
 querySpecification
-    : ((SELECT kind=(TRANSFORM | MAP | REDUCE)) '(' namedExpression (',' namedExpression)* ')'
+    : (((SELECT kind=TRANSFORM | kind=MAP | kind=REDUCE)) '(' namedExpression (',' namedExpression)* ')'
        inRowFormat=rowFormat?
        USING script=STRING
        (AS (columnAliasList | colTypeList | ('(' (columnAliasList | colTypeList) ')')))?
@@ -179,7 +179,7 @@ querySpecification
     ;
 
 fromClause
-    : FROM relation (',' relation)*
+    : FROM relation (',' relation)* lateralView*
     ;
 
 aggregation
