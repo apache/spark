@@ -35,7 +35,8 @@ def process_subdir(subdir):
         if dags_folder.rstrip('/') not in subdir.rstrip('/'):
             raise AirflowException(
                 "subdir has to be part of your DAGS_FOLDER as defined in your "
-                "airflow.cfg")
+                "airflow.cfg. DAGS_FOLDER is {df} and subdir is {sd}".format(
+                    df=dags_folder, sd=subdir))
         return subdir
 
 
