@@ -127,10 +127,10 @@ private[ml] trait HasRawPredictionCol extends Params {
 private[ml] trait HasProbabilityCol extends Params {
 
   /**
-   * Param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
+   * Param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
    * @group param
    */
-  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
+  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities")
 
   setDefault(probabilityCol, "probability")
 
@@ -139,7 +139,22 @@ private[ml] trait HasProbabilityCol extends Params {
 }
 
 /**
- * Trait for shared param threshold.
+ * Trait for shared param varianceCol.
+ */
+private[ml] trait HasVarianceCol extends Params {
+
+  /**
+   * Param for Column name for the biased sample variance of prediction.
+   * @group param
+   */
+  final val varianceCol: Param[String] = new Param[String](this, "varianceCol", "Column name for the biased sample variance of prediction")
+
+  /** @group getParam */
+  final def getVarianceCol: String = $(varianceCol)
+}
+
+/**
+ * Trait for shared param threshold (default: 0.5).
  */
 private[ml] trait HasThreshold extends Params {
 
@@ -149,8 +164,25 @@ private[ml] trait HasThreshold extends Params {
    */
   final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
 
+  setDefault(threshold, 0.5)
+
   /** @group getParam */
-  final def getThreshold: Double = $(threshold)
+  def getThreshold: Double = $(threshold)
+}
+
+/**
+ * Trait for shared param thresholds.
+ */
+private[ml] trait HasThresholds extends Params {
+
+  /**
+   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
+   * @group param
+   */
+  final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold", (t: Array[Double]) => t.forall(_ >= 0))
+
+  /** @group getParam */
+  def getThresholds: Array[Double] = $(thresholds)
 }
 
 /**
@@ -206,10 +238,10 @@ private[ml] trait HasOutputCol extends Params {
 private[ml] trait HasCheckpointInterval extends Params {
 
   /**
-   * Param for checkpoint interval (>= 1).
+   * Param for set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
    * @group param
    */
-  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval (>= 1)", ParamValidators.gtEq(1))
+  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations", (interval: Int) => interval == -1 || interval >= 1)
 
   /** @group getParam */
   final def getCheckpointInterval: Int = $(checkpointInterval)
@@ -233,15 +265,30 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
+ * Trait for shared param handleInvalid.
+ */
+private[ml] trait HasHandleInvalid extends Params {
+
+  /**
+   * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
+   * @group param
+   */
+  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later", ParamValidators.inArray(Array("skip", "error")))
+
+  /** @group getParam */
+  final def getHandleInvalid: String = $(handleInvalid)
+}
+
+/**
  * Trait for shared param standardization (default: true).
  */
 private[ml] trait HasStandardization extends Params {
 
   /**
-   * Param for whether to standardize the training features before fitting the model..
+   * Param for whether to standardize the training features before fitting the model.
    * @group param
    */
-  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "whether to standardize the training features before fitting the model.")
+  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "whether to standardize the training features before fitting the model")
 
   setDefault(standardization, true)
 
@@ -272,10 +319,10 @@ private[ml] trait HasSeed extends Params {
 private[ml] trait HasElasticNetParam extends Params {
 
   /**
-   * Param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty..
+   * Param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
    * @group param
    */
-  final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", ParamValidators.inRange(0, 1))
+  final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
   final def getElasticNetParam: Double = $(elasticNetParam)
@@ -302,12 +349,44 @@ private[ml] trait HasTol extends Params {
 private[ml] trait HasStepSize extends Params {
 
   /**
-   * Param for Step size to be used for each iteration of optimization..
+   * Param for Step size to be used for each iteration of optimization.
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.")
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization")
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
+}
+
+/**
+ * Trait for shared param weightCol.
+ */
+private[ml] trait HasWeightCol extends Params {
+
+  /**
+   * Param for weight column name. If this is not set or empty, we treat all instance weights as 1.0.
+   * @group param
+   */
+  final val weightCol: Param[String] = new Param[String](this, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0")
+
+  /** @group getParam */
+  final def getWeightCol: String = $(weightCol)
+}
+
+/**
+ * Trait for shared param solver (default: "auto").
+ */
+private[ml] trait HasSolver extends Params {
+
+  /**
+   * Param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+   * @group param
+   */
+  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'")
+
+  setDefault(solver, "auto")
+
+  /** @group getParam */
+  final def getSolver: String = $(solver)
 }
 // scalastyle:on

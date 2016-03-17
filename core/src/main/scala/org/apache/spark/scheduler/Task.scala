@@ -17,23 +17,23 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{TaskContextImpl, TaskContext}
+import org.apache.spark.{Accumulator, SparkEnv, TaskContext, TaskContextImpl}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.unsafe.memory.TaskMemoryManager
-import org.apache.spark.util.ByteBufferInputStream
-import org.apache.spark.util.Utils
-
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
- * - [[org.apache.spark.scheduler.ShuffleMapTask]]
- * - [[org.apache.spark.scheduler.ResultTask]]
+ *
+ *  - [[org.apache.spark.scheduler.ShuffleMapTask]]
+ *  - [[org.apache.spark.scheduler.ResultTask]]
  *
  * A Spark job consists of one or more stages. The very last stage in a job consists of multiple
  * ResultTasks, while earlier stages consist of ShuffleMapTasks. A ResultTask executes the task
@@ -41,36 +41,66 @@ import org.apache.spark.util.Utils
  * and divides the task output to multiple buckets (based on the task's partitioner).
  *
  * @param stageId id of the stage this task belongs to
+ * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
+ * @param initialAccumulators initial set of accumulators to be used in this task for tracking
+ *                            internal metrics. Other accumulators will be registered later when
+ *                            they are deserialized on the executors.
  */
-private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
+private[spark] abstract class Task[T](
+    val stageId: Int,
+    val stageAttemptId: Int,
+    val partitionId: Int,
+    val initialAccumulators: Seq[Accumulator[_]]) extends Serializable {
 
   /**
-   * Called by [[Executor]] to run this task.
+   * Called by [[org.apache.spark.executor.Executor]] to run this task.
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
-   * @return the result of the task
+   * @return the result of the task along with updates of Accumulators.
    */
-  final def run(taskAttemptId: Long, attemptNumber: Int): T = {
+  final def run(
+      taskAttemptId: Long,
+      attemptNumber: Int,
+      metricsSystem: MetricsSystem): T = {
+    SparkEnv.get.blockManager.registerTask(taskAttemptId)
     context = new TaskContextImpl(
-      stageId = stageId,
-      partitionId = partitionId,
-      taskAttemptId = taskAttemptId,
-      attemptNumber = attemptNumber,
-      taskMemoryManager = taskMemoryManager,
-      runningLocally = false)
+      stageId,
+      partitionId,
+      taskAttemptId,
+      attemptNumber,
+      taskMemoryManager,
+      metricsSystem,
+      initialAccumulators)
     TaskContext.setTaskContext(context)
-    context.taskMetrics.setHostname(Utils.localHostName())
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)
     }
     try {
       runTask(context)
+    } catch { case e: Throwable =>
+      // Catch all errors; run task failure callbacks, and rethrow the exception.
+      context.markTaskFailed(e)
+      throw e
     } finally {
+      // Call the task completion callbacks.
       context.markTaskCompleted()
-      TaskContext.unset()
+      try {
+        Utils.tryLogNonFatalError {
+          // Release memory used by this thread for unrolling blocks
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+          // Notify any tasks waiting for execution memory to be freed to wake up and try to
+          // acquire memory again. This makes impossible the scenario where a task sleeps forever
+          // because there are no other tasks left to notify it. Since this is safe to do but may
+          // not be strictly necessary, we should revisit whether we can remove this in the future.
+          val memoryManager = SparkEnv.get.memoryManager
+          memoryManager.synchronized { memoryManager.notifyAll() }
+        }
+      } finally {
+        TaskContext.unset()
+      }
     }
   }
 
@@ -112,6 +142,18 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   def executorDeserializeTime: Long = _executorDeserializeTime
 
   /**
+   * Collect the latest values of accumulators used in this task. If the task failed,
+   * filter out the accumulators whose values should not be included on failures.
+   */
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulableInfo] = {
+    if (context != null) {
+      context.taskMetrics.accumulatorUpdates().filter { a => !taskFailed || a.countFailedValues }
+    } else {
+      Seq.empty[AccumulableInfo]
+    }
+  }
+
+  /**
    * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark
    * code and user code to properly handle the flag. This function should be idempotent so it can
    * be called multiple times.
@@ -146,7 +188,7 @@ private[spark] object Task {
       serializer: SerializerInstance)
     : ByteBuffer = {
 
-    val out = new ByteArrayOutputStream(4096)
+    val out = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(out)
 
     // Write currentFiles
@@ -165,9 +207,9 @@ private[spark] object Task {
 
     // Write the task itself and finish
     dataOut.flush()
-    val taskBytes = serializer.serialize(task).array()
-    out.write(taskBytes)
-    ByteBuffer.wrap(out.toByteArray)
+    val taskBytes = serializer.serialize(task)
+    Utils.writeByteBuffer(taskBytes, out)
+    out.toByteBuffer
   }
 
   /**

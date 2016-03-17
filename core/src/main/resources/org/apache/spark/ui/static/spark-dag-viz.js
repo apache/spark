@@ -73,12 +73,23 @@ var StagePageVizConstants = {
 };
 
 /*
+ * Return "expand-dag-viz-arrow-job" if forJob is true.
+ * Otherwise, return "expand-dag-viz-arrow-stage".
+ */
+function expandDagVizArrowKey(forJob) {
+  return forJob ? "expand-dag-viz-arrow-job" : "expand-dag-viz-arrow-stage";
+}
+
+/*
  * Show or hide the RDD DAG visualization.
  *
  * The graph is only rendered the first time this is called.
  * This is the narrow interface called from the Scala UI code.
  */
 function toggleDagViz(forJob) {
+  var status = window.localStorage.getItem(expandDagVizArrowKey(forJob)) == "true";
+  status = !status;
+
   var arrowSelector = ".expand-dag-viz-arrow";
   $(arrowSelector).toggleClass('arrow-closed');
   $(arrowSelector).toggleClass('arrow-open');
@@ -93,7 +104,23 @@ function toggleDagViz(forJob) {
     // Save the graph for later so we don't have to render it again
     graphContainer().style("display", "none");
   }
+
+  window.localStorage.setItem(expandDagVizArrowKey(forJob), "" + status);
 }
+
+$(function (){
+  if ($("#stage-dag-viz").length &&
+      window.localStorage.getItem(expandDagVizArrowKey(false)) == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem(expandDagVizArrowKey(false), "false");
+    toggleDagViz(false);
+  } else if ($("#job-dag-viz").length &&
+      window.localStorage.getItem(expandDagVizArrowKey(true)) == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem(expandDagVizArrowKey(true), "false");
+    toggleDagViz(true);
+  }
+});
 
 /*
  * Render the RDD DAG visualization.
@@ -195,10 +222,11 @@ function renderDagVizForJob(svgContainer) {
       var attemptId = 0
       var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
         .select("a.name-link")
-        .attr("href") + "&expandDagViz=true";
+        .attr("href");
       container = svgContainer
         .append("a")
         .attr("xlink:href", stageLink)
+        .attr("onclick", "window.localStorage.setItem(expandDagVizArrowKey(false), true)")
         .append("g")
         .attr("id", containerId);
     }
@@ -257,7 +285,7 @@ function renderDot(dot, container, forJob) {
   renderer(container, g);
 
   // Find the stage cluster and mark it for styling and post-processing
-  container.selectAll("g.cluster[name*=\"Stage\"]").classed("stage", true);
+  container.selectAll("g.cluster[name^=\"Stage \"]").classed("stage", true);
 }
 
 /* -------------------- *

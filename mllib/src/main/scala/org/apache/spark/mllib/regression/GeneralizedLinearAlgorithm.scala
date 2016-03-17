@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.feature.StandardScaler
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.mllib.feature.StandardScaler
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.optimization._
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -34,9 +34,13 @@ import org.apache.spark.storage.StorageLevel
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
+ *
  */
+@Since("0.8.0")
 @DeveloperApi
-abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double)
+abstract class GeneralizedLinearModel @Since("1.0.0") (
+    @Since("1.0.0") val weights: Vector,
+    @Since("0.8.0") val intercept: Double)
   extends Serializable {
 
   /**
@@ -53,7 +57,9 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    *
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
+   *
    */
+  @Since("1.0.0")
   def predict(testData: RDD[Vector]): RDD[Double] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
@@ -71,7 +77,9 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    *
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
+   *
    */
+  @Since("1.0.0")
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
   }
@@ -88,14 +96,20 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
  * :: DeveloperApi ::
  * GeneralizedLinearAlgorithm implements methods to train a Generalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
+ *
  */
+@Since("0.8.0")
 @DeveloperApi
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 
   protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
-  /** The optimizer to solve the problem. */
+  /**
+   * The optimizer to solve the problem.
+   *
+   */
+  @Since("0.8.0")
   def optimizer: Optimizer
 
   /** Whether to add intercept (default: false). */
@@ -126,11 +140,13 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * translated back to resulting model weights, so it's transparent to users.
    * Note: This technique is used in both libsvm and glmnet packages. Default false.
    */
-  private var useFeatureScaling = false
+  private[mllib] var useFeatureScaling = false
 
   /**
    * The dimension of training features.
+   *
    */
+  @Since("1.4.0")
   def getNumFeatures: Int = this.numFeatures
 
   /**
@@ -153,13 +169,17 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   /**
    * Get if the algorithm uses addIntercept
+   *
    */
+  @Since("1.4.0")
   def isAddIntercept: Boolean = this.addIntercept
 
   /**
    * Set if the algorithm should add an intercept. Default false.
    * We set the default to false because adding the intercept will cause memory allocation.
+   *
    */
+  @Since("0.8.0")
   def setIntercept(addIntercept: Boolean): this.type = {
     this.addIntercept = addIntercept
     this
@@ -167,17 +187,18 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   /**
    * Set if the algorithm should validate data before training. Default true.
+   *
    */
+  @Since("0.8.0")
   def setValidateData(validateData: Boolean): this.type = {
     this.validateData = validateData
     this
   }
 
   /**
-   * Run the algorithm with the configured parameters on an input
-   * RDD of LabeledPoint entries.
+   * Generate the initial weights when the user does not supply them
    */
-  def run(input: RDD[LabeledPoint]): M = {
+  protected def generateInitialWeights(input: RDD[LabeledPoint]): Vector = {
     if (numFeatures < 0) {
       numFeatures = input.map(_.features.size).first()
     }
@@ -193,22 +214,31 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * TODO: See if we can deprecate `intercept` in `GeneralizedLinearModel`, and always
      * have the intercept as part of weights to have consistent design.
      */
-    val initialWeights = {
-      if (numOfLinearPredictor == 1) {
-        Vectors.zeros(numFeatures)
-      } else if (addIntercept) {
-        Vectors.zeros((numFeatures + 1) * numOfLinearPredictor)
-      } else {
-        Vectors.zeros(numFeatures * numOfLinearPredictor)
-      }
+    if (numOfLinearPredictor == 1) {
+      Vectors.zeros(numFeatures)
+    } else if (addIntercept) {
+      Vectors.zeros((numFeatures + 1) * numOfLinearPredictor)
+    } else {
+      Vectors.zeros(numFeatures * numOfLinearPredictor)
     }
-    run(input, initialWeights)
+  }
+
+  /**
+   * Run the algorithm with the configured parameters on an input
+   * RDD of LabeledPoint entries.
+   *
+   */
+  @Since("0.8.0")
+  def run(input: RDD[LabeledPoint]): M = {
+    run(input, generateInitialWeights(input))
   }
 
   /**
    * Run the algorithm with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
+   *
    */
+  @Since("1.0.0")
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 
     if (numFeatures < 0) {
@@ -320,7 +350,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
           val partialWeightsArray = scaler.transform(
             Vectors.dense(weightsArray.slice(start, end))).toArray
 
-          System.arraycopy(partialWeightsArray, 0, weightsArray, start, partialWeightsArray.size)
+          System.arraycopy(partialWeightsArray, 0, weightsArray, start, partialWeightsArray.length)
           i += 1
         }
         weights = Vectors.dense(weightsArray)
@@ -331,6 +361,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data was not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
+    }
+
+    // Unpersist cached data
+    if (data.getStorageLevel != StorageLevel.NONE) {
+      data.unpersist(false)
     }
 
     createModel(weights, intercept)

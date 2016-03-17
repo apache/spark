@@ -18,23 +18,20 @@
 package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BreezeVector}
-
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.{Vector, Matrices, Matrix}
+import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
-import org.apache.spark.mllib.util.{MLUtils, Loader, Saveable}
+import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.{Row, SQLContext}
 
 /**
- * :: Experimental ::
- *
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points
  * are drawn from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are
  * the respective mean and covariance for each Gaussian distribution i=1..k.
@@ -44,29 +41,48 @@ import org.apache.spark.sql.{SQLContext, Row}
  * @param gaussians Array of MultivariateGaussian where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
-@Experimental
-class GaussianMixtureModel(
-  val weights: Array[Double],
-  val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable {
+@Since("1.3.0")
+class GaussianMixtureModel @Since("1.3.0") (
+  @Since("1.3.0") val weights: Array[Double],
+  @Since("1.3.0") val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable {
 
   require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
 
   override protected def formatVersion = "1.0"
 
+  @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
     GaussianMixtureModel.SaveLoadV1_0.save(sc, path, weights, gaussians)
   }
 
-  /** Number of gaussians in mixture */
+  /**
+   * Number of gaussians in mixture
+   */
+  @Since("1.3.0")
   def k: Int = weights.length
 
-  /** Maps given points to their cluster indices. */
+  /**
+   * Maps given points to their cluster indices.
+   */
+  @Since("1.3.0")
   def predict(points: RDD[Vector]): RDD[Int] = {
     val responsibilityMatrix = predictSoft(points)
     responsibilityMatrix.map(r => r.indexOf(r.max))
   }
 
-  /** Java-friendly version of [[predict()]] */
+  /**
+   * Maps given point to its cluster index.
+   */
+  @Since("1.5.0")
+  def predict(point: Vector): Int = {
+    val r = predictSoft(point)
+    r.indexOf(r.max)
+  }
+
+  /**
+   * Java-friendly version of [[predict()]]
+   */
+  @Since("1.4.0")
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
@@ -74,6 +90,7 @@ class GaussianMixtureModel(
    * Given the input vectors, return the membership value of each vector
    * to all mixture components.
    */
+  @Since("1.3.0")
   def predictSoft(points: RDD[Vector]): RDD[Array[Double]] = {
     val sc = points.sparkContext
     val bcDists = sc.broadcast(gaussians)
@@ -81,6 +98,14 @@ class GaussianMixtureModel(
     points.map { x =>
       computeSoftAssignments(x.toBreeze.toDenseVector, bcDists.value, bcWeights.value, k)
     }
+  }
+
+  /**
+   * Given the input vector, return the membership values to all mixture components.
+   */
+  @Since("1.4.0")
+  def predictSoft(point: Vector): Array[Double] = {
+    computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
   }
 
   /**
@@ -102,7 +127,7 @@ class GaussianMixtureModel(
   }
 }
 
-@Experimental
+@Since("1.4.0")
 object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
   private object SaveLoadV1_0 {
@@ -119,7 +144,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
         weights: Array[Double],
         gaussians: Array[MultivariateGaussian]): Unit = {
 
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       // Create JSON metadata.
@@ -136,23 +161,23 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
       val dataPath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
-      val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
-
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)
+      val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
 
       val (weights, gaussians) = dataArray.map {
         case Row(weight: Double, mu: Vector, sigma: Matrix) =>
           (weight, new MultivariateGaussian(mu, sigma))
       }.unzip
 
-      return new GaussianMixtureModel(weights.toArray, gaussians.toArray)
+      new GaussianMixtureModel(weights.toArray, gaussians.toArray)
     }
   }
 
-  override def load(sc: SparkContext, path: String) : GaussianMixtureModel = {
+  @Since("1.4.0")
+  override def load(sc: SparkContext, path: String): GaussianMixtureModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     implicit val formats = DefaultFormats
     val k = (metadata \ "k").extract[Int]

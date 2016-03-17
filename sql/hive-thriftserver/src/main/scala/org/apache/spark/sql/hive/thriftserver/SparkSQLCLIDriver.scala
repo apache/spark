@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.JavaConversions._
-
 import java.io._
-import java.util.{ArrayList => JArrayList}
+import java.util.{ArrayList => JArrayList, Locale}
 
-import jline.{ConsoleReader, History}
+import scala.collection.JavaConverters._
 
+import jline.console.ConsoleReader
+import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
@@ -32,14 +32,20 @@ import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, SetProcessor, CommandProcessor, CommandProcessorFactory}
+import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, CommandProcessor,
+  CommandProcessorFactory, SetProcessor}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.util.Utils
+import org.apache.spark.util.ShutdownHookManager
 
+/**
+ * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
+ * has dropped its support.
+ */
 private[hive] object SparkSQLCLIDriver extends Logging {
   private var prompt = "spark-sql"
   private var continuedPrompt = "".padTo(prompt.length, ' ')
@@ -76,7 +82,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cliConf = new HiveConf(classOf[SessionState])
     // Override the location of the metastore since this is only used for local execution.
-    HiveContext.newTemporaryConfiguration().foreach {
+    HiveContext.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
       case (key, value) => cliConf.set(key, value)
     }
     val sessionState = new CliSessionState(cliConf)
@@ -96,9 +102,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
-    sessionState.cmdProperties.entrySet().foreach { item =>
-      val key = item.getKey.asInstanceOf[String]
-      val value = item.getValue.asInstanceOf[String]
+    sessionState.cmdProperties.entrySet().asScala.foreach { item =>
+      val key = item.getKey.toString
+      val value = item.getValue.toString
       // We do not propagate metastore options to the execution copy of hive.
       if (key != "javax.jdo.option.ConnectionURL") {
         conf.set(key, value)
@@ -109,18 +115,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     SessionState.start(sessionState)
 
     // Clean up after we exit
-    Utils.addShutdownHook { () => SparkSQLEnv.stop() }
+    ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
+    val remoteMode = isRemoteMode(sessionState)
     // "-h" option has been passed, so connect to Hive thrift server.
-    if (sessionState.getHost != null) {
-      sessionState.connect()
-      if (sessionState.isRemoteMode) {
-        prompt = s"[${sessionState.getHost}:${sessionState.getPort}]" + prompt
-        continuedPrompt = "".padTo(prompt.length, ' ')
-      }
-    }
-
-    if (!sessionState.isRemoteMode) {
+    if (!remoteMode) {
       // Hadoop-20 and above - we need to augment classpath using hiveconf
       // components.
       // See also: code in ExecDriver.java
@@ -131,6 +130,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
       conf.setClassLoader(loader)
       Thread.currentThread().setContextClassLoader(loader)
+    } else {
+      // Hive 1.2 + not supported in CLI
+      throw new RuntimeException("Remote operations not supported")
     }
 
     val cli = new SparkSQLCLIDriver
@@ -170,15 +172,16 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val reader = new ConsoleReader()
     reader.setBellEnabled(false)
+    reader.setExpandEvents(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
-    CliDriver.getCommandCompletor.foreach((e) => reader.addCompletor(e))
+    CliDriver.getCommandCompleter.foreach((e) => reader.addCompleter(e))
 
     val historyDirectory = System.getProperty("user.home")
 
     try {
       if (new File(historyDirectory).exists()) {
         val historyFile = historyDirectory + File.separator + ".hivehistory"
-        reader.setHistory(new History(new File(historyFile)))
+        reader.setHistory(new FileHistory(new File(historyFile)))
       } else {
         logWarning("WARNING: Directory for Hive history file: " + historyDirectory +
                            " does not exist.   History will not be available during this session.")
@@ -190,10 +193,28 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         logWarning(e.getMessage)
     }
 
+    // add shutdown hook to flush the history to history file
+    ShutdownHookManager.addShutdownHook { () =>
+      reader.getHistory match {
+        case h: FileHistory =>
+          try {
+            h.flush()
+          } catch {
+            case e: IOException =>
+              logWarning("WARNING: Failed to write command history file: " + e.getMessage)
+          }
+        case _ =>
+      }
+    }
+
+    // TODO: missing
+/*
     val clientTransportTSocketField = classOf[CliSessionState].getDeclaredField("transport")
     clientTransportTSocketField.setAccessible(true)
 
     transport = clientTransportTSocketField.get(sessionState).asInstanceOf[TSocket]
+*/
+    transport = null
 
     var ret = 0
     var prefix = ""
@@ -230,6 +251,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     System.exit(ret)
   }
+
+
+  def isRemoteMode(state: CliSessionState): Boolean = {
+    //    sessionState.isRemoteMode
+    state.isHiveServerQuery
+  }
+
 }
 
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
@@ -239,25 +267,36 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   private val console = new SessionState.LogHelper(LOG)
 
+  private val isRemoteMode = {
+    SparkSQLCLIDriver.isRemoteMode(sessionState)
+  }
+
   private val conf: Configuration =
     if (sessionState != null) sessionState.getConf else new Configuration()
 
   // Force initializing SparkSQLEnv. This is put here but not object SparkSQLCliDriver
   // because the Hive unit tests do not go through the main() code path.
-  if (!sessionState.isRemoteMode) {
+  if (!isRemoteMode) {
     SparkSQLEnv.init()
+  } else {
+    // Hive 1.2 + not supported in CLI
+    throw new RuntimeException("Remote operations not supported")
   }
 
   override def processCmd(cmd: String): Int = {
     val cmd_trimmed: String = cmd.trim()
+    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ENGLISH)
     val tokens: Array[String] = cmd_trimmed.split("\\s+")
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-    if (cmd_trimmed.toLowerCase.equals("quit") ||
-      cmd_trimmed.toLowerCase.equals("exit") ||
-      tokens(0).equalsIgnoreCase("source") ||
+    if (cmd_lower.equals("quit") ||
+      cmd_lower.equals("exit")) {
+      sessionState.close()
+      System.exit(0)
+    }
+    if (tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
       cmd_trimmed.startsWith("!") ||
       tokens(0).toLowerCase.equals("list") ||
-      sessionState.isRemoteMode) {
+      isRemoteMode) {
       val start = System.currentTimeMillis()
       super.processCmd(cmd)
       val end = System.currentTimeMillis()
@@ -267,7 +306,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     } else {
       var ret = 0
       val hconf = conf.asInstanceOf[HiveConf]
-      val proc: CommandProcessor = CommandProcessorFactory.get(Array(tokens(0)), hconf)
+      val proc: CommandProcessor = CommandProcessorFactory.get(tokens, hconf)
 
       if (proc != null) {
         // scalastyle:off println
@@ -277,6 +316,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           driver.init()
           val out = sessionState.out
+          val err = sessionState.err
           val start: Long = System.currentTimeMillis()
           if (sessionState.getIsVerbose) {
             out.println(cmd)
@@ -287,7 +327,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           ret = rc.getResponseCode
           if (ret != 0) {
-            console.printError(rc.getErrorMessage())
+            // For analysis exception, only the error is printed out to the console.
+            rc.getException() match {
+              case e : AnalysisException =>
+                err.println(s"""Error in query: ${e.getMessage}""")
+              case _ => err.println(rc.getErrorMessage())
+            }
             driver.close()
             return ret
           }
@@ -296,15 +341,15 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
             // Print the column names.
-            Option(driver.getSchema.getFieldSchemas).map { fields =>
-              out.println(fields.map(_.getName).mkString("\t"))
+            Option(driver.getSchema.getFieldSchemas).foreach { fields =>
+              out.println(fields.asScala.map(_.getName).mkString("\t"))
             }
           }
 
           var counter = 0
           try {
             while (!out.checkError() && driver.getResults(res)) {
-              res.foreach{ l =>
+              res.asScala.foreach { l =>
                 counter += 1
                 out.println(l)
               }
@@ -328,7 +373,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (counter != 0) {
             responseMsg += s", Fetched $counter row(s)"
           }
-          console.printInfo(responseMsg , null)
+          console.printInfo(responseMsg, null)
           // Destroy the driver to release all the locks.
           driver.destroy()
         } else {

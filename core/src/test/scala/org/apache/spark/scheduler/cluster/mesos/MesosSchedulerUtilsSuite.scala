@@ -17,10 +17,13 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
+import scala.language.reflectiveCalls
+
 import org.apache.mesos.Protos.Value
 import org.mockito.Mockito._
 import org.scalatest._
 import org.scalatest.mock.MockitoSugar
+
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoSugar {
@@ -38,20 +41,20 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   test("use at-least minimum overhead") {
     val f = fixture
     when(f.sc.executorMemory).thenReturn(512)
-    utils.calculateTotalMemory(f.sc) shouldBe 896
+    utils.executorMemory(f.sc) shouldBe 896
   }
 
   test("use overhead if it is greater than minimum value") {
     val f = fixture
     when(f.sc.executorMemory).thenReturn(4096)
-    utils.calculateTotalMemory(f.sc) shouldBe 4505
+    utils.executorMemory(f.sc) shouldBe 4505
   }
 
   test("use spark.mesos.executor.memoryOverhead (if set)") {
     val f = fixture
     when(f.sc.executorMemory).thenReturn(1024)
     f.sparkConf.set("spark.mesos.executor.memoryOverhead", "512")
-    utils.calculateTotalMemory(f.sc) shouldBe 1536
+    utils.executorMemory(f.sc) shouldBe 1536
   }
 
   test("parse a non-empty constraint string correctly") {

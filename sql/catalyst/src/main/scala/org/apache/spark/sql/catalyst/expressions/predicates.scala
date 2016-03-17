@@ -19,25 +19,34 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+
 
 object InterpretedPredicate {
   def create(expression: Expression, inputSchema: Seq[Attribute]): (InternalRow => Boolean) =
     create(BindReferences.bindReference(expression, inputSchema))
 
   def create(expression: Expression): (InternalRow => Boolean) = {
+    expression.foreach {
+      case n: Nondeterministic => n.setInitialValues()
+      case _ =>
+    }
     (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]
   }
 }
 
-trait Predicate extends Expression {
-  self: Product =>
 
+/**
+ * An [[Expression]] that returns a boolean value.
+ */
+trait Predicate extends Expression {
   override def dataType: DataType = BooleanType
 }
+
 
 trait PredicateHelper {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
@@ -56,9 +65,18 @@ trait PredicateHelper {
     }
   }
 
+  // Substitute any known alias from a map.
+  protected def replaceAlias(
+      condition: Expression,
+      aliases: AttributeMap[Expression]): Expression = {
+    condition.transform {
+      case a: Attribute => aliases.getOrElse(a, a)
+    }
+  }
+
   /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
-   * can be used to determine when is is acceptable to move expression evaluation within a query
+   * can be used to determine when it is acceptable to move expression evaluation within a query
    * plan.
    *
    * For example consider a join between two relations R(a, b) and S(c, d).
@@ -70,30 +88,102 @@ trait PredicateHelper {
     expr.references.subsetOf(plan.outputSet)
 }
 
-case class Not(child: Expression) extends UnaryExpression with Predicate with ExpectsInputTypes {
+
+case class Not(child: Expression)
+  extends UnaryExpression with Predicate with ImplicitCastInputTypes {
+
   override def toString: String = s"NOT $child"
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
 
   protected override def nullSafeEval(input: Any): Any = !input.asInstanceOf[Boolean]
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"!($c)")
   }
+
+  override def sql: String = s"(NOT ${child.sql})"
 }
+
 
 /**
  * Evaluates to `true` if `list` contains `value`.
  */
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate
+    with ImplicitCastInputTypes {
+
+  require(list != null, "list should not be null")
+
+  override def inputTypes: Seq[AbstractDataType] = value.dataType +: list.map(_.dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (list.exists(l => l.dataType != value.dataType)) {
+      TypeCheckResult.TypeCheckFailure(
+        "Arguments must be same type")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
   override def children: Seq[Expression] = value +: list
 
-  override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
     val evaluatedValue = value.eval(input)
-    list.exists(e => e.eval(input) == evaluatedValue)
+    if (evaluatedValue == null) {
+      null
+    } else {
+      var hasNull = false
+      list.foreach { e =>
+        val v = e.eval(input)
+        if (v == evaluatedValue) {
+          return true
+        } else if (v == null) {
+          hasNull = true
+        }
+      }
+      if (hasNull) {
+        null
+      } else {
+        false
+      }
+    }
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val valueGen = value.gen(ctx)
+    val listGen = list.map(_.gen(ctx))
+    val listCode = listGen.map(x =>
+      s"""
+        if (!${ev.value}) {
+          ${x.code}
+          if (${x.isNull}) {
+            ${ev.isNull} = true;
+          } else if (${ctx.genEqual(value.dataType, valueGen.value, x.value)}) {
+            ${ev.isNull} = false;
+            ${ev.value} = true;
+          }
+        }
+       """).mkString("\n")
+    s"""
+      ${valueGen.code}
+      boolean ${ev.value} = false;
+      boolean ${ev.isNull} = ${valueGen.isNull};
+      if (!${ev.isNull}) {
+        $listCode
+      }
+    """
+  }
+
+  override def sql: String = {
+    val childrenSQL = children.map(_.sql)
+    val valueSQL = childrenSQL.head
+    val listSQL = childrenSQL.tail.mkString(", ")
+    s"($valueSQL IN ($listSQL))"
   }
 }
 
@@ -101,23 +191,65 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(child: Expression, hset: Set[Any])
-  extends UnaryExpression with Predicate {
+case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
 
-  override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
+  require(hset != null, "hset could not be null")
+
   override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
 
-  override def eval(input: InternalRow): Any = {
-    hset.contains(child.eval(input))
+  @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
+
+  override def nullable: Boolean = child.nullable || hasNull
+
+  protected override def nullSafeEval(value: Any): Any = {
+    if (hset.contains(value)) {
+      true
+    } else if (hasNull) {
+      null
+    } else {
+      false
+    }
+  }
+
+  def getHSet(): Set[Any] = hset
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val setName = classOf[Set[Any]].getName
+    val InSetName = classOf[InSet].getName
+    val childGen = child.gen(ctx)
+    ctx.references += this
+    val hsetTerm = ctx.freshName("hset")
+    val hasNullTerm = ctx.freshName("hasNull")
+    ctx.addMutableState(setName, hsetTerm,
+      s"$hsetTerm = (($InSetName)references[${ctx.references.size - 1}]).getHSet();")
+    ctx.addMutableState("boolean", hasNullTerm, s"$hasNullTerm = $hsetTerm.contains(null);")
+    s"""
+      ${childGen.code}
+      boolean ${ev.isNull} = ${childGen.isNull};
+      boolean ${ev.value} = false;
+      if (!${ev.isNull}) {
+        ${ev.value} = $hsetTerm.contains(${childGen.value});
+        if (!${ev.value} && $hasNullTerm) {
+          ${ev.isNull} = true;
+        }
+      }
+     """
+  }
+
+  override def sql: String = {
+    val valueSQL = child.sql
+    val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
+    s"($valueSQL IN ($listSQL))"
   }
 }
 
-case class And(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with ExpectsInputTypes {
+case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
-  override def toString: String = s"($left && $right)"
+  override def inputType: AbstractDataType = BooleanType
 
-  override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+  override def symbol: String = "&&"
+
+  override def sqlOperator: String = "AND"
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -137,7 +269,7 @@ case class And(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
 
@@ -145,14 +277,14 @@ case class And(left: Expression, right: Expression)
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = false;
-      boolean ${ev.primitive} = false;
+      boolean ${ev.value} = false;
 
-      if (!${eval1.isNull} && !${eval1.primitive}) {
+      if (!${eval1.isNull} && !${eval1.value}) {
       } else {
         ${eval2.code}
-        if (!${eval2.isNull} && !${eval2.primitive}) {
+        if (!${eval2.isNull} && !${eval2.value}) {
         } else if (!${eval1.isNull} && !${eval2.isNull}) {
-          ${ev.primitive} = true;
+          ${ev.value} = true;
         } else {
           ${ev.isNull} = true;
         }
@@ -161,12 +293,14 @@ case class And(left: Expression, right: Expression)
   }
 }
 
-case class Or(left: Expression, right: Expression)
-  extends BinaryExpression with Predicate with ExpectsInputTypes {
 
-  override def toString: String = s"($left || $right)"
+case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
-  override def inputTypes: Seq[DataType] = Seq(BooleanType, BooleanType)
+  override def inputType: AbstractDataType = BooleanType
+
+  override def symbol: String = "||"
+
+  override def sqlOperator: String = "OR"
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -186,7 +320,7 @@ case class Or(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
 
@@ -194,14 +328,14 @@ case class Or(left: Expression, right: Expression)
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = false;
-      boolean ${ev.primitive} = true;
+      boolean ${ev.value} = true;
 
-      if (!${eval1.isNull} && ${eval1.primitive}) {
+      if (!${eval1.isNull} && ${eval1.value}) {
       } else {
         ${eval2.code}
-        if (!${eval2.isNull} && ${eval2.primitive}) {
+        if (!${eval2.isNull} && ${eval2.value}) {
         } else if (!${eval1.isNull} && !${eval2.isNull}) {
-          ${ev.primitive} = false;
+          ${ev.value} = false;
         } else {
           ${ev.isNull} = true;
         }
@@ -210,23 +344,14 @@ case class Or(left: Expression, right: Expression)
   }
 }
 
+
 abstract class BinaryComparison extends BinaryOperator with Predicate {
-  self: Product =>
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (left.dataType != right.dataType) {
-      TypeCheckResult.TypeCheckFailure(
-        s"differing types in ${this.getClass.getSimpleName} " +
-        s"(${left.dataType} and ${right.dataType}).")
-    } else {
-      checkTypesInternal(dataType)
-    }
-  }
-
-  protected def checkTypesInternal(t: DataType): TypeCheckResult
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    if (ctx.isPrimitiveType(left.dataType)) {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    if (ctx.isPrimitiveType(left.dataType)
+        && left.dataType != BooleanType // java boolean doesn't support > or < operator
+        && left.dataType != FloatType
+        && left.dataType != DoubleType) {
       // faster version
       defineCodeGen(ctx, ev, (c1, c2) => s"$c1 $symbol $c2")
     } else {
@@ -235,9 +360,11 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   }
 }
 
+
 private[sql] object BinaryComparison {
   def unapply(e: BinaryComparison): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
+
 
 /** An extractor that matches both standard 3VL equality and null-safe equality. */
 private[sql] object Equality {
@@ -248,27 +375,38 @@ private[sql] object Equality {
   }
 }
 
+
 case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = AnyDataType
+
   override def symbol: String = "="
 
-  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (left.dataType != BinaryType) input1 == input2
-    else java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
+    if (left.dataType == FloatType) {
+      Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
+    } else if (left.dataType == DoubleType) {
+      Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
+    } else if (left.dataType != BinaryType) {
+      input1 == input2
+    } else {
+      java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
+    }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
 }
 
+
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = AnyDataType
+
   override def symbol: String = "<=>"
 
   override def nullable: Boolean = false
-
-  override protected def checkTypesInternal(t: DataType) = TypeCheckResult.TypeCheckSuccess
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -278,7 +416,11 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (input1 == null || input2 == null) {
       false
     } else {
-      if (left.dataType != BinaryType) {
+      if (left.dataType == FloatType) {
+        Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
+      } else if (left.dataType == DoubleType) {
+        Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
+      } else if (left.dataType != BinaryType) {
         input1 == input2
       } else {
         java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
@@ -286,58 +428,62 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val equalCode = ctx.genEqual(left.dataType, eval1.primitive, eval2.primitive)
+    val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)
     ev.isNull = "false"
     eval1.code + eval2.code + s"""
-        boolean ${ev.primitive} = (${eval1.isNull} && ${eval2.isNull}) ||
+        boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
            (!${eval1.isNull} && $equalCode);
       """
   }
 }
 
+
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def symbol: String = "<"
 
-  override protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
-
-  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
 
+
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def symbol: String = "<="
 
-  override protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
-
-  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
 
+
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def symbol: String = ">"
 
-  override protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
-
-  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
 
+
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+
+  override def inputType: AbstractDataType = TypeCollection.Ordered
+
   override def symbol: String = ">="
 
-  override protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForOrderingExpr(left.dataType, "operator " + symbol)
-
-  private lazy val ordering = TypeUtils.getOrdering(left.dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }

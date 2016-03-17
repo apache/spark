@@ -20,14 +20,16 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.google.common.base.Splitter
-import org.apache.mesos.{MesosSchedulerDriver, SchedulerDriver, Scheduler, Protos}
+import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
-import org.apache.mesos.protobuf.GeneratedMessage
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
+
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
 import org.apache.spark.util.Utils
 
 /**
@@ -42,58 +44,165 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   protected var mesosDriver: SchedulerDriver = null
 
   /**
-   * Starts the MesosSchedulerDriver with the provided information. This method returns
-   * only after the scheduler has registered with Mesos.
-   * @param masterUrl Mesos master connection URL
-   * @param scheduler Scheduler object
-   * @param fwInfo FrameworkInfo to pass to the Mesos master
+   * Creates a new MesosSchedulerDriver that communicates to the Mesos master.
+   * @param masterUrl The url to connect to Mesos master
+   * @param scheduler the scheduler class to receive scheduler callbacks
+   * @param sparkUser User to impersonate with when running tasks
+   * @param appName The framework name to display on the Mesos UI
+   * @param conf Spark configuration
+   * @param webuiUrl The WebUI url to link from Mesos UI
+   * @param checkpoint Option to checkpoint tasks for failover
+   * @param failoverTimeout Duration Mesos master expect scheduler to reconnect on disconnect
+   * @param frameworkId The id of the new framework
    */
-  def startScheduler(masterUrl: String, scheduler: Scheduler, fwInfo: FrameworkInfo): Unit = {
+  protected def createSchedulerDriver(
+      masterUrl: String,
+      scheduler: Scheduler,
+      sparkUser: String,
+      appName: String,
+      conf: SparkConf,
+      webuiUrl: Option[String] = None,
+      checkpoint: Option[Boolean] = None,
+      failoverTimeout: Option[Double] = None,
+      frameworkId: Option[String] = None): SchedulerDriver = {
+    val fwInfoBuilder = FrameworkInfo.newBuilder().setUser(sparkUser).setName(appName)
+    val credBuilder = Credential.newBuilder()
+    webuiUrl.foreach { url => fwInfoBuilder.setWebuiUrl(url) }
+    checkpoint.foreach { checkpoint => fwInfoBuilder.setCheckpoint(checkpoint) }
+    failoverTimeout.foreach { timeout => fwInfoBuilder.setFailoverTimeout(timeout) }
+    frameworkId.foreach { id =>
+      fwInfoBuilder.setId(FrameworkID.newBuilder().setValue(id).build())
+    }
+    conf.getOption("spark.mesos.principal").foreach { principal =>
+      fwInfoBuilder.setPrincipal(principal)
+      credBuilder.setPrincipal(principal)
+    }
+    conf.getOption("spark.mesos.secret").foreach { secret =>
+      credBuilder.setSecret(ByteString.copyFromUtf8(secret))
+    }
+    if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
+      throw new SparkException(
+        "spark.mesos.principal must be configured when spark.mesos.secret is set")
+    }
+    conf.getOption("spark.mesos.role").foreach { role =>
+      fwInfoBuilder.setRole(role)
+    }
+    if (credBuilder.hasPrincipal) {
+      new MesosSchedulerDriver(
+        scheduler, fwInfoBuilder.build(), masterUrl, credBuilder.build())
+    } else {
+      new MesosSchedulerDriver(scheduler, fwInfoBuilder.build(), masterUrl)
+    }
+  }
+
+  /**
+   * Starts the MesosSchedulerDriver and stores the current running driver to this new instance.
+   * This driver is expected to not be running.
+   * This method returns only after the scheduler has registered with Mesos.
+   */
+  def startScheduler(newDriver: SchedulerDriver): Unit = {
     synchronized {
       if (mesosDriver != null) {
         registerLatch.await()
         return
       }
+      @volatile
+      var error: Option[Exception] = None
 
+      // We create a new thread that will block inside `mesosDriver.run`
+      // until the scheduler exists
       new Thread(Utils.getFormattedClassName(this) + "-mesos-driver") {
         setDaemon(true)
-
         override def run() {
-          mesosDriver = new MesosSchedulerDriver(scheduler, fwInfo, masterUrl)
           try {
+            mesosDriver = newDriver
             val ret = mesosDriver.run()
             logInfo("driver.run() returned with code " + ret)
-            if (ret.equals(Status.DRIVER_ABORTED)) {
-              System.exit(1)
+            if (ret != null && ret.equals(Status.DRIVER_ABORTED)) {
+              error = Some(new SparkException("Error starting driver, DRIVER_ABORTED"))
+              markErr()
             }
           } catch {
             case e: Exception => {
               logError("driver.run() failed", e)
-              System.exit(1)
+              error = Some(e)
+              markErr()
             }
           }
         }
       }.start()
 
       registerLatch.await()
+
+      // propagate any error to the calling thread. This ensures that SparkContext creation fails
+      // without leaving a broken context that won't be able to schedule any tasks
+      error.foreach(throw _)
     }
   }
 
+  def getResource(res: JList[Resource], name: String): Double = {
+    // A resource can have multiple values in the offer since it can either be from
+    // a specific role or wildcard.
+    res.asScala.filter(_.getName == name).map(_.getScalar.getValue).sum
+  }
+
   /**
-   * Signal that the scheduler has registered with Mesos.
-   */
+    * Signal that the scheduler has registered with Mesos.
+    */
   protected def markRegistered(): Unit = {
     registerLatch.countDown()
   }
 
+  protected def markErr(): Unit = {
+    registerLatch.countDown()
+  }
+
+  def createResource(name: String, amount: Double, role: Option[String] = None): Resource = {
+    val builder = Resource.newBuilder()
+      .setName(name)
+      .setType(Value.Type.SCALAR)
+      .setScalar(Value.Scalar.newBuilder().setValue(amount).build())
+
+    role.foreach { r => builder.setRole(r) }
+
+    builder.build()
+  }
+
   /**
-   * Get the amount of resources for the specified type from the resource list
+   * Partition the existing set of resources into two groups, those remaining to be
+   * scheduled and those requested to be used for a new task.
+   * @param resources The full list of available resources
+   * @param resourceName The name of the resource to take from the available resources
+   * @param amountToUse The amount of resources to take from the available resources
+   * @return The remaining resources list and the used resources list.
    */
-  protected def getResource(res: JList[Resource], name: String): Double = {
-    for (r <- res if r.getName == name) {
-      return r.getScalar.getValue
+  def partitionResources(
+      resources: JList[Resource],
+      resourceName: String,
+      amountToUse: Double): (List[Resource], List[Resource]) = {
+    var remain = amountToUse
+    var requestedResources = new ArrayBuffer[Resource]
+    val remainingResources = resources.asScala.map {
+      case r => {
+        if (remain > 0 &&
+          r.getType == Value.Type.SCALAR &&
+          r.getScalar.getValue > 0.0 &&
+          r.getName == resourceName) {
+          val usage = Math.min(remain, r.getScalar.getValue)
+          requestedResources += createResource(resourceName, usage, Some(r.getRole))
+          remain -= usage
+          createResource(resourceName, r.getScalar.getValue - usage, Some(r.getRole))
+        } else {
+          r
+        }
+      }
     }
-    0.0
+
+    // Filter any resource that has depleted.
+    val filteredResources =
+      remainingResources.filter(r => r.getType != Value.Type.SCALAR || r.getScalar.getValue > 0.0)
+
+    (filteredResources.toList, requestedResources.toList)
   }
 
   /** Helper method to get the key,value-set pair for a Mesos Attribute protobuf */
@@ -118,7 +227,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute]): Map[String, GeneratedMessage] = {
-    offerAttributes.map(attr => {
+    offerAttributes.asScala.map(attr => {
       val attrValue = attr.getType match {
         case Value.Type.SCALAR => attr.getScalar
         case Value.Type.RANGES => attr.getRanges
@@ -157,7 +266,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
             requiredValues.map(_.toLong).exists(offerRange.contains(_))
           case Some(offeredValue: Value.Set) =>
             // check if the specified required values is a subset of offered set
-            requiredValues.subsetOf(offeredValue.getItemList.toSet)
+            requiredValues.subsetOf(offeredValue.getItemList.asScala.toSet)
           case Some(textValue: Value.Text) =>
             // check if the specified value is equal, if multiple values are specified
             // we succeed if any of them match.
@@ -203,14 +312,13 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       Map()
     } else {
       try {
-        Map() ++ mapAsScalaMap(splitter.split(constraintsVal)).map {
-          case (k, v) =>
-            if (v == null || v.isEmpty) {
-              (k, Set[String]())
-            } else {
-              (k, v.split(',').toSet)
-            }
-        }
+        splitter.split(constraintsVal).asScala.toMap.mapValues(v =>
+          if (v == null || v.isEmpty) {
+            Set[String]()
+          } else {
+            v.split(',').toSet
+          }
+        )
       } catch {
         case NonFatal(e) =>
           throw new IllegalArgumentException(s"Bad constraint string: $constraintsVal", e)
@@ -229,10 +337,20 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @return memory requirement as (0.1 * <memoryOverhead>) or MEMORY_OVERHEAD_MINIMUM
    *         (whichever is larger)
    */
-  def calculateTotalMemory(sc: SparkContext): Int = {
+  def executorMemory(sc: SparkContext): Int = {
     sc.conf.getInt("spark.mesos.executor.memoryOverhead",
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory
+  }
+
+  def setupUris(uris: String, builder: CommandInfo.Builder): Unit = {
+    uris.split(",").foreach { uri =>
+      builder.addUris(CommandInfo.URI.newBuilder().setValue(uri.trim()))
+    }
+  }
+
+  protected def getRejectOfferDurationForUnmetConstraints(sc: SparkContext): Long = {
+    sc.conf.getTimeAsSeconds("spark.mesos.rejectOfferDurationForUnmetConstraints", "120s")
   }
 
 }

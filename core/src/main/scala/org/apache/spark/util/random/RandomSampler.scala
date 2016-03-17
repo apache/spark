@@ -19,8 +19,8 @@ package org.apache.spark.util.random
 
 import java.util.Random
 
-import scala.reflect.ClassTag
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import org.apache.commons.math3.distribution.PoissonDistribution
 
@@ -54,7 +54,7 @@ object RandomSampler {
   /**
    * Default maximum gap-sampling fraction.
    * For sampling fractions <= this value, the gap sampling optimization will be applied.
-   * Above this value, it is assumed that "tradtional" Bernoulli sampling is faster.  The
+   * Above this value, it is assumed that "traditional" Bernoulli sampling is faster.  The
    * optimal value for this will depend on the RNG.  More expensive RNGs will tend to make
    * the optimal value higher.  The most reliable way to determine this value for a new RNG
    * is to experiment.  When tuning for a new RNG, I would expect a value of 0.5 to be close
@@ -176,10 +176,15 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
  * A sampler for sampling with replacement, based on values drawn from Poisson distribution.
  *
  * @param fraction the sampling fraction (with replacement)
+ * @param useGapSamplingIfPossible if true, use gap sampling when sampling ratio is low.
  * @tparam T item type
  */
 @DeveloperApi
-class PoissonSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] {
+class PoissonSampler[T: ClassTag](
+    fraction: Double,
+    useGapSamplingIfPossible: Boolean) extends RandomSampler[T, T] {
+
+  def this(fraction: Double) = this(fraction, useGapSamplingIfPossible = true)
 
   /** Epsilon slop to avoid failure from floating point jitter. */
   require(
@@ -199,17 +204,18 @@ class PoissonSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] 
   override def sample(items: Iterator[T]): Iterator[T] = {
     if (fraction <= 0.0) {
       Iterator.empty
-    } else if (fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
-        new GapSamplingReplacementIterator(items, fraction, rngGap, RandomSampler.rngEpsilon)
+    } else if (useGapSamplingIfPossible &&
+               fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
+      new GapSamplingReplacementIterator(items, fraction, rngGap, RandomSampler.rngEpsilon)
     } else {
-      items.flatMap { item => {
+      items.flatMap { item =>
         val count = rng.sample()
         if (count == 0) Iterator.empty else Iterator.fill(count)(item)
-      }}
+      }
     }
   }
 
-  override def clone: PoissonSampler[T] = new PoissonSampler[T](fraction)
+  override def clone: PoissonSampler[T] = new PoissonSampler[T](fraction, useGapSamplingIfPossible)
 }
 
 
@@ -313,7 +319,7 @@ class GapSamplingReplacementIterator[T: ClassTag](
   /**
    * Skip elements with replication factor zero (i.e. elements that won't be sampled).
    * Samples 'k' from geometric distribution  P(k) = (1-q)(q)^k, where q = e^(-f), that is
-   * q is the probabililty of Poisson(0; f)
+   * q is the probability of Poisson(0; f)
    */
   private def advance(): Unit = {
     val u = math.max(rng.nextDouble(), epsilon)

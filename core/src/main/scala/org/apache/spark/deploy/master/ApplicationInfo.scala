@@ -22,7 +22,6 @@ import java.util.Date
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
@@ -42,6 +41,12 @@ private[spark] class ApplicationInfo(
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
+  @transient @volatile var appUIUrlAtHistoryServer: Option[String] = None
+
+  // A cap on the number of executors this application can have at any given time.
+  // By default, this is infinite. Only after the first allocation request is issued by the
+  // application will this be set to a finite value. This is used for dynamic allocation.
+  @transient private[master] var executorLimit: Int = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -60,6 +65,8 @@ private[spark] class ApplicationInfo(
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
+    executorLimit = desc.initialExecutorLimit.getOrElse(Integer.MAX_VALUE)
+    appUIUrlAtHistoryServer = None
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
@@ -116,6 +123,12 @@ private[spark] class ApplicationInfo(
     state != ApplicationState.WAITING && state != ApplicationState.RUNNING
   }
 
+  /**
+   * Return the limit on the number of executors this application can have.
+   * For testing only.
+   */
+  private[deploy] def getExecutorLimit: Int = executorLimit
+
   def duration: Long = {
     if (endTime != -1) {
       endTime - startTime
@@ -123,5 +136,11 @@ private[spark] class ApplicationInfo(
       System.currentTimeMillis() - startTime
     }
   }
+
+  /**
+   * Returns the original application UI url unless there is its address at history server
+   * is defined
+   */
+  def curAppUIUrl: String = appUIUrlAtHistoryServer.getOrElse(desc.appUiUrl)
 
 }

@@ -17,10 +17,10 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Duration, Time}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
 import scala.reflect.ClassTag
+
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{Duration, Time}
 
 private[streaming]
 class MapValuedDStream[K: ClassTag, V: ClassTag, U: ClassTag](

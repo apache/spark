@@ -19,13 +19,16 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
-import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
-
 
 private[sql] object Column {
 
@@ -36,15 +39,64 @@ private[sql] object Column {
   def unapply(col: Column): Option[Expression] = Some(col.expr)
 }
 
+/**
+ * A [[Column]] where an [[Encoder]] has been given for the expected input and return type.
+ * To create a [[TypedColumn]], use the `as` function on a [[Column]].
+ *
+ * @tparam T The input type expected for this expression.  Can be `Any` if the expression is type
+ *           checked by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
+ * @tparam U The output type of this column.
+ *
+ * @since 1.6.0
+ */
+class TypedColumn[-T, U](
+    expr: Expression,
+    private[sql] val encoder: ExpressionEncoder[U])
+  extends Column(expr) {
+
+  /**
+   * Inserts the specific input type and schema into any expressions that are expected to operate
+   * on a decoded object.
+   */
+  private[sql] def withInputType(
+      inputEncoder: ExpressionEncoder[_],
+      schema: Seq[Attribute]): TypedColumn[T, U] = {
+    val boundEncoder = inputEncoder.bind(schema).asInstanceOf[ExpressionEncoder[Any]]
+    new TypedColumn[T, U](
+      expr transform { case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
+        ta.copy(aEncoder = Some(boundEncoder), children = schema)
+      },
+      encoder)
+  }
+}
 
 /**
  * :: Experimental ::
- * A column in a [[DataFrame]].
+ * A column that will be computed based on the data in a [[DataFrame]].
  *
- * @groupname java_expr_ops Java-specific expression operators.
- * @groupname expr_ops Expression operators.
- * @groupname df_ops DataFrame functions.
- * @groupname Ungrouped Support functions for DataFrames.
+ * A new column is constructed based on the input columns present in a dataframe:
+ *
+ * {{{
+ *   df("columnName")            // On a specific DataFrame.
+ *   col("columnName")           // A generic column no yet associated with a DataFrame.
+ *   col("columnName.field")     // Extracting a struct field
+ *   col("`a.column.with.dots`") // Escape `.` in column names.
+ *   $"columnName"               // Scala short hand for a named column.
+ *   expr("a + 1")               // A column that is constructed from a parsed SQL Expression.
+ *   lit("abc")                  // A column that produces a literal (constant) value.
+ * }}}
+ *
+ * [[Column]] objects can be composed to form complex expressions:
+ *
+ * {{{
+ *   $"a" + 1
+ *   $"a" === $"b"
+ * }}}
+ *
+ * @groupname java_expr_ops Java-specific expression operators
+ * @groupname expr_ops Expression operators
+ * @groupname df_ops DataFrame functions
+ * @groupname Ungrouped Support functions for DataFrames
  *
  * @since 1.3.0
  */
@@ -53,14 +105,49 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
-    case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
-    case _ => UnresolvedAttribute(name)
+    case _ if name.endsWith(".*") =>
+      val parts = UnresolvedAttribute.parseAttributeName(name.substring(0, name.length - 2))
+      UnresolvedStar(Some(parts))
+    case _ => UnresolvedAttribute.quotedString(name)
   })
 
   /** Creates a column based on the given expression. */
-  implicit private def exprToColumn(newExpr: Expression): Column = new Column(newExpr)
+  private def withExpr(newExpr: Expression): Column = new Column(newExpr)
 
-  override def toString: String = expr.prettyString
+  /**
+   * Returns the expression for this column either with an existing or auto assigned name.
+   */
+  private[sql] def named: NamedExpression = expr match {
+    // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+    // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+    // make it a NamedExpression.
+    case u: UnresolvedAttribute => UnresolvedAlias(u)
+
+    case u: UnresolvedExtractValue => UnresolvedAlias(u)
+
+    case expr: NamedExpression => expr
+
+    // Leave an unaliased generator with an empty list of names since the analyzer will generate
+    // the correct defaults after the nested expression's type has been resolved.
+    case explode: Explode => MultiAlias(explode, Nil)
+
+    case jt: JsonTuple => MultiAlias(jt, Nil)
+
+    case func: UnresolvedFunction => UnresolvedAlias(func, Some(usePrettyExpression(func).sql))
+
+    // If we have a top level Cast, there is a chance to give it a better alias, if there is a
+    // NamedExpression under this Cast.
+    case c: Cast => c.transformUp {
+      case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
+    } match {
+      case ne: NamedExpression => ne
+      case other => Alias(expr, usePrettyExpression(expr).sql)()
+    }
+
+    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
+  }
+
+  override def toString: String = usePrettyExpression(expr).sql
 
   override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
@@ -70,18 +157,29 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   override def hashCode: Int = this.expr.hashCode
 
   /**
+   * Provides a type hint about the expected return value of this column.  This information can
+   * be used by operations such as `select` on a [[Dataset]] to automatically convert the
+   * results into the correct JVM types.
+   * @since 1.6.0
+   */
+  def as[U : Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](expr, encoderFor[U])
+
+  /**
    * Extracts a value or values from a complex type.
    * The following types of extraction are supported:
-   * - Given an Array, an integer ordinal can be used to retrieve a single value.
-   * - Given a Map, a key of the correct type can be used to retrieve an individual value.
-   * - Given a Struct, a string fieldName can be used to extract that field.
-   * - Given an Array of Structs, a string fieldName can be used to extract filed
-   *   of every struct in that array, and return an Array of fields
+   *
+   *  - Given an Array, an integer ordinal can be used to retrieve a single value.
+   *  - Given a Map, a key of the correct type can be used to retrieve an individual value.
+   *  - Given a Struct, a string fieldName can be used to extract that field.
+   *  - Given an Array of Structs, a string fieldName can be used to extract filed
+   *    of every struct in that array, and return an Array of fields
    *
    * @group expr_ops
    * @since 1.4.0
    */
-  def apply(extraction: Any): Column = UnresolvedExtractValue(expr, lit(extraction).expr)
+  def apply(extraction: Any): Column = withExpr {
+    UnresolvedExtractValue(expr, lit(extraction).expr)
+  }
 
   /**
    * Unary minus, i.e. negate the expression.
@@ -97,7 +195,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def unary_- : Column = UnaryMinus(expr)
+  def unary_- : Column = withExpr { UnaryMinus(expr) }
 
   /**
    * Inversion of boolean expression, i.e. NOT.
@@ -113,7 +211,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def unary_! : Column = Not(expr)
+  def unary_! : Column = withExpr { Not(expr) }
 
   /**
    * Equality test.
@@ -129,7 +227,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def === (other: Any): Column = {
+  def === (other: Any): Column = withExpr {
     val right = lit(other).expr
     if (this.expr == right) {
       logWarning(
@@ -159,6 +257,23 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Inequality test.
    * {{{
    *   // Scala:
+   *   df.select( df("colA") =!= df("colB") )
+   *   df.select( !(df("colA") === df("colB")) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.functions.*;
+   *   df.filter( col("colA").notEqual(col("colB")) );
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.0.0
+    */
+  def =!= (other: Any): Column = withExpr{ Not(EqualTo(expr, lit(other).expr)) }
+
+  /**
+   * Inequality test.
+   * {{{
+   *   // Scala:
    *   df.select( df("colA") !== df("colB") )
    *   df.select( !(df("colA") === df("colB")) )
    *
@@ -169,8 +284,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    * @since 1.3.0
-   */
-  def !== (other: Any): Column = Not(EqualTo(expr, lit(other).expr))
+    */
+  @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
+  def !== (other: Any): Column = this =!= other
 
   /**
    * Inequality test.
@@ -187,7 +303,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group java_expr_ops
    * @since 1.3.0
    */
-  def notEqual(other: Any): Column = Not(EqualTo(expr, lit(other).expr))
+  def notEqual(other: Any): Column = withExpr { Not(EqualTo(expr, lit(other).expr)) }
 
   /**
    * Greater than.
@@ -203,7 +319,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def > (other: Any): Column = GreaterThan(expr, lit(other).expr)
+  def > (other: Any): Column = withExpr { GreaterThan(expr, lit(other).expr) }
 
   /**
    * Greater than.
@@ -234,7 +350,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def < (other: Any): Column = LessThan(expr, lit(other).expr)
+  def < (other: Any): Column = withExpr { LessThan(expr, lit(other).expr) }
 
   /**
    * Less than.
@@ -264,7 +380,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def <= (other: Any): Column = LessThanOrEqual(expr, lit(other).expr)
+  def <= (other: Any): Column = withExpr { LessThanOrEqual(expr, lit(other).expr) }
 
   /**
    * Less than or equal to.
@@ -294,7 +410,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def >= (other: Any): Column = GreaterThanOrEqual(expr, lit(other).expr)
+  def >= (other: Any): Column = withExpr { GreaterThanOrEqual(expr, lit(other).expr) }
 
   /**
    * Greater than or equal to an expression.
@@ -317,7 +433,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def <=> (other: Any): Column = EqualNullSafe(expr, lit(other).expr)
+  def <=> (other: Any): Column = withExpr { EqualNullSafe(expr, lit(other).expr) }
 
   /**
    * Equality test that is safe for null values.
@@ -349,8 +465,11 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.4.0
    */
   def when(condition: Column, value: Any): Column = this.expr match {
-    case CaseWhen(branches: Seq[Expression]) =>
-      CaseWhen(branches ++ Seq(lit(condition).expr, lit(value).expr))
+    case CaseWhen(branches, None) =>
+      withExpr { CaseWhen(branches :+ (condition.expr, lit(value).expr)) }
+    case CaseWhen(branches, Some(_)) =>
+      throw new IllegalArgumentException(
+        "when() cannot be applied once otherwise() is applied")
     case _ =>
       throw new IllegalArgumentException(
         "when() can only be applied on a Column previously generated by when() function")
@@ -378,13 +497,11 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.4.0
    */
   def otherwise(value: Any): Column = this.expr match {
-    case CaseWhen(branches: Seq[Expression]) =>
-      if (branches.size % 2 == 0) {
-        CaseWhen(branches :+ lit(value).expr)
-      } else {
-        throw new IllegalArgumentException(
-          "otherwise() can only be applied once on a Column previously generated by when()")
-      }
+    case CaseWhen(branches, None) =>
+      withExpr { CaseWhen(branches, Option(lit(value).expr)) }
+    case CaseWhen(branches, Some(_)) =>
+      throw new IllegalArgumentException(
+        "otherwise() can only be applied once on a Column previously generated by when()")
     case _ =>
       throw new IllegalArgumentException(
         "otherwise() can only be applied on a Column previously generated by when()")
@@ -401,12 +518,20 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   /**
+   * True if the current expression is NaN.
+   *
+   * @group expr_ops
+   * @since 1.5.0
+   */
+  def isNaN: Column = withExpr { IsNaN(expr) }
+
+  /**
    * True if the current expression is null.
    *
    * @group expr_ops
    * @since 1.3.0
    */
-  def isNull: Column = IsNull(expr)
+  def isNull: Column = withExpr { IsNull(expr) }
 
   /**
    * True if the current expression is NOT null.
@@ -414,7 +539,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def isNotNull: Column = IsNotNull(expr)
+  def isNotNull: Column = withExpr { IsNotNull(expr) }
 
   /**
    * Boolean OR.
@@ -429,7 +554,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def || (other: Any): Column = Or(expr, lit(other).expr)
+  def || (other: Any): Column = withExpr { Or(expr, lit(other).expr) }
 
   /**
    * Boolean OR.
@@ -459,7 +584,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def && (other: Any): Column = And(expr, lit(other).expr)
+  def && (other: Any): Column = withExpr { And(expr, lit(other).expr) }
 
   /**
    * Boolean AND.
@@ -489,7 +614,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def + (other: Any): Column = Add(expr, lit(other).expr)
+  def + (other: Any): Column = withExpr { Add(expr, lit(other).expr) }
 
   /**
    * Sum of this expression and another expression.
@@ -519,7 +644,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def - (other: Any): Column = Subtract(expr, lit(other).expr)
+  def - (other: Any): Column = withExpr { Subtract(expr, lit(other).expr) }
 
   /**
    * Subtraction. Subtract the other expression from this expression.
@@ -549,7 +674,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def * (other: Any): Column = Multiply(expr, lit(other).expr)
+  def * (other: Any): Column = withExpr { Multiply(expr, lit(other).expr) }
 
   /**
    * Multiplication of this expression and another expression.
@@ -579,7 +704,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def / (other: Any): Column = Divide(expr, lit(other).expr)
+  def / (other: Any): Column = withExpr { Divide(expr, lit(other).expr) }
 
   /**
    * Division this expression by another expression.
@@ -602,7 +727,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def % (other: Any): Column = Remainder(expr, lit(other).expr)
+  def % (other: Any): Column = withExpr { Remainder(expr, lit(other).expr) }
 
   /**
    * Modulo (a.k.a. remainder) expression.
@@ -617,10 +742,10 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * by the evaluated values of the arguments.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 1.5.0
    */
   @scala.annotation.varargs
-  def in(list: Any*): Column = In(expr, list.map(lit(_).expr))
+  def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
 
   /**
    * SQL like expression.
@@ -628,7 +753,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def like(literal: String): Column = Like(expr, lit(literal).expr)
+  def like(literal: String): Column = withExpr { Like(expr, lit(literal).expr) }
 
   /**
    * SQL RLIKE expression (LIKE with Regex).
@@ -636,7 +761,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
+  def rlike(literal: String): Column = withExpr { RLike(expr, lit(literal).expr) }
 
   /**
    * An expression that gets an item at position `ordinal` out of an array,
@@ -645,7 +770,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def getItem(key: Any): Column = UnresolvedExtractValue(expr, Literal(key))
+  def getItem(key: Any): Column = withExpr { UnresolvedExtractValue(expr, Literal(key)) }
 
   /**
    * An expression that gets a field by name in a [[StructType]].
@@ -653,7 +778,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def getField(fieldName: String): Column = UnresolvedExtractValue(expr, Literal(fieldName))
+  def getField(fieldName: String): Column = withExpr {
+    UnresolvedExtractValue(expr, Literal(fieldName))
+  }
 
   /**
    * An expression that returns a substring.
@@ -663,7 +790,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def substr(startPos: Column, len: Column): Column = Substring(expr, startPos.expr, len.expr)
+  def substr(startPos: Column, len: Column): Column = withExpr {
+    Substring(expr, startPos.expr, len.expr)
+  }
 
   /**
    * An expression that returns a substring.
@@ -673,7 +802,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def substr(startPos: Int, len: Int): Column = Substring(expr, lit(startPos).expr, lit(len).expr)
+  def substr(startPos: Int, len: Int): Column = withExpr {
+    Substring(expr, lit(startPos).expr, lit(len).expr)
+  }
 
   /**
    * Contains the other element.
@@ -681,7 +812,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def contains(other: Any): Column = Contains(expr, lit(other).expr)
+  def contains(other: Any): Column = withExpr { Contains(expr, lit(other).expr) }
 
   /**
    * String starts with.
@@ -689,7 +820,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def startsWith(other: Column): Column = StartsWith(expr, lit(other).expr)
+  def startsWith(other: Column): Column = withExpr { StartsWith(expr, lit(other).expr) }
 
   /**
    * String starts with another string literal.
@@ -705,7 +836,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def endsWith(other: Column): Column = EndsWith(expr, lit(other).expr)
+  def endsWith(other: Column): Column = withExpr { EndsWith(expr, lit(other).expr) }
 
   /**
    * String ends with another string literal.
@@ -734,10 +865,18 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *   df.select($"colA".as("colB"))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String): Column = Alias(expr, alias)()
+  def as(alias: String): Column = withExpr {
+    expr match {
+      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
+      case other => Alias(other, alias)()
+    }
+  }
 
   /**
    * (Scala-specific) Assigns the given aliases to the results of a table generating function.
@@ -749,7 +888,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def as(aliases: Seq[String]): Column = MultiAlias(expr, aliases)
+  def as(aliases: Seq[String]): Column = withExpr { MultiAlias(expr, aliases) }
 
   /**
    * Assigns the given aliases to the results of a table generating function.
@@ -761,7 +900,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def as(aliases: Array[String]): Column = MultiAlias(expr, aliases)
+  def as(aliases: Array[String]): Column = withExpr { MultiAlias(expr, aliases) }
 
   /**
    * Gives the column an alias.
@@ -770,10 +909,18 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *   df.select($"colA".as('colB))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: Symbol): Column = Alias(expr, alias.name)()
+  def as(alias: Symbol): Column = withExpr {
+    expr match {
+      case ne: NamedExpression => Alias(expr, alias.name)(explicitMetadata = Some(ne.metadata))
+      case other => Alias(other, alias.name)()
+    }
+  }
 
   /**
    * Gives the column an alias with metadata.
@@ -785,7 +932,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String, metadata: Metadata): Column = {
+  def as(alias: String, metadata: Metadata): Column = withExpr {
     Alias(expr, alias)(explicitMetadata = Some(metadata))
   }
 
@@ -803,11 +950,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: DataType): Column = expr match {
-    // Lift alias out of cast so we can support col.as("name").cast(IntegerType)
-    case Alias(childExpr, name) => Alias(Cast(childExpr, to), name)()
-    case _ => Cast(expr, to)
-  }
+  def cast(to: DataType): Column = withExpr { Cast(expr, to) }
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -836,7 +979,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def desc: Column = SortOrder(expr, Descending)
+  def desc: Column = withExpr { SortOrder(expr, Descending) }
 
   /**
    * Returns an ordering used in sorting.
@@ -851,7 +994,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def asc: Column = SortOrder(expr, Ascending)
+  def asc: Column = withExpr { SortOrder(expr, Ascending) }
 
   /**
    * Prints the expression to the console for debugging purpose.
@@ -864,7 +1007,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     if (extended) {
       println(expr)
     } else {
-      println(expr.prettyString)
+      println(expr.sql)
     }
     // scalastyle:on println
   }
@@ -878,7 +1021,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def bitwiseOR(other: Any): Column = BitwiseOr(expr, lit(other).expr)
+  def bitwiseOR(other: Any): Column = withExpr { BitwiseOr(expr, lit(other).expr) }
 
   /**
    * Compute bitwise AND of this expression with another expression.
@@ -889,7 +1032,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def bitwiseAND(other: Any): Column = BitwiseAnd(expr, lit(other).expr)
+  def bitwiseAND(other: Any): Column = withExpr { BitwiseAnd(expr, lit(other).expr) }
 
   /**
    * Compute bitwise XOR of this expression with another expression.
@@ -900,7 +1043,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def bitwiseXOR(other: Any): Column = BitwiseXor(expr, lit(other).expr)
+  def bitwiseXOR(other: Any): Column = withExpr { BitwiseXor(expr, lit(other).expr) }
 
   /**
    * Define a windowing column.
@@ -988,7 +1131,7 @@ class ColumnName(name: String) extends Column(name) {
    * Creates a new [[StructField]] of type decimal.
    * @since 1.3.0
    */
-  def decimal: StructField = StructField(name, DecimalType.Unlimited)
+  def decimal: StructField = StructField(name, DecimalType.USER_DEFAULT)
 
   /**
    * Creates a new [[StructField]] of type decimal.

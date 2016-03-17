@@ -16,14 +16,9 @@
  */
 
 .navbar {
-  height: 50px;
   font-size: 15px;
   margin-bottom: 15px;
-  min-width: 1200px
-}
-
-.navbar .navbar-inner {
-  height: 50px;
+  min-width: 600px;
 }
 
 .navbar .brand {
@@ -46,6 +41,7 @@
 .navbar-text {
   height: 50px;
   line-height: 3.3;
+  white-space: nowrap;
 }
 
 table.sortable thead {
@@ -207,7 +203,7 @@ span.additional-metric-title {
 /* Hide all additional metrics by default. This is done here rather than using JavaScript to
  * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
 .scheduler_delay, .deserialization_time, .fetch_wait_time, .shuffle_read_remote,
-.serialization_time, .getting_result_time {
+.serialization_time, .getting_result_time, .peak_execution_memory {
   display: none;
 }
 
@@ -223,4 +219,19 @@ span.additional-metric-title {
 
 a.expandbutton {
   cursor: pointer;
+}
+
+.threaddump-td-mouseover {
+  background-color: #49535a !important;
+  color: white;
+  cursor:pointer;
+}
+
+.table-head-clickable th a, .table-head-clickable th a:hover {
+  /* Make the entire header clickable, not just the text label */
+  display: block;
+  width: 100%;
+  /* Suppress the default link styling */
+  color: #333;
+  text-decoration: none;
 }

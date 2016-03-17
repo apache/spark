@@ -21,18 +21,16 @@ import java.io.FileNotFoundException
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.concurrent.{ScheduledFuture, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.language.postfixOps
 import scala.util.Random
 
-import akka.serialization.Serialization
-import akka.serialization.SerializationExtension
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.rpc.akka.AkkaRpcEnv
-import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
   ExecutorState, SparkHadoopUtil}
@@ -43,11 +41,13 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
+import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[master] class Master(
+private[deploy] class Master(
     override val rpcEnv: RpcEnv,
     address: RpcAddress,
     webUiPort: Int,
@@ -58,8 +58,9 @@ private[master] class Master(
   private val forwardMessageThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
 
-  // TODO Remove it once we don't use akka.serialization.Serialization
-  private val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
+  private val rebuildUIThread =
+    ThreadUtils.newDaemonSingleThreadExecutor("master-rebuild-ui-thread")
+  private val rebuildUIContext = ExecutionContext.fromExecutor(rebuildUIThread)
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
@@ -73,7 +74,7 @@ private[master] class Master(
 
   val workers = new HashSet[WorkerInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
-  val waitingApps = new ArrayBuffer[ApplicationInfo]
+  private val waitingApps = new ArrayBuffer[ApplicationInfo]
   val apps = new HashSet[ApplicationInfo]
 
   private val idToWorker = new HashMap[String, WorkerInfo]
@@ -83,7 +84,8 @@ private[master] class Master(
   private val addressToApp = new HashMap[RpcAddress, ApplicationInfo]
   private val completedApps = new ArrayBuffer[ApplicationInfo]
   private var nextAppNumber = 0
-  private val appIdToUI = new HashMap[String, SparkUI]
+  // Using ConcurrentHashMap so that master-rebuild-ui-thread can add a UI after asyncRebuildUI
+  private val appIdToUI = new ConcurrentHashMap[String, SparkUI]
 
   private val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -132,14 +134,8 @@ private[master] class Master(
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
-  private val restServer =
-    if (restServerEnabled) {
-      val port = conf.getInt("spark.master.rest.port", 6066)
-      Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
-    } else {
-      None
-    }
-  private val restServerBoundPort = restServer.map(_.start())
+  private var restServer: Option[StandaloneRestServer] = None
+  private var restServerBoundPort: Option[Int] = None
 
   override def onStart(): Unit = {
     logInfo("Starting Spark master at " + masterUrl)
@@ -153,6 +149,12 @@ private[master] class Master(
       }
     }, 0, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
 
+    if (restServerEnabled) {
+      val port = conf.getInt("spark.master.rest.port", 6066)
+      restServer = Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
+    }
+    restServerBoundPort = restServer.map(_.start())
+
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
     applicationMetricsSystem.start()
@@ -161,20 +163,21 @@ private[master] class Master(
     masterMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
     applicationMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
 
+    val serializer = new JavaSerializer(conf)
     val (persistenceEngine_, leaderElectionAgent_) = RECOVERY_MODE match {
       case "ZOOKEEPER" =>
         logInfo("Persisting recovery state to ZooKeeper")
         val zkFactory =
-          new ZooKeeperRecoveryModeFactory(conf, SerializationExtension(actorSystem))
+          new ZooKeeperRecoveryModeFactory(conf, serializer)
         (zkFactory.createPersistenceEngine(), zkFactory.createLeaderElectionAgent(this))
       case "FILESYSTEM" =>
         val fsFactory =
-          new FileSystemRecoveryModeFactory(conf, SerializationExtension(actorSystem))
+          new FileSystemRecoveryModeFactory(conf, serializer)
         (fsFactory.createPersistenceEngine(), fsFactory.createLeaderElectionAgent(this))
       case "CUSTOM" =>
-        val clazz = Class.forName(conf.get("spark.deploy.recoveryMode.factory"))
-        val factory = clazz.getConstructor(classOf[SparkConf], classOf[Serialization])
-          .newInstance(conf, SerializationExtension(actorSystem))
+        val clazz = Utils.classForName(conf.get("spark.deploy.recoveryMode.factory"))
+        val factory = clazz.getConstructor(classOf[SparkConf], classOf[Serializer])
+          .newInstance(conf, serializer)
           .asInstanceOf[StandaloneRecoveryModeFactory]
         (factory.createPersistenceEngine(), factory.createLeaderElectionAgent(this))
       case _ =>
@@ -195,6 +198,7 @@ private[master] class Master(
       checkForWorkerTimeOutTask.cancel(true)
     }
     forwardMessageThread.shutdownNow()
+    rebuildUIThread.shutdownNow()
     webUi.stop()
     restServer.foreach(_.stop())
     masterMetricsSystem.stop()
@@ -213,7 +217,7 @@ private[master] class Master(
 
   override def receive: PartialFunction[Any, Unit] = {
     case ElectedLeader => {
-      val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData()
+      val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData(rpcEnv)
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
         RecoveryState.ALIVE
       } else {
@@ -237,31 +241,6 @@ private[master] class Master(
       System.exit(0)
     }
 
-    case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
-      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
-        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
-      if (state == RecoveryState.STANDBY) {
-        // ignore, don't send response
-      } else if (idToWorker.contains(id)) {
-        workerRef.send(RegisterWorkerFailed("Duplicate worker ID"))
-      } else {
-        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          workerRef, workerUiPort, publicAddress)
-        if (registerWorker(worker)) {
-          persistenceEngine.addWorker(worker)
-          workerRef.send(RegisteredWorker(self, masterWebUiUrl))
-          schedule()
-        } else {
-          val workerAddress = worker.endpoint.address
-          logWarning("Worker registration failed. Attempted to re-register worker at same " +
-            "address: " + workerAddress)
-          workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
-            + workerAddress))
-        }
-      }
-    }
-
     case RegisterApplication(description, driver) => {
       // TODO Prevent repeated registrations from some driver
       if (state == RecoveryState.STANDBY) {
@@ -282,9 +261,17 @@ private[master] class Master(
       execOption match {
         case Some(exec) => {
           val appInfo = idToApp(appId)
+          val oldState = exec.state
           exec.state = state
-          if (state == ExecutorState.RUNNING) { appInfo.resetRetryCount() }
+
+          if (state == ExecutorState.RUNNING) {
+            assert(oldState == ExecutorState.LAUNCHING,
+              s"executor $execId state transfer from $oldState to RUNNING is illegal")
+            appInfo.resetRetryCount()
+          }
+
           exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
+
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
             logInfo(s"Removing executor ${exec.fullId} because it is $state")
@@ -381,6 +368,30 @@ private[master] class Master(
       if (canCompleteRecovery) { completeRecovery() }
     }
 
+    case WorkerLatestState(workerId, executors, driverIds) =>
+      idToWorker.get(workerId) match {
+        case Some(worker) =>
+          for (exec <- executors) {
+            val executorMatches = worker.executors.exists {
+              case (_, e) => e.application.id == exec.appId && e.id == exec.execId
+            }
+            if (!executorMatches) {
+              // master doesn't recognize this executor. So just tell worker to kill it.
+              worker.endpoint.send(KillExecutor(masterUrl, exec.appId, exec.execId))
+            }
+          }
+
+          for (driverId <- driverIds) {
+            val driverMatches = worker.drivers.exists { case (id, _) => id == driverId }
+            if (!driverMatches) {
+              // master doesn't recognize this driver. So just tell worker to kill it.
+              worker.endpoint.send(KillDriver(driverId))
+            }
+          }
+        case None =>
+          logWarning("Worker state from unknown worker: " + workerId)
+      }
+
     case UnregisterApplication(applicationId) =>
       logInfo(s"Received unregister request from application $applicationId")
       idToApp.get(applicationId).foreach(finishApplication)
@@ -388,9 +399,38 @@ private[master] class Master(
     case CheckForWorkerTimeOut => {
       timeOutDeadWorkers()
     }
+
+    case AttachCompletedRebuildUI(appId) =>
+      // An asyncRebuildSparkUI has completed, so need to attach to master webUi
+      Option(appIdToUI.get(appId)).foreach { ui => webUi.attachSparkUI(ui) }
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case RegisterWorker(
+        id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) => {
+      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
+        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
+      if (state == RecoveryState.STANDBY) {
+        context.reply(MasterInStandby)
+      } else if (idToWorker.contains(id)) {
+        context.reply(RegisterWorkerFailed("Duplicate worker ID"))
+      } else {
+        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
+          workerRef, workerWebUiUrl)
+        if (registerWorker(worker)) {
+          persistenceEngine.addWorker(worker)
+          context.reply(RegisteredWorker(self, masterWebUiUrl))
+          schedule()
+        } else {
+          val workerAddress = worker.endpoint.address
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          context.reply(RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress))
+        }
+      }
+    }
+
     case RequestSubmitDriver(description) => {
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
@@ -472,6 +512,13 @@ private[master] class Master(
     case BoundPortsRequest => {
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))
     }
+
+    case RequestExecutors(appId, requestedTotal) =>
+      context.reply(handleRequestExecutors(appId, requestedTotal))
+
+    case KillExecutors(appId, executorIds) =>
+      val formattedExecutorIds = formatExecutorIds(executorIds)
+      context.reply(handleKillExecutors(appId, formattedExecutorIds))
   }
 
   override def onDisconnected(address: RpcAddress): Unit = {
@@ -545,6 +592,7 @@ private[master] class Master(
 
   /**
    * Schedule executors to be launched on the workers.
+   * Returns an array containing number of cores assigned to each worker.
    *
    * There are two modes of launching executors. The first attempts to spread out an application's
    * executors on as many workers as possible, while the second does the opposite (i.e. launch them
@@ -555,39 +603,97 @@ private[master] class Master(
    * multiple executors from the same application may be launched on the same worker if the worker
    * has enough cores and memory. Otherwise, each executor grabs all the cores available on the
    * worker by default, in which case only one executor may be launched on each worker.
+   *
+   * It is important to allocate coresPerExecutor on each worker at a time (instead of 1 core
+   * at a time). Consider the following example: cluster has 4 workers with 16 cores each.
+   * User requests 3 executors (spark.cores.max = 48, spark.executor.cores = 16). If 1 core is
+   * allocated at a time, 12 cores from each worker would be assigned to each executor.
+   * Since 12 < 16, no executors would launch [SPARK-8881].
+   */
+  private def scheduleExecutorsOnWorkers(
+      app: ApplicationInfo,
+      usableWorkers: Array[WorkerInfo],
+      spreadOutApps: Boolean): Array[Int] = {
+    val coresPerExecutor = app.desc.coresPerExecutor
+    val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
+    val oneExecutorPerWorker = coresPerExecutor.isEmpty
+    val memoryPerExecutor = app.desc.memoryPerExecutorMB
+    val numUsable = usableWorkers.length
+    val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
+    val assignedExecutors = new Array[Int](numUsable) // Number of new executors on each worker
+    var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
+
+    /** Return whether the specified worker can launch an executor for this app. */
+    def canLaunchExecutor(pos: Int): Boolean = {
+      val keepScheduling = coresToAssign >= minCoresPerExecutor
+      val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
+
+      // If we allow multiple executors per worker, then we can always launch new executors.
+      // Otherwise, if there is already an executor on this worker, just give it more cores.
+      val launchingNewExecutor = !oneExecutorPerWorker || assignedExecutors(pos) == 0
+      if (launchingNewExecutor) {
+        val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
+        val enoughMemory = usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor
+        val underLimit = assignedExecutors.sum + app.executors.size < app.executorLimit
+        keepScheduling && enoughCores && enoughMemory && underLimit
+      } else {
+        // We're adding cores to an existing executor, so no need
+        // to check memory and executor limits
+        keepScheduling && enoughCores
+      }
+    }
+
+    // Keep launching executors until no more workers can accommodate any
+    // more executors, or if we have reached this application's limits
+    var freeWorkers = (0 until numUsable).filter(canLaunchExecutor)
+    while (freeWorkers.nonEmpty) {
+      freeWorkers.foreach { pos =>
+        var keepScheduling = true
+        while (keepScheduling && canLaunchExecutor(pos)) {
+          coresToAssign -= minCoresPerExecutor
+          assignedCores(pos) += minCoresPerExecutor
+
+          // If we are launching one executor per worker, then every iteration assigns 1 core
+          // to the executor. Otherwise, every iteration assigns cores to a new executor.
+          if (oneExecutorPerWorker) {
+            assignedExecutors(pos) = 1
+          } else {
+            assignedExecutors(pos) += 1
+          }
+
+          // Spreading out an application means spreading out its executors across as
+          // many workers as possible. If we are not spreading out, then we should keep
+          // scheduling executors on this worker until we use all of its resources.
+          // Otherwise, just move on to the next worker.
+          if (spreadOutApps) {
+            keepScheduling = false
+          }
+        }
+      }
+      freeWorkers = freeWorkers.filter(canLaunchExecutor)
+    }
+    assignedCores
+  }
+
+  /**
+   * Schedule and launch executors on workers
    */
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
-    if (spreadOutApps) {
-      // Try to spread out each app among all the workers, until it has all its cores
-      for (app <- waitingApps if app.coresLeft > 0) {
-        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
-          .sortBy(_.coresFree).reverse
-        val numUsable = usableWorkers.length
-        val assigned = new Array[Int](numUsable) // Number of cores to give on each node
-        var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
-        var pos = 0
-        while (toAssign > 0) {
-          if (usableWorkers(pos).coresFree - assigned(pos) > 0) {
-            toAssign -= 1
-            assigned(pos) += 1
-          }
-          pos = (pos + 1) % numUsable
-        }
-        // Now that we've decided how many cores to give on each node, let's actually give them
-        for (pos <- 0 until numUsable if assigned(pos) > 0) {
-          allocateWorkerResourceToExecutors(app, assigned(pos), usableWorkers(pos))
-        }
-      }
-    } else {
-      // Pack each app into as few workers as possible until we've assigned all its cores
-      for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
-        for (app <- waitingApps if app.coresLeft > 0) {
-          allocateWorkerResourceToExecutors(app, app.coresLeft, worker)
-        }
+    for (app <- waitingApps if app.coresLeft > 0) {
+      val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
+      // Filter out workers that don't have enough resources to launch an executor
+      val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+        .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
+          worker.coresFree >= coresPerExecutor.getOrElse(1))
+        .sortBy(_.coresFree).reverse
+      val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
+
+      // Now that we've decided how many cores to allocate on each worker, let's allocate them
+      for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
+        allocateWorkerResourceToExecutors(
+          app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
       }
     }
   }
@@ -595,19 +701,22 @@ private[master] class Master(
   /**
    * Allocate a worker's resources to one or more executors.
    * @param app the info of the application which the executors belong to
-   * @param coresToAllocate cores on this worker to be allocated to this application
+   * @param assignedCores number of cores on this worker for this application
+   * @param coresPerExecutor number of cores per executor
    * @param worker the worker info
    */
   private def allocateWorkerResourceToExecutors(
       app: ApplicationInfo,
-      coresToAllocate: Int,
+      assignedCores: Int,
+      coresPerExecutor: Option[Int],
       worker: WorkerInfo): Unit = {
-    val memoryPerExecutor = app.desc.memoryPerExecutorMB
-    val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresToAllocate)
-    var coresLeft = coresToAllocate
-    while (coresLeft >= coresPerExecutor && worker.memoryFree >= memoryPerExecutor) {
-      val exec = app.addExecutor(worker, coresPerExecutor)
-      coresLeft -= coresPerExecutor
+    // If the number of cores per executor is specified, we divide the cores assigned
+    // to this worker evenly among the executors with no remainder.
+    // Otherwise, we launch a single executor that grabs all the assignedCores on this worker.
+    val numExecutors = coresPerExecutor.map { assignedCores / _ }.getOrElse(1)
+    val coresToAssign = coresPerExecutor.getOrElse(assignedCores)
+    for (i <- 1 to numExecutors) {
+      val exec = app.addExecutor(worker, coresToAssign)
       launchExecutor(worker, exec)
       app.state = ApplicationState.RUNNING
     }
@@ -618,15 +727,28 @@ private[master] class Master(
    * every time a new app joins or resource availability changes.
    */
   private def schedule(): Unit = {
-    if (state != RecoveryState.ALIVE) { return }
+    if (state != RecoveryState.ALIVE) {
+      return
+    }
     // Drivers take strict precedence over executors
-    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
-    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
-      for (driver <- waitingDrivers) {
+    val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
+    val numWorkersAlive = shuffledAliveWorkers.size
+    var curPos = 0
+    for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
+      // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
+      // start from the last worker that was assigned a driver, and continue onwards until we have
+      // explored all alive workers.
+      var launched = false
+      var numWorkersVisited = 0
+      while (numWorkersVisited < numWorkersAlive && !launched) {
+        val worker = shuffledAliveWorkers(curPos)
+        numWorkersVisited += 1
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
+          launched = true
         }
+        curPos = (curPos + 1) % numWorkersAlive
       }
     }
     startExecutorsOnWorkers()
@@ -637,8 +759,8 @@ private[master] class Master(
     worker.addExecutor(exec)
     worker.endpoint.send(LaunchExecutor(masterUrl,
       exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
-    exec.application.driver.send(ExecutorAdded(
-      exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
+    exec.application.driver.send(
+      ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
 
   private def registerWorker(worker: WorkerInfo): Boolean = {
@@ -678,6 +800,7 @@ private[master] class Master(
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
         exec.id, ExecutorState.LOST, Some("worker lost"), None))
+      exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
     for (driver <- worker.drivers.values) {
@@ -703,7 +826,8 @@ private[master] class Master(
       ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
+    val appId = newApplicationId(date)
+    new ApplicationInfo(now, appId, desc, date, driver, defaultCores)
   }
 
   private def registerApplication(app: ApplicationInfo): Unit = {
@@ -735,7 +859,7 @@ private[master] class Master(
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
-          appIdToUI.remove(a.id).foreach { ui => webUi.detachSparkUI(ui) }
+          Option(appIdToUI.remove(a.id)).foreach { ui => webUi.detachSparkUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
         })
         completedApps.trimStart(toRemove)
@@ -744,12 +868,10 @@ private[master] class Master(
       waitingApps -= app
 
       // If application events are logged, use them to rebuild the UI
-      rebuildSparkUI(app)
+      asyncRebuildSparkUI(app)
 
       for (exec <- app.executors.values) {
-        exec.worker.removeExecutor(exec)
-        exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
-        exec.state = ExecutorState.KILLED
+        killExecutor(exec)
       }
       app.markFinished(state)
       if (state != ApplicationState.FINISHED) {
@@ -766,53 +888,146 @@ private[master] class Master(
   }
 
   /**
+   * Handle a request to set the target number of executors for this application.
+   *
+   * If the executor limit is adjusted upwards, new executors will be launched provided
+   * that there are workers with sufficient resources. If it is adjusted downwards, however,
+   * we do not kill existing executors until we explicitly receive a kill request.
+   *
+   * @return whether the application has previously registered with this Master.
+   */
+  private def handleRequestExecutors(appId: String, requestedTotal: Int): Boolean = {
+    idToApp.get(appId) match {
+      case Some(appInfo) =>
+        logInfo(s"Application $appId requested to set total executors to $requestedTotal.")
+        appInfo.executorLimit = requestedTotal
+        schedule()
+        true
+      case None =>
+        logWarning(s"Unknown application $appId requested $requestedTotal total executors.")
+        false
+    }
+  }
+
+  /**
+   * Handle a kill request from the given application.
+   *
+   * This method assumes the executor limit has already been adjusted downwards through
+   * a separate [[RequestExecutors]] message, such that we do not launch new executors
+   * immediately after the old ones are removed.
+   *
+   * @return whether the application has previously registered with this Master.
+   */
+  private def handleKillExecutors(appId: String, executorIds: Seq[Int]): Boolean = {
+    idToApp.get(appId) match {
+      case Some(appInfo) =>
+        logInfo(s"Application $appId requests to kill executors: " + executorIds.mkString(", "))
+        val (known, unknown) = executorIds.partition(appInfo.executors.contains)
+        known.foreach { executorId =>
+          val desc = appInfo.executors(executorId)
+          appInfo.removeExecutor(desc)
+          killExecutor(desc)
+        }
+        if (unknown.nonEmpty) {
+          logWarning(s"Application $appId attempted to kill non-existent executors: "
+            + unknown.mkString(", "))
+        }
+        schedule()
+        true
+      case None =>
+        logWarning(s"Unregistered application $appId requested us to kill executors!")
+        false
+    }
+  }
+
+  /**
+   * Cast the given executor IDs to integers and filter out the ones that fail.
+   *
+   * All executors IDs should be integers since we launched these executors. However,
+   * the kill interface on the driver side accepts arbitrary strings, so we need to
+   * handle non-integer executor IDs just to be safe.
+   */
+  private def formatExecutorIds(executorIds: Seq[String]): Seq[Int] = {
+    executorIds.flatMap { executorId =>
+      try {
+        Some(executorId.toInt)
+      } catch {
+        case e: NumberFormatException =>
+          logError(s"Encountered executor with a non-integer ID: $executorId. Ignoring")
+          None
+      }
+    }
+  }
+
+  /**
+   * Ask the worker on which the specified executor is launched to kill the executor.
+   */
+  private def killExecutor(exec: ExecutorDesc): Unit = {
+    exec.worker.removeExecutor(exec)
+    exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
+    exec.state = ExecutorState.KILLED
+  }
+
+  /**
    * Rebuild a new SparkUI from the given application's event logs.
    * Return the UI if successful, else None
    */
   private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
+    val futureUI = asyncRebuildSparkUI(app)
+    Await.result(futureUI, Duration.Inf)
+  }
+
+  /** Rebuild a new SparkUI asynchronously to not block RPC event loop */
+  private[master] def asyncRebuildSparkUI(app: ApplicationInfo): Future[Option[SparkUI]] = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    try {
-      val eventLogDir = app.desc.eventLogDir
-        .getOrElse {
-          // Event logging is not enabled for this application
-          app.desc.appUiUrl = notFoundBasePath
-          return None
-        }
-
+    val eventLogDir = app.desc.eventLogDir
+      .getOrElse {
+        // Event logging is disabled for this application
+        app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
+        return Future.successful(None)
+      }
+    val futureUI = Future {
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, app.desc.eventLogCodec)
+        eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
-          EventLoggingListener.IN_PROGRESS))
+        EventLoggingListener.IN_PROGRESS))
 
-      if (inProgressExists) {
+      val eventLogFile = if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
         logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
-      }
-
-      val (eventLogFile, status) = if (inProgressExists) {
-        (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
+        eventLogFilePrefix + EventLoggingListener.IN_PROGRESS
       } else {
-        (eventLogFilePrefix, " (completed)")
+        eventLogFilePrefix
       }
 
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
-      val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
+        appName, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       try {
-        replayBus.replay(logInput, eventLogFile, maybeTruncated)
+        replayBus.replay(logInput, eventLogFile, inProgressExists)
       } finally {
         logInput.close()
       }
-      appIdToUI(app.id) = ui
-      webUi.attachSparkUI(ui)
-      // Application UI is successfully rebuilt, so link the Master UI to it
-      app.desc.appUiUrl = ui.basePath
+
       Some(ui)
-    } catch {
+    }(rebuildUIContext)
+
+    futureUI.onSuccess { case Some(ui) =>
+      appIdToUI.put(app.id, ui)
+      // `self` can be null if we are already in the process of shutting down
+      // This happens frequently in tests where `local-cluster` is used
+      if (self != null) {
+        self.send(AttachCompletedRebuildUI(app.id))
+      }
+      // Application UI is successfully rebuilt, so link the Master UI to it
+      // NOTE - app.appUIUrlAtHistoryServer is volatile
+      app.appUIUrlAtHistoryServer = Some(ui.basePath)
+    }(ThreadUtils.sameThread)
+
+    futureUI.onFailure {
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
         val title = s"Application history not found (${app.id})"
@@ -820,8 +1035,8 @@ private[master] class Master(
         logWarning(msg)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
-        None
+        app.appUIUrlAtHistoryServer = Some(notFoundBasePath + s"?msg=$msg&title=$title")
+
       case e: Exception =>
         // Relay exception message to application UI page
         val title = s"Application history load error (${app.id})"
@@ -829,9 +1044,11 @@ private[master] class Master(
         var msg = s"Exception in replaying log for application $appName!"
         logError(msg, e)
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
-        None
-    }
+        app.appUIUrlAtHistoryServer =
+            Some(notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title")
+    }(ThreadUtils.sameThread)
+
+    futureUI
   }
 
   /** Generate a new app ID given a app's submission date */
@@ -908,7 +1125,7 @@ private[deploy] object Master extends Logging {
   val ENDPOINT_NAME = "Master"
 
   def main(argStrings: Array[String]) {
-    SignalLogger.register(log)
+    Utils.initDaemon(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
     val (rpcEnv, _, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, conf)

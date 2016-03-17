@@ -80,10 +80,10 @@ public class JavaMatricesSuite implements Serializable {
         assertArrayEquals(sd.toArray(), s.toArray(), 0.0);
         assertArrayEquals(s.toArray(), ss.toArray(), 0.0);
         assertArrayEquals(s.values(), ss.values(), 0.0);
-        assert(s.values().length == 2);
-        assert(ss.values().length == 2);
-        assert(s.colPtrs().length == 4);
-        assert(ss.colPtrs().length == 4);
+        assertEquals(2, s.values().length);
+        assertEquals(2, ss.values().length);
+        assertEquals(4, s.colPtrs().length);
+        assertEquals(4, ss.colPtrs().length);
     }
 
     @Test
@@ -137,27 +137,27 @@ public class JavaMatricesSuite implements Serializable {
         Matrix deHorz2 = Matrices.horzcat(new Matrix[]{spMat1, deMat2});
         Matrix deHorz3 = Matrices.horzcat(new Matrix[]{deMat1, spMat2});
 
-        assert(deHorz1.numRows() == 3);
-        assert(deHorz2.numRows() == 3);
-        assert(deHorz3.numRows() == 3);
-        assert(spHorz.numRows() == 3);
-        assert(deHorz1.numCols() == 5);
-        assert(deHorz2.numCols() == 5);
-        assert(deHorz3.numCols() == 5);
-        assert(spHorz.numCols() == 5);
+        assertEquals(3, deHorz1.numRows());
+        assertEquals(3, deHorz2.numRows());
+        assertEquals(3, deHorz3.numRows());
+        assertEquals(3, spHorz.numRows());
+        assertEquals(5, deHorz1.numCols());
+        assertEquals(5, deHorz2.numCols());
+        assertEquals(5, deHorz3.numCols());
+        assertEquals(5, spHorz.numCols());
 
         Matrix spVert = Matrices.vertcat(new Matrix[]{spMat1, spMat3});
         Matrix deVert1 = Matrices.vertcat(new Matrix[]{deMat1, deMat3});
         Matrix deVert2 = Matrices.vertcat(new Matrix[]{spMat1, deMat3});
         Matrix deVert3 = Matrices.vertcat(new Matrix[]{deMat1, spMat3});
 
-        assert(deVert1.numRows() == 5);
-        assert(deVert2.numRows() == 5);
-        assert(deVert3.numRows() == 5);
-        assert(spVert.numRows() == 5);
-        assert(deVert1.numCols() == 2);
-        assert(deVert2.numCols() == 2);
-        assert(deVert3.numCols() == 2);
-        assert(spVert.numCols() == 2);
+        assertEquals(5, deVert1.numRows());
+        assertEquals(5, deVert2.numRows());
+        assertEquals(5, deVert3.numRows());
+        assertEquals(5, spVert.numRows());
+        assertEquals(2, deVert1.numCols());
+        assertEquals(2, deVert2.numCols());
+        assertEquals(2, deVert3.numCols());
+        assertEquals(2, spVert.numCols());
     }
 }

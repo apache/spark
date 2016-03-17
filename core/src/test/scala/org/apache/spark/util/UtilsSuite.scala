@@ -17,25 +17,25 @@
 
 package org.apache.spark.util
 
-import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream}
+import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
 import java.text.DecimalFormatSymbols
-import java.util.concurrent.TimeUnit
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-
+import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.SparkConf
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -268,7 +268,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val tmpDir2 = Utils.createTempDir()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
-    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
+    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
     f1.close()
 
     // Read first few bytes
@@ -295,9 +295,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("reading offset bytes across multiple files") {
     val tmpDir = Utils.createTempDir()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
-    Files.write("0123456789", files(0), UTF_8)
-    Files.write("abcdefghij", files(1), UTF_8)
-    Files.write("ABCDEFGHIJ", files(2), UTF_8)
+    Files.write("0123456789", files(0), StandardCharsets.UTF_8)
+    Files.write("abcdefghij", files(1), StandardCharsets.UTF_8)
+    Files.write("ABCDEFGHIJ", files(2), StandardCharsets.UTF_8)
 
     // Read first few bytes in the 1st file
     assert(Utils.offsetBytes(files, 0, 5) === "01234")
@@ -383,7 +383,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
     assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
-    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar%23app.jar")
+    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
     assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
     if (Utils.isWindows) {
       assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt")
@@ -413,10 +413,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assertResolves("file:/jar1,file:/jar2", "file:/jar1,file:/jar2")
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
     assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4%23jar5,file:$cwd/path%20to/jar6")
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5,file:$cwd/path%20to/jar6")
     if (Utils.isWindows) {
       assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
-        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
+        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi,file:/C:/path%20to/jar4")
     }
   }
 
@@ -529,7 +529,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     try {
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
-        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
+        "spark.test.fileNameLoadB 1\n", outFile, StandardCharsets.UTF_8)
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
         .filter { case (k, v) => k.startsWith("spark.")}
@@ -559,7 +559,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
     val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
     val targetDir = new File(tempDir, "target-dir")
-    Files.write("some text", sourceFile, UTF_8)
+    Files.write("some text", sourceFile, StandardCharsets.UTF_8)
 
     val path =
       if (Utils.isWindows) {
@@ -688,5 +688,138 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     stream.println("test circular test circular test circular test circular test circular")
     // scalastyle:on println
     assert(buffer.toString === "t circular test circular\n")
+  }
+
+  test("nanSafeCompareDoubles") {
+    def shouldMatchDefaultOrder(a: Double, b: Double): Unit = {
+      assert(Utils.nanSafeCompareDoubles(a, b) === JDouble.compare(a, b))
+      assert(Utils.nanSafeCompareDoubles(b, a) === JDouble.compare(b, a))
+    }
+    shouldMatchDefaultOrder(0d, 0d)
+    shouldMatchDefaultOrder(0d, 1d)
+    shouldMatchDefaultOrder(Double.MinValue, Double.MaxValue)
+    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NaN) === 0)
+    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.PositiveInfinity) === 1)
+    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NegativeInfinity) === 1)
+    assert(Utils.nanSafeCompareDoubles(Double.PositiveInfinity, Double.NaN) === -1)
+    assert(Utils.nanSafeCompareDoubles(Double.NegativeInfinity, Double.NaN) === -1)
+  }
+
+  test("nanSafeCompareFloats") {
+    def shouldMatchDefaultOrder(a: Float, b: Float): Unit = {
+      assert(Utils.nanSafeCompareFloats(a, b) === JFloat.compare(a, b))
+      assert(Utils.nanSafeCompareFloats(b, a) === JFloat.compare(b, a))
+    }
+    shouldMatchDefaultOrder(0f, 0f)
+    shouldMatchDefaultOrder(1f, 1f)
+    shouldMatchDefaultOrder(Float.MinValue, Float.MaxValue)
+    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NaN) === 0)
+    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.PositiveInfinity) === 1)
+    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NegativeInfinity) === 1)
+    assert(Utils.nanSafeCompareFloats(Float.PositiveInfinity, Float.NaN) === -1)
+    assert(Utils.nanSafeCompareFloats(Float.NegativeInfinity, Float.NaN) === -1)
+  }
+
+  test("isDynamicAllocationEnabled") {
+    val conf = new SparkConf()
+    conf.set("spark.master", "yarn-client")
+    assert(Utils.isDynamicAllocationEnabled(conf) === false)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.dynamicAllocation.enabled", "false")) === false)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.dynamicAllocation.enabled", "true")) === true)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.executor.instances", "1")) === false)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.executor.instances", "0")) === true)
+    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
+    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.dynamicAllocation.testing", "true")))
+  }
+
+  test("encodeFileNameToURIRawPath") {
+    assert(Utils.encodeFileNameToURIRawPath("abc") === "abc")
+    assert(Utils.encodeFileNameToURIRawPath("abc xyz") === "abc%20xyz")
+    assert(Utils.encodeFileNameToURIRawPath("abc:xyz") === "abc:xyz")
+  }
+
+  test("decodeFileNameInURI") {
+    assert(Utils.decodeFileNameInURI(new URI("files:///abc/xyz")) === "xyz")
+    assert(Utils.decodeFileNameInURI(new URI("files:///abc")) === "abc")
+    assert(Utils.decodeFileNameInURI(new URI("files:///abc%20xyz")) === "abc xyz")
+  }
+
+  test("Kill process") {
+    // Verify that we can terminate a process even if it is in a bad state. This is only run
+    // on UNIX since it does some OS specific things to verify the correct behavior.
+    if (SystemUtils.IS_OS_UNIX) {
+      def getPid(p: Process): Int = {
+        val f = p.getClass().getDeclaredField("pid")
+        f.setAccessible(true)
+        f.get(p).asInstanceOf[Int]
+      }
+
+      def pidExists(pid: Int): Boolean = {
+        val p = Runtime.getRuntime.exec(s"kill -0 $pid")
+        p.waitFor()
+        p.exitValue() == 0
+      }
+
+      def signal(pid: Int, s: String): Unit = {
+        val p = Runtime.getRuntime.exec(s"kill -$s $pid")
+        p.waitFor()
+      }
+
+      // Start up a process that runs 'sleep 10'. Terminate the process and assert it takes
+      // less time and the process is no longer there.
+      val startTimeMs = System.currentTimeMillis()
+      val process = new ProcessBuilder("sleep", "10").start()
+      val pid = getPid(process)
+      try {
+        assert(pidExists(pid))
+        val terminated = Utils.terminateProcess(process, 5000)
+        assert(terminated.isDefined)
+        Utils.waitForProcess(process, 5000)
+        val durationMs = System.currentTimeMillis() - startTimeMs
+        assert(durationMs < 5000)
+        assert(!pidExists(pid))
+      } finally {
+        // Forcibly kill the test process just in case.
+        signal(pid, "SIGKILL")
+      }
+
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var majorVersion = versionParts(0).toInt
+      if (majorVersion == 1) majorVersion = versionParts(1).toInt
+      if (majorVersion >= 8) {
+        // Java8 added a way to forcibly terminate a process. We'll make sure that works by
+        // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
+        // older versions of java, this will *not* terminate.
+        val file = File.createTempFile("temp-file-name", ".tmp")
+        val cmd =
+          s"""
+             |#!/bin/bash
+             |trap "" SIGTERM
+             |sleep 10
+           """.stripMargin
+        Files.write(cmd.getBytes(StandardCharsets.UTF_8), file)
+        file.getAbsoluteFile.setExecutable(true)
+
+        val process = new ProcessBuilder(file.getAbsolutePath).start()
+        val pid = getPid(process)
+        assert(pidExists(pid))
+        try {
+          signal(pid, "SIGSTOP")
+          val start = System.currentTimeMillis()
+          val terminated = Utils.terminateProcess(process, 5000)
+          assert(terminated.isDefined)
+          Utils.waitForProcess(process, 5000)
+          val duration = System.currentTimeMillis() - start
+          assert(duration < 5000)
+          assert(!pidExists(pid))
+        } finally {
+          signal(pid, "SIGKILL")
+        }
+      }
+    }
   }
 }

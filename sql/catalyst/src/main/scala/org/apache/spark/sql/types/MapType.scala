@@ -62,8 +62,14 @@ case class MapType(
 
   override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>"
 
-  private[spark] override def asNullable: MapType =
+  override def sql: String = s"MAP<${keyType.sql}, ${valueType.sql}>"
+
+  override private[spark] def asNullable: MapType =
     MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
+
+  override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
+    f(this) || keyType.existsRecursively(f) || valueType.existsRecursively(f)
+  }
 }
 
 
@@ -71,7 +77,7 @@ object MapType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = apply(NullType, NullType)
 
-  override private[sql] def isSameType(other: DataType): Boolean = {
+  override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[MapType]
   }
 

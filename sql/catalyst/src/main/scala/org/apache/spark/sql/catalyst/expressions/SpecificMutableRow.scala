@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
@@ -41,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *     val newCopy = new Mutable$tpe
  *     newCopy.isNull = isNull
  *     newCopy.value = value
- *     newCopy.asInstanceOf[this.type]
+ *     newCopy
  *   }
  * }"""
  * }.foreach(println)
@@ -78,7 +77,7 @@ final class MutableInt extends MutableValue {
     val newCopy = new MutableInt
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableInt]
+    newCopy
   }
 }
 
@@ -93,7 +92,7 @@ final class MutableFloat extends MutableValue {
     val newCopy = new MutableFloat
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableFloat]
+    newCopy
   }
 }
 
@@ -108,7 +107,7 @@ final class MutableBoolean extends MutableValue {
     val newCopy = new MutableBoolean
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableBoolean]
+    newCopy
   }
 }
 
@@ -123,7 +122,7 @@ final class MutableDouble extends MutableValue {
     val newCopy = new MutableDouble
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableDouble]
+    newCopy
   }
 }
 
@@ -138,7 +137,7 @@ final class MutableShort extends MutableValue {
     val newCopy = new MutableShort
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableShort]
+    newCopy
   }
 }
 
@@ -153,7 +152,7 @@ final class MutableLong extends MutableValue {
     val newCopy = new MutableLong
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableLong]
+    newCopy
   }
 }
 
@@ -168,7 +167,7 @@ final class MutableByte extends MutableValue {
     val newCopy = new MutableByte
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableByte]
+    newCopy
   }
 }
 
@@ -183,7 +182,7 @@ final class MutableAny extends MutableValue {
     val newCopy = new MutableAny
     newCopy.isNull = isNull
     newCopy.value = value
-    newCopy.asInstanceOf[MutableAny]
+    newCopy
   }
 }
 
@@ -192,7 +191,8 @@ final class MutableAny extends MutableValue {
  * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
  * values of primitive columns.
  */
-final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableRow {
+final class SpecificMutableRow(val values: Array[MutableValue])
+  extends MutableRow with BaseGenericInternalRow {
 
   def this(dataTypes: Seq[DataType]) =
     this(
@@ -211,15 +211,13 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   def this() = this(Seq.empty)
 
-  override def length: Int = values.length
+  def this(schema: StructType) = this(schema.fields.map(_.dataType))
 
-  override def toSeq: Seq[Any] = values.map(_.boxed).toSeq
+  override def numFields: Int = values.length
 
   override def setNullAt(i: Int): Unit = {
     values(i).isNull = true
   }
-
-  override def apply(i: Int): Any = values(i).boxed
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
@@ -234,6 +232,8 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     new GenericInternalRow(newValues)
   }
 
+  override protected def genericGet(i: Int): Any = values(i).boxed
+
   override def update(ordinal: Int, value: Any) {
     if (value == null) {
       setNullAt(ordinal)
@@ -241,11 +241,6 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
       values(ordinal).update(value)
     }
   }
-
-  override def setString(ordinal: Int, value: String): Unit =
-    update(ordinal, UTF8String.fromString(value))
-
-  override def getString(ordinal: Int): String = apply(ordinal).toString
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]
@@ -315,9 +310,5 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def getByte(i: Int): Byte = {
     values(i).asInstanceOf[MutableByte].value
-  }
-
-  override def getAs[T](i: Int): T = {
-    values(i).boxed.asInstanceOf[T]
   }
 }

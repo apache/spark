@@ -21,11 +21,11 @@ import scala.util.Random
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::
@@ -33,8 +33,10 @@ import org.apache.spark.mllib.regression.LabeledPoint
  * for the features and adds Gaussian noise with weight 0.1 to generate labels.
  */
 @DeveloperApi
+@Since("0.8.0")
 object SVMDataGenerator {
 
+  @Since("0.8.0")
   def main(args: Array[String]) {
     if (args.length < 2) {
       // scalastyle:off println

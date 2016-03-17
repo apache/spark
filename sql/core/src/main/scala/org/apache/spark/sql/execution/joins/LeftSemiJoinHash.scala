@@ -17,53 +17,42 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.LeftSemi
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * :: DeveloperApi ::
- * Build the right table's join keys into a HashSet, and iteratively go through the left
- * table, to find the if join keys are in the Hash set.
+ * Build the right table's join keys into a HashedRelation, and iteratively go through the left
+ * table, to find if the join keys are in the HashedRelation.
  */
-@DeveloperApi
 case class LeftSemiJoinHash(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with HashJoin {
+    right: SparkPlan,
+    condition: Option[Expression]) extends BinaryNode with HashJoin {
 
-  override val buildSide: BuildSide = BuildRight
+  override val joinType = LeftSemi
+  override val buildSide = BuildRight
 
-  override def requiredChildDistribution: Seq[ClusteredDistribution] =
+  override private[sql] lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
+  override def outputPartitioning: Partitioning = left.outputPartitioning
+
+  override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  override def output: Seq[Attribute] = left.output
-
   protected override def doExecute(): RDD[InternalRow] = {
-    buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
-      val hashSet = new java.util.HashSet[InternalRow]()
-      var currentRow: InternalRow = null
+    val numOutputRows = longMetric("numOutputRows")
 
-      // Create a Hash set of buildKeys
-      while (buildIter.hasNext) {
-        currentRow = buildIter.next()
-        val rowKey = buildSideKeyGenerator(currentRow)
-        if (!rowKey.anyNull) {
-          val keyExists = hashSet.contains(rowKey)
-          if (!keyExists) {
-            hashSet.add(rowKey)
-          }
-        }
-      }
-
-      val joinKeys = streamSideKeyGenerator()
-      streamIter.filter(current => {
-        !joinKeys(current).anyNull && hashSet.contains(joinKeys.currentValue)
-      })
+    right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
+      val hashRelation = HashedRelation(buildIter.map(_.copy()), buildSideKeyGenerator)
+      hashSemiJoin(streamIter, hashRelation, numOutputRows)
     }
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.JavaConversions.{collectionAsScalaIterable, asJavaIterator}
+import scala.collection.JavaConverters._
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
 
@@ -34,6 +34,6 @@ private[spark] object Utils {
     val ordering = new GuavaOrdering[T] {
       override def compare(l: T, r: T): Int = ord.compare(l, r)
     }
-    collectionAsScalaIterable(ordering.leastOf(asJavaIterator(input), num)).iterator
+    ordering.leastOf(input.asJava, num).iterator.asScala
   }
 }

@@ -53,12 +53,13 @@ private[spark] object SerializationDebugger extends Logging {
   /**
    * Find the path leading to a not serializable object. This method is modeled after OpenJDK's
    * serialization mechanism, and handles the following cases:
-   * - primitives
-   * - arrays of primitives
-   * - arrays of non-primitive objects
-   * - Serializable objects
-   * - Externalizable objects
-   * - writeReplace
+   *
+   *  - primitives
+   *  - arrays of primitives
+   *  - arrays of non-primitive objects
+   *  - Serializable objects
+   *  - Externalizable objects
+   *  - writeReplace
    *
    * It does not yet handle writeObject override, but that shouldn't be too hard to do either.
    */
@@ -407,7 +408,9 @@ private[spark] object SerializationDebugger extends Logging {
 
     /** ObjectStreamClass$ClassDataSlot.desc field */
     val DescField: Field = {
+      // scalastyle:off classforname
       val f = Class.forName("java.io.ObjectStreamClass$ClassDataSlot").getDeclaredField("desc")
+      // scalastyle:on classforname
       f.setAccessible(true)
       f
     }

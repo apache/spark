@@ -35,6 +35,10 @@ import threading
 import hashlib
 
 from py4j.protocol import Py4JJavaError
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -62,7 +66,7 @@ from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, 
     CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer, \
     PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer, \
     FlattenedValuesSerializer
-from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
+from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
 
@@ -94,17 +98,6 @@ class MergerTests(unittest.TestCase):
         self.agg = Aggregator(lambda x: [x],
                               lambda x, y: x.append(y) or x,
                               lambda x, y: x.extend(y) or x)
-
-    def test_in_memory(self):
-        m = InMemoryMerger(self.agg)
-        m.mergeValues(self.data)
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
-
-        m = InMemoryMerger(self.agg)
-        m.mergeCombiners(map(lambda x_y: (x_y[0], [x_y[1]]), self.data))
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
 
     def test_small_dataset(self):
         m = ExternalMerger(self.agg, 1000)
@@ -218,6 +211,11 @@ class SerializationTestCase(unittest.TestCase):
         p2 = loads(dumps(p1, 2))
         self.assertEqual(p1, p2)
 
+        from pyspark.cloudpickle import dumps
+        P2 = loads(dumps(P))
+        p3 = P2(1, 3)
+        self.assertEqual(p1, p3)
+
     def test_itemgetter(self):
         from operator import itemgetter
         ser = CloudPickleSerializer()
@@ -229,6 +227,12 @@ class SerializationTestCase(unittest.TestCase):
         getter = itemgetter(0, 3)
         getter2 = ser.loads(ser.dumps(getter))
         self.assertEqual(getter(d), getter2(d))
+
+    def test_function_module_name(self):
+        ser = CloudPickleSerializer()
+        func = lambda x: x
+        func2 = ser.loads(ser.dumps(func))
+        self.assertEqual(func.__module__, func2.__module__)
 
     def test_attrgetter(self):
         from operator import attrgetter
@@ -255,10 +259,12 @@ class SerializationTestCase(unittest.TestCase):
 
     # Regression test for SPARK-3415
     def test_pickling_file_handles(self):
-        ser = CloudPickleSerializer()
-        out1 = sys.stderr
-        out2 = ser.loads(ser.dumps(out1))
-        self.assertEqual(out1, out2)
+        # to be corrected with SPARK-11160
+        if not xmlrunner:
+            ser = CloudPickleSerializer()
+            out1 = sys.stderr
+            out2 = ser.loads(ser.dumps(out1))
+            self.assertEqual(out1, out2)
 
     def test_func_globals(self):
 
@@ -529,9 +535,126 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_sampling_default_seed(self):
         # Test for SPARK-3995 (default seed setting)
-        data = self.sc.parallelize(range(1000), 1)
+        data = self.sc.parallelize(xrange(1000), 1)
         subset = data.takeSample(False, 10)
         self.assertEqual(len(subset), 10)
+
+    def test_aggregate_mutable_zero_value(self):
+        # Test for SPARK-9021; uses aggregate and treeAggregate to build dict
+        # representing a counter of ints
+        # NOTE: dict is used instead of collections.Counter for Python 2.6
+        # compatibility
+        from collections import defaultdict
+
+        # Show that single or multiple partitions work
+        data1 = self.sc.range(10, numSlices=1)
+        data2 = self.sc.range(10, numSlices=2)
+
+        def seqOp(x, y):
+            x[y] += 1
+            return x
+
+        def comboOp(x, y):
+            for key, val in y.items():
+                x[key] += val
+            return x
+
+        counts1 = data1.aggregate(defaultdict(int), seqOp, comboOp)
+        counts2 = data2.aggregate(defaultdict(int), seqOp, comboOp)
+        counts3 = data1.treeAggregate(defaultdict(int), seqOp, comboOp, 2)
+        counts4 = data2.treeAggregate(defaultdict(int), seqOp, comboOp, 2)
+
+        ground_truth = defaultdict(int, dict((i, 1) for i in range(10)))
+        self.assertEqual(counts1, ground_truth)
+        self.assertEqual(counts2, ground_truth)
+        self.assertEqual(counts3, ground_truth)
+        self.assertEqual(counts4, ground_truth)
+
+    def test_aggregate_by_key_mutable_zero_value(self):
+        # Test for SPARK-9021; uses aggregateByKey to make a pair RDD that
+        # contains lists of all values for each key in the original RDD
+
+        # list(range(...)) for Python 3.x compatibility (can't use * operator
+        # on a range object)
+        # list(zip(...)) for Python 3.x compatibility (want to parallelize a
+        # collection, not a zip object)
+        tuples = list(zip(list(range(10))*2, [1]*20))
+        # Show that single or multiple partitions work
+        data1 = self.sc.parallelize(tuples, 1)
+        data2 = self.sc.parallelize(tuples, 2)
+
+        def seqOp(x, y):
+            x.append(y)
+            return x
+
+        def comboOp(x, y):
+            x.extend(y)
+            return x
+
+        values1 = data1.aggregateByKey([], seqOp, comboOp).collect()
+        values2 = data2.aggregateByKey([], seqOp, comboOp).collect()
+        # Sort lists to ensure clean comparison with ground_truth
+        values1.sort()
+        values2.sort()
+
+        ground_truth = [(i, [1]*2) for i in range(10)]
+        self.assertEqual(values1, ground_truth)
+        self.assertEqual(values2, ground_truth)
+
+    def test_fold_mutable_zero_value(self):
+        # Test for SPARK-9021; uses fold to merge an RDD of dict counters into
+        # a single dict
+        # NOTE: dict is used instead of collections.Counter for Python 2.6
+        # compatibility
+        from collections import defaultdict
+
+        counts1 = defaultdict(int, dict((i, 1) for i in range(10)))
+        counts2 = defaultdict(int, dict((i, 1) for i in range(3, 8)))
+        counts3 = defaultdict(int, dict((i, 1) for i in range(4, 7)))
+        counts4 = defaultdict(int, dict((i, 1) for i in range(5, 6)))
+        all_counts = [counts1, counts2, counts3, counts4]
+        # Show that single or multiple partitions work
+        data1 = self.sc.parallelize(all_counts, 1)
+        data2 = self.sc.parallelize(all_counts, 2)
+
+        def comboOp(x, y):
+            for key, val in y.items():
+                x[key] += val
+            return x
+
+        fold1 = data1.fold(defaultdict(int), comboOp)
+        fold2 = data2.fold(defaultdict(int), comboOp)
+
+        ground_truth = defaultdict(int)
+        for counts in all_counts:
+            for key, val in counts.items():
+                ground_truth[key] += val
+        self.assertEqual(fold1, ground_truth)
+        self.assertEqual(fold2, ground_truth)
+
+    def test_fold_by_key_mutable_zero_value(self):
+        # Test for SPARK-9021; uses foldByKey to make a pair RDD that contains
+        # lists of all values for each key in the original RDD
+
+        tuples = [(i, range(i)) for i in range(10)]*2
+        # Show that single or multiple partitions work
+        data1 = self.sc.parallelize(tuples, 1)
+        data2 = self.sc.parallelize(tuples, 2)
+
+        def comboOp(x, y):
+            x.extend(y)
+            return x
+
+        values1 = data1.foldByKey([], comboOp).collect()
+        values2 = data2.foldByKey([], comboOp).collect()
+        # Sort lists to ensure clean comparison with ground_truth
+        values1.sort()
+        values2.sort()
+
+        # list(range(...)) for Python 3.x compatibility
+        ground_truth = [(i, list(range(i))*2) for i in range(10)]
+        self.assertEqual(values1, ground_truth)
+        self.assertEqual(values2, ground_truth)
 
     def test_aggregate_by_key(self):
         data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
@@ -624,8 +747,8 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_zip_with_different_object_sizes(self):
         # regress test for SPARK-5973
-        a = self.sc.parallelize(range(10000)).map(lambda i: '*' * i)
-        b = self.sc.parallelize(range(10000, 20000)).map(lambda i: '*' * i)
+        a = self.sc.parallelize(xrange(10000)).map(lambda i: '*' * i)
+        b = self.sc.parallelize(xrange(10000, 20000)).map(lambda i: '*' * i)
         self.assertEqual(10000, a.zip(b).count())
 
     def test_zip_with_different_number_of_items(self):
@@ -647,7 +770,7 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertRaises(Exception, lambda: a.zip(b).count())
 
     def test_count_approx_distinct(self):
-        rdd = self.sc.parallelize(range(1000))
+        rdd = self.sc.parallelize(xrange(1000))
         self.assertTrue(950 < rdd.countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(float).countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(str).countApproxDistinct(0.03) < 1050)
@@ -777,7 +900,7 @@ class RDDTests(ReusedPySparkTestCase):
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")
         N = 200001
-        kv = self.sc.parallelize(range(N)).map(lambda x: (x % 3, x))
+        kv = self.sc.parallelize(xrange(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
         filtered = gkv.filter(lambda kv: kv[0] == 1)
@@ -871,7 +994,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     # Regression test for SPARK-6294
     def test_take_on_jrdd(self):
-        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
+        rdd = self.sc.parallelize(xrange(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
     def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
@@ -893,7 +1016,8 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertRaises(Py4JJavaError, rdd.pipe('cc', checkCode=True).collect)
         result = rdd.pipe('cat').collect()
         result.sort()
-        [self.assertEqual(x, y) for x, y in zip(data, result)]
+        for x, y in zip(data, result):
+            self.assertEqual(x, y)
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
@@ -1516,13 +1640,13 @@ class WorkerTests(ReusedPySparkTestCase):
             self.fail("daemon had been killed")
 
         # run a normal job
-        rdd = self.sc.parallelize(range(100), 1)
+        rdd = self.sc.parallelize(xrange(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_exception(self):
         def raise_exception(_):
             raise Exception()
-        rdd = self.sc.parallelize(range(100), 1)
+        rdd = self.sc.parallelize(xrange(100), 1)
         with QuietTest(self.sc):
             self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
         self.assertEqual(100, rdd.map(str).count())
@@ -1538,22 +1662,22 @@ class WorkerTests(ReusedPySparkTestCase):
         with QuietTest(self.sc):
             self.assertRaises(Exception, lambda: filtered_data.count())
 
-        rdd = self.sc.parallelize(range(100), 1)
+        rdd = self.sc.parallelize(xrange(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
     def test_accumulator_when_reuse_worker(self):
         from pyspark.accumulators import INT_ACCUMULATOR_PARAM
         acc1 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
-        self.sc.parallelize(range(100), 20).foreach(lambda x: acc1.add(x))
+        self.sc.parallelize(xrange(100), 20).foreach(lambda x: acc1.add(x))
         self.assertEqual(sum(range(100)), acc1.value)
 
         acc2 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
-        self.sc.parallelize(range(100), 20).foreach(lambda x: acc2.add(x))
+        self.sc.parallelize(xrange(100), 20).foreach(lambda x: acc2.add(x))
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
 
     def test_reuse_worker_after_take(self):
-        rdd = self.sc.parallelize(range(100000), 1)
+        rdd = self.sc.parallelize(xrange(100000), 1)
         self.assertEqual(0, rdd.first())
 
         def count():
@@ -1705,7 +1829,7 @@ class SparkSubmitTests(unittest.TestCase):
             |    return x + 1
             """)
         proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, "--master",
-                                "local-cluster[1,1,512]", script],
+                                "local-cluster[1,1,1024]", script],
                                 stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -1739,7 +1863,7 @@ class SparkSubmitTests(unittest.TestCase):
         self.create_spark_package("a:mylib:0.1")
         proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
                                  "file:" + self.programDir, "--master",
-                                 "local-cluster[1,1,512]", script], stdout=subprocess.PIPE)
+                                 "local-cluster[1,1,1024]", script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out.decode('utf-8'))
@@ -1758,7 +1882,7 @@ class SparkSubmitTests(unittest.TestCase):
         # this will fail if you have different spark.executor.memory
         # in conf/spark-defaults.conf
         proc = subprocess.Popen(
-            [self.sparkSubmit, "--master", "local-cluster[1,1,512]", script],
+            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]", script],
             stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -1770,6 +1894,10 @@ class ContextTests(unittest.TestCase):
     def test_failed_sparkcontext_creation(self):
         # Regression test for SPARK-1550
         self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
+
+    def test_get_or_create(self):
+        with SparkContext.getOrCreate() as sc:
+            self.assertTrue(SparkContext.getOrCreate() is sc)
 
     def test_stop(self):
         sc = SparkContext()
@@ -1864,13 +1992,37 @@ class NumPyTests(PySparkTestCase):
         self.assertSequenceEqual([3.0, 3.0], s.max().tolist())
         self.assertSequenceEqual([1.0, 1.0], s.sampleStdev().tolist())
 
+        stats_dict = s.asDict()
+        self.assertEqual(3, stats_dict['count'])
+        self.assertSequenceEqual([2.0, 2.0], stats_dict['mean'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict['min'].tolist())
+        self.assertSequenceEqual([3.0, 3.0], stats_dict['max'].tolist())
+        self.assertSequenceEqual([6.0, 6.0], stats_dict['sum'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict['stdev'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict['variance'].tolist())
+
+        stats_sample_dict = s.asDict(sample=True)
+        self.assertEqual(3, stats_dict['count'])
+        self.assertSequenceEqual([2.0, 2.0], stats_sample_dict['mean'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_sample_dict['min'].tolist())
+        self.assertSequenceEqual([3.0, 3.0], stats_sample_dict['max'].tolist())
+        self.assertSequenceEqual([6.0, 6.0], stats_sample_dict['sum'].tolist())
+        self.assertSequenceEqual(
+            [0.816496580927726, 0.816496580927726], stats_sample_dict['stdev'].tolist())
+        self.assertSequenceEqual(
+            [0.6666666666666666, 0.6666666666666666], stats_sample_dict['variance'].tolist())
+
 
 if __name__ == "__main__":
+    from pyspark.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if not _have_numpy:
         print("NOTE: Skipping NumPy tests as it does not seem to be installed")
-    unittest.main()
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")
     if not _have_numpy:

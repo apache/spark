@@ -19,10 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
-import scala.collection.JavaConversions._
-
-import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 
 class ExecutorRunnerTest extends SparkFunSuite {
   test("command includes appId") {
@@ -36,6 +34,7 @@ class ExecutorRunnerTest extends SparkFunSuite {
       ExecutorState.RUNNING)
     val builder = CommandUtils.buildProcessBuilder(
       appDesc.command, new SecurityManager(conf), 512, sparkHome, er.substituteVariables)
-    assert(builder.command().last === appId)
+    val builderCommand = builder.command()
+    assert(builderCommand.get(builderCommand.size() - 1) === appId)
   }
 }

@@ -18,15 +18,16 @@ package org.apache.spark.deploy.yarn
 
 import java.util.concurrent.{Executors, TimeUnit}
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.util.{ThreadUtils, Utils}
-
-import scala.util.control.NonFatal
 
 private[spark] class ExecutorDelegationTokenUpdater(
     sparkConf: SparkConf,
@@ -34,7 +35,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
 
   @volatile private var lastCredentialsFileSuffix = 0
 
-  private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
+  private val credentialsFile = sparkConf.get(CREDENTIALS_FILE_PATH)
   private val freshHadoopConf =
     SparkHadoopUtil.get.getConfBypassingFSCache(
       hadoopConf, new Path(credentialsFile).toUri.getScheme)
@@ -76,7 +77,10 @@ private[spark] class ExecutorDelegationTokenUpdater(
         SparkHadoopUtil.get.getTimeFromNowToRenewal(
           sparkConf, 0.8, UserGroupInformation.getCurrentUser.getCredentials)
       if (timeFromNowToRenewal <= 0) {
-        executorUpdaterRunnable.run()
+        // We just checked for new credentials but none were there, wait a minute and retry.
+        // This handles the shutdown case where the staging directory may have been removed(see
+        // SPARK-12316 for more details).
+        delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.MINUTES)
       } else {
         logInfo(s"Scheduling token refresh from HDFS in $timeFromNowToRenewal millis.")
         delegationTokenRenewer.schedule(

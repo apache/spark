@@ -17,20 +17,19 @@
 
 package org.apache.spark.ml.classification
 
-import scala.collection.mutable
-
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
+import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+
 
 /**
  * :: Experimental ::
@@ -39,44 +38,59 @@ import org.apache.spark.sql.DataFrame
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
+@Since("1.4.0")
 @Experimental
-final class RandomForestClassifier(override val uid: String)
-  extends Predictor[Vector, RandomForestClassifier, RandomForestClassificationModel]
+final class RandomForestClassifier @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
+  extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestParams with TreeClassifierParams {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("rfc"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
   // Parameters from TreeClassifierParams:
 
+  @Since("1.4.0")
   override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
+  @Since("1.4.0")
   override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
 
+  @Since("1.4.0")
   override def setMinInstancesPerNode(value: Int): this.type =
     super.setMinInstancesPerNode(value)
 
+  @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
+  @Since("1.4.0")
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
+  @Since("1.4.0")
   override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
+  @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
+  @Since("1.4.0")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   // Parameters from TreeEnsembleParams:
 
+  @Since("1.4.0")
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
+  @Since("1.4.0")
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
   // Parameters from RandomForestParams:
 
+  @Since("1.4.0")
   override def setNumTrees(value: Int): this.type = super.setNumTrees(value)
 
+  @Since("1.4.0")
   override def setFeatureSubsetStrategy(value: String): this.type =
     super.setFeatureSubsetStrategy(value)
 
@@ -93,20 +107,26 @@ final class RandomForestClassifier(override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
-    val oldModel = OldRandomForest.trainClassifier(
-      oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed.toInt)
-    RandomForestClassificationModel.fromOld(oldModel, this, categoricalFeatures)
+    val trees =
+      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
+        .map(_.asInstanceOf[DecisionTreeClassificationModel])
+    val numFeatures = oldDataset.first().features.size
+    new RandomForestClassificationModel(trees, numFeatures, numClasses)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
 }
 
+@Since("1.4.0")
 @Experimental
 object RandomForestClassifier {
   /** Accessor for supported impurity settings: entropy, gini */
+  @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 
   /** Accessor for supported featureSubsetStrategy settings: auto, all, onethird, sqrt, log2 */
+  @Since("1.4.0")
   final val supportedFeatureSubsetStrategies: Array[String] =
     RandomForestParams.supportedFeatureSubsetStrategies
 }
@@ -119,42 +139,102 @@ object RandomForestClassifier {
  * @param _trees  Decision trees in the ensemble.
  *               Warning: These have null parents.
  */
+@Since("1.4.0")
 @Experimental
 final class RandomForestClassificationModel private[ml] (
-    override val uid: String,
-    private val _trees: Array[DecisionTreeClassificationModel])
-  extends PredictionModel[Vector, RandomForestClassificationModel]
+    @Since("1.5.0") override val uid: String,
+    private val _trees: Array[DecisionTreeClassificationModel],
+    @Since("1.6.0") override val numFeatures: Int,
+    @Since("1.5.0") override val numClasses: Int)
+  extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
+  /**
+   * Construct a random forest classification model, with all trees weighted equally.
+   * @param trees  Component trees
+   */
+  private[ml] def this(
+      trees: Array[DecisionTreeClassificationModel],
+      numFeatures: Int,
+      numClasses: Int) =
+    this(Identifiable.randomUID("rfc"), trees, numFeatures, numClasses)
+
+  @Since("1.4.0")
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
   private lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
+  @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def predict(features: Vector): Double = {
-    // TODO: Override transform() to broadcast model.  SPARK-7127
+  override protected def transformImpl(dataset: DataFrame): DataFrame = {
+    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
+    val predictUDF = udf { (features: Any) =>
+      bcastModel.value.predict(features.asInstanceOf[Vector])
+    }
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+  }
+
+  override protected def predictRaw(features: Vector): Vector = {
     // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
     // Classifies using majority votes.
-    // Ignore the weights since all are 1.0 for now.
-    val votes = mutable.Map.empty[Int, Double]
+    // Ignore the tree weights since all are 1.0 for now.
+    val votes = Array.fill[Double](numClasses)(0.0)
     _trees.view.foreach { tree =>
-      val prediction = tree.rootNode.predict(features).toInt
-      votes(prediction) = votes.getOrElse(prediction, 0.0) + 1.0 // 1.0 = weight
+      val classCounts: Array[Double] = tree.rootNode.predictImpl(features).impurityStats.stats
+      val total = classCounts.sum
+      if (total != 0) {
+        var i = 0
+        while (i < numClasses) {
+          votes(i) += classCounts(i) / total
+          i += 1
+        }
+      }
     }
-    votes.maxBy(_._2)._1
+    Vectors.dense(votes)
   }
 
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    rawPrediction match {
+      case dv: DenseVector =>
+        ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(dv)
+        dv
+      case sv: SparseVector =>
+        throw new RuntimeException("Unexpected error in RandomForestClassificationModel:" +
+          " raw2probabilityInPlace encountered SparseVector")
+    }
+  }
+
+  @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
-    copyValues(new RandomForestClassificationModel(uid, _trees), extra)
+    copyValues(new RandomForestClassificationModel(uid, _trees, numFeatures, numClasses), extra)
+      .setParent(parent)
   }
 
+  @Since("1.4.0")
   override def toString: String = {
-    s"RandomForestClassificationModel with $numTrees trees"
+    s"RandomForestClassificationModel (uid=$uid) with $numTrees trees"
   }
+
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * This generalizes the idea of "Gini" importance to other losses,
+   * following the explanation of Gini importance from "Random Forests" documentation
+   * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+   *
+   * This feature importance is calculated as follows:
+   *  - Average over trees:
+   *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
+   *       where gain is scaled by the number of instances passing through node
+   *     - Normalize importances for tree to sum to 1.
+   *  - Normalize feature importance vector to sum to 1.
+   */
+  @Since("1.5.0")
+  lazy val featureImportances: Vector = RandomForest.featureImportances(trees, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldRandomForestModel = {
@@ -168,7 +248,9 @@ private[ml] object RandomForestClassificationModel {
   def fromOld(
       oldModel: OldRandomForestModel,
       parent: RandomForestClassifier,
-      categoricalFeatures: Map[Int, Int]): RandomForestClassificationModel = {
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int,
+      numFeatures: Int = -1): RandomForestClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
@@ -176,6 +258,6 @@ private[ml] object RandomForestClassificationModel {
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
-    new RandomForestClassificationModel(uid, newTrees)
+    new RandomForestClassificationModel(uid, newTrees, numFeatures, numClasses)
   }
 }

@@ -17,97 +17,94 @@
 
 package org.apache.spark.mllib.fpm
 
+import scala.collection.mutable
+
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
 
 /**
+ * Calculate all patterns of a projected database in local mode.
  *
- * :: Experimental ::
- *
- * Calculate all patterns of a projected database in local.
+ * @param minCount minimal count for a frequent pattern
+ * @param maxPatternLength max pattern length for a frequent pattern
  */
-@Experimental
-private[fpm] object LocalPrefixSpan extends Logging with Serializable {
+private[fpm] class LocalPrefixSpan(
+    val minCount: Long,
+    val maxPatternLength: Int) extends Logging with Serializable {
+  import PrefixSpan.Postfix
+  import LocalPrefixSpan.ReversedPrefix
 
   /**
-   * Calculate all patterns of a projected database.
-   * @param minCount minimum count
-   * @param maxPatternLength maximum pattern length
-   * @param prefix prefix
-   * @param projectedDatabase the projected dabase
-   * @return a set of sequential pattern pairs,
-   *         the key of pair is sequential pattern (a list of items),
-   *         the value of pair is the pattern's count.
+   * Generates frequent patterns on the input array of postfixes.
+   * @param postfixes an array of postfixes
+   * @return an iterator of (frequent pattern, count)
    */
-  def run(
-      minCount: Long,
-      maxPatternLength: Int,
-      prefix: Array[Int],
-      projectedDatabase: Array[Array[Int]]): Array[(Array[Int], Long)] = {
-    val frequentPrefixAndCounts = getFreqItemAndCounts(minCount, projectedDatabase)
-    val frequentPatternAndCounts = frequentPrefixAndCounts
-      .map(x => (prefix ++ Array(x._1), x._2))
-    val prefixProjectedDatabases = getPatternAndProjectedDatabase(
-      prefix, frequentPrefixAndCounts.map(_._1), projectedDatabase)
-
-    val continueProcess = prefixProjectedDatabases.nonEmpty && prefix.length + 1 < maxPatternLength
-    if (continueProcess) {
-      val nextPatterns = prefixProjectedDatabases
-        .map(x => run(minCount, maxPatternLength, x._1, x._2))
-        .reduce(_ ++ _)
-      frequentPatternAndCounts ++ nextPatterns
-    } else {
-      frequentPatternAndCounts
+  def run(postfixes: Array[Postfix]): Iterator[(Array[Int], Long)] = {
+    genFreqPatterns(ReversedPrefix.empty, postfixes).map { case (prefix, count) =>
+      (prefix.toSequence, count)
     }
   }
 
   /**
-   * calculate suffix sequence following a prefix in a sequence
-   * @param prefix prefix
-   * @param sequence sequence
-   * @return suffix sequence
+   * Recursively generates frequent patterns.
+   * @param prefix current prefix
+   * @param postfixes projected postfixes w.r.t. the prefix
+   * @return an iterator of (prefix, count)
    */
-  def getSuffix(prefix: Int, sequence: Array[Int]): Array[Int] = {
-    val index = sequence.indexOf(prefix)
-    if (index == -1) {
-      Array()
-    } else {
-      sequence.drop(index + 1)
+  private def genFreqPatterns(
+      prefix: ReversedPrefix,
+      postfixes: Array[Postfix]): Iterator[(ReversedPrefix, Long)] = {
+    if (maxPatternLength == prefix.length || postfixes.length < minCount) {
+      return Iterator.empty
+    }
+    // find frequent items
+    val counts = mutable.Map.empty[Int, Long].withDefaultValue(0)
+    postfixes.foreach { postfix =>
+      postfix.genPrefixItems.foreach { case (x, _) =>
+        counts(x) += 1L
+      }
+    }
+    val freqItems = counts.toSeq.filter { case (_, count) =>
+      count >= minCount
+    }.sorted
+    // project and recursively call genFreqPatterns
+    freqItems.toIterator.flatMap { case (item, count) =>
+      val newPrefix = prefix :+ item
+      Iterator.single((newPrefix, count)) ++ {
+        val projected = postfixes.map(_.project(item)).filter(_.nonEmpty)
+        genFreqPatterns(newPrefix, projected)
+      }
     }
   }
+}
+
+private object LocalPrefixSpan {
 
   /**
-   * Generates frequent items by filtering the input data using minimal count level.
-   * @param minCount the absolute minimum count
-   * @param sequences sequences data
-   * @return array of item and count pair
+   * Represents a prefix stored as a list in reversed order.
+   * @param items items in the prefix in reversed order
+   * @param length length of the prefix, not counting delimiters
    */
-  private def getFreqItemAndCounts(
-      minCount: Long,
-      sequences: Array[Array[Int]]): Array[(Int, Long)] = {
-    sequences.flatMap(_.distinct)
-      .groupBy(x => x)
-      .mapValues(_.length.toLong)
-      .filter(_._2 >= minCount)
-      .toArray
+  class ReversedPrefix private (val items: List[Int], val length: Int) extends Serializable {
+    /**
+     * Expands the prefix by one item.
+     */
+    def :+(item: Int): ReversedPrefix = {
+      require(item != 0)
+      if (item < 0) {
+        new ReversedPrefix(-item :: items, length + 1)
+      } else {
+        new ReversedPrefix(item :: 0 :: items, length + 1)
+      }
+    }
+
+    /**
+     * Converts this prefix to a sequence.
+     */
+    def toSequence: Array[Int] = (0 :: items).toArray.reverse
   }
 
-  /**
-   * Get the frequent prefixes' projected database.
-   * @param prePrefix the frequent prefixes' prefix
-   * @param frequentPrefixes frequent prefixes
-   * @param sequences sequences data
-   * @return prefixes and projected database
-   */
-  private def getPatternAndProjectedDatabase(
-      prePrefix: Array[Int],
-      frequentPrefixes: Array[Int],
-      sequences: Array[Array[Int]]): Array[(Array[Int], Array[Array[Int]])] = {
-    val filteredProjectedDatabase = sequences
-      .map(x => x.filter(frequentPrefixes.contains(_)))
-    frequentPrefixes.map { x =>
-      val sub = filteredProjectedDatabase.map(y => getSuffix(x, y)).filter(_.nonEmpty)
-      (prePrefix ++ Array(x), sub)
-    }.filter(x => x._2.nonEmpty)
+  object ReversedPrefix {
+    /** An empty prefix. */
+    val empty: ReversedPrefix = new ReversedPrefix(List.empty, 0)
   }
 }

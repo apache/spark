@@ -19,10 +19,11 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.MetadataUtils
-import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
+import org.apache.spark.ml.util.{MetadataUtils, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
+import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -42,16 +43,16 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val nPoints = 1000
 
-    // The following weights and xMean/xVariance are computed from iris dataset with lambda=0.2.
+    // The following coefficients and xMean/xVariance are computed from iris dataset with lambda=0.2
     // As a result, we are drawing samples from probability distribution of an actual model.
-    val weights = Array(
+    val coefficients = Array(
       -0.57997, 0.912083, -0.371077, -0.819866, 2.688191,
       -0.16624, -0.84355, -0.048509, -0.301789, 4.170682)
 
     val xMean = Array(5.843, 3.057, 3.758, 1.199)
     val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
     rdd = sc.parallelize(generateMultinomialLogisticInput(
-      weights, xMean, xVariance, true, nPoints, 42), 2)
+      coefficients, xMean, xVariance, true, nPoints, 42), 2)
     dataset = sqlContext.createDataFrame(rdd)
   }
 
@@ -69,6 +70,10 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(ova.getLabelCol === "label")
     assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(ovaModel)
+
     assert(ovaModel.models.size === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
 
@@ -76,9 +81,9 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val predictionColSchema = transformedDataset.schema(ovaModel.getPredictionCol)
     assert(MetadataUtils.getNumClasses(predictionColSchema) === Some(3))
 
-    val ovaResults = transformedDataset
-      .select("prediction", "label")
-      .map(row => (row.getDouble(0), row.getDouble(1)))
+    val ovaResults = transformedDataset.select("prediction", "label").rdd.map {
+      row => (row.getDouble(0), row.getDouble(1))
+    }
 
     val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.1).setNumIterations(100)
@@ -104,6 +109,29 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     ova.fit(datasetWithLabelMetadata)
   }
 
+  test("SPARK-8092: ensure label features and prediction cols are configurable") {
+    val labelIndexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("indexed")
+
+    val indexedDataset = labelIndexer
+      .fit(dataset)
+      .transform(dataset)
+      .drop("label")
+      .withColumnRenamed("features", "f")
+
+    val ova = new OneVsRest()
+    ova.setClassifier(new LogisticRegression())
+      .setLabelCol(labelIndexer.getOutputCol)
+      .setFeaturesCol("f")
+      .setPredictionCol("p")
+
+    val ovaModel = ova.fit(indexedDataset)
+    val transformedDataset = ovaModel.transform(indexedDataset)
+    val outputFields = transformedDataset.schema.fieldNames.toSet
+    assert(outputFields.contains("p"))
+  }
+
   test("SPARK-8049: OneVsRest shouldn't output temp columns") {
     val logReg = new LogisticRegression()
       .setMaxIter(1)
@@ -127,7 +155,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     require(ovr1.getClassifier.getOrDefault(lr.maxIter) === 10,
       "copy should handle extra classifier params")
 
-    val ovrModel = ovr1.fit(dataset).copy(ParamMap(lr.threshold -> 0.1))
+    val ovrModel = ovr1.fit(dataset).copy(ParamMap(lr.thresholds -> Array(0.9, 0.1)))
     ovrModel.models.foreach { case m: LogisticRegressionModel =>
       require(m.getThreshold === 0.1, "copy should handle extra model params")
     }
@@ -140,7 +168,7 @@ private class MockLogisticRegression(uid: String) extends LogisticRegression(uid
 
   setMaxIter(1)
 
-  override protected def train(dataset: DataFrame): LogisticRegressionModel = {
+  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
     val labelSchema = dataset.schema($(labelCol))
     // check for label attribute propagation.
     assert(MetadataUtils.getNumClasses(labelSchema).forall(_ == 2))

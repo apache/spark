@@ -183,6 +183,8 @@ class AttributeGroup private (
     sum = 37 * sum + attributes.map(_.toSeq).hashCode
     sum
   }
+
+  override def toString: String = toMetadata.toString
 }
 
 /**

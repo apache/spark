@@ -19,16 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
+import org.apache.spark.sql.execution.DataSourceScan
+import org.apache.spark.sql.execution.command.ExecutedCommand
+import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.execution.HiveTableScan
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.parquet.{ParquetRelation2, ParquetTableScan}
-import org.apache.spark.sql.sources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -57,10 +55,20 @@ case class ParquetDataWithKeyAndComplexTypes(
  * A suite to test the automatic conversion of metastore tables with parquet data to use the
  * built in parquet support.
  */
-class ParquetMetastoreSuiteBase extends ParquetPartitioningTest {
+class ParquetMetastoreSuite extends ParquetPartitioningTest {
+  import hiveContext._
+  import hiveContext.implicits._
+
   override def beforeAll(): Unit = {
     super.beforeAll()
-
+    dropTables("partitioned_parquet",
+      "partitioned_parquet_with_key",
+      "partitioned_parquet_with_complextypes",
+      "partitioned_parquet_with_key_and_complextypes",
+      "normal_parquet",
+      "jt",
+      "jt_array",
+      "test_parquet")
     sql(s"""
       create external table partitioned_parquet
       (
@@ -134,6 +142,19 @@ class ParquetMetastoreSuiteBase extends ParquetPartitioningTest {
       LOCATION '${partitionedTableDirWithKeyAndComplexTypes.getCanonicalPath}'
     """)
 
+    sql(
+      """
+        |create table test_parquet
+        |(
+        |  intField INT,
+        |  stringField STRING
+        |)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        |STORED AS
+        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      """.stripMargin)
+
     (1 to 10).foreach { p =>
       sql(s"ALTER TABLE partitioned_parquet ADD PARTITION (p=$p)")
     }
@@ -150,65 +171,33 @@ class ParquetMetastoreSuiteBase extends ParquetPartitioningTest {
       sql(s"ALTER TABLE partitioned_parquet_with_complextypes ADD PARTITION (p=$p)")
     }
 
-    val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-    read.json(rdd1).registerTempTable("jt")
-    val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":[$i, null]}"""))
-    read.json(rdd2).registerTempTable("jt_array")
+    (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").registerTempTable("jt")
+    (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a").registerTempTable("jt_array")
 
     setConf(HiveContext.CONVERT_METASTORE_PARQUET, true)
   }
 
   override def afterAll(): Unit = {
-    sql("DROP TABLE partitioned_parquet")
-    sql("DROP TABLE partitioned_parquet_with_key")
-    sql("DROP TABLE partitioned_parquet_with_complextypes")
-    sql("DROP TABLE partitioned_parquet_with_key_and_complextypes")
-    sql("DROP TABLE normal_parquet")
-    sql("DROP TABLE IF EXISTS jt")
-    sql("DROP TABLE IF EXISTS jt_array")
+    dropTables("partitioned_parquet",
+      "partitioned_parquet_with_key",
+      "partitioned_parquet_with_complextypes",
+      "partitioned_parquet_with_key_and_complextypes",
+      "normal_parquet",
+      "jt",
+      "jt_array",
+       "test_parquet")
     setConf(HiveContext.CONVERT_METASTORE_PARQUET, false)
   }
 
   test(s"conversion is working") {
     assert(
-      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
+      sql("SELECT * FROM normal_parquet").queryExecution.sparkPlan.collect {
         case _: HiveTableScan => true
       }.isEmpty)
     assert(
-      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
-        case _: ParquetTableScan => true
-        case _: PhysicalRDD => true
+      sql("SELECT * FROM normal_parquet").queryExecution.sparkPlan.collect {
+        case _: DataSourceScan => true
       }.nonEmpty)
-  }
-}
-
-class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
-  val originalConf = conf.parquetUseDataSourceApi
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-
-    sql(
-      """
-        |create table test_parquet
-        |(
-        |  intField INT,
-        |  stringField STRING
-        |)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        |STORED AS
-        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      """.stripMargin)
-
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    sql("DROP TABLE IF EXISTS test_parquet")
-
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
   }
 
   test("scan an empty parquet table") {
@@ -220,6 +209,7 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
   }
 
   test("insert into an empty parquet table") {
+    dropTables("test_insert_parquet")
     sql(
       """
         |create table test_insert_parquet
@@ -245,7 +235,7 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
       sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
       Row(3, "str3") :: Row(4, "str4") :: Nil
     )
-    sql("DROP TABLE IF EXISTS test_insert_parquet")
+    dropTables("test_insert_parquet")
 
     // Create it again.
     sql(
@@ -272,174 +262,175 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
       sql(s"SELECT intField, stringField FROM test_insert_parquet"),
       (1 to 10).map(i => Row(i, s"str$i")) ++ (1 to 4).map(i => Row(i, s"str$i"))
     )
-    sql("DROP TABLE IF EXISTS test_insert_parquet")
+    dropTables("test_insert_parquet")
   }
 
   test("scan a parquet table created through a CTAS statement") {
-    sql(
-      """
-        |create table test_parquet_ctas ROW FORMAT
-        |SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        |STORED AS
-        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-        |AS select * from jt
-      """.stripMargin)
+    withTable("test_parquet_ctas") {
+      sql(
+        """
+          |create table test_parquet_ctas ROW FORMAT
+          |SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+          |STORED AS
+          |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+          |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+          |AS select * from jt
+        """.stripMargin)
 
-    checkAnswer(
-      sql(s"SELECT a, b FROM test_parquet_ctas WHERE a = 1"),
-      Seq(Row(1, "str1"))
-    )
+      checkAnswer(
+        sql(s"SELECT a, b FROM test_parquet_ctas WHERE a = 1"),
+        Seq(Row(1, "str1"))
+      )
 
-    table("test_parquet_ctas").queryExecution.optimizedPlan match {
-      case LogicalRelation(_: ParquetRelation2) => // OK
-      case _ => fail(
-        "test_parquet_ctas should be converted to " +
-          s"${classOf[ParquetRelation2].getCanonicalName}")
+      table("test_parquet_ctas").queryExecution.optimizedPlan match {
+        case LogicalRelation(_: HadoopFsRelation, _, _) => // OK
+        case _ => fail(
+          "test_parquet_ctas should be converted to " +
+              s"${classOf[HadoopFsRelation ].getCanonicalName }")
+      }
     }
-
-    sql("DROP TABLE IF EXISTS test_parquet_ctas")
   }
 
   test("MetastoreRelation in InsertIntoTable will be converted") {
-    sql(
-      """
-        |create table test_insert_parquet
-        |(
-        |  intField INT
-        |)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        |STORED AS
-        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      """.stripMargin)
+    withTable("test_insert_parquet") {
+      sql(
+        """
+          |create table test_insert_parquet
+          |(
+          |  intField INT
+          |)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+          |STORED AS
+          |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+          |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        """.stripMargin)
 
-    val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
-    df.queryExecution.executedPlan match {
-      case ExecutedCommand(InsertIntoHadoopFsRelation(_: ParquetRelation2, _, _)) => // OK
-      case o => fail("test_insert_parquet should be converted to a " +
-        s"${classOf[ParquetRelation2].getCanonicalName} and " +
-        s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan. " +
-        s"However, found a ${o.toString} ")
+      val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
+      df.queryExecution.sparkPlan match {
+        case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
+        case o => fail("test_insert_parquet should be converted to a " +
+          s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
+          s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan. " +
+          s"However, found a ${o.toString} ")
+      }
+
+      checkAnswer(
+        sql("SELECT intField FROM test_insert_parquet WHERE test_insert_parquet.intField > 5"),
+        sql("SELECT a FROM jt WHERE jt.a > 5").collect()
+      )
     }
-
-    checkAnswer(
-      sql("SELECT intField FROM test_insert_parquet WHERE test_insert_parquet.intField > 5"),
-      sql("SELECT a FROM jt WHERE jt.a > 5").collect()
-    )
-
-    sql("DROP TABLE IF EXISTS test_insert_parquet")
   }
 
   test("MetastoreRelation in InsertIntoHiveTable will be converted") {
-    sql(
-      """
-        |create table test_insert_parquet
-        |(
-        |  int_array array<int>
-        |)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        |STORED AS
-        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      """.stripMargin)
+    withTable("test_insert_parquet") {
+      sql(
+        """
+          |create table test_insert_parquet
+          |(
+          |  int_array array<int>
+          |)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+          |STORED AS
+          |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+          |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        """.stripMargin)
 
-    val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
-    df.queryExecution.executedPlan match {
-      case ExecutedCommand(InsertIntoHadoopFsRelation(r: ParquetRelation2, _, _)) => // OK
-      case o => fail("test_insert_parquet should be converted to a " +
-        s"${classOf[ParquetRelation2].getCanonicalName} and " +
-        s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
-        s"However, found a ${o.toString} ")
+      val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
+      df.queryExecution.sparkPlan match {
+        case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
+        case o => fail("test_insert_parquet should be converted to a " +
+          s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
+          s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
+          s"However, found a ${o.toString} ")
+      }
+
+      checkAnswer(
+        sql("SELECT int_array FROM test_insert_parquet"),
+        sql("SELECT a FROM jt_array").collect()
+      )
     }
-
-    checkAnswer(
-      sql("SELECT int_array FROM test_insert_parquet"),
-      sql("SELECT a FROM jt_array").collect()
-    )
-
-    sql("DROP TABLE IF EXISTS test_insert_parquet")
   }
 
   test("SPARK-6450 regression test") {
-    sql(
-      """CREATE TABLE IF NOT EXISTS ms_convert (key INT)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        |STORED AS
-        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      """.stripMargin)
+    withTable("ms_convert") {
+      sql(
+        """CREATE TABLE IF NOT EXISTS ms_convert (key INT)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+          |STORED AS
+          |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+          |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        """.stripMargin)
 
-    // This shouldn't throw AnalysisException
-    val analyzed = sql(
-      """SELECT key FROM ms_convert
-        |UNION ALL
-        |SELECT key FROM ms_convert
-      """.stripMargin).queryExecution.analyzed
+      // This shouldn't throw AnalysisException
+      val analyzed = sql(
+        """SELECT key FROM ms_convert
+          |UNION ALL
+          |SELECT key FROM ms_convert
+        """.stripMargin).queryExecution.analyzed
 
-    assertResult(2) {
-      analyzed.collect {
-        case r @ LogicalRelation(_: ParquetRelation2) => r
-      }.size
+      assertResult(2) {
+        analyzed.collect {
+          case r @ LogicalRelation(_: HadoopFsRelation, _, _) => r
+        }.size
+      }
     }
-
-    sql("DROP TABLE ms_convert")
   }
 
-  def collectParquetRelation(df: DataFrame): ParquetRelation2 = {
+  def collectHadoopFsRelation(df: DataFrame): HadoopFsRelation = {
     val plan = df.queryExecution.analyzed
     plan.collectFirst {
-      case LogicalRelation(r: ParquetRelation2) => r
+      case LogicalRelation(r: HadoopFsRelation, _, _) => r
     }.getOrElse {
-      fail(s"Expecting a ParquetRelation2, but got:\n$plan")
+      fail(s"Expecting a HadoopFsRelation 2, but got:\n$plan")
     }
   }
 
   test("SPARK-7749: non-partitioned metastore Parquet table lookup should use cached relation") {
-    sql(
-      s"""CREATE TABLE nonPartitioned (
-         |  key INT,
-         |  value STRING
-         |)
-         |STORED AS PARQUET
-       """.stripMargin)
+    withTable("nonPartitioned") {
+      sql(
+        s"""CREATE TABLE nonPartitioned (
+           |  key INT,
+           |  value STRING
+           |)
+           |STORED AS PARQUET
+         """.stripMargin)
 
-    // First lookup fills the cache
-    val r1 = collectParquetRelation(table("nonPartitioned"))
-    // Second lookup should reuse the cache
-    val r2 = collectParquetRelation(table("nonPartitioned"))
-    // They should be the same instance
-    assert(r1 eq r2)
-
-    sql("DROP TABLE nonPartitioned")
+      // First lookup fills the cache
+      val r1 = collectHadoopFsRelation (table("nonPartitioned"))
+      // Second lookup should reuse the cache
+      val r2 = collectHadoopFsRelation (table("nonPartitioned"))
+      // They should be the same instance
+      assert(r1 eq r2)
+    }
   }
 
   test("SPARK-7749: partitioned metastore Parquet table lookup should use cached relation") {
-    sql(
-      s"""CREATE TABLE partitioned (
-         |  key INT,
-         |  value STRING
-         |)
-         |PARTITIONED BY (part INT)
-         |STORED AS PARQUET
+    withTable("partitioned") {
+      sql(
+        s"""CREATE TABLE partitioned (
+           | key INT,
+           | value STRING
+           |)
+           |PARTITIONED BY (part INT)
+           |STORED AS PARQUET
        """.stripMargin)
 
-    // First lookup fills the cache
-    val r1 = collectParquetRelation(table("partitioned"))
-    // Second lookup should reuse the cache
-    val r2 = collectParquetRelation(table("partitioned"))
-    // They should be the same instance
-    assert(r1 eq r2)
-
-    sql("DROP TABLE partitioned")
+      // First lookup fills the cache
+      val r1 = collectHadoopFsRelation (table("partitioned"))
+      // Second lookup should reuse the cache
+      val r2 = collectHadoopFsRelation (table("partitioned"))
+      // They should be the same instance
+      assert(r1 eq r2)
+    }
   }
 
   test("Caching converted data source Parquet Relations") {
-    def checkCached(tableIdentifier: catalog.QualifiedTableName): Unit = {
+    val _catalog = sessionState.catalog
+    def checkCached(tableIdentifier: _catalog.QualifiedTableName): Unit = {
       // Converted test_parquet should be cached.
-      catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
+      sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
-        case logical @ LogicalRelation(parquetRelation: ParquetRelation2) => // OK
+        case logical @ LogicalRelation(parquetRelation: HadoopFsRelation, _, _) => // OK
         case other =>
           fail(
             "The cached test_parquet should be a Parquet Relation. " +
@@ -447,8 +438,7 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
       }
     }
 
-    sql("DROP TABLE IF EXISTS test_insert_parquet")
-    sql("DROP TABLE IF EXISTS test_parquet_partitioned_cache_test")
+    dropTables("test_insert_parquet", "test_parquet_partitioned_cache_test")
 
     sql(
       """
@@ -463,17 +453,17 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    var tableIdentifier = catalog.QualifiedTableName("default", "test_insert_parquet")
+    var tableIdentifier = _catalog.QualifiedTableName("default", "test_insert_parquet")
 
     // First, make sure the converted test_parquet is not cached.
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     // Table lookup will make the table cached.
     table("test_insert_parquet")
     checkCached(tableIdentifier)
     // For insert into non-partitioned table, we will do the conversion,
     // so the converted test_insert_parquet should be cached.
     invalidateTable("test_insert_parquet")
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_insert_parquet
@@ -486,7 +476,7 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
       sql("select a, b from jt").collect())
     // Invalidate the cache.
     invalidateTable("test_insert_parquet")
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
 
     // Create a partitioned table.
     sql(
@@ -496,38 +486,38 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
         |  intField INT,
         |  stringField STRING
         |)
-        |PARTITIONED BY (date string)
+        |PARTITIONED BY (`date` string)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
         |STORED AS
         |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    tableIdentifier = catalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    tableIdentifier = _catalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
+    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
-        |PARTITION (date='2015-04-01')
+        |PARTITION (`date`='2015-04-01')
         |select a, b from jt
       """.stripMargin)
     // Right now, insert into a partitioned Parquet is not supported in data source Parquet.
     // So, we expect it is not cached.
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
-        |PARTITION (date='2015-04-02')
+        |PARTITION (`date`='2015-04-02')
         |select a, b from jt
       """.stripMargin)
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
 
     // Make sure we can cache the partitioned table.
     table("test_parquet_partitioned_cache_test")
     checkCached(tableIdentifier)
     // Make sure we can read the data.
     checkAnswer(
-      sql("select STRINGField, date, intField from test_parquet_partitioned_cache_test"),
+      sql("select STRINGField, `date`, intField from test_parquet_partitioned_cache_test"),
       sql(
         """
           |select b, '2015-04-01', a FROM jt
@@ -536,90 +526,26 @@ class ParquetDataSourceOnMetastoreSuite extends ParquetMetastoreSuiteBase {
         """.stripMargin).collect())
 
     invalidateTable("test_parquet_partitioned_cache_test")
-    assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
 
-    sql("DROP TABLE test_insert_parquet")
-    sql("DROP TABLE test_parquet_partitioned_cache_test")
-  }
-}
-
-class ParquetDataSourceOffMetastoreSuite extends ParquetMetastoreSuiteBase {
-  val originalConf = conf.parquetUseDataSourceApi
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
-  }
-
-  test("MetastoreRelation in InsertIntoTable will not be converted") {
-    sql(
-      """
-        |create table test_insert_parquet
-        |(
-        |  intField INT
-        |)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        |STORED AS
-        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      """.stripMargin)
-
-    val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
-    df.queryExecution.executedPlan match {
-      case insert: execution.InsertIntoHiveTable => // OK
-      case o => fail(s"The SparkPlan should be ${classOf[InsertIntoHiveTable].getCanonicalName}. " +
-        s"However, found ${o.toString}.")
-    }
-
-    checkAnswer(
-      sql("SELECT intField FROM test_insert_parquet WHERE test_insert_parquet.intField > 5"),
-      sql("SELECT a FROM jt WHERE jt.a > 5").collect()
-    )
-
-    sql("DROP TABLE IF EXISTS test_insert_parquet")
-  }
-
-  // TODO: enable it after the fix of SPARK-5950.
-  ignore("MetastoreRelation in InsertIntoHiveTable will not be converted") {
-    sql(
-      """
-        |create table test_insert_parquet
-        |(
-        |  int_array array<int>
-        |)
-        |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        |STORED AS
-        |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-      """.stripMargin)
-
-    val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
-    df.queryExecution.executedPlan match {
-      case insert: execution.InsertIntoHiveTable => // OK
-      case o => fail(s"The SparkPlan should be ${classOf[InsertIntoHiveTable].getCanonicalName}. " +
-        s"However, found ${o.toString}.")
-    }
-
-    checkAnswer(
-      sql("SELECT int_array FROM test_insert_parquet"),
-      sql("SELECT a FROM jt_array").collect()
-    )
-
-    sql("DROP TABLE IF EXISTS test_insert_parquet")
+    dropTables("test_insert_parquet", "test_parquet_partitioned_cache_test")
   }
 }
 
 /**
  * A suite of tests for the Parquet support through the data sources API.
  */
-class ParquetSourceSuiteBase extends ParquetPartitioningTest {
+class ParquetSourceSuite extends ParquetPartitioningTest {
+  import testImplicits._
+  import hiveContext._
+
   override def beforeAll(): Unit = {
     super.beforeAll()
+    dropTables("partitioned_parquet",
+      "partitioned_parquet_with_key",
+      "partitioned_parquet_with_complextypes",
+      "partitioned_parquet_with_key_and_complextypes",
+      "normal_parquet")
 
     sql( s"""
       create temporary table partitioned_parquet
@@ -666,7 +592,7 @@ class ParquetSourceSuiteBase extends ParquetPartitioningTest {
     sql("drop table if exists spark_6016_fix")
 
     // Create a DataFrame with two partitions. So, the created table will have two parquet files.
-    val df1 = read.json(sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i}"""), 2))
+    val df1 = (1 to 10).map(Tuple1(_)).toDF("a").coalesce(2)
     df1.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable("spark_6016_fix")
     checkAnswer(
       sql("select * from spark_6016_fix"),
@@ -674,7 +600,7 @@ class ParquetSourceSuiteBase extends ParquetPartitioningTest {
     )
 
     // Create a DataFrame with four partitions. So, the created table will have four parquet files.
-    val df2 = read.json(sparkContext.parallelize((1 to 10).map(i => s"""{"b":$i}"""), 4))
+    val df2 = (1 to 10).map(Tuple1(_)).toDF("b").coalesce(4)
     df2.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable("spark_6016_fix")
     // For the bug of SPARK-6016, we are caching two outdated footers for df1. Then,
     // since the new table has four parquet files, we are trying to read new footers from two files
@@ -696,13 +622,16 @@ class ParquetSourceSuiteBase extends ParquetPartitioningTest {
         val conf = Seq(
           HiveContext.CONVERT_METASTORE_PARQUET.key -> "false",
           SQLConf.PARQUET_BINARY_AS_STRING.key -> "true",
-          SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key -> "true")
+          SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "false")
 
         withSQLConf(conf: _*) {
           sql(
             s"""CREATE TABLE array_of_struct
                |STORED AS PARQUET LOCATION '$path'
-               |AS SELECT '1st', '2nd', ARRAY(NAMED_STRUCT('a', 'val_a', 'b', 'val_b'))
+               |AS SELECT
+               |  '1st' AS a,
+               |  '2nd' AS b,
+               |  ARRAY(NAMED_STRUCT('a', 'val_a', 'b', 'val_b')) AS c
              """.stripMargin)
 
           checkAnswer(
@@ -712,20 +641,6 @@ class ParquetSourceSuiteBase extends ParquetPartitioningTest {
       }
     }
   }
-}
-
-class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
-  val originalConf = conf.parquetUseDataSourceApi
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
-  }
 
   test("values in arrays and maps stored in parquet are always nullable") {
     val df = createDataFrame(Tuple2(Map(2 -> 3), Seq(4, 5, 6)) :: Nil).toDF("m", "a")
@@ -734,25 +649,25 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
     val expectedSchema1 =
       StructType(
         StructField("m", mapType1, nullable = true) ::
-        StructField("a", arrayType1, nullable = true) :: Nil)
+          StructField("a", arrayType1, nullable = true) :: Nil)
     assert(df.schema === expectedSchema1)
 
-    df.write.format("parquet").saveAsTable("alwaysNullable")
+    withTable("alwaysNullable") {
+      df.write.format("parquet").saveAsTable("alwaysNullable")
 
-    val mapType2 = MapType(IntegerType, IntegerType, valueContainsNull = true)
-    val arrayType2 = ArrayType(IntegerType, containsNull = true)
-    val expectedSchema2 =
-      StructType(
-        StructField("m", mapType2, nullable = true) ::
-          StructField("a", arrayType2, nullable = true) :: Nil)
+      val mapType2 = MapType(IntegerType, IntegerType, valueContainsNull = true)
+      val arrayType2 = ArrayType(IntegerType, containsNull = true)
+      val expectedSchema2 =
+        StructType(
+          StructField("m", mapType2, nullable = true) ::
+              StructField("a", arrayType2, nullable = true) :: Nil)
 
-    assert(table("alwaysNullable").schema === expectedSchema2)
+      assert(table("alwaysNullable").schema === expectedSchema2)
 
-    checkAnswer(
-      sql("SELECT m, a FROM alwaysNullable"),
-      Row(Map(2 -> 3), Seq(4, 5, 6)))
-
-    sql("DROP TABLE alwaysNullable")
+      checkAnswer(
+        sql("SELECT m, a FROM alwaysNullable"),
+        Row(Map(2 -> 3), Seq(4, 5, 6)))
+    }
   }
 
   test("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
@@ -772,25 +687,11 @@ class ParquetDataSourceOnSourceSuite extends ParquetSourceSuiteBase {
   }
 }
 
-class ParquetDataSourceOffSourceSuite extends ParquetSourceSuiteBase {
-  val originalConf = conf.parquetUseDataSourceApi
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
-  }
-}
-
 /**
  * A collection of tests for parquet data with various forms of partitioning.
  */
-abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-  override def sqlContext: SQLContext = TestHive
+abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import testImplicits._
 
   var partitionedTableDir: File = null
   var normalTableDir: File = null
@@ -852,6 +753,17 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     partitionedTableDirWithKey.delete()
     partitionedTableDirWithComplexTypes.delete()
     partitionedTableDirWithKeyAndComplexTypes.delete()
+  }
+
+  /**
+   * Drop named tables if they exist
+ *
+   * @param tableNames tables to drop
+   */
+  def dropTables(tableNames: String*): Unit = {
+    tableNames.foreach { name =>
+      sql(s"DROP TABLE IF EXISTS $name")
+    }
   }
 
   Seq(
@@ -943,7 +855,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     test(s"hive udfs $table") {
       checkAnswer(
         sql(s"SELECT concat(stringField, stringField) FROM $table"),
-        sql(s"SELECT stringField FROM $table").map {
+        sql(s"SELECT stringField FROM $table").rdd.map {
           case Row(s: String) => Row(s + s)
         }.collect().toSeq)
     }
@@ -963,8 +875,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
         (1 to 10).map(i => Row(1, i, f"${i}_string")))
     }
 
-    // Re-enable this after SPARK-5508 is fixed
-    ignore(s"SPARK-5775 read array from $table") {
+    test(s"SPARK-5775 read array from $table") {
       checkAnswer(
         sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
         (1 to 10).map(i => Row(1 to i, 1)))

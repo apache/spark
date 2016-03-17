@@ -19,7 +19,6 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
-import org.apache.spark.storage.BlockObjectWriter
 import org.apache.spark.util.collection.WritablePartitionedPairCollection._
 
 /**

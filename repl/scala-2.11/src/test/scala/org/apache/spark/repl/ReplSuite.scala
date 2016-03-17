@@ -21,7 +21,6 @@ import java.io._
 import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
 
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.{SparkContext, SparkFunSuite}
@@ -49,14 +48,8 @@ class ReplSuite extends SparkFunSuite {
     val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
 
-    System.setProperty("spark.master", master)
-    val interp = {
-      new SparkILoop(in, new PrintWriter(out))
-    }
-    org.apache.spark.repl.Main.interp = interp
-    Main.s.processArguments(List("-classpath", classpath), true)
-    Main.main(Array()) // call main
-    org.apache.spark.repl.Main.interp = null
+    Main.conf.set("spark.master", master)
+    Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
 
     if (oldExecutorClasspath != null) {
       System.setProperty(CONF_EXECUTOR_CLASSPATH, oldExecutorClasspath)
@@ -209,7 +202,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("local-cluster mode") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |var v = 7
         |def getV() = v
@@ -231,7 +224,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("SPARK-1199 two instances of same class don't type check.") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |case class Sum(exp: String, exp2: String)
         |val a = Sum("A", "B")
@@ -254,7 +247,7 @@ class ReplSuite extends SparkFunSuite {
 
   test("SPARK-2576 importing SQLContext.createDataFrame.") {
     // We need to use local-cluster to test this case.
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
         |import sqlContext.implicits._
@@ -314,7 +307,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("collecting objects of class defined in repl - shuffling") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |case class Foo(i: Int)
         |val list = List((1, Foo(1)), (1, Foo(2)))

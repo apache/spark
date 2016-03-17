@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.{TimerTask, Timer}
+import java.util.{Timer, TimerTask}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -32,9 +32,8 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
-import org.apache.spark.util.{ThreadUtils, Utils}
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -75,9 +74,9 @@ private[spark] class TaskSchedulerImpl(
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
-  val activeTaskSets = new HashMap[String, TaskSetManager]
+  private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
-  val taskIdToTaskSetId = new HashMap[Long, String]
+  private[scheduler] val taskIdToTaskSetManager = new HashMap[Long, TaskSetManager]
   val taskIdToExecutorId = new HashMap[Long, String]
 
   @volatile private var hasReceivedTask = false
@@ -87,8 +86,8 @@ private[spark] class TaskSchedulerImpl(
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
 
-  // Which executor IDs we have executors on
-  val activeExecutorIds = new HashSet[String]
+  // Number of tasks running on each executor
+  private val executorIdToTaskCount = new HashMap[String, Int]
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
@@ -162,7 +161,17 @@ private[spark] class TaskSchedulerImpl(
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
-      activeTaskSets(taskSet.id) = manager
+      val stage = taskSet.stageId
+      val stageTaskSets =
+        taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
+      stageTaskSets(taskSet.stageAttemptId) = manager
+      val conflictingTaskSet = stageTaskSets.exists { case (_, ts) =>
+        ts.taskSet != taskSet && !ts.isZombie
+      }
+      if (conflictingTaskSet) {
+        throw new IllegalStateException(s"more than one active taskSet for stage $stage:" +
+          s" ${stageTaskSets.toSeq.map{_._2.taskSet.id}.mkString(",")}")
+      }
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {
@@ -192,19 +201,21 @@ private[spark] class TaskSchedulerImpl(
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
-    activeTaskSets.find(_._2.stageId == stageId).foreach { case (_, tsm) =>
-      // There are two possible cases here:
-      // 1. The task set manager has been created and some tasks have been scheduled.
-      //    In this case, send a kill signal to the executors to kill the task and then abort
-      //    the stage.
-      // 2. The task set manager has been created but no tasks has been scheduled. In this case,
-      //    simply abort the stage.
-      tsm.runningTasksSet.foreach { tid =>
-        val execId = taskIdToExecutorId(tid)
-        backend.killTask(tid, execId, interruptThread)
+    taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
+      attempts.foreach { case (_, tsm) =>
+        // There are two possible cases here:
+        // 1. The task set manager has been created and some tasks have been scheduled.
+        //    In this case, send a kill signal to the executors to kill the task and then abort
+        //    the stage.
+        // 2. The task set manager has been created but no tasks has been scheduled. In this case,
+        //    simply abort the stage.
+        tsm.runningTasksSet.foreach { tid =>
+          val execId = taskIdToExecutorId(tid)
+          backend.killTask(tid, execId, interruptThread)
+        }
+        tsm.abort("Stage %s cancelled".format(stageId))
+        logInfo("Stage %d was cancelled".format(stageId))
       }
-      tsm.abort("Stage %s cancelled".format(stageId))
-      logInfo("Stage %d was cancelled".format(stageId))
     }
   }
 
@@ -214,7 +225,12 @@ private[spark] class TaskSchedulerImpl(
    * cleaned up.
    */
   def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
-    activeTaskSets -= manager.taskSet.id
+    taskSetsByStageIdAndAttempt.get(manager.taskSet.stageId).foreach { taskSetsForStage =>
+      taskSetsForStage -= manager.taskSet.stageAttemptId
+      if (taskSetsForStage.isEmpty) {
+        taskSetsByStageIdAndAttempt -= manager.taskSet.stageId
+      }
+    }
     manager.parent.removeSchedulable(manager)
     logInfo("Removed TaskSet %s, whose tasks have all completed, from pool %s"
       .format(manager.taskSet.id, manager.parent.name))
@@ -235,8 +251,9 @@ private[spark] class TaskSchedulerImpl(
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
             tasks(i) += task
             val tid = task.taskId
-            taskIdToTaskSetId(tid) = taskSet.taskSet.id
+            taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
+            executorIdToTaskCount(execId) += 1
             executorsByHost(host) += execId
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
@@ -265,7 +282,7 @@ private[spark] class TaskSchedulerImpl(
     var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
-      activeExecutorIds += o.executorId
+      executorIdToTaskCount.getOrElseUpdate(o.executorId, 0)
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
@@ -314,31 +331,35 @@ private[spark] class TaskSchedulerImpl(
         if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
           // We lost this entire executor, so remember that it's gone
           val execId = taskIdToExecutorId(tid)
-          if (activeExecutorIds.contains(execId)) {
-            removeExecutor(execId)
+
+          if (executorIdToTaskCount.contains(execId)) {
+            removeExecutor(execId,
+              SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
             failedExecutor = Some(execId)
           }
         }
-        taskIdToTaskSetId.get(tid) match {
-          case Some(taskSetId) =>
+        taskIdToTaskSetManager.get(tid) match {
+          case Some(taskSet) =>
             if (TaskState.isFinished(state)) {
-              taskIdToTaskSetId.remove(tid)
-              taskIdToExecutorId.remove(tid)
-            }
-            activeTaskSets.get(taskSetId).foreach { taskSet =>
-              if (state == TaskState.FINISHED) {
-                taskSet.removeRunningTask(tid)
-                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
-              } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
-                taskSet.removeRunningTask(tid)
-                taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+              taskIdToTaskSetManager.remove(tid)
+              taskIdToExecutorId.remove(tid).foreach { execId =>
+                if (executorIdToTaskCount.contains(execId)) {
+                  executorIdToTaskCount(execId) -= 1
+                }
               }
+            }
+            if (state == TaskState.FINISHED) {
+              taskSet.removeRunningTask(tid)
+              taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+            } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+              taskSet.removeRunningTask(tid)
+              taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
             }
           case None =>
             logError(
               ("Ignoring update with state %s for TID %s because its task set is gone (this is " +
-               "likely the result of receiving duplicate task finished status updates)")
-              .format(state, tid))
+                "likely the result of receiving duplicate task finished status updates)")
+                .format(state, tid))
         }
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
@@ -358,17 +379,17 @@ private[spark] class TaskSchedulerImpl(
    */
   override def executorHeartbeatReceived(
       execId: String,
-      taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
+      accumUpdates: Array[(Long, Seq[AccumulableInfo])],
       blockManagerId: BlockManagerId): Boolean = {
-
-    val metricsWithStageIds: Array[(Long, Int, Int, TaskMetrics)] = synchronized {
-      taskMetrics.flatMap { case (id, metrics) =>
-        taskIdToTaskSetId.get(id)
-          .flatMap(activeTaskSets.get)
-          .map(taskSetMgr => (id, taskSetMgr.stageId, taskSetMgr.taskSet.attempt, metrics))
+    // (taskId, stageId, stageAttemptId, accumUpdates)
+    val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = synchronized {
+      accumUpdates.flatMap { case (id, updates) =>
+        taskIdToTaskSetManager.get(id).map { taskSetMgr =>
+          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, updates)
+        }
       }
     }
-    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
+    dagScheduler.executorHeartbeatReceived(execId, accumUpdatesWithTaskIds, blockManagerId)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {
@@ -397,9 +418,12 @@ private[spark] class TaskSchedulerImpl(
 
   def error(message: String) {
     synchronized {
-      if (activeTaskSets.nonEmpty) {
+      if (taskSetsByStageIdAndAttempt.nonEmpty) {
         // Have each task set throw a SparkException with the error
-        for ((taskSetId, manager) <- activeTaskSets) {
+        for {
+          attempts <- taskSetsByStageIdAndAttempt.values
+          manager <- attempts.values
+        } {
           try {
             manager.abort(message)
           } catch {
@@ -443,17 +467,27 @@ private[spark] class TaskSchedulerImpl(
     var failedExecutor: Option[String] = None
 
     synchronized {
-      if (activeExecutorIds.contains(executorId)) {
+      if (executorIdToTaskCount.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
-        logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
-        removeExecutor(executorId)
+        logExecutorLoss(executorId, hostPort, reason)
+        removeExecutor(executorId, reason)
         failedExecutor = Some(executorId)
       } else {
-         // We may get multiple executorLost() calls with different loss reasons. For example, one
-         // may be triggered by a dropped connection from the slave while another may be a report
-         // of executor termination from Mesos. We produce log messages for both so we eventually
-         // report the termination reason.
-         logError("Lost an executor " + executorId + " (already removed): " + reason)
+        executorIdToHost.get(executorId) match {
+          case Some(hostPort) =>
+            // If the host mapping still exists, it means we don't know the loss reason for the
+            // executor. So call removeExecutor() to update tasks running on that executor when
+            // the real loss reason is finally known.
+            logExecutorLoss(executorId, hostPort, reason)
+            removeExecutor(executorId, reason)
+
+          case None =>
+            // We may get multiple executorLost() calls with different loss reasons. For example,
+            // one may be triggered by a dropped connection from the slave while another may be a
+            // report of executor termination from Mesos. We produce log messages for both so we
+            // eventually report the termination reason.
+            logError(s"Lost an executor $executorId (already removed): $reason")
+        }
       }
     }
     // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
@@ -463,9 +497,26 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  /** Remove an executor from all our data structures and mark it as lost */
-  private def removeExecutor(executorId: String) {
-    activeExecutorIds -= executorId
+  private def logExecutorLoss(
+      executorId: String,
+      hostPort: String,
+      reason: ExecutorLossReason): Unit = reason match {
+    case LossReasonPending =>
+      logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
+    case ExecutorKilled =>
+      logInfo(s"Executor $executorId on $hostPort killed by driver.")
+    case _ =>
+      logError(s"Lost executor $executorId on $hostPort: $reason")
+  }
+
+  /**
+   * Remove an executor from all our data structures and mark it as lost. If the executor's loss
+   * reason is not yet known, do not yet remove its association with its host nor update the status
+   * of any running tasks, since the loss reason defines whether we'll fail those tasks.
+   */
+  private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
+    executorIdToTaskCount -= executorId
+
     val host = executorIdToHost(executorId)
     val execs = executorsByHost.getOrElse(host, new HashSet)
     execs -= executorId
@@ -478,8 +529,11 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
-    executorIdToHost -= executorId
-    rootPool.executorLost(executorId, host)
+
+    if (reason != LossReasonPending) {
+      executorIdToHost -= executorId
+      rootPool.executorLost(executorId, host, reason)
+    }
   }
 
   def executorAdded(execId: String, host: String) {
@@ -499,7 +553,11 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def isExecutorAlive(execId: String): Boolean = synchronized {
-    activeExecutorIds.contains(execId)
+    executorIdToTaskCount.contains(execId)
+  }
+
+  def isExecutorBusy(execId: String): Boolean = synchronized {
+    executorIdToTaskCount.getOrElse(execId, -1) > 0
   }
 
   // By default, rack is unknown
@@ -519,6 +577,17 @@ private[spark] class TaskSchedulerImpl(
   override def applicationId(): String = backend.applicationId()
 
   override def applicationAttemptId(): Option[String] = backend.applicationAttemptId()
+
+  private[scheduler] def taskSetManagerForAttempt(
+      stageId: Int,
+      stageAttemptId: Int): Option[TaskSetManager] = {
+    for {
+      attempts <- taskSetsByStageIdAndAttempt.get(stageId)
+      manager <- attempts.get(stageAttemptId)
+    } yield {
+      manager
+    }
+  }
 
 }
 
@@ -551,10 +620,10 @@ private[spark] object TaskSchedulerImpl {
     while (found) {
       found = false
       for (key <- keyList) {
-        val containerList: ArrayBuffer[T] = map.get(key).getOrElse(null)
+        val containerList: ArrayBuffer[T] = map.getOrElse(key, null)
         assert(containerList != null)
         // Get the index'th entry for this host - if present
-        if (index < containerList.size){
+        if (index < containerList.size) {
           retval += containerList.apply(index)
           found = true
         }

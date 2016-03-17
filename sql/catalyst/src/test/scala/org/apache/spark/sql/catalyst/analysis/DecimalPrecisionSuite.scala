@@ -19,13 +19,17 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Union, Project, LocalRelation}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Union}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 
-class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
+
+class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
   val conf = new SimpleCatalystConf(true)
   val catalog = new SimpleCatalog(conf)
   val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
@@ -34,7 +38,7 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     AttributeReference("i", IntegerType)(),
     AttributeReference("d1", DecimalType(2, 1))(),
     AttributeReference("d2", DecimalType(5, 2))(),
-    AttributeReference("u", DecimalType.Unlimited)(),
+    AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
     AttributeReference("f", FloatType)(),
     AttributeReference("b", DoubleType)()
   )
@@ -47,7 +51,7 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
   val b: Expression = UnresolvedAttribute("b")
 
   before {
-    catalog.registerTable(Seq("table"), relation)
+    catalog.registerTable(TableIdentifier("table"), relation)
   }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {
@@ -69,7 +73,7 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
       Union(Project(Seq(Alias(left, "l")()), relation),
         Project(Seq(Alias(right, "r")()), relation))
     val (l, r) = analyzer.execute(plan).collect {
-      case Union(left, right) => (left.output.head, right.output.head)
+      case Union(Seq(child1, child2)) => (child1.output.head, child2.output.head)
     }.head
     assert(l.dataType === expectedType)
     assert(r.dataType === expectedType)
@@ -92,11 +96,11 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Comparison operations") {
-    checkComparison(EqualTo(i, d1), DecimalType(10, 1))
+    checkComparison(EqualTo(i, d1), DecimalType(11, 1))
     checkComparison(EqualNullSafe(d2, d1), DecimalType(5, 2))
-    checkComparison(LessThan(i, d1), DecimalType(10, 1))
+    checkComparison(LessThan(i, d1), DecimalType(11, 1))
     checkComparison(LessThanOrEqual(d1, d2), DecimalType(5, 2))
-    checkComparison(GreaterThan(d2, u), DecimalType.Unlimited)
+    checkComparison(GreaterThan(d2, u), DecimalType.SYSTEM_DEFAULT)
     checkComparison(GreaterThanOrEqual(d1, f), DoubleType)
     checkComparison(GreaterThan(d2, d2), DecimalType(5, 2))
   }
@@ -106,12 +110,12 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     checkUnion(i, d2, DecimalType(12, 2))
     checkUnion(d1, d2, DecimalType(5, 2))
     checkUnion(d2, d1, DecimalType(5, 2))
-    checkUnion(d1, f, DecimalType(8, 7))
-    checkUnion(f, d2, DecimalType(10, 7))
-    checkUnion(d1, b, DecimalType(16, 15))
-    checkUnion(b, d2, DecimalType(18, 15))
-    checkUnion(d1, u, DecimalType.Unlimited)
-    checkUnion(u, d2, DecimalType.Unlimited)
+    checkUnion(d1, f, DoubleType)
+    checkUnion(f, d2, DoubleType)
+    checkUnion(d1, b, DoubleType)
+    checkUnion(b, d2, DoubleType)
+    checkUnion(d1, u, DecimalType.SYSTEM_DEFAULT)
+    checkUnion(u, d2, DecimalType.SYSTEM_DEFAULT)
   }
 
   test("bringing in primitive types") {
@@ -125,13 +129,149 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     checkType(Add(d1, Cast(i, DoubleType)), DoubleType)
   }
 
-  test("unlimited decimals make everything else cast up") {
-    for (expr <- Seq(d1, d2, i, f, u)) {
-      checkType(Add(expr, u), DecimalType.Unlimited)
-      checkType(Subtract(expr, u), DecimalType.Unlimited)
-      checkType(Multiply(expr, u), DecimalType.Unlimited)
-      checkType(Divide(expr, u), DecimalType.Unlimited)
-      checkType(Remainder(expr, u), DecimalType.Unlimited)
+  test("maximum decimals") {
+    for (expr <- Seq(d1, d2, i, u)) {
+      checkType(Add(expr, u), DecimalType.SYSTEM_DEFAULT)
+      checkType(Subtract(expr, u), DecimalType.SYSTEM_DEFAULT)
     }
+
+    checkType(Multiply(d1, u), DecimalType(38, 19))
+    checkType(Multiply(d2, u), DecimalType(38, 20))
+    checkType(Multiply(i, u), DecimalType(38, 18))
+    checkType(Multiply(u, u), DecimalType(38, 36))
+
+    checkType(Divide(u, d1), DecimalType(38, 18))
+    checkType(Divide(u, d2), DecimalType(38, 19))
+    checkType(Divide(u, i), DecimalType(38, 23))
+    checkType(Divide(u, u), DecimalType(38, 18))
+
+    checkType(Remainder(d1, u), DecimalType(19, 18))
+    checkType(Remainder(d2, u), DecimalType(21, 18))
+    checkType(Remainder(i, u), DecimalType(28, 18))
+    checkType(Remainder(u, u), DecimalType.SYSTEM_DEFAULT)
+
+    for (expr <- Seq(f, b)) {
+      checkType(Add(expr, u), DoubleType)
+      checkType(Subtract(expr, u), DoubleType)
+      checkType(Multiply(expr, u), DoubleType)
+      checkType(Divide(expr, u), DoubleType)
+      checkType(Remainder(expr, u), DoubleType)
+    }
+  }
+
+  test("DecimalType.isWiderThan") {
+    val d0 = DecimalType(2, 0)
+    val d1 = DecimalType(2, 1)
+    val d2 = DecimalType(5, 2)
+    val d3 = DecimalType(15, 3)
+    val d4 = DecimalType(25, 4)
+
+    assert(d0.isWiderThan(d1) === false)
+    assert(d1.isWiderThan(d0) === false)
+    assert(d1.isWiderThan(d2) === false)
+    assert(d2.isWiderThan(d1) === true)
+    assert(d2.isWiderThan(d3) === false)
+    assert(d3.isWiderThan(d2) === true)
+    assert(d4.isWiderThan(d3) === true)
+
+    assert(d1.isWiderThan(ByteType) === false)
+    assert(d2.isWiderThan(ByteType) === true)
+    assert(d2.isWiderThan(ShortType) === false)
+    assert(d3.isWiderThan(ShortType) === true)
+    assert(d3.isWiderThan(IntegerType) === true)
+    assert(d3.isWiderThan(LongType) === false)
+    assert(d4.isWiderThan(LongType) === true)
+    assert(d4.isWiderThan(FloatType) === false)
+    assert(d4.isWiderThan(DoubleType) === false)
+  }
+
+  test("strength reduction for integer/decimal comparisons - basic test") {
+    Seq(ByteType, ShortType, IntegerType, LongType).foreach { dt =>
+      val int = AttributeReference("a", dt)()
+
+      ruleTest(int > Literal(Decimal(4)), int > Literal(4L))
+      ruleTest(int > Literal(Decimal(4.7)), int > Literal(4L))
+
+      ruleTest(int >= Literal(Decimal(4)), int >= Literal(4L))
+      ruleTest(int >= Literal(Decimal(4.7)), int >= Literal(5L))
+
+      ruleTest(int < Literal(Decimal(4)), int < Literal(4L))
+      ruleTest(int < Literal(Decimal(4.7)), int < Literal(5L))
+
+      ruleTest(int <= Literal(Decimal(4)), int <= Literal(4L))
+      ruleTest(int <= Literal(Decimal(4.7)), int <= Literal(4L))
+
+      ruleTest(Literal(Decimal(4)) > int, Literal(4L) > int)
+      ruleTest(Literal(Decimal(4.7)) > int, Literal(5L) > int)
+
+      ruleTest(Literal(Decimal(4)) >= int, Literal(4L) >= int)
+      ruleTest(Literal(Decimal(4.7)) >= int, Literal(4L) >= int)
+
+      ruleTest(Literal(Decimal(4)) < int, Literal(4L) < int)
+      ruleTest(Literal(Decimal(4.7)) < int, Literal(4L) < int)
+
+      ruleTest(Literal(Decimal(4)) <= int, Literal(4L) <= int)
+      ruleTest(Literal(Decimal(4.7)) <= int, Literal(5L) <= int)
+
+    }
+  }
+
+  test("strength reduction for integer/decimal comparisons - overflow test") {
+    val maxValue = Literal(Decimal(Long.MaxValue))
+    val overflow = Literal(Decimal(Long.MaxValue) + Decimal(0.1))
+    val minValue = Literal(Decimal(Long.MinValue))
+    val underflow = Literal(Decimal(Long.MinValue) - Decimal(0.1))
+
+    Seq(ByteType, ShortType, IntegerType, LongType).foreach { dt =>
+      val int = AttributeReference("a", dt)()
+
+      ruleTest(int > maxValue, int > Literal(Long.MaxValue))
+      ruleTest(int > overflow, FalseLiteral)
+      ruleTest(int > minValue, int > Literal(Long.MinValue))
+      ruleTest(int > underflow, TrueLiteral)
+
+      ruleTest(int >= maxValue, int >= Literal(Long.MaxValue))
+      ruleTest(int >= overflow, FalseLiteral)
+      ruleTest(int >= minValue, int >= Literal(Long.MinValue))
+      ruleTest(int >= underflow, TrueLiteral)
+
+      ruleTest(int < maxValue, int < Literal(Long.MaxValue))
+      ruleTest(int < overflow, TrueLiteral)
+      ruleTest(int < minValue, int < Literal(Long.MinValue))
+      ruleTest(int < underflow, FalseLiteral)
+
+      ruleTest(int <= maxValue, int <= Literal(Long.MaxValue))
+      ruleTest(int <= overflow, TrueLiteral)
+      ruleTest(int <= minValue, int <= Literal(Long.MinValue))
+      ruleTest(int <= underflow, FalseLiteral)
+
+      ruleTest(maxValue > int, Literal(Long.MaxValue) > int)
+      ruleTest(overflow > int, TrueLiteral)
+      ruleTest(minValue > int, Literal(Long.MinValue) > int)
+      ruleTest(underflow > int, FalseLiteral)
+
+      ruleTest(maxValue >= int, Literal(Long.MaxValue) >= int)
+      ruleTest(overflow >= int, TrueLiteral)
+      ruleTest(minValue >= int, Literal(Long.MinValue) >= int)
+      ruleTest(underflow >= int, FalseLiteral)
+
+      ruleTest(maxValue < int, Literal(Long.MaxValue) < int)
+      ruleTest(overflow < int, FalseLiteral)
+      ruleTest(minValue < int, Literal(Long.MinValue) < int)
+      ruleTest(underflow < int, TrueLiteral)
+
+      ruleTest(maxValue <= int, Literal(Long.MaxValue) <= int)
+      ruleTest(overflow <= int, FalseLiteral)
+      ruleTest(minValue <= int, Literal(Long.MinValue) <= int)
+      ruleTest(underflow <= int, TrueLiteral)
+    }
+  }
+
+  /** strength reduction for integer/decimal comparisons */
+  def ruleTest(initial: Expression, transformed: Expression): Unit = {
+    val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+    comparePlans(
+      DecimalPrecision(Project(Seq(Alias(initial, "a")()), testRelation)),
+      Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 }

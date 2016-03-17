@@ -20,9 +20,9 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{diag => brzDiag, DenseMatrix => BDM, DenseVector => BDV}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 
 class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -150,6 +150,18 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     val A = new IndexedRowMatrix(indexedRows)
     intercept[IllegalArgumentException] {
       A.computeSVD(-1)
+    }
+  }
+
+  test("similar columns") {
+    val A = new IndexedRowMatrix(indexedRows)
+    val gram = A.computeGramianMatrix().toBreeze.toDenseMatrix
+
+    val G = A.columnSimilarities().toBreeze()
+
+    for (i <- 0 until n; j <- i + 1 until n) {
+      val trueResult = gram(i, j) / scala.math.sqrt(gram(i, i) * gram(j, j))
+      assert(math.abs(G(i, j) - trueResult) < 1e-6)
     }
   }
 

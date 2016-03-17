@@ -18,24 +18,24 @@
 package org.apache.spark.ui
 
 import java.net.{HttpURLConnection, URL}
-import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
+import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
-import scala.collection.JavaConversions._
+import scala.io.Source
 import scala.xml.Node
 
 import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
 import org.json4s._
 import org.json4s.jackson.JsonMethods
-import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.openqa.selenium.{By, WebDriver}
+import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 import org.w3c.css.sac.CSSParseException
 
-import org.apache.spark.LocalSparkContext._
 import org.apache.spark._
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
@@ -76,14 +76,19 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     webDriver = new HtmlUnitDriver {
       getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
     }
   }
 
   override def afterAll(): Unit = {
-    if (webDriver != null) {
-      webDriver.quit()
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
@@ -284,7 +289,11 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         JInt(stageId) <- stage \ "stageId"
         JInt(attemptId) <- stage \ "attemptId"
       } {
-        val exp = if (attemptId == 0 && stageId == 1) StageStatus.FAILED else StageStatus.COMPLETE
+        val exp = if (attemptId.toInt == 0 && stageId.toInt == 1) {
+          StageStatus.FAILED
+        } else {
+          StageStatus.COMPLETE
+        }
         status should be (exp.name())
       }
 
@@ -340,15 +349,15 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         // The completed jobs table should have two rows. The first row will be the most recent job:
         val firstRow = find(cssSelector("tbody tr")).get.underlying
         val firstRowColumns = firstRow.findElements(By.tagName("td"))
-        firstRowColumns(0).getText should be ("1")
-        firstRowColumns(4).getText should be ("1/1 (2 skipped)")
-        firstRowColumns(5).getText should be ("8/8 (16 skipped)")
+        firstRowColumns.get(0).getText should be ("1")
+        firstRowColumns.get(4).getText should be ("1/1 (2 skipped)")
+        firstRowColumns.get(5).getText should be ("8/8 (16 skipped)")
         // The second row is the first run of the job, where nothing was skipped:
         val secondRow = findAll(cssSelector("tbody tr")).toSeq(1).underlying
         val secondRowColumns = secondRow.findElements(By.tagName("td"))
-        secondRowColumns(0).getText should be ("0")
-        secondRowColumns(4).getText should be ("3/3")
-        secondRowColumns(5).getText should be ("24/24")
+        secondRowColumns.get(0).getText should be ("0")
+        secondRowColumns.get(4).getText should be ("3/3")
+        secondRowColumns.get(5).getText should be ("24/24")
       }
     }
   }
@@ -501,8 +510,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         for {
           (row, idx) <- rows.zipWithIndex
           columns = row.findElements(By.tagName("td"))
-          id = columns(0).getText()
-          description = columns(1).getText()
+          id = columns.get(0).getText()
+          description = columns.get(1).getText()
         } {
           id should be (expJobInfo(idx)._1)
           description should include (expJobInfo(idx)._2)
@@ -546,8 +555,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         for {
           (row, idx) <- rows.zipWithIndex
           columns = row.findElements(By.tagName("td"))
-          id = columns(0).getText()
-          description = columns(1).getText()
+          id = columns.get(0).getText()
+          description = columns.get(1).getText()
         } {
           id should be (expStageInfo(idx)._1)
           description should include (expStageInfo(idx)._2)
@@ -603,6 +612,44 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     }
   }
 
+  test("job stages should have expected dotfile under DAG visualization") {
+    withSpark(newSparkContext()) { sc =>
+      // Create a multi-stage job
+      val rdd =
+        sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity).map(identity).groupBy(identity)
+      rdd.count()
+
+      val stage0 = Source.fromURL(sc.ui.get.appUIAddress +
+        "/stages/stage/?id=0&attempt=0&expandDagViz=true").mkString
+      assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
+        "label=&quot;Stage 0&quot;;\n    subgraph "))
+      assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
+        "0 [label=&quot;ParallelCollectionRDD [0]"))
+      assert(stage0.contains("{\n      label=&quot;map&quot;;\n      " +
+        "1 [label=&quot;MapPartitionsRDD [1]"))
+      assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+        "2 [label=&quot;MapPartitionsRDD [2]"))
+
+      val stage1 = Source.fromURL(sc.ui.get.appUIAddress +
+        "/stages/stage/?id=1&attempt=0&expandDagViz=true").mkString
+      assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
+        "label=&quot;Stage 1&quot;;\n    subgraph "))
+      assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+        "3 [label=&quot;ShuffledRDD [3]"))
+      assert(stage1.contains("{\n      label=&quot;map&quot;;\n      " +
+        "4 [label=&quot;MapPartitionsRDD [4]"))
+      assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+        "5 [label=&quot;MapPartitionsRDD [5]"))
+
+      val stage2 = Source.fromURL(sc.ui.get.appUIAddress +
+        "/stages/stage/?id=2&attempt=0&expandDagViz=true").mkString
+      assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
+        "label=&quot;Stage 2&quot;;\n    subgraph "))
+      assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+        "6 [label=&quot;ShuffledRDD [6]"))
+    }
+  }
+
   def goToUi(sc: SparkContext, path: String): Unit = {
     goToUi(sc.ui.get, path)
   }
@@ -620,6 +667,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   def apiUrl(ui: SparkUI, path: String): URL = {
-    new URL(ui.appUIAddress + "/api/v1/applications/test/" + path)
+    new URL(ui.appUIAddress + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path)
   }
 }

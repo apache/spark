@@ -154,34 +154,40 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
     var lastClickedBatch = null;
     var lastTimeout = null;
 
+    function isFailedBatch(batchTime) {
+        return $("#batch-" + batchTime).attr("isFailed") == "true";
+    }
+
     // Add points to the line. However, we make it invisible at first. But when the user moves mouse
     // over a point, it will be displayed with its detail.
     svg.selectAll(".point")
         .data(data)
         .enter().append("circle")
-            .attr("stroke", "white") // white and opacity = 0 make it invisible
-            .attr("fill", "white")
-            .attr("opacity", "0")
+            .attr("stroke", function(d) { return isFailedBatch(d.x) ? "red" : "white";}) // white and opacity = 0 make it invisible
+            .attr("fill", function(d) { return isFailedBatch(d.x) ? "red" : "white";})
+            .attr("opacity", function(d) { return isFailedBatch(d.x) ? "1" : "0";})
             .style("cursor", "pointer")
             .attr("cx", function(d) { return x(d.x); })
             .attr("cy", function(d) { return y(d.y); })
-            .attr("r", function(d) { return 3; })
+            .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "0";})
             .on('mouseover', function(d) {
                 var tip = formatYValue(d.y) + " " + unitY + " at " + timeFormat[d.x];
                 showBootstrapTooltip(d3.select(this).node(), tip);
                 // show the point
                 d3.select(this)
-                    .attr("stroke", "steelblue")
-                    .attr("fill", "steelblue")
-                    .attr("opacity", "1");
+                    .attr("stroke", function(d) { return isFailedBatch(d.x) ? "red" : "steelblue";})
+                    .attr("fill", function(d) { return isFailedBatch(d.x) ? "red" : "steelblue";})
+                    .attr("opacity", "1")
+                    .attr("r", "3");
             })
             .on('mouseout',  function() {
                 hideBootstrapTooltip(d3.select(this).node());
                 // hide the point
                 d3.select(this)
-                    .attr("stroke", "white")
-                    .attr("fill", "white")
-                    .attr("opacity", "0");
+                    .attr("stroke", function(d) { return isFailedBatch(d.x) ? "red" : "white";})
+                    .attr("fill", function(d) { return isFailedBatch(d.x) ? "red" : "white";})
+                    .attr("opacity", function(d) { return isFailedBatch(d.x) ? "1" : "0";})
+                    .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "0";});
             })
             .on("click", function(d) {
                 if (lastTimeout != null) {

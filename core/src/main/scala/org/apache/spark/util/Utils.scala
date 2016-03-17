@@ -21,19 +21,23 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
-import java.util.{PriorityQueue, Properties, Locale, Random, UUID}
+import java.nio.channels.Channels
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
-import scala.collection.JavaConversions._
+import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import com.google.common.io.{ByteStreams, Files}
+import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
@@ -42,9 +46,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
-
-import tachyon.TachyonURI
-import tachyon.client.{TachyonFS, TachyonFile}
+import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -57,6 +59,7 @@ private[spark] case class CallSite(shortForm: String, longForm: String)
 private[spark] object CallSite {
   val SHORT_FORM = "callSite.short"
   val LONG_FORM = "callSite.long"
+  val empty = CallSite("", "")
 }
 
 /**
@@ -64,21 +67,6 @@ private[spark] object CallSite {
  */
 private[spark] object Utils extends Logging {
   val random = new Random()
-
-  val DEFAULT_SHUTDOWN_PRIORITY = 100
-
-  /**
-   * The shutdown priority of the SparkContext instance. This is lower than the default
-   * priority, so that by default hooks are run before the context is shut down.
-   */
-  val SPARK_CONTEXT_SHUTDOWN_PRIORITY = 50
-
-  /**
-   * The shutdown priority of temp directory must be lower than the SparkContext shutdown
-   * priority. Otherwise cleaning the temp directories while Spark jobs are running can
-   * throw undesirable errors at the time of shutdown.
-   */
-  val TEMP_DIR_SHUTDOWN_PRIORITY = 25
 
   /**
    * Define a default value for driver memory here since this value is referenced across the code
@@ -89,9 +77,6 @@ private[spark] object Utils extends Logging {
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
-
-  private val shutdownHooks = new SparkShutdownHookManager()
-  shutdownHooks.install()
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -113,8 +98,11 @@ private[spark] object Utils extends Logging {
   def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis) {
-      override def resolveClass(desc: ObjectStreamClass): Class[_] =
+      override def resolveClass(desc: ObjectStreamClass): Class[_] = {
+        // scalastyle:off classforname
         Class.forName(desc.getName, false, loader)
+        // scalastyle:on classforname
+      }
     }
     ois.readObject.asInstanceOf[T]
   }
@@ -177,18 +165,22 @@ private[spark] object Utils extends Logging {
 
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
+    // scalastyle:off classforname
     Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
+    // scalastyle:on classforname
   }
 
+  // scalastyle:off classforname
   /** Preferred alternative to Class.forName(className) */
   def classForName(className: String): Class[_] = {
     Class.forName(className, true, getContextOrSparkClassLoader)
+    // scalastyle:on classforname
   }
 
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
-  def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {
+  def writeByteBuffer(bb: ByteBuffer, out: DataOutput): Unit = {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
@@ -198,84 +190,17 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
-  private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
-
-  // Add a shutdown hook to delete the temp dirs when the JVM exits
-  addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
-    logInfo("Shutdown hook called")
-    shutdownDeletePaths.foreach { dirPath =>
-      try {
-        logInfo("Deleting directory " + dirPath)
-        Utils.deleteRecursively(new File(dirPath))
-      } catch {
-        case e: Exception => logError(s"Exception while deleting Spark temp dir: $dirPath", e)
-      }
+  /**
+   * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.OutputStream]]
+   */
+  def writeByteBuffer(bb: ByteBuffer, out: OutputStream): Unit = {
+    if (bb.hasArray) {
+      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    } else {
+      val bbval = new Array[Byte](bb.remaining())
+      bb.get(bbval)
+      out.write(bbval)
     }
-  }
-
-  // Register the path to be deleted via shutdown hook
-  def registerShutdownDeleteDir(file: File) {
-    val absolutePath = file.getAbsolutePath()
-    shutdownDeletePaths.synchronized {
-      shutdownDeletePaths += absolutePath
-    }
-  }
-
-  // Register the tachyon path to be deleted via shutdown hook
-  def registerShutdownDeleteDir(tachyonfile: TachyonFile) {
-    val absolutePath = tachyonfile.getPath()
-    shutdownDeleteTachyonPaths.synchronized {
-      shutdownDeleteTachyonPaths += absolutePath
-    }
-  }
-
-  // Is the path already registered to be deleted via a shutdown hook ?
-  def hasShutdownDeleteDir(file: File): Boolean = {
-    val absolutePath = file.getAbsolutePath()
-    shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.contains(absolutePath)
-    }
-  }
-
-  // Is the path already registered to be deleted via a shutdown hook ?
-  def hasShutdownDeleteTachyonDir(file: TachyonFile): Boolean = {
-    val absolutePath = file.getPath()
-    shutdownDeleteTachyonPaths.synchronized {
-      shutdownDeleteTachyonPaths.contains(absolutePath)
-    }
-  }
-
-  // Note: if file is child of some registered path, while not equal to it, then return true;
-  // else false. This is to ensure that two shutdown hooks do not try to delete each others
-  // paths - resulting in IOException and incomplete cleanup.
-  def hasRootAsShutdownDeleteDir(file: File): Boolean = {
-    val absolutePath = file.getAbsolutePath()
-    val retval = shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.exists { path =>
-        !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }
-    }
-    if (retval) {
-      logInfo("path = " + file + ", already present as root for deletion.")
-    }
-    retval
-  }
-
-  // Note: if file is child of some registered path, while not equal to it, then return true;
-  // else false. This is to ensure that two shutdown hooks do not try to delete each others
-  // paths - resulting in Exception and incomplete cleanup.
-  def hasRootAsShutdownDeleteDir(file: TachyonFile): Boolean = {
-    val absolutePath = file.getPath()
-    val retval = shutdownDeleteTachyonPaths.synchronized {
-      shutdownDeleteTachyonPaths.exists { path =>
-        !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }
-    }
-    if (retval) {
-      logInfo("path = " + file + ", already present as root for deletion.")
-    }
-    retval
   }
 
   /**
@@ -326,7 +251,7 @@ private[spark] object Utils extends Logging {
       root: String = System.getProperty("java.io.tmpdir"),
       namePrefix: String = "spark"): File = {
     val dir = createDirectory(root, namePrefix)
-    registerShutdownDeleteDir(dir)
+    ShutdownHookManager.registerShutdownDeleteDir(dir)
     dir
   }
 
@@ -408,6 +333,30 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * A file name may contain some invalid URI characters, such as " ". This method will convert the
+   * file name to a raw path accepted by `java.net.URI(String)`.
+   *
+   * Note: the file name must not contain "/" or "\"
+   */
+  def encodeFileNameToURIRawPath(fileName: String): String = {
+    require(!fileName.contains("/") && !fileName.contains("\\"))
+    // `file` and `localhost` are not used. Just to prevent URI from parsing `fileName` as
+    // scheme or host. The prefix "/" is required because URI doesn't accept a relative path.
+    // We should remove it after we get the raw path.
+    new URI("file", null, "localhost", -1, "/" + fileName, null, null).getRawPath.substring(1)
+  }
+
+  /**
+   * Get the file name from uri's raw path and decode it. If the raw path of uri ends with "/",
+   * return the name before the last "/".
+   */
+  def decodeFileNameInURI(uri: URI): String = {
+    val rawPath = uri.getRawPath
+    val rawFileName = rawPath.split("/").last
+    new URI("file:///" + rawFileName).getPath.substring(1)
+  }
+
+    /**
    * Download a file or directory to target directory. Supports fetching the file in a variety of
    * ways, including HTTP, Hadoop-compatible filesystems, and files on a standard filesystem, based
    * on the URL parameter. Fetching directories is only supported from Hadoop-compatible
@@ -428,7 +377,7 @@ private[spark] object Utils extends Logging {
       hadoopConf: Configuration,
       timestamp: Long,
       useCache: Boolean) {
-    val fileName = url.split("/").last
+    val fileName = decodeFileNameInURI(new URI(url))
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
     if (useCache && fetchCacheEnabled) {
@@ -436,11 +385,11 @@ private[spark] object Utils extends Logging {
       val lockFileName = s"${url.hashCode}${timestamp}_lock"
       val localDir = new File(getLocalDir(conf))
       val lockFile = new File(localDir, lockFileName)
-      val raf = new RandomAccessFile(lockFile, "rw")
+      val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel()
       // Only one executor entry.
       // The FileLock is only used to control synchronization for executors download file,
       // it's always safe regardless of lock type (mandatory or advisory).
-      val lock = raf.getChannel().lock()
+      val lock = lockFileChannel.lock()
       val cachedFile = new File(localDir, cachedFileName)
       try {
         if (!cachedFile.exists()) {
@@ -448,6 +397,7 @@ private[spark] object Utils extends Logging {
         }
       } finally {
         lock.release()
+        lockFileChannel.close()
       }
       copyFile(
         url,
@@ -569,7 +519,7 @@ private[spark] object Utils extends Logging {
 
     // The file does not exist in the target directory. Copy or move it there.
     if (removeSourceFile) {
-      Files.move(sourceFile, destFile)
+      Files.move(sourceFile.toPath, destFile.toPath)
     } else {
       logInfo(s"Copying ${sourceFile.getAbsolutePath} to ${destFile.getAbsolutePath}")
       copyRecursive(sourceFile, destFile)
@@ -587,7 +537,7 @@ private[spark] object Utils extends Logging {
         case (f1, f2) => filesEqualRecursive(f1, f2)
       }
     } else if (file1.isFile && file2.isFile) {
-      Files.equal(file1, file2)
+      GFiles.equal(file1, file2)
     } else {
       false
     }
@@ -601,7 +551,7 @@ private[spark] object Utils extends Logging {
       val subfiles = source.listFiles()
       subfiles.foreach(f => copyRecursive(f, new File(dest, f.getName)))
     } else {
-      Files.copy(source, dest)
+      Files.copy(source.toPath, dest.toPath)
     }
   }
 
@@ -625,6 +575,14 @@ private[spark] object Utils extends Logging {
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
     Option(uri.getScheme).getOrElse("file") match {
+      case "spark" =>
+        if (SparkEnv.get == null) {
+          throw new IllegalStateException(
+            "Cannot retrieve files with 'spark' scheme without an active SparkEnv.")
+        }
+        val source = SparkEnv.get.rpcEnv.openChannel(url)
+        val is = Channels.newInputStream(source)
+        downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
         var uc: URLConnection = null
         if (securityMgr.isAuthenticationEnabled()) {
@@ -707,9 +665,7 @@ private[spark] object Utils extends Logging {
 
   private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
     // These environment variables are set by YARN.
-    // For Hadoop 0.23.X, we check for YARN_LOCAL_DIRS (we use this below in getYarnLocalDirs())
-    // For Hadoop 2.X, we check for CONTAINER_ID.
-    conf.getenv("CONTAINER_ID") != null || conf.getenv("YARN_LOCAL_DIRS") != null
+    conf.getenv("CONTAINER_ID") != null
   }
 
   /**
@@ -739,6 +695,7 @@ private[spark] object Utils extends Logging {
    * logic of locating the local directories according to deployment mode.
    */
   def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
+    val shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -747,13 +704,23 @@ private[spark] object Utils extends Logging {
       getYarnLocalDirs(conf).split(",")
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
+    } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
+      conf.getenv("SPARK_LOCAL_DIRS").split(",")
+    } else if (conf.getenv("MESOS_DIRECTORY") != null && !shuffleServiceEnabled) {
+      // Mesos already creates a directory per Mesos task. Spark should use that directory
+      // instead so all temporary files are automatically cleaned up when the Mesos task ends.
+      // Note that we don't want this if the shuffle service is enabled because we want to
+      // continue to serve shuffle files after the executors that wrote them have already exited.
+      Array(conf.getenv("MESOS_DIRECTORY"))
     } else {
+      if (conf.getenv("MESOS_DIRECTORY") != null && shuffleServiceEnabled) {
+        logInfo("MESOS_DIRECTORY available but not using provided Mesos sandbox because " +
+          "spark.shuffle.service.enabled is enabled.")
+      }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
       // permissions under each listed directory.
-      Option(conf.getenv("SPARK_LOCAL_DIRS"))
-        .getOrElse(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
-        .split(",")
+      conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")).split(",")
     }
   }
 
@@ -774,17 +741,12 @@ private[spark] object Utils extends Logging {
           logError(s"Failed to create local root dir in $root. Ignoring this directory.")
           None
       }
-    }.toArray
+    }
   }
 
   /** Get the Yarn approved local directories. */
   private def getYarnLocalDirs(conf: SparkConf): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(conf.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(conf.getenv("LOCAL_DIRS"))
-      .getOrElse(""))
+    val localDirs = Option(conf.getenv("LOCAL_DIRS")).getOrElse("")
 
     if (localDirs.isEmpty) {
       throw new Exception("Yarn Local dirs can't be empty")
@@ -838,12 +800,12 @@ private[spark] object Utils extends Logging {
         // getNetworkInterfaces returns ifs in reverse order compared to ifconfig output order
         // on unix-like system. On windows, it returns in index order.
         // It's more proper to pick ip address following system output order.
-        val activeNetworkIFs = NetworkInterface.getNetworkInterfaces.toList
+        val activeNetworkIFs = NetworkInterface.getNetworkInterfaces.asScala.toSeq
         val reOrderedNetworkIFs = if (isWindows) activeNetworkIFs else activeNetworkIFs.reverse
 
         for (ni <- reOrderedNetworkIFs) {
-          val addresses = ni.getInetAddresses.toList
-            .filterNot(addr => addr.isLinkLocalAddress || addr.isLoopbackAddress)
+          val addresses = ni.getInetAddresses.asScala
+            .filterNot(addr => addr.isLinkLocalAddress || addr.isLoopbackAddress).toSeq
           if (addresses.nonEmpty) {
             val addr = addresses.find(_.isInstanceOf[Inet4Address]).getOrElse(addresses.head)
             // because of Inet6Address.toHostName may add interface at the end if it knows about it
@@ -965,9 +927,7 @@ private[spark] object Utils extends Logging {
           if (savedIOException != null) {
             throw savedIOException
           }
-          shutdownDeletePaths.synchronized {
-            shutdownDeletePaths.remove(file.getAbsolutePath)
-          }
+          ShutdownHookManager.removeShutdownDeleteDir(file)
         }
       } finally {
         if (!file.delete()) {
@@ -977,15 +937,6 @@ private[spark] object Utils extends Logging {
           }
         }
       }
-    }
-  }
-
-  /**
-   * Delete a file or directory and its contents recursively.
-   */
-  def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(new TachyonURI(dir.getPath()), true)) {
-      throw new IOException("Failed to delete the tachyon dir: " + dir)
     }
   }
 
@@ -1033,7 +984,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * Convert a time parameter such as (50s, 100ms, or 250us) to seconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
   def timeStringAsSeconds(str: String): Long = {
@@ -1292,7 +1243,6 @@ private[spark] object Utils extends Logging {
    * exception from the original `out.write` call.
    */
   def tryWithSafeFinally[T](block: => T)(finallyBlock: => Unit): T = {
-    // It would be nice to find a method on Try that did this
     var originalThrowable: Throwable = null
     try {
       block
@@ -1301,6 +1251,44 @@ private[spark] object Utils extends Logging {
         // Purposefully not using NonFatal, because even fatal exceptions
         // we don't want to have our finallyBlock suppress
         originalThrowable = t
+        throw originalThrowable
+    } finally {
+      try {
+        finallyBlock
+      } catch {
+        case t: Throwable =>
+          if (originalThrowable != null) {
+            originalThrowable.addSuppressed(t)
+            logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
+            throw originalThrowable
+          } else {
+            throw t
+          }
+      }
+    }
+  }
+
+  /**
+   * Execute a block of code, call the failure callbacks before finally block if there is any
+   * exceptions happen. But if exceptions happen in the finally block, do not suppress the original
+   * exception.
+   *
+   * This is primarily an issue with `finally { out.close() }` blocks, where
+   * close needs to be called to clean up `out`, but if an exception happened
+   * in `out.write`, it's likely `out` may be corrupted and `out.close` will
+   * fail as well. This would then suppress the original/likely more meaningful
+   * exception from the original `out.write` call.
+   */
+  def tryWithSafeFinallyAndFailureCallbacks[T](block: => T)(finallyBlock: => Unit): T = {
+    var originalThrowable: Throwable = null
+    try {
+      block
+    } catch {
+      case t: Throwable =>
+        // Purposefully not using NonFatal, because even fatal exceptions
+        // we don't want to have our finallyBlock suppress
+        originalThrowable = t
+        TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(t)
         throw originalThrowable
     } finally {
       try {
@@ -1458,7 +1446,7 @@ private[spark] object Utils extends Logging {
           file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
       }
       sum += fileToLength(file)
-      logDebug(s"After processing file $file, string built is ${stringBuffer.toString}}")
+      logDebug(s"After processing file $file, string built is ${stringBuffer.toString}")
     }
     stringBuffer.toString
   }
@@ -1468,27 +1456,6 @@ private[spark] object Utils extends Logging {
    */
   def clone[T: ClassTag](value: T, serializer: SerializerInstance): T = {
     serializer.deserialize[T](serializer.serialize(value))
-  }
-
-  /**
-   * Detect whether this thread might be executing a shutdown hook. Will always return true if
-   * the current thread is a running a shutdown hook but may spuriously return true otherwise (e.g.
-   * if System.exit was just called by a concurrent thread).
-   *
-   * Currently, this detects whether the JVM is shutting down by Runtime#addShutdownHook throwing
-   * an IllegalStateException.
-   */
-  def inShutdown(): Boolean = {
-    try {
-      val hook = new Thread {
-        override def run() {}
-      }
-      Runtime.getRuntime.addShutdownHook(hook)
-      Runtime.getRuntime.removeShutdownHook(hook)
-    } catch {
-      case ise: IllegalStateException => return true
-    }
-    false
   }
 
   private def isSpace(c: Char): Boolean = {
@@ -1563,7 +1530,7 @@ private[spark] object Utils extends Logging {
     rawMod + (if (rawMod < 0) mod else 0)
   }
 
-  // Handles idiosyncracies with hash (add more as required)
+  // Handles idiosyncrasies with hash (add more as required)
   // This method should be kept in sync with
   // org.apache.spark.network.util.JavaUtils#nonNegativeHash().
   def nonNegativeHash(obj: AnyRef): Int = {
@@ -1579,14 +1546,40 @@ private[spark] object Utils extends Logging {
     hashAbs
   }
 
+  /**
+   * NaN-safe version of [[java.lang.Double.compare()]] which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN > any non-NaN double.
+   */
+  def nanSafeCompareDoubles(x: Double, y: Double): Int = {
+    val xIsNan: Boolean = java.lang.Double.isNaN(x)
+    val yIsNan: Boolean = java.lang.Double.isNaN(y)
+    if ((xIsNan && yIsNan) || (x == y)) 0
+    else if (xIsNan) 1
+    else if (yIsNan) -1
+    else if (x > y) 1
+    else -1
+  }
+
+  /**
+   * NaN-safe version of [[java.lang.Float.compare()]] which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN > any non-NaN float.
+   */
+  def nanSafeCompareFloats(x: Float, y: Float): Int = {
+    val xIsNan: Boolean = java.lang.Float.isNaN(x)
+    val yIsNan: Boolean = java.lang.Float.isNaN(y)
+    if ((xIsNan && yIsNan) || (x == y)) 0
+    else if (xIsNan) 1
+    else if (yIsNan) -1
+    else if (x > y) 1
+    else -1
+  }
+
   /** Returns the system properties map that is thread-safe to iterator over. It gets the
     * properties which have been set explicitly, as well as those for which only a default value
     * has been defined. */
   def getSystemProperties: Map[String, String] = {
-    val sysProps = for (key <- System.getProperties.stringPropertyNames()) yield
-      (key, System.getProperty(key))
-
-    sysProps.toMap
+    System.getProperties.stringPropertyNames().asScala
+      .map(key => (key, System.getProperty(key))).toMap
   }
 
   /**
@@ -1607,7 +1600,7 @@ private[spark] object Utils extends Logging {
    * @param f function to be executed. If prepare is not None, the running time of each call to f
    *          must be an order of magnitude longer than one millisecond for accurate timing.
    * @param prepare function to be executed before each call to f. Its running time doesn't count.
-   * @return the total time across all iterations (not couting preparation time)
+   * @return the total time across all iterations (not counting preparation time)
    */
   def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
     if (prepare.isEmpty) {
@@ -1643,30 +1636,18 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Creates a symlink. Note jdk1.7 has Files.createSymbolicLink but not used here
-   * for jdk1.6 support.  Supports windows by doing copy, everything else uses "ln -sf".
+   * Creates a symlink.
    * @param src absolute path to the source
    * @param dst relative path for the destination
    */
-  def symlink(src: File, dst: File) {
+  def symlink(src: File, dst: File): Unit = {
     if (!src.isAbsolute()) {
       throw new IOException("Source must be absolute")
     }
     if (dst.isAbsolute()) {
       throw new IOException("Destination must be relative")
     }
-    var cmdSuffix = ""
-    val linkCmd = if (isWindows) {
-      // refer to http://technet.microsoft.com/en-us/library/cc771254.aspx
-      cmdSuffix = " /s /e /k /h /y /i"
-      "cmd /c xcopy "
-    } else {
-      cmdSuffix = ""
-      "ln -sf "
-    }
-    import scala.sys.process._
-    (linkCmd + src.getAbsolutePath() + " " + dst.getPath() + cmdSuffix) lines_!
-    ProcessLogger(line => logInfo(line))
+    Files.createSymbolicLink(dst.toPath, src.toPath)
   }
 
 
@@ -1736,6 +1717,30 @@ private[spark] object Utils extends Logging {
    */
   def stripDirectory(path: String): String = {
     new File(path).getName
+  }
+
+  /**
+   * Terminates a process waiting for at most the specified duration. Returns whether
+   * the process terminated.
+   */
+  def terminateProcess(process: Process, timeoutMs: Long): Option[Int] = {
+    try {
+      // Java8 added a new API which will more forcibly kill the process. Use that if available.
+      val destroyMethod = process.getClass().getMethod("destroyForcibly");
+      destroyMethod.setAccessible(true)
+      destroyMethod.invoke(process)
+    } catch {
+      case NonFatal(e) =>
+        if (!e.isInstanceOf[NoSuchMethodException]) {
+          logWarning("Exception when attempting to kill process", e)
+        }
+        process.destroy()
+    }
+    if (waitForProcess(process, timeoutMs)) {
+      Option(process.exitValue())
+    } else {
+      None
+    }
   }
 
   /**
@@ -1815,15 +1820,6 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  lazy val isInInterpreter: Boolean = {
-    try {
-      val interpClass = classForName("org.apache.spark.repl.Main")
-      interpClass.getMethod("interp").invoke(null) != null
-    } catch {
-      case _: ClassNotFoundException => false
-    }
-  }
-
   /**
    * Return a well-formed URI for the file described by a user input string.
    *
@@ -1835,6 +1831,13 @@ private[spark] object Utils extends Logging {
       val uri = new URI(path)
       if (uri.getScheme() != null) {
         return uri
+      }
+      // make sure to handle if the path has a fragment (applies to yarn
+      // distributed cache)
+      if (uri.getFragment() != null) {
+        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
+        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
+          uri.getFragment())
       }
     } catch {
       case e: URISyntaxException =>
@@ -1893,11 +1896,12 @@ private[spark] object Utils extends Logging {
     require(file.exists(), s"Properties file $file does not exist")
     require(file.isFile(), s"Properties file $file is not a normal file")
 
-    val inReader = new InputStreamReader(new FileInputStream(file), "UTF-8")
+    val inReader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)
     try {
       val properties = new Properties()
       properties.load(inReader)
-      properties.stringPropertyNames().map(k => (k, properties(k).trim)).toMap
+      properties.stringPropertyNames().asScala.map(
+        k => (k, properties.getProperty(k).trim)).toMap
     } catch {
       case e: IOException =>
         throw new SparkException(s"Failed when loading Spark properties from $filename", e)
@@ -1974,6 +1978,7 @@ private[spark] object Utils extends Logging {
    *                     This is expected to throw java.net.BindException on port collision.
    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
    * @param serviceName Name of the service.
+   * @return (service: T, port: Int)
    */
   def startServiceOnPort[T](
       startPort: Int,
@@ -2001,8 +2006,10 @@ private[spark] object Utils extends Logging {
       } catch {
         case e: Exception if isBindCollision(e) =>
           if (offset >= maxRetries) {
-            val exceptionMessage =
-              s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
+            val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
+              s"$maxRetries retries! Consider explicitly setting the appropriate port for the " +
+              s"service$serviceString (for example spark.ui.port for SparkUI) to an available " +
+              "port or increasing spark.port.maxRetries."
             val exception = new BindException(exceptionMessage)
             // restore original stack trace
             exception.setStackTrace(e.getStackTrace)
@@ -2026,7 +2033,8 @@ private[spark] object Utils extends Logging {
           return true
         }
         isBindCollision(e.getCause)
-      case e: MultiException => e.getThrowables.exists(isBindCollision)
+      case e: MultiException =>
+        e.getThrowables.asScala.exists(isBindCollision)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false
     }
@@ -2186,37 +2194,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Adds a shutdown hook with default priority.
-   *
-   * @param hook The code to run during shutdown.
-   * @return A handle that can be used to unregister the shutdown hook.
-   */
-  def addShutdownHook(hook: () => Unit): AnyRef = {
-    addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY)(hook)
-  }
-
-  /**
-   * Adds a shutdown hook with the given priority. Hooks with lower priority values run
-   * first.
-   *
-   * @param hook The code to run during shutdown.
-   * @return A handle that can be used to unregister the shutdown hook.
-   */
-  def addShutdownHook(priority: Int)(hook: () => Unit): AnyRef = {
-    shutdownHooks.add(priority, hook)
-  }
-
-  /**
-   * Remove a previously installed shutdown hook.
-   *
-   * @param ref A handle returned by `addShutdownHook`.
-   * @return Whether the hook was removed.
-   */
-  def removeShutdownHook(ref: AnyRef): Boolean = {
-    shutdownHooks.remove(ref)
-  }
-
-  /**
    * To avoid calling `Utils.getCallSite` for every single RDD we create in the body,
    * set a dummy call site that RDDs use instead. This is for performance optimization.
    */
@@ -2237,6 +2214,7 @@ private[spark] object Utils extends Logging {
   /**
    * Return whether the specified file is a parent directory of the child file.
    */
+  @tailrec
   def isInDirectory(parent: File, child: File): Boolean = {
     if (child == null || parent == null) {
       return false
@@ -2250,70 +2228,60 @@ private[spark] object Utils extends Logging {
     isInDirectory(parent, child.getParentFile)
   }
 
-}
-
-private [util] class SparkShutdownHookManager {
-
-  private val hooks = new PriorityQueue[SparkShutdownHook]()
-  private var shuttingDown = false
 
   /**
-   * Install a hook to run at shutdown and run all registered hooks in order. Hadoop 1.x does not
-   * have `ShutdownHookManager`, so in that case we just use the JVM's `Runtime` object and hope for
-   * the best.
+   *
+   * @return whether it is local mode
    */
-  def install(): Unit = {
-    val hookTask = new Runnable() {
-      override def run(): Unit = runAll()
+  def isLocalMaster(conf: SparkConf): Boolean = {
+    val master = conf.get("spark.master", "")
+    master == "local" || master.startsWith("local[")
+  }
+
+  /**
+   * Return whether dynamic allocation is enabled in the given conf
+   * Dynamic allocation and explicitly setting the number of executors are inherently
+   * incompatible. In environments where dynamic allocation is turned on by default,
+   * the latter should override the former (SPARK-9092).
+   */
+  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+    val numExecutor = conf.getInt("spark.executor.instances", 0)
+    val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
+    if (numExecutor != 0 && dynamicAllocationEnabled) {
+      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
     }
-    Try(Class.forName("org.apache.hadoop.util.ShutdownHookManager")) match {
-      case Success(shmClass) =>
-        val fsPriority = classOf[FileSystem].getField("SHUTDOWN_HOOK_PRIORITY").get()
-          .asInstanceOf[Int]
-        val shm = shmClass.getMethod("get").invoke(null)
-        shm.getClass().getMethod("addShutdownHook", classOf[Runnable], classOf[Int])
-          .invoke(shm, hookTask, Integer.valueOf(fsPriority + 30))
-
-      case Failure(_) =>
-        Runtime.getRuntime.addShutdownHook(new Thread(hookTask, "Spark Shutdown Hook"));
-    }
+    numExecutor == 0 && dynamicAllocationEnabled &&
+      (!isLocalMaster(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
   }
 
-  def runAll(): Unit = synchronized {
-    shuttingDown = true
-    while (!hooks.isEmpty()) {
-      Try(Utils.logUncaughtExceptions(hooks.poll().run()))
-    }
+  def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
+    val resource = createResource
+    try f.apply(resource) finally resource.close()
   }
 
-  def add(priority: Int, hook: () => Unit): AnyRef = synchronized {
-    checkState()
-    val hookRef = new SparkShutdownHook(priority, hook)
-    hooks.add(hookRef)
-    hookRef
+  /**
+   * Returns a path of temporary file which is in the same directory with `path`.
+   */
+  def tempFileWith(path: File): File = {
+    new File(path.getAbsolutePath + "." + UUID.randomUUID())
   }
 
-  def remove(ref: AnyRef): Boolean = synchronized {
-    hooks.remove(ref)
+  /**
+   * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
+   * this is formatted as PID@hostname.
+   */
+  def getProcessName(): String = {
+    ManagementFactory.getRuntimeMXBean().getName()
   }
 
-  private def checkState(): Unit = {
-    if (shuttingDown) {
-      throw new IllegalStateException("Shutdown hooks cannot be modified during shutdown.")
-    }
+  /**
+   * Utility function that should be called early in `main()` for daemons to set up some common
+   * diagnostic state.
+   */
+  def initDaemon(log: Logger): Unit = {
+    log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
+    SignalLogger.register(log)
   }
-
-}
-
-private class SparkShutdownHook(private val priority: Int, hook: () => Unit)
-  extends Comparable[SparkShutdownHook] {
-
-  override def compareTo(other: SparkShutdownHook): Int = {
-    other.priority - priority
-  }
-
-  def run(): Unit = hook()
-
 }
 
 /**
@@ -2368,7 +2336,7 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
 
       def read(): Int = if (iterator.hasNext) iterator.next() else -1
     }
-    val reader = new BufferedReader(new InputStreamReader(input))
+    val reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
     val stringBuilder = new StringBuilder
     var line = reader.readLine()
     while (line != null) {

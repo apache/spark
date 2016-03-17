@@ -23,16 +23,34 @@ import org.apache.spark.executor.ExecutorExitCode
  * Represents an explanation for a executor or whole slave failing or exiting.
  */
 private[spark]
-class ExecutorLossReason(val message: String) {
+class ExecutorLossReason(val message: String) extends Serializable {
   override def toString: String = message
 }
 
 private[spark]
-case class ExecutorExited(val exitCode: Int)
-  extends ExecutorLossReason(ExecutorExitCode.explainExitCode(exitCode)) {
+case class ExecutorExited(exitCode: Int, exitCausedByApp: Boolean, reason: String)
+  extends ExecutorLossReason(reason)
+
+private[spark] object ExecutorExited {
+  def apply(exitCode: Int, exitCausedByApp: Boolean): ExecutorExited = {
+    ExecutorExited(
+      exitCode,
+      exitCausedByApp,
+      ExecutorExitCode.explainExitCode(exitCode))
+  }
 }
+
+private[spark] object ExecutorKilled extends ExecutorLossReason("Executor killed by driver.")
+
+/**
+ * A loss reason that means we don't yet know why the executor exited.
+ *
+ * This is used by the task scheduler to remove state associated with the executor, but
+ * not yet fail any tasks that were running in the executor before the real loss reason
+ * is known.
+ */
+private [spark] object LossReasonPending extends ExecutorLossReason("Pending loss reason.")
 
 private[spark]
 case class SlaveLost(_message: String = "Slave lost")
-  extends ExecutorLossReason(_message) {
-}
+  extends ExecutorLossReason(_message)

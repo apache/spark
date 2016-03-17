@@ -17,10 +17,9 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.xml.Node
-import scala.xml.Text
-
 import java.util.Date
+
+import scala.xml.{Node, Text}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -116,7 +115,7 @@ private[ui] class StageTableBase(
       stageData <- listener.stageIdToData.get((s.stageId, s.attemptId))
       desc <- stageData.description
     } yield {
-      <span class="description-input" title={desc}>{desc}</span>
+      UIUtils.makeDescription(desc, basePathUri)
     }
     <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
   }
@@ -146,9 +145,22 @@ private[ui] class StageTableBase(
       case None => "Unknown"
     }
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis)
-    val duration = s.submissionTime.map { t =>
-      if (finishTime > t) finishTime - t else System.currentTimeMillis - t
-    }
+
+    // The submission time for a stage is misleading because it counts the time
+    // the stage waits to be launched. (SPARK-10930)
+    val taskLaunchTimes =
+      stageData.taskData.values.map(_.taskInfo.launchTime).filter(_ > 0)
+    val duration: Option[Long] =
+      if (taskLaunchTimes.nonEmpty) {
+        val startTime = taskLaunchTimes.min
+        if (finishTime > startTime) {
+          Some(finishTime - startTime)
+        } else {
+          Some(System.currentTimeMillis() - startTime)
+        }
+      } else {
+        None
+      }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
 
     val inputRead = stageData.inputBytes

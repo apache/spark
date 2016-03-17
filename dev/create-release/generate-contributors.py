@@ -178,13 +178,16 @@ for commit in filtered_commits:
             author_info[author][issue_type].add(component)
     # Find issues and components associated with this commit
     for issue in issues:
-        jira_issue = jira_client.issue(issue)
-        jira_type = jira_issue.fields.issuetype.name
-        jira_type = translate_issue_type(jira_type, issue, warnings)
-        jira_components = [translate_component(c.name, _hash, warnings)\
-          for c in jira_issue.fields.components]
-        all_components = set(jira_components + commit_components)
-        populate(jira_type, all_components)
+        try:
+            jira_issue = jira_client.issue(issue)
+            jira_type = jira_issue.fields.issuetype.name
+            jira_type = translate_issue_type(jira_type, issue, warnings)
+            jira_components = [translate_component(c.name, _hash, warnings)\
+              for c in jira_issue.fields.components]
+            all_components = set(jira_components + commit_components)
+            populate(jira_type, all_components)
+        except Exception as e:
+            print "Unexpected error:", e
     # For docs without an associated JIRA, manually add it ourselves
     if is_docs(title) and not issues:
         populate("documentation", commit_components)
@@ -223,7 +226,8 @@ for author in authors:
     # E.g. andrewor14/SPARK-3425/SPARK-1157/SPARK-6672
     if author in invalid_authors and invalid_authors[author]:
         author = author + "/" + "/".join(invalid_authors[author])
-    line = " * %s -- %s" % (author, contribution)
+    #line = " * %s -- %s" % (author, contribution)
+    line = author
     contributors_file.write(line + "\n")
 contributors_file.close()
 print "Contributors list is successfully written to %s!" % contributors_file_name

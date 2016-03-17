@@ -17,19 +17,21 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.lang.{Long => JLong, Iterable => JIterable}
+import java.{lang => jl}
+import java.lang.{Iterable => JIterable}
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
+
 import org.apache.spark.Partitioner
-import org.apache.spark.api.java.{JavaPairRDD, JavaUtils}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils, Optional}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
@@ -116,14 +118,14 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * generate the RDDs with Spark's default number of partitions.
    */
   def groupByKey(): JavaPairDStream[K, JIterable[V]] =
-    dstream.groupByKey().mapValues(asJavaIterable _)
+    dstream.groupByKey().mapValues(_.asJava)
 
   /**
    * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
    */
   def groupByKey(numPartitions: Int): JavaPairDStream[K, JIterable[V]] =
-    dstream.groupByKey(numPartitions).mapValues(asJavaIterable _)
+    dstream.groupByKey(numPartitions).mapValues(_.asJava)
 
   /**
    * Return a new DStream by applying `groupByKey` on each RDD of `this` DStream.
@@ -132,12 +134,12 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * is used to control the partitioning of each RDD.
    */
   def groupByKey(partitioner: Partitioner): JavaPairDStream[K, JIterable[V]] =
-    dstream.groupByKey(partitioner).mapValues(asJavaIterable _)
+    dstream.groupByKey(partitioner).mapValues(_.asJava)
 
   /**
    * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
-   * merged using the associative reduce function. Hash partitioning is used to generate the RDDs
-   * with Spark's default number of partitions.
+   * merged using the associative and commutative reduce function. Hash partitioning is used to
+   * generate the RDDs with Spark's default number of partitions.
    */
   def reduceByKey(func: JFunction2[V, V, V]): JavaPairDStream[K, V] =
     dstream.reduceByKey(func)
@@ -153,7 +155,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   /**
    * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
    * merged using the supplied reduce function. org.apache.spark.Partitioner is used to control
-   * thepartitioning of each RDD.
+   * the partitioning of each RDD.
    */
   def reduceByKey(func: JFunction2[V, V, V], partitioner: Partitioner): JavaPairDStream[K, V] = {
     dstream.reduceByKey(func, partitioner)
@@ -197,7 +199,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                       batching interval
    */
   def groupByKeyAndWindow(windowDuration: Duration): JavaPairDStream[K, JIterable[V]] = {
-    dstream.groupByKeyAndWindow(windowDuration).mapValues(asJavaIterable _)
+    dstream.groupByKeyAndWindow(windowDuration).mapValues(_.asJava)
   }
 
   /**
@@ -212,7 +214,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration)
   : JavaPairDStream[K, JIterable[V]] = {
-    dstream.groupByKeyAndWindow(windowDuration, slideDuration).mapValues(asJavaIterable _)
+    dstream.groupByKeyAndWindow(windowDuration, slideDuration).mapValues(_.asJava)
   }
 
   /**
@@ -228,8 +230,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration, numPartitions: Int)
     : JavaPairDStream[K, JIterable[V]] = {
-    dstream.groupByKeyAndWindow(windowDuration, slideDuration, numPartitions)
-      .mapValues(asJavaIterable _)
+    dstream.groupByKeyAndWindow(windowDuration, slideDuration, numPartitions).mapValues(_.asJava)
   }
 
   /**
@@ -248,8 +249,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       slideDuration: Duration,
       partitioner: Partitioner
     ): JavaPairDStream[K, JIterable[V]] = {
-    dstream.groupByKeyAndWindow(windowDuration, slideDuration, partitioner)
-      .mapValues(asJavaIterable _)
+    dstream.groupByKeyAndWindow(windowDuration, slideDuration, partitioner).mapValues(_.asJava)
   }
 
   /**
@@ -257,7 +257,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Similar to `DStream.reduceByKey()`, but applies it over a sliding window. The new DStream
    * generates RDDs with the same interval as this DStream. Hash partitioning is used to generate
    * the RDDs with Spark's default number of partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    */
@@ -270,7 +270,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -289,7 +289,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -309,7 +309,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   /**
    * Return a new DStream by applying `reduceByKey` over a sliding window. Similar to
    * `DStream.reduceByKey()`, but applies it over a sliding window.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative rand commutative educe function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -335,7 +335,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * This is more efficient that reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param invReduceFunc inverse function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
@@ -360,7 +360,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * This is more efficient that reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param invReduceFunc inverse function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
@@ -397,7 +397,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
    * This is more efficient that reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param invReduceFunc inverse function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
@@ -428,10 +428,46 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     )
   }
 
+  /**
+   * :: Experimental ::
+   * Return a [[JavaMapWithStateDStream]] by applying a function to every key-value element of
+   * `this` stream, while maintaining some state data for each unique key. The mapping function
+   * and other specification (e.g. partitioners, timeouts, initial state data, etc.) of this
+   * transformation can be specified using [[StateSpec]] class. The state data is accessible in
+   * as a parameter of type [[State]] in the mapping function.
+   *
+   * Example of using `mapWithState`:
+   * {{{
+   *   // A mapping function that maintains an integer state and return a string
+   *   Function3<String, Optional<Integer>, State<Integer>, String> mappingFunction =
+   *       new Function3<String, Optional<Integer>, State<Integer>, String>() {
+   *           @Override
+   *           public Optional<String> call(Optional<Integer> value, State<Integer> state) {
+   *               // Use state.exists(), state.get(), state.update() and state.remove()
+   *               // to manage state, and return the necessary string
+   *           }
+   *       };
+   *
+   *    JavaMapWithStateDStream<String, Integer, Integer, String> mapWithStateDStream =
+   *        keyValueDStream.mapWithState(StateSpec.function(mappingFunc));
+   *}}}
+   *
+   * @param spec          Specification of this transformation
+   * @tparam StateType    Class type of the state data
+   * @tparam MappedType   Class type of the mapped data
+   */
+  @Experimental
+  def mapWithState[StateType, MappedType](spec: StateSpec[K, V, StateType, MappedType]):
+    JavaMapWithStateDStream[K, V, StateType, MappedType] = {
+    new JavaMapWithStateDStream(dstream.mapWithState(spec)(
+      JavaSparkContext.fakeClassTag,
+      JavaSparkContext.fakeClassTag))
+  }
+
   private def convertUpdateStateFunction[S](in: JFunction2[JList[V], Optional[S], Optional[S]]):
   (Seq[V], Option[S]) => Option[S] = {
     val scalaFunc: (Seq[V], Option[S]) => Option[S] = (values, state) => {
-      val list: JList[V] = values
+      val list: JList[V] = values.asJava
       val scalaState: Optional[S] = JavaUtils.optionToOptional(state)
       val result: Optional[S] = in.apply(list, scalaState)
       result.isPresent match {
@@ -539,7 +575,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def cogroup[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (JIterable[V], JIterable[W])] = {
     implicit val cm: ClassTag[W] = fakeClassTag
-    dstream.cogroup(other.dstream).mapValues(t => (asJavaIterable(t._1), asJavaIterable((t._2))))
+    dstream.cogroup(other.dstream).mapValues(t => (t._1.asJava, t._2.asJava))
   }
 
   /**
@@ -551,8 +587,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       numPartitions: Int
     ): JavaPairDStream[K, (JIterable[V], JIterable[W])] = {
     implicit val cm: ClassTag[W] = fakeClassTag
-    dstream.cogroup(other.dstream, numPartitions)
-           .mapValues(t => (asJavaIterable(t._1), asJavaIterable((t._2))))
+    dstream.cogroup(other.dstream, numPartitions).mapValues(t => (t._1.asJava, t._2.asJava))
   }
 
   /**
@@ -564,8 +599,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       partitioner: Partitioner
     ): JavaPairDStream[K, (JIterable[V], JIterable[W])] = {
     implicit val cm: ClassTag[W] = fakeClassTag
-    dstream.cogroup(other.dstream, partitioner)
-           .mapValues(t => (asJavaIterable(t._1), asJavaIterable((t._2))))
+    dstream.cogroup(other.dstream, partitioner).mapValues(t => (t._1.asJava, t._2.asJava))
   }
 
   /**
@@ -788,7 +822,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: Configuration = new Configuration) {
+      conf: Configuration = dstream.context.sparkContext.hadoopConfiguration) {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
 
@@ -813,7 +847,7 @@ object JavaPairDStream {
   }
 
   def scalaToJavaLong[K: ClassTag](dstream: JavaPairDStream[K, Long])
-  : JavaPairDStream[K, JLong] = {
-    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
+  : JavaPairDStream[K, jl.Long] = {
+    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(jl.Long.valueOf)
   }
 }

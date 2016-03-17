@@ -35,8 +35,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
   var rpcHandler: ExternalShuffleBlockHandler = _
 
   override def beforeAll() {
-    val transportConf = SparkTransportConf.fromSparkConf(conf, numUsableCores = 2)
-    rpcHandler = new ExternalShuffleBlockHandler(transportConf)
+    super.beforeAll()
+    val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 2)
+    rpcHandler = new ExternalShuffleBlockHandler(transportConf, null)
     val transportContext = new TransportContext(transportConf, rpcHandler)
     server = transportContext.createServer()
 
@@ -46,12 +47,16 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
   }
 
   override def afterAll() {
-    server.close()
+    try {
+      server.close()
+    } finally {
+      super.afterAll()
+    }
   }
 
   // This test ensures that the external shuffle service is actually in use for the other tests.
   test("using external shuffle service") {
-    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
 
@@ -61,7 +66,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     // local blocks from the local BlockManager and won't send requests to ExternalShuffleService.
     // In this case, we won't receive FetchFailed. And it will make this test fail.
     // Therefore, we should wait until all slaves are up
-    sc.jobProgressListener.waitUntilExecutorsUp(2, 10000)
+    sc.jobProgressListener.waitUntilExecutorsUp(2, 60000)
 
     val rdd = sc.parallelize(0 until 1000, 10).map(i => (i, 1)).reduceByKey(_ + _)
 

@@ -17,15 +17,16 @@
 
 package org.apache.spark.examples.pythonconverters
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.parsing.json.JSONObject
 
-import org.apache.spark.api.python.Converter
+import org.apache.hadoop.hbase.CellUtil
+import org.apache.hadoop.hbase.KeyValue.Type
 import org.apache.hadoop.hbase.client.{Put, Result}
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.KeyValue.Type
-import org.apache.hadoop.hbase.CellUtil
+
+import org.apache.spark.api.python.Converter
 
 /**
  * Implementation of [[org.apache.spark.api.python.Converter]] that converts all
@@ -33,7 +34,6 @@ import org.apache.hadoop.hbase.CellUtil
  */
 class HBaseResultToStringConverter extends Converter[Any, String] {
   override def convert(obj: Any): String = {
-    import collection.JavaConverters._
     val result = obj.asInstanceOf[Result]
     val output = result.listCells.asScala.map(cell =>
         Map(
@@ -77,7 +77,7 @@ class StringToImmutableBytesWritableConverter extends Converter[Any, ImmutableBy
  */
 class StringListToPutConverter extends Converter[Any, Put] {
   override def convert(obj: Any): Put = {
-    val output = obj.asInstanceOf[java.util.ArrayList[String]].map(Bytes.toBytes(_)).toArray
+    val output = obj.asInstanceOf[java.util.ArrayList[String]].asScala.map(Bytes.toBytes).toArray
     val put = new Put(output(0))
     put.add(output(1), output(2), output(3))
   }

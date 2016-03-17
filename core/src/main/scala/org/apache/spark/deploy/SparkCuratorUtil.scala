@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
 import org.apache.curator.retry.ExponentialBackoffRetry
@@ -57,7 +57,7 @@ private[spark] object SparkCuratorUtil extends Logging {
 
   def deleteRecursive(zk: CuratorFramework, path: String) {
     if (zk.checkExists().forPath(path) != null) {
-      for (child <- zk.getChildren.forPath(path)) {
+      for (child <- zk.getChildren.forPath(path).asScala) {
         zk.delete().forPath(path + "/" + child)
       }
       zk.delete().forPath(path)

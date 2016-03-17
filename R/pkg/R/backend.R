@@ -110,6 +110,8 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
 
   # TODO: check the status code to output error information
   returnStatus <- readInt(conn)
-  stopifnot(returnStatus == 0)
+  if (returnStatus != 0) {
+    stop(readString(conn))
+  }
   readObject(conn)
 }

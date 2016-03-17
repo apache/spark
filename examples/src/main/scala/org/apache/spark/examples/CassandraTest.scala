@@ -19,20 +19,18 @@
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
+import java.util.Arrays
 import java.util.SortedMap
 
-import scala.collection.JavaConversions._
-
 import org.apache.cassandra.db.IColumn
+import org.apache.cassandra.hadoop.ColumnFamilyInputFormat
 import org.apache.cassandra.hadoop.ColumnFamilyOutputFormat
 import org.apache.cassandra.hadoop.ConfigHelper
-import org.apache.cassandra.hadoop.ColumnFamilyInputFormat
 import org.apache.cassandra.thrift._
 import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 
 /*
  * This example demonstrates using Spark with Cassandra with the New Hadoop API and Cassandra
@@ -60,7 +58,7 @@ object CassandraTest {
     val sc = new SparkContext(sparkConf)
 
     // Build the job configuration with ConfigHelper provided by Cassandra
-    val job = new Job()
+    val job = Job.getInstance()
     job.setInputFormatClass(classOf[ColumnFamilyInputFormat])
 
     val host: String = args(1)
@@ -118,7 +116,7 @@ object CassandraTest {
 
         val outputkey = ByteBufferUtil.bytes(word + "-COUNT-" + System.currentTimeMillis)
 
-        val mutations: java.util.List[Mutation] = new Mutation() :: new Mutation() :: Nil
+        val mutations = Arrays.asList(new Mutation(), new Mutation())
         mutations.get(0).setColumn_or_supercolumn(new ColumnOrSuperColumn())
         mutations.get(0).column_or_supercolumn.setColumn(colWord)
         mutations.get(1).setColumn_or_supercolumn(new ColumnOrSuperColumn())

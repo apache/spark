@@ -42,4 +42,12 @@ private[python] class MatrixFactorizationModelWrapper(model: MatrixFactorization
       case (product, feature) => (product, Vectors.dense(feature))
     }.asInstanceOf[RDD[(Any, Any)]])
   }
+
+  def wrappedRecommendProductsForUsers(num: Int): RDD[Array[Any]] = {
+    SerDe.fromTuple2RDD(recommendProductsForUsers(num).asInstanceOf[RDD[(Any, Any)]])
+  }
+
+  def wrappedRecommendUsersForProducts(num: Int): RDD[Array[Any]] = {
+    SerDe.fromTuple2RDD(recommendUsersForProducts(num).asInstanceOf[RDD[(Any, Any)]])
+  }
 }

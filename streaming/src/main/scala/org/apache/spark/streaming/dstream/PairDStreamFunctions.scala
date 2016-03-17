@@ -25,8 +25,9 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.{HashPartitioner, Partitioner}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Duration, Time}
+import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf}
 
@@ -35,8 +36,7 @@ import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf}
  */
 class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K])
-  extends Serializable
-{
+  extends Serializable {
   private[streaming] def ssc = self.ssc
 
   private[streaming] def sparkContext = self.context.sparkContext
@@ -75,8 +75,8 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
 
   /**
    * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
-   * merged using the associative reduce function. Hash partitioning is used to generate the RDDs
-   * with Spark's default number of partitions.
+   * merged using the associative and commutative reduce function. Hash partitioning is used to
+   * generate the RDDs with Spark's default number of partitions.
    */
   def reduceByKey(reduceFunc: (V, V) => V): DStream[(K, V)] = ssc.withScope {
     reduceByKey(reduceFunc, defaultPartitioner())
@@ -204,7 +204,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * Similar to `DStream.reduceByKey()`, but applies it over a sliding window. The new DStream
    * generates RDDs with the same interval as this DStream. Hash partitioning is used to generate
    * the RDDs with Spark's default number of partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    */
@@ -219,7 +219,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -238,7 +238,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -259,7 +259,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
   /**
    * Return a new DStream by applying `reduceByKey` over a sliding window. Similar to
    * `DStream.reduceByKey()`, but applies it over a sliding window.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -289,7 +289,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * This is more efficient than reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param invReduceFunc inverse reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
@@ -320,7 +320,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
    * This is more efficient than reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
-   * @param reduceFunc     associative reduce function
+   * @param reduceFunc     associative and commutative reduce function
    * @param invReduceFunc  inverse reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
@@ -347,6 +347,41 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     new ReducedWindowedDStream[K, V](
       self, cleanedReduceFunc, cleanedInvReduceFunc, cleanedFilterFunc,
       windowDuration, slideDuration, partitioner
+    )
+  }
+
+  /**
+   * :: Experimental ::
+   * Return a [[MapWithStateDStream]] by applying a function to every key-value element of
+   * `this` stream, while maintaining some state data for each unique key. The mapping function
+   * and other specification (e.g. partitioners, timeouts, initial state data, etc.) of this
+   * transformation can be specified using [[StateSpec]] class. The state data is accessible in
+   * as a parameter of type [[State]] in the mapping function.
+   *
+   * Example of using `mapWithState`:
+   * {{{
+   *    // A mapping function that maintains an integer state and return a String
+   *    def mappingFunction(key: String, value: Option[Int], state: State[Int]): Option[String] = {
+   *      // Use state.exists(), state.get(), state.update() and state.remove()
+   *      // to manage state, and return the necessary string
+   *    }
+   *
+   *    val spec = StateSpec.function(mappingFunction).numPartitions(10)
+   *
+   *    val mapWithStateDStream = keyValueDStream.mapWithState[StateType, MappedType](spec)
+   * }}}
+   *
+   * @param spec          Specification of this transformation
+   * @tparam StateType    Class type of the state data
+   * @tparam MappedType   Class type of the mapped data
+   */
+  @Experimental
+  def mapWithState[StateType: ClassTag, MappedType: ClassTag](
+      spec: StateSpec[K, V, StateType, MappedType]
+    ): MapWithStateDStream[K, V, StateType, MappedType] = {
+    new MapWithStateDStreamImpl[K, V, StateType, MappedType](
+      self,
+      spec.asInstanceOf[StateSpecImpl[K, V, StateType, MappedType]]
     )
   }
 
@@ -411,7 +446,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    *                   remember the partitioner despite the key being changed.
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
-   * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
+   * @param rememberPartitioner Whether to remember the partitioner object in the generated RDDs.
    * @tparam S State type
    */
   def updateStateByKey[S: ClassTag](
@@ -455,7 +490,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    *                   remember the  partitioner despite the key being changed.
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
-   * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
+   * @param rememberPartitioner Whether to remember the partitioner object in the generated RDDs.
    * @param initialRDD initial state value of each key.
    * @tparam S State type
    */
@@ -692,7 +727,8 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     val serializableConf = new SerializableJobConf(conf)
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, serializableConf.value)
+      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass,
+        new JobConf(serializableConf.value))
     }
     self.foreachRDD(saveFunc)
   }

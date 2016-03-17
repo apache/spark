@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.yarn
 
-import org.apache.spark.util.{MemoryParam, IntParam}
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
-import collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.util.{IntParam, MemoryParam}
 
 class ApplicationMasterArguments(val args: Array[String]) {
   var userJar: String = null
@@ -29,7 +29,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var userArgs: Seq[String] = Nil
   var executorMemory = 1024
   var executorCores = 1
-  var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var propertiesFile: String = null
 
   parseArgs(args.toList)
@@ -63,10 +62,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
           userArgsBuffer += value
           args = tail
 
-        case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
-          numExecutors = value
-          args = tail
-
         case ("--worker-memory" | "--executor-memory") :: MemoryParam(value) :: tail =>
           executorMemory = value
           args = tail
@@ -91,7 +86,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
       System.exit(-1)
     }
 
-    userArgs = userArgsBuffer.readOnly
+    userArgs = userArgsBuffer.toList
   }
 
   def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
@@ -110,9 +105,9 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |                       place on the PYTHONPATH for Python apps.
       |  --args ARGS          Arguments to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.
-      |  --num-executors NUM    Number of executors to start (Default: 2)
       |  --executor-cores NUM   Number of cores for the executors (Default: 1)
       |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
+      |  --properties-file FILE Path to a custom Spark properties file.
       """.stripMargin)
     // scalastyle:on println
     System.exit(exitCode)

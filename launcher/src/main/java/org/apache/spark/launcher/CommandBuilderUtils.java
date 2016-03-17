@@ -30,7 +30,6 @@ class CommandBuilderUtils {
   static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
-  static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
 
   /** The set of known JVM vendors. */
   static enum JavaVendor {
@@ -147,7 +146,7 @@ class CommandBuilderUtils {
    * Output: [ "ab cd", "efgh", "i \" j" ]
    */
   static List<String> parseOptionString(String s) {
-    List<String> opts = new ArrayList<String>();
+    List<String> opts = new ArrayList<>();
     StringBuilder opt = new StringBuilder();
     boolean inOpt = false;
     boolean inSingleQuote = false;
@@ -313,4 +312,41 @@ class CommandBuilderUtils {
     return quoted.append('"').toString();
   }
 
+  /**
+   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
+   * set it.
+   */
+  static void addPermGenSizeOpt(List<String> cmd) {
+    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
+    if (getJavaVendor() == JavaVendor.IBM) {
+      return;
+    }
+    if (javaMajorVersion(System.getProperty("java.version")) > 7) {
+      return;
+    }
+    for (String arg : cmd) {
+      if (arg.startsWith("-XX:MaxPermSize=")) {
+        return;
+      }
+    }
+
+    cmd.add("-XX:MaxPermSize=256m");
+  }
+
+  /**
+   * Get the major version of the java version string supplied. This method
+   * accepts any JEP-223-compliant strings (9-ea, 9+100), as well as legacy
+   * version strings such as 1.7.0_79
+   */
+  static int javaMajorVersion(String javaVersion) {
+    String[] version = javaVersion.split("[+.\\-]+");
+    int major = Integer.parseInt(version[0]);
+    // if major > 1, we're using the JEP-223 version string, e.g., 9-ea, 9+120
+    // otherwise the second number is the major version
+    if (major > 1) {
+      return major;
+    } else {
+      return Integer.parseInt(version[1]);
+    }
+  }
 }

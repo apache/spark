@@ -18,8 +18,10 @@
 
 package org.apache.spark.streaming.ui
 
+import scala.collection.mutable
+
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.scheduler.{BatchInfo, StreamInputInfo}
+import org.apache.spark.streaming.scheduler.{BatchInfo, OutputOperationInfo, StreamInputInfo}
 import org.apache.spark.streaming.ui.StreamingJobProgressListener._
 
 private[ui] case class OutputOpIdAndSparkJobId(outputOpId: OutputOpId, sparkJobId: SparkJobId)
@@ -30,7 +32,8 @@ private[ui] case class BatchUIData(
     val submissionTime: Long,
     val processingStartTime: Option[Long],
     val processingEndTime: Option[Long],
-    var outputOpIdSparkJobIdPairs: Seq[OutputOpIdAndSparkJobId] = Seq.empty) {
+    val outputOperations: mutable.HashMap[OutputOpId, OutputOperationUIData] = mutable.HashMap(),
+    var outputOpIdSparkJobIdPairs: Iterable[OutputOpIdAndSparkJobId] = Seq.empty) {
 
   /**
    * Time taken for the first job of this batch to start processing from the time this batch
@@ -59,17 +62,75 @@ private[ui] case class BatchUIData(
    * The number of recorders received by the receivers in this batch.
    */
   def numRecords: Long = streamIdToInputInfo.values.map(_.numRecords).sum
+
+  /**
+   * Update an output operation information of this batch.
+   */
+  def updateOutputOperationInfo(outputOperationInfo: OutputOperationInfo): Unit = {
+    assert(batchTime == outputOperationInfo.batchTime)
+    outputOperations(outputOperationInfo.id) = OutputOperationUIData(outputOperationInfo)
+  }
+
+  /**
+   * Return the number of failed output operations.
+   */
+  def numFailedOutputOp: Int = outputOperations.values.count(_.failureReason.nonEmpty)
+
+  /**
+   * Return the number of running output operations.
+   */
+  def numActiveOutputOp: Int = outputOperations.values.count(_.endTime.isEmpty)
+
+  /**
+   * Return the number of completed output operations.
+   */
+  def numCompletedOutputOp: Int = outputOperations.values.count {
+      op => op.failureReason.isEmpty && op.endTime.nonEmpty
+    }
+
+  /**
+   * Return if this batch has any output operations
+   */
+  def isFailed: Boolean = numFailedOutputOp != 0
 }
 
 private[ui] object BatchUIData {
 
   def apply(batchInfo: BatchInfo): BatchUIData = {
+    val outputOperations = mutable.HashMap[OutputOpId, OutputOperationUIData]()
+    outputOperations ++= batchInfo.outputOperationInfos.mapValues(OutputOperationUIData.apply)
     new BatchUIData(
       batchInfo.batchTime,
       batchInfo.streamIdToInputInfo,
       batchInfo.submissionTime,
       batchInfo.processingStartTime,
-      batchInfo.processingEndTime
+      batchInfo.processingEndTime,
+      outputOperations
+    )
+  }
+}
+
+private[ui] case class OutputOperationUIData(
+    id: OutputOpId,
+    name: String,
+    description: String,
+    startTime: Option[Long],
+    endTime: Option[Long],
+    failureReason: Option[String]) {
+
+  def duration: Option[Long] = for (s <- startTime; e <- endTime) yield e - s
+}
+
+private[ui] object OutputOperationUIData {
+
+  def apply(outputOperationInfo: OutputOperationInfo): OutputOperationUIData = {
+    OutputOperationUIData(
+      outputOperationInfo.id,
+      outputOperationInfo.name,
+      outputOperationInfo.description,
+      outputOperationInfo.startTime,
+      outputOperationInfo.endTime,
+      outputOperationInfo.failureReason
     )
   }
 }

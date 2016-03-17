@@ -18,9 +18,9 @@
 package org.apache.spark.mllib.clustering;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 
-import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -48,7 +48,7 @@ public class JavaGaussianMixtureSuite implements Serializable {
 
   @Test
   public void runGaussianMixture() {
-    List<Vector> points = Lists.newArrayList(
+    List<Vector> points = Arrays.asList(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)

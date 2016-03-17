@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.evaluation;
 
 import java.io.Serializable;
-import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 import scala.Tuple2;
 import scala.Tuple2$;
 
-import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -34,18 +34,18 @@ import org.apache.spark.api.java.JavaSparkContext;
 
 public class JavaRankingMetricsSuite implements Serializable {
   private transient JavaSparkContext sc;
-  private transient JavaRDD<Tuple2<ArrayList<Integer>, ArrayList<Integer>>> predictionAndLabels;
+  private transient JavaRDD<Tuple2<List<Integer>, List<Integer>>> predictionAndLabels;
 
   @Before
   public void setUp() {
     sc = new JavaSparkContext("local", "JavaRankingMetricsSuite");
-    predictionAndLabels = sc.parallelize(Lists.newArrayList(
+    predictionAndLabels = sc.parallelize(Arrays.asList(
       Tuple2$.MODULE$.apply(
-        Lists.newArrayList(1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Lists.newArrayList(1, 2, 3, 4, 5)),
+        Arrays.asList(1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Arrays.asList(1, 2, 3, 4, 5)),
       Tuple2$.MODULE$.apply(
-        Lists.newArrayList(4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Lists.newArrayList(1, 2, 3)),
+          Arrays.asList(4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Arrays.asList(1, 2, 3)),
       Tuple2$.MODULE$.apply(
-        Lists.newArrayList(1, 2, 3, 4, 5), Lists.<Integer>newArrayList())), 2);
+          Arrays.asList(1, 2, 3, 4, 5), Arrays.<Integer>asList())), 2);
   }
 
   @After

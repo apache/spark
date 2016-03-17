@@ -21,6 +21,8 @@ import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 class PrunedScanSource extends RelationProvider {
@@ -51,10 +53,12 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
   }
 }
 
-class PrunedScanSuite extends DataSourceTest {
+class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
+  protected override lazy val sql = caseInsensitiveContext.sql _
 
-  before {
-    caseInsensitiveContext.sql(
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sql(
       """
         |CREATE TEMPORARY TABLE oneToTenPruned
         |USING org.apache.spark.sql.sources.PrunedScanSource
@@ -114,28 +118,35 @@ class PrunedScanSuite extends DataSourceTest {
 
   def testPruning(sqlString: String, expectedColumns: String*): Unit = {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
-      val queryExecution = caseInsensitiveContext.sql(sqlString).queryExecution
-      val rawPlan = queryExecution.executedPlan.collect {
-        case p: execution.PhysicalRDD => p
-      } match {
-        case Seq(p) => p
-        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
-      }
-      val rawColumns = rawPlan.output.map(_.name)
-      val rawOutput = rawPlan.execute().first()
 
-      if (rawColumns != expectedColumns) {
-        fail(
-          s"Wrong column names. Got $rawColumns, Expected $expectedColumns\n" +
-          s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
-            queryExecution)
-      }
+      // These tests check a particular plan, disable whole stage codegen.
+      caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
+      try {
+        val queryExecution = sql(sqlString).queryExecution
+        val rawPlan = queryExecution.executedPlan.collect {
+          case p: execution.DataSourceScan => p
+        } match {
+          case Seq(p) => p
+          case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+        }
+        val rawColumns = rawPlan.output.map(_.name)
+        val rawOutput = rawPlan.execute().first()
 
-      if (rawOutput.size != expectedColumns.size) {
-        fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
+        if (rawColumns != expectedColumns) {
+          fail(
+            s"Wrong column names. Got $rawColumns, Expected $expectedColumns\n" +
+              s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
+              queryExecution)
+        }
+
+        if (rawOutput.numFields != expectedColumns.size) {
+          fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
+        }
+      } finally {
+        caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }
   }
-
 }
 

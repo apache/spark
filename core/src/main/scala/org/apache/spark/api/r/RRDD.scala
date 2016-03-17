@@ -19,9 +19,9 @@ package org.apache.spark.api.r
 
 import java.io._
 import java.net.{InetAddress, ServerSocket}
-import java.util.{Map => JMap}
+import java.util.{Arrays, Map => JMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -112,6 +112,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     partition: Int): Unit = {
 
     val env = SparkEnv.get
+    val taskContext = TaskContext.get()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
     val stream = new BufferedOutputStream(output, bufferSize)
 
@@ -119,6 +120,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
       override def run(): Unit = {
         try {
           SparkEnv.set(env)
+          TaskContext.setTaskContext(taskContext)
           val dataOut = new DataOutputStream(stream)
           dataOut.writeInt(partition)
 
@@ -363,11 +365,11 @@ private[r] object RRDD {
       sparkConf.setIfMissing("spark.master", "local")
     }
 
-    for ((name, value) <- sparkEnvirMap) {
-      sparkConf.set(name.asInstanceOf[String], value.asInstanceOf[String])
+    for ((name, value) <- sparkEnvirMap.asScala) {
+      sparkConf.set(name.toString, value.toString)
     }
-    for ((name, value) <- sparkExecutorEnvMap) {
-      sparkConf.setExecutorEnv(name.asInstanceOf[String], value.asInstanceOf[String])
+    for ((name, value) <- sparkExecutorEnvMap.asScala) {
+      sparkConf.setExecutorEnv(name.toString, value.toString)
     }
 
     val jsc = new JavaSparkContext(sparkConf)
@@ -389,17 +391,22 @@ private[r] object RRDD {
   }
 
   private def createRProcess(port: Int, script: String): BufferedStreamThread = {
-    val rCommand = SparkEnv.get.conf.get("spark.sparkr.r.command", "Rscript")
+    // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
+    // but kept here for backward compatibility.
+    val sparkConf = SparkEnv.get.conf
+    var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
+    rCommand = sparkConf.get("spark.r.command", rCommand)
+
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
-    val rExecScript = rLibDir + "/SparkR/worker/" + script
-    val pb = new ProcessBuilder(List(rCommand, rOptions, rExecScript))
+    val rExecScript = rLibDir(0) + "/SparkR/worker/" + script
+    val pb = new ProcessBuilder(Arrays.asList(rCommand, rOptions, rExecScript))
     // Unset the R_TESTS environment variable for workers.
     // This is set by R CMD check as startup.Rs
     // (http://svn.r-project.org/R/trunk/src/library/tools/R/testing.R)
     // and confuses worker script which tries to load a non-existent file
     pb.environment().put("R_TESTS", "")
-    pb.environment().put("SPARKR_RLIBDIR", rLibDir)
+    pb.environment().put("SPARKR_RLIBDIR", rLibDir.mkString(","))
     pb.environment().put("SPARKR_WORKER_PORT", port.toString)
     pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()

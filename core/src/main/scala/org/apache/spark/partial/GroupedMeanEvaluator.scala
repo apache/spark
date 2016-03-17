@@ -19,7 +19,7 @@ package org.apache.spark.partial
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.JavaConversions.mapAsScalaMap
+import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.HashMap
 
@@ -55,9 +55,9 @@ private[spark] class GroupedMeanEvaluator[T](totalOutputs: Int, confidence: Doub
       while (iter.hasNext) {
         val entry = iter.next()
         val mean = entry.getValue.mean
-        result(entry.getKey) = new BoundedDouble(mean, 1.0, mean, mean)
+        result.put(entry.getKey, new BoundedDouble(mean, 1.0, mean, mean))
       }
-      result
+      result.asScala
     } else if (outputsMerged == 0) {
       new HashMap[T, BoundedDouble]
     } else {
@@ -72,9 +72,9 @@ private[spark] class GroupedMeanEvaluator[T](totalOutputs: Int, confidence: Doub
         val confFactor = studentTCacher.get(counter.count)
         val low = mean - confFactor * stdev
         val high = mean + confFactor * stdev
-        result(entry.getKey) = new BoundedDouble(mean, confidence, low, high)
+        result.put(entry.getKey, new BoundedDouble(mean, confidence, low, high))
       }
-      result
+      result.asScala
     }
   }
 }

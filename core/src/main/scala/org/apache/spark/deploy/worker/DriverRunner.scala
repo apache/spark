@@ -18,20 +18,20 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkConf, SecurityManager}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.util.{Utils, Clock, SystemClock}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
@@ -172,9 +172,9 @@ private[deploy] class DriverRunner(
       CommandUtils.redirectStream(process.getInputStream, stdout)
 
       val stderr = new File(baseDir, "stderr")
-      val header = "Launch Command: %s\n%s\n\n".format(
-        builder.command.mkString("\"", "\" \"", "\""), "=" * 40)
-      Files.append(header, stderr, UTF_8)
+      val formattedCommand = builder.command.asScala.mkString("\"", "\" \"", "\"")
+      val header = "Launch Command: %s\n%s\n\n".format(formattedCommand, "=" * 40)
+      Files.append(header, stderr, StandardCharsets.UTF_8)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
@@ -229,6 +229,6 @@ private[deploy] trait ProcessBuilderLike {
 private[deploy] object ProcessBuilderLike {
   def apply(processBuilder: ProcessBuilder): ProcessBuilderLike = new ProcessBuilderLike {
     override def start(): Process = processBuilder.start()
-    override def command: Seq[String] = processBuilder.command()
+    override def command: Seq[String] = processBuilder.command().asScala
   }
 }

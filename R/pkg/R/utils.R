@@ -32,7 +32,7 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
   }
 
   results <- if (arrSize > 0) {
-    lapply(0:(arrSize - 1),
+    lapply(0 : (arrSize - 1),
           function(index) {
             obj <- callJMethod(jList, "get", as.integer(index))
 
@@ -41,8 +41,8 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
               if (isInstanceOf(obj, "scala.Tuple2")) {
                 # JavaPairRDD[Array[Byte], Array[Byte]].
 
-                keyBytes = callJMethod(obj, "_1")
-                valBytes = callJMethod(obj, "_2")
+                keyBytes <- callJMethod(obj, "_1")
+                valBytes <- callJMethod(obj, "_2")
                 res <- list(unserialize(keyBytes),
                   unserialize(valBytes))
               } else {
@@ -158,7 +158,7 @@ wrapInt <- function(value) {
 # Multiply `val` by 31 and add `addVal` to the result. Ensures that
 # integer-overflows are handled at every step.
 mult31AndAdd <- function(val, addVal) {
-  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
+  vec <- c(bitwShiftL(val, c(4, 3, 2, 1, 0)), addVal)
   Reduce(function(a, b) {
           wrapInt(as.numeric(a) + as.numeric(b))
          },
@@ -202,7 +202,7 @@ serializeToString <- function(rdd) {
 # This function amortizes the allocation cost by doubling
 # the size of the list every time it fills up.
 addItemToAccumulator <- function(acc, item) {
-  if(acc$counter == acc$size) {
+  if (acc$counter == acc$size) {
     acc$size <- acc$size * 2
     length(acc$data) <- acc$size
   }
@@ -314,7 +314,8 @@ convertEnvsToList <- function(keys, vals) {
 
 # Utility function to capture the varargs into environment object
 varargsToEnv <- function(...) {
-  pairs <- as.list(substitute(list(...)))[-1L]
+  # Based on http://stackoverflow.com/a/3057419/4577954
+  pairs <- list(...)
   env <- new.env()
   for (name in names(pairs)) {
     env[[name]] <- pairs[[name]]
@@ -360,16 +361,6 @@ numToInt <- function(num) {
   as.integer(num)
 }
 
-# create a Seq in JVM
-toSeq <- function(...) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", list(...))
-}
-
-# create a Seq in JVM from a list
-listToSeq <- function(l) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", l)
-}
-
 # Utility function to recursively traverse the Abstract Syntax Tree (AST) of a
 # user defined function (UDF), and to examine variables in the UDF to decide
 # if their values should be included in the new function environment.
@@ -390,14 +381,17 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
       for (i in 1:nodeLen) {
         processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
       }
-    } else {  # if node[[1]] is length of 1, check for some R special functions.
+    } else {
+      # if node[[1]] is length of 1, check for some R special functions.
       nodeChar <- as.character(node[[1]])
-      if (nodeChar == "{" || nodeChar == "(") {  # Skip start symbol.
+      if (nodeChar == "{" || nodeChar == "(") {
+        # Skip start symbol.
         for (i in 2:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
       } else if (nodeChar == "<-" || nodeChar == "=" ||
-                   nodeChar == "<<-") { # Assignment Ops.
+                   nodeChar == "<<-") {
+        # Assignment Ops.
         defVar <- node[[2]]
         if (length(defVar) == 1 && typeof(defVar) == "symbol") {
           # Add the defined variable name into defVars.
@@ -408,14 +402,16 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
         for (i in 3:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
-      } else if (nodeChar == "function") {  # Function definition.
+      } else if (nodeChar == "function") {
+        # Function definition.
         # Add parameter names.
         newArgs <- names(node[[2]])
         lapply(newArgs, function(arg) { addItemToAccumulator(defVars, arg) })
         for (i in 3:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
-      } else if (nodeChar == "$") {  # Skip the field.
+      } else if (nodeChar == "$") {
+        # Skip the field.
         processClosure(node[[2]], oldEnv, defVars, checkedFuncs, newEnv)
       } else if (nodeChar == "::" || nodeChar == ":::") {
         processClosure(node[[3]], oldEnv, defVars, checkedFuncs, newEnv)
@@ -429,7 +425,8 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
                (typeof(node) == "symbol" || typeof(node) == "language")) {
     # Base case: current AST node is a leaf node and a symbol or a function call.
     nodeChar <- as.character(node)
-    if (!nodeChar %in% defVars$data) {  # Not a function parameter or local variable.
+    if (!nodeChar %in% defVars$data) {
+      # Not a function parameter or local variable.
       func.env <- oldEnv
       topEnv <- parent.env(.GlobalEnv)
       # Search in function environment, and function's enclosing environments
@@ -439,20 +436,24 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
       while (!identical(func.env, topEnv)) {
         # Namespaces other than "SparkR" will not be searched.
         if (!isNamespace(func.env) ||
-              (getNamespaceName(func.env) == "SparkR" &&
-              !(nodeChar %in% getNamespaceExports("SparkR")))) {  # Only include SparkR internals.
+            (getNamespaceName(func.env) == "SparkR" &&
+               !(nodeChar %in% getNamespaceExports("SparkR")))) {
+          # Only include SparkR internals.
+
           # Set parameter 'inherits' to FALSE since we do not need to search in
           # attached package environments.
           if (tryCatch(exists(nodeChar, envir = func.env, inherits = FALSE),
                        error = function(e) { FALSE })) {
             obj <- get(nodeChar, envir = func.env, inherits = FALSE)
-            if (is.function(obj)) {  # If the node is a function call.
+            if (is.function(obj)) {
+              # If the node is a function call.
               funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F,
                                ifnotfound = list(list(NULL)))[[1]]
               found <- sapply(funcList, function(func) {
                 ifelse(identical(func, obj), TRUE, FALSE)
               })
-              if (sum(found) > 0) {  # If function has been examined, ignore.
+              if (sum(found) > 0) {
+                # If function has been examined, ignore.
                 break
               }
               # Function has not been examined, record it and recursively clean its closure.
@@ -495,7 +496,8 @@ cleanClosure <- function(func, checkedFuncs = new.env()) {
     # environment. First, function's arguments are added to defVars.
     defVars <- initAccumulator()
     argNames <- names(as.list(args(func)))
-    for (i in 1:(length(argNames) - 1)) {  # Remove the ending NULL in pairlist.
+    for (i in 1:(length(argNames) - 1)) {
+      # Remove the ending NULL in pairlist.
       addItemToAccumulator(defVars, argNames[i])
     }
     # Recursively examine variables in the function body.
@@ -561,7 +563,7 @@ mergePartitions <- function(rdd, zip) {
           keys <- list()
         }
         if (lengthOfValues > 1) {
-          values <- part[(lengthOfKeys + 1) : (len - 1)]
+          values <- part[ (lengthOfKeys + 1) : (len - 1) ]
         } else {
           values <- list()
         }
@@ -585,4 +587,66 @@ mergePartitions <- function(rdd, zip) {
   }
 
   PipelinedRDD(rdd, partitionFunc)
+}
+
+# Convert a named list to struct so that
+# SerDe won't confuse between a normal named list and struct
+listToStruct <- function(list) {
+  stopifnot(class(list) == "list")
+  stopifnot(!is.null(names(list)))
+  class(list) <- "struct"
+  list
+}
+
+# Convert a struct to a named list
+structToList <- function(struct) {
+  stopifnot(class(list) == "struct")
+
+  class(struct) <- "list"
+  struct
+}
+
+# Convert a named list to an environment to be passed to JVM
+convertNamedListToEnv <- function(namedList) {
+  # Make sure each item in the list has a name
+  names <- names(namedList)
+  stopifnot(
+    if (is.null(names)) {
+      length(namedList) == 0
+    } else {
+      !any(is.na(names))
+    })
+
+  env <- new.env()
+  for (name in names) {
+    env[[name]] <- namedList[[name]]
+  }
+  env
+}
+
+# Assign a new environment for attach() and with() methods
+assignNewEnv <- function(data) {
+  stopifnot(class(data) == "DataFrame")
+  cols <- columns(data)
+  stopifnot(length(cols) > 0)
+
+  env <- new.env()
+  for (i in 1:length(cols)) {
+    assign(x = cols[i], value = data[, cols[i]], envir = env)
+  }
+  env
+}
+
+# Utility function to split by ',' and whitespace, remove empty tokens
+splitString <- function(input) {
+  Filter(nzchar, unlist(strsplit(input, ",|\\s")))
+}
+
+convertToJSaveMode <- function(mode) {
+ allModes <- c("append", "overwrite", "error", "ignore")
+ if (!(mode %in% allModes)) {
+   stop('mode should be one of "append", "overwrite", "error", "ignore"')  # nolint
+ }
+ jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
+ jmode
 }
