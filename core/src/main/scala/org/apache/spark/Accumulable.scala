@@ -123,6 +123,18 @@ class Accumulable[R, T] private[spark] (
 
   @volatile @transient private var value_ : R = initialValue // Current value on driver
 
+  val zero = param.zero(initialValue) // Zero value to be passed to executors
+  private var deserialized = false
+
+  /**
+   * The following values are used for consistent [[Accumulable]]s. Consistent accumulables are
+   * intended to track data properties, so have only-once semantics. These semantics are implemented
+   * by keeping track of which RDD id, shuffle id, and partition id the current function is
+   * processing in. If a partition is fully processed the results for that partition/shuffle/rdd
+   * combination are sent back to the driver. The driver keeps track of which rdd/shuffle/partitions
+   * already have been applied, and only combines values into value_ if the rdd/shuffle/partition
+   * has not already been aggregated on the driver program
+   */
   // For consistent accumulators pending and processed updates.
   // Pending and processed are keyed by (rdd id, shuffle id, partition id)
   @transient private[spark] lazy val pending = new mutable.HashMap[(Int, Int, Int), R]()
@@ -133,9 +145,6 @@ class Accumulable[R, T] private[spark] (
   // Processed is keyed by (rdd id, shuffle id) and the value is a bitset containing all partitions
   // for the given key which have been merged into the value. This is used on the driver.
   @transient private[spark] lazy val processed = new mutable.HashMap[(Int, Int), mutable.BitSet]()
-
-  val zero = param.zero(initialValue) // Zero value to be passed to executors
-  private var deserialized = false
 
   // In many places we create internal accumulators without access to the active context cleaner,
   // so if we register them here then we may never unregister these accumulators. To avoid memory
