@@ -178,7 +178,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
         val parquetReader: VectorizedParquetRecordReader = new VectorizedParquetRecordReader()
         if (!parquetReader.tryInitialize(
-          split.serializableHadoopSplit.value, hadoopAttemptContext)) {
+            split.serializableHadoopSplit.value, hadoopAttemptContext)) {
           parquetReader.close()
         } else {
           reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
