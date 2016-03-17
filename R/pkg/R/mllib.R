@@ -83,7 +83,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 #'}
 setMethod("survreg", signature(formula = "formula", data = "DataFrame"),
           function(formula, data) {
-            formula <- paste(deparse(formula), collapse="")
+            formula <- paste(deparse(formula), collapse = "")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                  "fitAFTSurvivalRegression", formula, data@sdf)
             return(new("PipelineModel", model = model))
