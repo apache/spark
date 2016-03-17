@@ -438,16 +438,18 @@ class SQLContext(object):
         # So that we can convert WrappedJStructTypes we need to get a
         # serilizable versions of toInternal.
         if isinstance(schema, WrappedJStructType):
-            java_schema = schema._jstructtype
             python_schema = schema.unWrap()
         else:
-            java_schema = schema.json()
             python_schema = schema
 
         if isinstance(data, RDD):
             rdd, schema = self._createFromRDD(data.map(prepare), python_schema, samplingRatio)
         else:
             rdd, schema = self._createFromLocal(map(prepare, data), python_schema)
+        if isinstance(schema, WrappedJStructType):
+            java_schema = schema._jstructtype
+        else:
+            java_schema  = schema.json()
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         jdf = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), java_schema)
         df = DataFrame(jdf, self)
