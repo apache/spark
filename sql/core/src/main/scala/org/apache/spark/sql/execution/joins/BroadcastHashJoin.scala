@@ -230,6 +230,7 @@ case class BroadcastHashJoin(
        """.stripMargin
 
     } else {
+      ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
       val i = ctx.freshName("i")
@@ -303,6 +304,7 @@ case class BroadcastHashJoin(
        """.stripMargin
 
     } else {
+      ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
       val i = ctx.freshName("i")
