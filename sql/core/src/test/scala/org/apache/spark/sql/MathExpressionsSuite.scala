@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -212,7 +214,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(5, 10, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
 
-    val pi = 3.1415
+    val pi = "3.1415"
     checkAnswer(
       sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
         s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
@@ -262,9 +264,9 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   test("unhex") {
     val data = Seq(("1C", "737472696E67")).toDF("a", "b")
     checkAnswer(data.select(unhex('a)), Row(Array[Byte](28.toByte)))
-    checkAnswer(data.select(unhex('b)), Row("string".getBytes))
+    checkAnswer(data.select(unhex('b)), Row("string".getBytes(StandardCharsets.UTF_8)))
     checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
-    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes))
+    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes(StandardCharsets.UTF_8)))
     checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))
     checkAnswer(data.selectExpr("""unhex("G123")"""), Row(null))
   }
@@ -367,6 +369,16 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       input.toDF("key", "value").selectExpr("abs(key) a").sort("a"),
       input.map(pair => Row(pair._2)))
+
+    checkAnswer(
+      sql("select abs(0), abs(-1), abs(123), abs(-9223372036854775807), abs(9223372036854775807)"),
+      Row(0, 1, 123, 9223372036854775807L, 9223372036854775807L)
+    )
+
+    checkAnswer(
+      sql("select abs(0.0), abs(-3.14159265), abs(3.14159265)"),
+      Row(BigDecimal("0.0"), BigDecimal("3.14159265"), BigDecimal("3.14159265"))
+    )
   }
 
   test("log2") {

@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.math.BigInteger
+import java.net.URLClassLoader
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.runtime.universe.typeOf
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.BoundReference
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 case class PrimitiveData(
     intField: Int,
@@ -68,6 +72,10 @@ case class ComplexData(
 
 case class GenericData[A](
     genericField: A)
+
+object GenericData {
+  type IntData = GenericData[Int]
+}
 
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
@@ -186,6 +194,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
       nullable = true))
   }
 
+  test("type-aliased data") {
+    assert(schemaFor[GenericData[Int]] == schemaFor[GenericData.IntData])
+  }
+
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
@@ -229,4 +241,40 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(anyTypes.forall(!_.isPrimitive))
     assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
   }
+
+  private val dataTypeForComplexData = dataTypeFor[ComplexData]
+  private val typeOfComplexData = typeOf[ComplexData]
+
+  Seq(
+    ("mirror", () => mirror),
+    ("dataTypeFor", () => dataTypeFor[ComplexData]),
+    ("constructorFor", () => constructorFor[ComplexData]),
+    ("extractorsFor", {
+      val inputObject = BoundReference(0, dataTypeForComplexData, nullable = false)
+      () => extractorsFor[ComplexData](inputObject)
+    }),
+    ("getConstructorParameters(cls)", () => getConstructorParameters(classOf[ComplexData])),
+    ("getConstructorParameterNames", () => getConstructorParameterNames(classOf[ComplexData])),
+    ("getClassFromType", () => getClassFromType(typeOfComplexData)),
+    ("schemaFor", () => schemaFor[ComplexData]),
+    ("localTypeOf", () => localTypeOf[ComplexData]),
+    ("getClassNameFromType", () => getClassNameFromType(typeOfComplexData)),
+    ("getParameterTypes", () => getParameterTypes(() => ())),
+    ("getConstructorParameters(tpe)", () => getClassNameFromType(typeOfComplexData))).foreach {
+      case (name, exec) =>
+        test(s"SPARK-13640: thread safety of ${name}") {
+          (0 until 100).foreach { _ =>
+            val loader = new URLClassLoader(Array.empty, Utils.getContextOrSparkClassLoader)
+            (0 until 10).par.foreach { _ =>
+              val cl = Thread.currentThread.getContextClassLoader
+              try {
+                Thread.currentThread.setContextClassLoader(loader)
+                exec()
+              } finally {
+                Thread.currentThread.setContextClassLoader(cl)
+              }
+            }
+          }
+        }
+    }
 }

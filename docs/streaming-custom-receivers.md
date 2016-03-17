@@ -72,7 +72,8 @@ class CustomReceiver(host: String, port: Int)
      socket = new Socket(host, port)
 
      // Until stopped or connection broken continue reading
-     val reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"))
+     val reader = new BufferedReader(
+       new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
      userInput = reader.readLine()
      while(!isStopped && userInput != null) {
        store(userInput)
@@ -135,7 +136,8 @@ public class JavaCustomReceiver extends Receiver<String> {
       // connect to the server
       socket = new Socket(host, port);
 
-      BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+      BufferedReader reader = new BufferedReader(
+        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
 
       // Until stopped or connection broken continue reading
       while (!isStopped() && (userInput = reader.readLine()) != null) {
@@ -254,28 +256,3 @@ The following table summarizes the characteristics of both types of receivers
   <td></td>
 </tr>
 </table>
-
-## Implementing and Using a Custom Actor-based Receiver
-
-Custom [Akka Actors](http://doc.akka.io/docs/akka/2.2.4/scala/actors.html) can also be used to
-receive data. The [`ActorHelper`](api/scala/index.html#org.apache.spark.streaming.receiver.ActorHelper)
-trait can be applied on any Akka actor, which allows received data to be stored in Spark using
- `store(...)` methods. The supervisor strategy of this actor can be configured to handle failures, etc.
-
-{% highlight scala %}
-class CustomActor extends Actor with ActorHelper {
-  def receive = {
-    case data: String => store(data)
-  }
-}
-{% endhighlight %}
-
-And a new input stream can be created with this custom actor as
-
-{% highlight scala %}
-// Assuming ssc is the StreamingContext
-val lines = ssc.actorStream[String](Props(new CustomActor()), "CustomReceiver")
-{% endhighlight %}
-
-See [ActorWordCount.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/ActorWordCount.scala)
-for an end-to-end example.

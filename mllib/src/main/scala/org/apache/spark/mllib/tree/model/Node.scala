@@ -83,7 +83,7 @@ class Node @Since("1.2.0") (
    * @return predicted value
    */
   @Since("1.1.0")
-  def predict(features: Vector) : Double = {
+  def predict(features: Vector): Double = {
     if (isLeaf) {
       predict.predict
     } else {

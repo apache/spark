@@ -90,9 +90,9 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
     } else {
       lit(1.0)
     }
-    dataset.select(col($(labelCol)), f, w)
-      .map { case Row(label: Double, feature: Double, weight: Double) =>
-      (label, feature, weight)
+    dataset.select(col($(labelCol)), f, w).rdd.map {
+      case Row(label: Double, feature: Double, weight: Double) =>
+        (label, feature, weight)
     }
   }
 
@@ -105,7 +105,6 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   protected[ml] def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean): StructType = {
-    validateParams()
     if (fitting) {
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
       if (hasWeightCol) {

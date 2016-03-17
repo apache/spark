@@ -40,11 +40,10 @@ public class JavaSaveLoadSuite {
   private transient JavaSparkContext sc;
   private transient SQLContext sqlContext;
 
-  String originalDefaultSource;
   File path;
-  DataFrame df;
+  Dataset<Row> df;
 
-  private static void checkAnswer(DataFrame actual, List<Row> expected) {
+  private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
     if (errorMessage != null) {
       Assert.fail(errorMessage);
@@ -57,7 +56,6 @@ public class JavaSaveLoadSuite {
     sqlContext = new SQLContext(_sc);
     sc = new JavaSparkContext(_sc);
 
-    originalDefaultSource = sqlContext.conf().defaultDataSourceName();
     path =
       Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
     if (path.exists()) {
@@ -85,7 +83,7 @@ public class JavaSaveLoadSuite {
     Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
     df.write().mode(SaveMode.ErrorIfExists).format("json").options(options).save();
-    DataFrame loadedDF = sqlContext.read().format("json").options(options).load();
+    Dataset<Row> loadedDF = sqlContext.read().format("json").options(options).load();
     checkAnswer(loadedDF, df.collectAsList());
   }
 
@@ -98,7 +96,7 @@ public class JavaSaveLoadSuite {
     List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
-    DataFrame loadedDF = sqlContext.read().format("json").schema(schema).options(options).load();
+    Dataset<Row> loadedDF = sqlContext.read().format("json").schema(schema).options(options).load();
 
     checkAnswer(loadedDF, sqlContext.sql("SELECT b FROM jsonTable").collectAsList());
   }

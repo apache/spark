@@ -19,10 +19,10 @@ package org.apache.spark.ml.util
 
 import java.io.IOException
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.json4s._
-import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonDSL._
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{Experimental, Since}
@@ -75,13 +75,14 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = {
     val hadoopConf = sc.hadoopConfiguration
-    val fs = FileSystem.get(hadoopConf)
-    val p = new Path(path)
-    if (fs.exists(p)) {
+    val outputPath = new Path(path)
+    val fs = outputPath.getFileSystem(hadoopConf)
+    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    if (fs.exists(qualifiedOutputPath)) {
       if (shouldOverwrite) {
         logInfo(s"Path $path already exists. It will be overwritten.")
         // TODO: Revert back to the original content if save is not successful.
-        fs.delete(p, true)
+        fs.delete(qualifiedOutputPath, true)
       } else {
         throw new IOException(
           s"Path $path already exists. Please use write.overwrite().save(path) to overwrite it.")
@@ -272,7 +273,29 @@ private[ml] object DefaultParamsReader {
       sparkVersion: String,
       params: JValue,
       metadata: JValue,
-      metadataJson: String)
+      metadataJson: String) {
+
+    /**
+     * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
+     * This can be useful for getting a Param value before an instance of [[Params]]
+     * is available.
+     */
+    def getParamValue(paramName: String): JValue = {
+      implicit val format = DefaultFormats
+      params match {
+        case JObject(pairs) =>
+          val values = pairs.filter { case (pName, jsonValue) =>
+            pName == paramName
+          }.map(_._2)
+          assert(values.length == 1, s"Expected one instance of Param '$paramName' but found" +
+            s" ${values.length} in JSON Params: " + pairs.map(_.toString).mkString(", "))
+          values.head
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot recognize JSON metadata: $metadataJson.")
+      }
+    }
+  }
 
   /**
    * Load metadata from file.
@@ -301,6 +324,7 @@ private[ml] object DefaultParamsReader {
   /**
    * Extract Params from metadata, and set them in the instance.
    * This works if all Params implement [[org.apache.spark.ml.param.Param.jsonDecode()]].
+   * TODO: Move to [[Metadata]] method
    */
   def getAndSetParams(instance: Params, metadata: Metadata): Unit = {
     implicit val format = DefaultFormats

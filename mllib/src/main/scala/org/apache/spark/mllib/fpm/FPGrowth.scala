@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.fpm
 
-import java.lang.{Iterable => JavaIterable}
 import java.{util => ju}
+import java.lang.{Iterable => JavaIterable}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -29,16 +29,15 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
+import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.fpm.FPGrowth._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
@@ -134,8 +133,8 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       loadImpl(freqItemsets, sample)
     }
 
-    def loadImpl[Item : ClassTag](freqItemsets: DataFrame, sample: Item): FPGrowthModel[Item] = {
-      val freqItemsetsRDD = freqItemsets.select("items", "freq").map { x =>
+    def loadImpl[Item: ClassTag](freqItemsets: DataFrame, sample: Item): FPGrowthModel[Item] = {
+      val freqItemsetsRDD = freqItemsets.select("items", "freq").rdd.map { x =>
         val items = x.getAs[Seq[Item]](0).toArray
         val freq = x.getLong(1)
         new FreqItemset(items, freq)
@@ -153,7 +152,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
  * [[http://dx.doi.org/10.1145/335191.335372 Han et al., Mining frequent patterns without candidate
  *  generation]].
  *
- * @param minSupport the minimal support level of the frequent pattern, any pattern appears
+ * @param minSupport the minimal support level of the frequent pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
  * @param numPartitions number of partitions used by parallel FP-growth
  *
@@ -233,7 +232,7 @@ class FPGrowth private (
       partitioner: Partitioner): Array[Item] = {
     data.flatMap { t =>
       val uniq = t.toSet
-      if (t.size != uniq.size) {
+      if (t.length != uniq.size) {
         throw new SparkException(s"Items in a transaction must be unique but got ${t.toSeq}.")
       }
       t

@@ -158,7 +158,7 @@ object LinearDataGenerator {
 
   /**
    * Generate an RDD containing sample data for Linear Regression models - including Ridge, Lasso,
-   * and uregularized variants.
+   * and unregularized variants.
    *
    * @param sc SparkContext to be used for generating the RDD.
    * @param nexamples Number of examples that will be contained in the RDD.
@@ -175,7 +175,7 @@ object LinearDataGenerator {
       nfeatures: Int,
       eps: Double,
       nparts: Int = 2,
-      intercept: Double = 0.0) : RDD[LabeledPoint] = {
+      intercept: Double = 0.0): RDD[LabeledPoint] = {
     val random = new Random(42)
     // Random values distributed uniformly in [-0.5, 0.5]
     val w = Array.fill(nfeatures)(random.nextDouble() - 0.5)

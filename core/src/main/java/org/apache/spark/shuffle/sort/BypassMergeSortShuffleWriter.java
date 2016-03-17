@@ -114,8 +114,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.shuffleId = dep.shuffleId();
     this.partitioner = dep.partitioner();
     this.numPartitions = partitioner.numPartitions();
-    this.writeMetrics = new ShuffleWriteMetrics();
-    taskContext.taskMetrics().shuffleWriteMetrics_$eq(Option.apply(writeMetrics));
+    this.writeMetrics = taskContext.taskMetrics().registerShuffleWriteMetrics();
     this.serializer = Serializer.getSerializer(dep.serializer());
     this.shuffleBlockResolver = shuffleBlockResolver;
   }
@@ -138,12 +137,12 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       final File file = tempShuffleBlockIdPlusFile._2();
       final BlockId blockId = tempShuffleBlockIdPlusFile._1();
       partitionWriters[i] =
-        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics).open();
+        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
     }
     // Creating the file to write to and creating a disk writer both involve interacting with
     // the disk, and can take a long time in aggregate when we open many files, so should be
     // included in the shuffle write time.
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - openStartTime);
+    writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
 
     while (records.hasNext()) {
       final Product2<K, V> record = records.next();
@@ -185,22 +184,25 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
-        final FileInputStream in = new FileInputStream(partitionWriters[i].fileSegment().file());
-        boolean copyThrewException = true;
-        try {
-          lengths[i] = Utils.copyStream(in, out, false, transferToEnabled);
-          copyThrewException = false;
-        } finally {
-          Closeables.close(in, copyThrewException);
-        }
-        if (!partitionWriters[i].fileSegment().file().delete()) {
-          logger.error("Unable to delete file for partition {}", i);
+        final File file = partitionWriters[i].fileSegment().file();
+        if (file.exists()) {
+          final FileInputStream in = new FileInputStream(file);
+          boolean copyThrewException = true;
+          try {
+            lengths[i] = Utils.copyStream(in, out, false, transferToEnabled);
+            copyThrewException = false;
+          } finally {
+            Closeables.close(in, copyThrewException);
+          }
+          if (!file.delete()) {
+            logger.error("Unable to delete file for partition {}", i);
+          }
         }
       }
       threwException = false;
     } finally {
       Closeables.close(out, threwException);
-      writeMetrics.incShuffleWriteTime(System.nanoTime() - writeStartTime);
+      writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
     }
     partitionWriters = null;
     return lengths;

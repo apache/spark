@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.util.control.NonFatal
 
@@ -27,8 +28,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{ExplainCommand, SetCommand}
+import org.apache.spark.sql.execution.command.{ExplainCommand, SetCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
+import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable, SQLBuilder}
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -126,8 +128,34 @@ abstract class HiveComparisonTest
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
     val digest = java.security.MessageDigest.getInstance("MD5")
-    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes("utf-8"))
+    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes(StandardCharsets.UTF_8))
     new java.math.BigInteger(1, digest.digest).toString(16)
+  }
+
+  /** Used for testing [[SQLBuilder]] */
+  private var numConvertibleQueries: Int = 0
+  private var numTotalQueries: Int = 0
+
+  override protected def afterAll(): Unit = {
+    logInfo({
+      val percentage = if (numTotalQueries > 0) {
+        numConvertibleQueries.toDouble / numTotalQueries * 100
+      } else {
+        0D
+      }
+
+      s"""SQLBuilder statistics:
+         |- Total query number:                $numTotalQueries
+         |- Number of convertible queries:     $numConvertibleQueries
+         |- Percentage of convertible queries: $percentage%
+       """.stripMargin
+    })
+
+    try {
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   protected def prepareAnswer(
@@ -372,14 +400,57 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = new TestHive.QueryExecution(queryString)
-          try { (query, prepareAnswer(query, query.stringResult())) } catch {
+          var query: TestHive.QueryExecution = null
+          try {
+            query = {
+              val originalQuery = new TestHive.QueryExecution(queryString)
+              val containsCommands = originalQuery.analyzed.collectFirst {
+                case _: Command => ()
+                case _: LogicalInsertIntoHiveTable => ()
+              }.nonEmpty
+
+              if (containsCommands) {
+                originalQuery
+              } else {
+                numTotalQueries += 1
+                try {
+                  val sql = new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
+                  numConvertibleQueries += 1
+                  logInfo(
+                    s"""
+                      |### Running SQL generation round-trip test {{{
+                      |${originalQuery.analyzed.treeString}
+                      |Original SQL:
+                      |$queryString
+                      |
+                      |Generated SQL:
+                      |$sql
+                      |}}}
+                   """.stripMargin.trim)
+                  new TestHive.QueryExecution(sql)
+                } catch { case NonFatal(e) =>
+                  logInfo(
+                    s"""
+                       |### Cannot convert the following logical plan back to SQL {{{
+                       |${originalQuery.analyzed.treeString}
+                       |Original SQL:
+                       |$queryString
+                       |}}}
+                   """.stripMargin.trim)
+                  originalQuery
+                }
+              }
+            }
+
+            (query, prepareAnswer(query, query.stringResult()))
+          } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
                   |Failed to execute query using catalyst:
                   |Error: ${e.getMessage}
                   |${stackTraceToString(e)}
+                  |$queryString
                   |$query
                   |== HIVE - ${hive.size} row(s) ==
                   |${hive.mkString("\n")}
@@ -421,7 +492,7 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHive.QueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
-                  case (q, e) => e.executedPlan.collect {
+                  case (q, e) => e.sparkPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
                   }

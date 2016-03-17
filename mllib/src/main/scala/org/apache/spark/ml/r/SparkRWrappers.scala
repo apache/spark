@@ -20,7 +20,8 @@ package org.apache.spark.ml.api.r
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
-import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
+import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.sql.DataFrame
 
@@ -51,6 +52,22 @@ private[r] object SparkRWrappers {
     pipeline.fit(df)
   }
 
+  def fitKMeans(
+      df: DataFrame,
+      initMode: String,
+      maxIter: Double,
+      k: Double,
+      columns: Array[String]): PipelineModel = {
+    val assembler = new VectorAssembler().setInputCols(columns)
+    val kMeans = new KMeans()
+      .setInitMode(initMode)
+      .setMaxIter(maxIter.toInt)
+      .setK(k.toInt)
+      .setFeaturesCol(assembler.getOutputCol)
+    val pipeline = new Pipeline().setStages(Array(assembler, kMeans))
+    pipeline.fit(df)
+  }
+
   def getModelCoefficients(model: PipelineModel): Array[Double] = {
     model.stages.last match {
       case m: LinearRegressionModel => {
@@ -72,6 +89,8 @@ private[r] object SparkRWrappers {
           m.coefficients.toArray
         }
       }
+      case m: KMeansModel =>
+        m.clusterCenters.flatMap(_.toArray)
     }
   }
 
@@ -82,6 +101,31 @@ private[r] object SparkRWrappers {
       case m: LogisticRegressionModel =>
         throw new UnsupportedOperationException(
           "No deviance residuals available for LogisticRegressionModel")
+    }
+  }
+
+  def getKMeansModelSize(model: PipelineModel): Array[Int] = {
+    model.stages.last match {
+      case m: KMeansModel => Array(m.getK) ++ m.summary.size
+      case other => throw new UnsupportedOperationException(
+        s"KMeansModel required but ${other.getClass.getSimpleName} found.")
+    }
+  }
+
+  def getKMeansCluster(model: PipelineModel, method: String): DataFrame = {
+    model.stages.last match {
+      case m: KMeansModel =>
+        if (method == "centers") {
+          // Drop the assembled vector for easy-print to R side.
+          m.summary.predictions.drop(m.summary.featuresCol)
+        } else if (method == "classes") {
+          m.summary.cluster
+        } else {
+          throw new UnsupportedOperationException(
+            s"Method (centers or classes) required but $method found.")
+        }
+      case other => throw new UnsupportedOperationException(
+        s"KMeansModel required but ${other.getClass.getSimpleName} found.")
     }
   }
 
@@ -103,6 +147,10 @@ private[r] object SparkRWrappers {
         } else {
           attrs.attributes.get.map(_.name.get)
         }
+      case m: KMeansModel =>
+        val attrs = AttributeGroup.fromStructField(
+          m.summary.predictions.schema(m.summary.featuresCol))
+        attrs.attributes.get.map(_.name.get)
     }
   }
 
@@ -112,6 +160,8 @@ private[r] object SparkRWrappers {
         "LinearRegressionModel"
       case m: LogisticRegressionModel =>
         "LogisticRegressionModel"
+      case m: KMeansModel =>
+        "KMeansModel"
     }
   }
 }

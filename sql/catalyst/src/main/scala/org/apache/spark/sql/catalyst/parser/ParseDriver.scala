@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.annotation.tailrec
+
 import org.antlr.runtime._
 import org.antlr.runtime.tree.CommonTree
 
@@ -28,7 +30,25 @@ import org.apache.spark.sql.AnalysisException
  * This is based on Hive's org.apache.hadoop.hive.ql.parse.ParseDriver
  */
 object ParseDriver extends Logging {
-  def parse(command: String, conf: ParserConf): ASTNode = {
+  /** Create an LogicalPlan ASTNode from a SQL command. */
+  def parsePlan(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
+    parser.statement().getTree
+  }
+
+  /** Create an Expression ASTNode from a SQL command. */
+  def parseExpression(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
+    parser.singleNamedExpression().getTree
+  }
+
+  /** Create an TableIdentifier ASTNode from a SQL command. */
+  def parseTableName(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
+    parser.singleTableName().getTree
+  }
+
+  private def parse(
+      command: String,
+      conf: ParserConf)(
+      toTree: SparkSqlParser => CommonTree): ASTNode = {
     logInfo(s"Parsing command: $command")
 
     // Setup error collection.
@@ -44,7 +64,7 @@ object ParseDriver extends Logging {
     parser.configure(conf, reporter)
 
     try {
-      val result = parser.statement()
+      val result = toTree(parser)
 
       // Check errors.
       reporter.checkForErrors()
@@ -53,11 +73,12 @@ object ParseDriver extends Logging {
       logInfo(s"Parse completed.")
 
       // Find the non null token tree in the result.
+      @tailrec
       def nonNullToken(tree: CommonTree): CommonTree = {
         if (tree.token != null || tree.getChildCount == 0) tree
         else nonNullToken(tree.getChild(0).asInstanceOf[CommonTree])
       }
-      val tree = nonNullToken(result.getTree)
+      val tree = nonNullToken(result)
 
       // Make sure all boundaries are set.
       tree.setUnknownTokenBoundaries()

@@ -21,7 +21,18 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
 import java.net.URI;
-import java.util.*;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.*;
 
 import scala.Tuple2;
@@ -35,8 +46,6 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.base.Throwables;
-import com.google.common.base.Optional;
-import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -49,7 +58,12 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.JavaDoubleRDD;
+import org.apache.spark.api.java.JavaFutureAction;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
@@ -866,8 +880,8 @@ public class JavaAPISuite implements Serializable {
       "The quick brown fox jumps over the lazy dog."));
     JavaRDD<String> words = rdd.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Arrays.asList(x.split(" "));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(x.split(" ")).iterator();
       }
     });
     Assert.assertEquals("Hello", words.first());
@@ -876,12 +890,12 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<String, String> pairsRDD = rdd.flatMapToPair(
       new PairFlatMapFunction<String, String, String>() {
         @Override
-        public Iterable<Tuple2<String, String>> call(String s) {
+        public Iterator<Tuple2<String, String>> call(String s) {
           List<Tuple2<String, String>> pairs = new LinkedList<>();
           for (String word : s.split(" ")) {
             pairs.add(new Tuple2<>(word, word));
           }
-          return pairs;
+          return pairs.iterator();
         }
       }
     );
@@ -890,12 +904,12 @@ public class JavaAPISuite implements Serializable {
 
     JavaDoubleRDD doubles = rdd.flatMapToDouble(new DoubleFlatMapFunction<String>() {
       @Override
-      public Iterable<Double> call(String s) {
+      public Iterator<Double> call(String s) {
         List<Double> lengths = new LinkedList<>();
         for (String word : s.split(" ")) {
           lengths.add((double) word.length());
         }
-        return lengths;
+        return lengths.iterator();
       }
     });
     Assert.assertEquals(5.0, doubles.first(), 0.01);
@@ -916,8 +930,8 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<String, Integer> swapped = pairRDD.flatMapToPair(
       new PairFlatMapFunction<Tuple2<Integer, String>, String, Integer>() {
         @Override
-        public Iterable<Tuple2<String, Integer>> call(Tuple2<Integer, String> item) {
-          return Collections.singletonList(item.swap());
+        public Iterator<Tuple2<String, Integer>> call(Tuple2<Integer, String> item) {
+          return Collections.singletonList(item.swap()).iterator();
         }
       });
     swapped.collect();
@@ -937,12 +951,12 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> partitionSums = rdd.mapPartitions(
       new FlatMapFunction<Iterator<Integer>, Integer>() {
         @Override
-        public Iterable<Integer> call(Iterator<Integer> iter) {
+        public Iterator<Integer> call(Iterator<Integer> iter) {
           int sum = 0;
           while (iter.hasNext()) {
             sum += iter.next();
           }
-          return Collections.singletonList(sum);
+          return Collections.singletonList(sum).iterator();
         }
     });
     Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
@@ -1044,7 +1058,7 @@ public class JavaAPISuite implements Serializable {
     rdd.saveAsTextFile(outputDir);
     // Read the plain text file and check it's OK
     File outputFile = new File(outputDir, "part-00000");
-    String content = Files.toString(outputFile, Charsets.UTF_8);
+    String content = Files.toString(outputFile, StandardCharsets.UTF_8);
     Assert.assertEquals("1\n2\n3\n4\n", content);
     // Also try reading it in as a text file RDD
     List<String> expected = Arrays.asList("1", "2", "3", "4");
@@ -1054,8 +1068,8 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void wholeTextFiles() throws Exception {
-    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
-    byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
+    byte[] content2 = "spark is also easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
     Files.write(content1, new File(tempDirName + "/part-00000"));
@@ -1117,7 +1131,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void binaryFiles() throws Exception {
     // Reusing the wholeText files example
-    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
     File file1 = new File(tempDirName + "/part-00000");
@@ -1138,7 +1152,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void binaryFilesCaching() throws Exception {
     // Reusing the wholeText files example
-    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
     File file1 = new File(tempDirName + "/part-00000");
@@ -1167,7 +1181,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void binaryRecords() throws Exception {
     // Reusing the wholeText files example
-    byte[] content1 = "spark isn't always easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark isn't always easy to use.\n".getBytes(StandardCharsets.UTF_8);
     int numOfCopies = 10;
     String tempDirName = tempDir.getAbsolutePath();
     File file1 = new File(tempDirName + "/part-00000");
@@ -1353,8 +1367,8 @@ public class JavaAPISuite implements Serializable {
     FlatMapFunction2<Iterator<Integer>, Iterator<String>, Integer> sizesFn =
       new FlatMapFunction2<Iterator<Integer>, Iterator<String>, Integer>() {
         @Override
-        public Iterable<Integer> call(Iterator<Integer> i, Iterator<String> s) {
-          return Arrays.asList(Iterators.size(i), Iterators.size(s));
+        public Iterator<Integer> call(Iterator<Integer> i, Iterator<String> s) {
+          return Arrays.asList(Iterators.size(i), Iterators.size(s)).iterator();
         }
       };
 
@@ -1785,32 +1799,6 @@ public class JavaAPISuite implements Serializable {
     Assert.assertTrue(future.isDone());
   }
 
-
-  /**
-   * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
-   * since that's the only artifact where Guava classes have been relocated.
-   */
-  @Test
-  public void testGuavaOptional() {
-    // Stop the context created in setUp() and start a local-cluster one, to force usage of the
-    // assembly.
-    sc.stop();
-    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,1024]", "JavaAPISuite");
-    try {
-      JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
-      JavaRDD<Optional<Integer>> rdd2 = rdd1.map(
-        new Function<Integer, Optional<Integer>>() {
-          @Override
-          public Optional<Integer> call(Integer i) {
-            return Optional.fromNullable(i);
-          }
-        });
-      rdd2.collect();
-    } finally {
-      localCluster.stop();
-    }
-  }
-
   static class Class1 {}
   static class Class2 {}
 
@@ -1821,6 +1809,18 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(
         Class1.class.getName() + "," + Class2.class.getName(),
         conf.get("spark.kryo.classesToRegister"));
+  }
+
+  @Test
+  public void testGetPersistentRDDs() {
+    java.util.Map<Integer, JavaRDD<?>> cachedRddsMap = sc.getPersistentRDDs();
+    Assert.assertTrue(cachedRddsMap.isEmpty());
+    JavaRDD<String> rdd1 = sc.parallelize(Arrays.asList("a", "b")).setName("RDD1").cache();
+    JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("c", "d")).setName("RDD2").cache();
+    cachedRddsMap = sc.getPersistentRDDs();
+    Assert.assertEquals(2, cachedRddsMap.size());
+    Assert.assertEquals("RDD1", cachedRddsMap.get(0).name());
+    Assert.assertEquals("RDD2", cachedRddsMap.get(1).name());
   }
 
 }

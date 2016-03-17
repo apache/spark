@@ -83,7 +83,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   /**
    * Returns the mean average precision (MAP) of all the queries.
    * If a query has an empty ground truth set, the average precision will be zero and a log
-   * warining is generated.
+   * warning is generated.
    */
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab) =>

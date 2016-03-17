@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
-private[json] object InferSchema {
+private[sql] object InferSchema {
 
   /**
    * Infer the type of a collection of json records in three stages:
@@ -134,8 +134,12 @@ private[json] object InferSchema {
             val v = parser.getDecimalValue
             DecimalType(v.precision(), v.scale())
           case FLOAT | DOUBLE =>
-            // TODO(davies): Should we use decimal if possible?
-            DoubleType
+            if (configOptions.floatAsBigDecimal) {
+              val v = parser.getDecimalValue
+              DecimalType(v.precision(), v.scale())
+            } else {
+              DoubleType
+            }
         }
 
       case VALUE_TRUE | VALUE_FALSE => BooleanType
@@ -145,7 +149,7 @@ private[json] object InferSchema {
   /**
    * Convert NullType to StringType and remove StructTypes with no fields
    */
-  private def canonicalizeType: DataType => Option[DataType] = {
+  private def canonicalizeType(tpe: DataType): Option[DataType] = tpe match {
     case at @ ArrayType(elementType, _) =>
       for {
         canonicalType <- canonicalizeType(elementType)
@@ -154,15 +158,15 @@ private[json] object InferSchema {
       }
 
     case StructType(fields) =>
-      val canonicalFields = for {
+      val canonicalFields: Array[StructField] = for {
         field <- fields
-        if field.name.nonEmpty
+        if field.name.length > 0
         canonicalType <- canonicalizeType(field.dataType)
       } yield {
         field.copy(dataType = canonicalType)
       }
 
-      if (canonicalFields.nonEmpty) {
+      if (canonicalFields.length > 0) {
         Some(StructType(canonicalFields))
       } else {
         // per SPARK-8093: empty structs should be deleted
@@ -217,10 +221,9 @@ private[json] object InferSchema {
       (t1, t2) match {
         // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
         // in most case, also have better precision.
-        case (DoubleType, t: DecimalType) =>
+        case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) =>
           DoubleType
-        case (t: DecimalType, DoubleType) =>
-          DoubleType
+
         case (t1: DecimalType, t2: DecimalType) =>
           val scale = math.max(t1.scale, t2.scale)
           val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)

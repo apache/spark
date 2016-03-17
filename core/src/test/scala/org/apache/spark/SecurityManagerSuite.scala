@@ -183,7 +183,6 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     val securityManager = new SecurityManager(conf)
 
     assert(securityManager.fileServerSSLOptions.enabled === true)
-    assert(securityManager.akkaSSLOptions.enabled === true)
 
     assert(securityManager.sslSocketFactory.isDefined === true)
     assert(securityManager.hostnameVerifier.isDefined === true)
@@ -197,16 +196,6 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.fileServerSSLOptions.keyPassword === Some("password"))
     assert(securityManager.fileServerSSLOptions.protocol === Some("TLSv1.2"))
     assert(securityManager.fileServerSSLOptions.enabledAlgorithms === expectedAlgorithms)
-
-    assert(securityManager.akkaSSLOptions.trustStore.isDefined === true)
-    assert(securityManager.akkaSSLOptions.trustStore.get.getName === "truststore")
-    assert(securityManager.akkaSSLOptions.keyStore.isDefined === true)
-    assert(securityManager.akkaSSLOptions.keyStore.get.getName === "keystore")
-    assert(securityManager.akkaSSLOptions.trustStorePassword === Some("password"))
-    assert(securityManager.akkaSSLOptions.keyStorePassword === Some("password"))
-    assert(securityManager.akkaSSLOptions.keyPassword === Some("password"))
-    assert(securityManager.akkaSSLOptions.protocol === Some("TLSv1.2"))
-    assert(securityManager.akkaSSLOptions.enabledAlgorithms === expectedAlgorithms)
   }
 
   test("ssl off setup") {
@@ -218,7 +207,6 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     val securityManager = new SecurityManager(conf)
 
     assert(securityManager.fileServerSSLOptions.enabled === false)
-    assert(securityManager.akkaSSLOptions.enabled === false)
     assert(securityManager.sslSocketFactory.isDefined === false)
     assert(securityManager.hostnameVerifier.isDefined === false)
   }

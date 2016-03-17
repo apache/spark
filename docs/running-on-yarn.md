@@ -114,6 +114,19 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.memory</code></td>
+  <td>1g</td>
+  <td>
+    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
+    (e.g. <code>1g</code>, <code>2g</code>).
+
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-memory</code> command line option
+    or in your default properties file.
+  </td>
+</tr>
+<tr>
   <td><code>spark.driver.cores</code></td>
   <td><code>1</code></td>
   <td>
@@ -203,10 +216,24 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.cores</code></td>
+  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
+  <td>
+    The number of cores to use on each executor. For YARN and standalone mode only.
+  </td>
+</tr>
+<tr>
  <td><code>spark.executor.instances</code></td>
   <td><code>2</code></td>
   <td>
     The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>. If both <code>spark.dynamicAllocation.enabled</code> and <code>spark.executor.instances</code> are specified, dynamic allocation is turned off and the specified number of <code>spark.executor.instances</code> is used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.memory</code></td>
+  <td>1g</td>
+  <td>
+    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
   </td>
 </tr>
 <tr>
@@ -245,14 +272,25 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.jar</code></td>
+  <td><code>spark.yarn.jars</code></td>
   <td>(none)</td>
   <td>
-    The location of the Spark jar file, in case overriding the default location is desired.
-    By default, Spark on YARN will use a Spark jar installed locally, but the Spark jar can also be
+    List of libraries containing Spark code to distribute to YARN containers.
+    By default, Spark on YARN will use Spark jars installed locally, but the Spark jars can also be
     in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't
-    need to be distributed each time an application runs. To point to a jar on HDFS, for example,
-    set this configuration to <code>hdfs:///some/path</code>.
+    need to be distributed each time an application runs. To point to jars on HDFS, for example,
+    set this configuration to <code>hdfs:///some/path</code>. Globs are allowed.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.archive</code></td>
+  <td>(none)</td>
+  <td>
+    An archive containing needed Spark jars for distribution to the YARN cache. If set, this
+    configuration replaces <code>spark.yarn.jars</code> and the archive is used in all the
+    application's containers. The archive should contain jar files in its root directory.
+    Like with the previous option, the archive can also be hosted on HDFS to speed up file
+    distribution.
   </td>
 </tr>
 <tr>
@@ -260,10 +298,10 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>(none)</td>
   <td>
     A comma-separated list of secure HDFS namenodes your Spark application is going to access. For
-    example, <code>spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032</code>.
-    The Spark application must have access to the namenodes listed and Kerberos must
-    be properly configured to be able to access them (either in the same realm or in
-    a trusted realm). Spark acquires security tokens for each of the namenodes so that
+    example, <code>spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
+    webhdfs://nn3.com:50070</code>. The Spark application must have access to the namenodes listed
+    and Kerberos must be properly configured to be able to access them (either in the same realm
+    or in a trusted realm). Spark acquires security tokens for each of the namenodes so that
     the Spark application can access those remote HDFS clusters.
   </td>
 </tr>
