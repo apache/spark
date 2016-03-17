@@ -109,14 +109,6 @@ private[tree] class GiniAggregator(numClasses: Int)
   def getCalculator(allStats: Array[Double], offset: Int): GiniCalculator = {
     new GiniCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
-
-  /**
-   * Get an [[ImpurityCalculator]] for a node.
-   * @param sufficientStats  Sufficient stats array for a node.
-   */
-  def getCalculator(sufficientStats: Array[Double]): GiniCalculator = {
-    new GiniCalculator(sufficientStats.clone())
-  }
 }
 
 /**

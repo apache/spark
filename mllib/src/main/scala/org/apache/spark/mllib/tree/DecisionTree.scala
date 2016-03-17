@@ -833,7 +833,8 @@ object DecisionTree extends Serializable with Logging {
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
             Range(0, numSplits).map { case splitIdx =>
               val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
-              val rightChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
+              val rightChildStats =
+                binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
               rightChildStats.subtract(leftChildStats)
               predictWithImpurity = Some(predictWithImpurity.getOrElse(
                 calculatePredictImpurity(leftChildStats, rightChildStats)))

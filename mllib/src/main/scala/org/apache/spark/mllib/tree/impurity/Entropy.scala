@@ -113,14 +113,6 @@ private[tree] class EntropyAggregator(numClasses: Int)
   def getCalculator(allStats: Array[Double], offset: Int): EntropyCalculator = {
     new EntropyCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
-
-  /**
-   * Get an [[ImpurityCalculator]] for a node.
-   * @param sufficientStats  Sufficient stats array for a node.
-   */
-  def getCalculator(sufficientStats: Array[Double]): EntropyCalculator = {
-    new EntropyCalculator(sufficientStats.clone())
-  }
 }
 
 /**

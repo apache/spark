@@ -78,6 +78,9 @@ private[spark] class DTStatsAggregator(
 
   /**
    * Array of parent node sufficient stats.
+   *
+   * Note: this is necessary because stats for the parent node are not available
+   *       on the first iteration of tree learning.
    */
   private val parentStats: Array[Double] = new Array[Double](statsSize)
 
@@ -94,7 +97,7 @@ private[spark] class DTStatsAggregator(
    * Get an [[ImpurityCalculator]] for the parent node.
    */
   def getParentImpurityCalculator(): ImpurityCalculator = {
-    impurityAggregator.getCalculator(parentStats)
+    impurityAggregator.getCalculator(parentStats, 0)
   }
 
   /**

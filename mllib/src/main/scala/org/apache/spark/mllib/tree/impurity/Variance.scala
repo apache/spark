@@ -93,14 +93,6 @@ private[tree] class VarianceAggregator()
   def getCalculator(allStats: Array[Double], offset: Int): VarianceCalculator = {
     new VarianceCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
-
-  /**
-   * Get an [[ImpurityCalculator]] for a node.
-   * @param sufficientStats  Sufficient stats array for a node.
-   */
-  def getCalculator(sufficientStats: Array[Double]): VarianceCalculator = {
-    new VarianceCalculator(sufficientStats.clone())
-  }
 }
 
 /**
