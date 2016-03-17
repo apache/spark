@@ -24,6 +24,7 @@ import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.rdd.RDD
@@ -35,6 +36,8 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
 
   private val conf = new SparkConf().setMaster("local").setAppName(this.getClass.getCanonicalName)
   private var tempDir = Files.createTempDirectory("StateStoreRDDSuite").toString
+  private val keySchema = StructType(Seq(StructField("key", StringType, true)))
+  private val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
 
   import StateStoreCoordinatorSuite._
   import StateStoreSuite._
@@ -55,22 +58,22 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
         val increment = (store: StateStore, iter: Iterator[String]) => {
           iter.foreach { s =>
             store.update(
-              wrapKey(s), oldRow => {
-                val oldValue = oldRow.map(unwrapValue).getOrElse(0)
-                wrapValue(oldValue + 1)
+              keyToRow(s), oldRow => {
+                val oldValue = oldRow.map(rowToValue).getOrElse(0)
+                valueToRow(oldValue + 1)
               })
           }
           store.commit()
-          store.iterator().map(unwrapKeyValue)
+          store.iterator().map(rowsToKeyValue)
         }
         val opId = 0
-        val rdd1 = makeRDD(sc, Seq("a", "b", "a"))
-          .withStateStores(increment, opId, storeVersion = 0, path)
+        val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+          increment, opId, storeVersion = 0, path, keySchema, valueSchema)
         assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
 
         // Generate next version of stores
-        val rdd2 = makeRDD(sc, Seq("a", "c"))
-          .withStateStores(increment, opId, storeVersion = 1, path)
+        val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionWithStateStore(
+          increment, opId, storeVersion = 1, path, keySchema, valueSchema)
         assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
 
         // Make sure the previous RDD still has the same data.
@@ -88,7 +91,8 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
           sc: SparkContext,
           seq: Seq[String],
           storeVersion: Int): RDD[(String, Int)] = {
-        makeRDD(sc, Seq("a")).withStateStores(increment, opId, storeVersion, path)
+        makeRDD(sc, Seq("a")).mapPartitionWithStateStore(
+          increment, opId, storeVersion, path, keySchema, valueSchema)
       }
 
       // Generate RDDs and state store data
@@ -114,8 +118,8 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
         coordinator.reportActiveInstance(StateStoreId(opId, 0), "host1", "exec1")
         coordinator.reportActiveInstance(StateStoreId(opId, 1), "host2", "exec2")
 
-        val rdd = makeRDD(sc, Seq("a", "b", "a"))
-          .withStateStores(increment, opId, storeVersion = 0, path, Some(coordinator))
+        val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+          increment, opId, storeVersion = 0, path, keySchema, valueSchema, Some(coordinator))
         require(rdd.partitions.size === 2)
 
         assert(
@@ -138,12 +142,12 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
   private val increment = (store: StateStore, iter: Iterator[String]) => {
     iter.foreach { s =>
       store.update(
-        wrapKey(s), oldRow => {
-          val oldValue = oldRow.map(unwrapValue).getOrElse(0)
-          wrapValue(oldValue + 1)
+        keyToRow(s), oldRow => {
+          val oldValue = oldRow.map(rowToValue).getOrElse(0)
+          valueToRow(oldValue + 1)
         })
     }
     store.commit()
-    store.iterator().map(unwrapKeyValue)
+    store.iterator().map(rowsToKeyValue)
   }
 }

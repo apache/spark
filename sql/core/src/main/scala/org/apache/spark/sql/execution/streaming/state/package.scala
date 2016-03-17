@@ -20,20 +20,30 @@ package org.apache.spark.sql.execution.streaming
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.StructType
 
 package object state {
 
   implicit class StateStoreOps[T: ClassTag](dataRDD: RDD[T]) {
-    def withStateStores[U: ClassTag](
+    def mapPartitionWithStateStore[U: ClassTag](
       storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
       operatorId: Long,
       storeVersion: Long,
       storeDirectory: String,
+      keySchema: StructType,
+      valueSchema: StructType,
       storeCoordinator: Option[StateStoreCoordinator] = None
     ): StateStoreRDD[T, U] = {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       new StateStoreRDD(
-        dataRDD, cleanedF, operatorId, storeVersion, storeDirectory, storeCoordinator)
+        dataRDD,
+        cleanedF,
+        operatorId,
+        storeVersion,
+        storeDirectory,
+        keySchema,
+        valueSchema,
+        storeCoordinator)
     }
   }
 }

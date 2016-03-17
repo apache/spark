@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable
 import scala.util.Random
 import scala.util.control.NonFatal
 
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.serializer.{DeserializationStream, KryoSerializer, SerializationStream}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.util.{CompletionIterator, Utils}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 
 /**
@@ -58,6 +62,8 @@ import org.apache.spark.util.{CompletionIterator, Utils}
 private[state] class HDFSBackedStateStoreProvider(
     val id: StateStoreId,
     val directory: String,
+    keySchema: StructType,
+    valueSchema: StructType,
     numBatchesToRetain: Int = 2,
     maxDeltaChainForSnapshots: Int = 10
   ) extends StateStoreProvider with Logging {
@@ -75,8 +81,8 @@ private[state] class HDFSBackedStateStoreProvider(
 
     private val newVersion = version + 1
     private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
-    private val tempDeltaFileStream =
-      serializer.newInstance().serializeStream(fs.create(tempDeltaFile, true))
+    private val tempDeltaFileStream = fs.create(tempDeltaFile, true)
+      // serializer.newInstance().serializeStream(fs.create(tempDeltaFile, true))
     private val allUpdates = new mutable.HashMap[UnsafeRow, StoreUpdate]
 
     @volatile private var state: STATE = UPDATING
@@ -104,7 +110,8 @@ private[state] class HDFSBackedStateStoreProvider(
             if (oldValueOption.nonEmpty) ValueUpdated(key, value) else ValueAdded(key, value)
           allUpdates.put(key, update)
       }
-      tempDeltaFileStream.writeObject(ValueUpdated(key, value))
+      // tempDeltaFileStream.writeObject(ValueUpdated(key, value))
+      writeToDeltaFile(tempDeltaFileStream, ValueUpdated(key, value))
     }
 
     /** Remove keys that match the following condition */
@@ -126,7 +133,8 @@ private[state] class HDFSBackedStateStoreProvider(
             case Some(KeyRemoved(_)) =>
               // Remove already in update map, no need to change
           }
-          tempDeltaFileStream.writeObject(KeyRemoved(key))
+          // tempDeltaFileStream.writeObject(KeyRemoved(key))
+          writeToDeltaFile(tempDeltaFileStream, KeyRemoved(key))
         }
       }
     }
@@ -136,7 +144,7 @@ private[state] class HDFSBackedStateStoreProvider(
       verify(state == UPDATING, "Cannot commit again after already committed or cancelled")
 
       try {
-        tempDeltaFileStream.close()
+        finalizeDeltaFile(tempDeltaFileStream)
         finalDeltaFile = commitUpdates(newVersion, mapToUpdate, tempDeltaFile)
         state = COMMITTED
         newVersion
@@ -267,10 +275,11 @@ private[state] class HDFSBackedStateStoreProvider(
     synchronized { loadedMaps.get(version) }.getOrElse {
       val mapFromFile = readSnapshotFile(version).getOrElse {
         val prevMap = loadMap(version - 1)
-        val deltaUpdates = readDeltaFile(version)
         val newMap = new MapType()
-        newMap ++= prevMap
         newMap.sizeHint(prevMap.size)
+        newMap ++= prevMap
+        /*
+        val deltaUpdates = readDeltaFile(version)
         while (deltaUpdates.hasNext) {
           deltaUpdates.next match {
             case ValueAdded(key, value) => newMap.put(key, value)
@@ -278,6 +287,8 @@ private[state] class HDFSBackedStateStoreProvider(
             case KeyRemoved(key) => newMap.remove(key)
           }
         }
+        */
+        updateFromDeltaFile(version, newMap)
         newMap
       }
       loadedMaps.put(version, mapFromFile)
@@ -285,20 +296,79 @@ private[state] class HDFSBackedStateStoreProvider(
     }
   }
 
-  private def readDeltaFile(version: Long): Iterator[StoreUpdate] = {
+  private def writeToDeltaFile(output: DataOutputStream, update: StoreUpdate): Unit = {
+
+    def writeUpdate(key: UnsafeRow, value: UnsafeRow): Unit = {
+      val keyBytes = key.getBytes()
+      val valueBytes = value.getBytes()
+      output.writeInt(keyBytes.size)
+      output.write(keyBytes)
+      output.writeInt(valueBytes.size)
+      output.write(valueBytes)
+    }
+
+    def writeRemove(key: UnsafeRow): Unit = {
+      val keyBytes = key.getBytes()
+      output.writeInt(keyBytes.size)
+      output.write(keyBytes)
+      output.writeInt(-1)
+    }
+
+    update match {
+      case ValueAdded(key, value) =>
+        writeUpdate(key, value)
+      case ValueUpdated(key, value) =>
+        writeUpdate(key, value)
+      case KeyRemoved(key) =>
+        writeRemove(key)
+    }
+  }
+
+  private def finalizeDeltaFile(output: DataOutputStream): Unit = {
+    output.writeInt(-1)  // Write this magic number to signify end of file
+    output.close()
+  }
+
+  private def updateFromDeltaFile(version: Long, map: MapType): Unit = {
     val fileToRead = deltaFile(version)
     if (!fs.exists(fileToRead)) {
       throw new IllegalStateException(
-        s"Cannot read delta file $fileToRead of $this: $fileToRead does not exist")
+        s"Error reading delta file $fileToRead of $this: $fileToRead does not exist")
     }
-    val deser = serializer.newInstance()
-    var deserStream: DeserializationStream = null
-    deserStream = deser.deserializeStream(fs.open(fileToRead))
-    val iter = deserStream.asIterator.asInstanceOf[Iterator[StoreUpdate]]
-    CompletionIterator[StoreUpdate, Iterator[StoreUpdate]](
-    iter, {
-      deserStream.close()
-    })
+    var input: DataInputStream = null
+    try {
+      input = fs.open(fileToRead)
+      var eof = false
+
+      while(!eof) {
+        val keySize = input.readInt()
+        if (keySize == -1) {
+          eof = true
+        } else if (keySize < 0) {
+          throw new Exception(
+            s"Error reading delta file $fileToRead of $this: key size cannot be $keySize")
+        } else {
+          val keyRowBuffer = new Array[Byte](keySize)
+          ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
+
+          val keyRow = new UnsafeRow(keySchema.fields.length)
+          keyRow.pointTo(keyRowBuffer, keySize)
+
+          val valueSize = input.readInt()
+          if (valueSize < 0) {
+            map.remove(keyRow)
+          } else {
+            val valueRowBuffer = new Array[Byte](valueSize)
+            ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
+            val valueRow = new UnsafeRow(valueSchema.fields.length)
+            valueRow.pointTo(valueRowBuffer, valueSize)
+            map.put(keyRow, valueRow)
+          }
+        }
+      }
+    } finally {
+      if (input != null) input.close()
+    }
   }
 
   private def writeSnapshotFile(version: Long, map: MapType): Unit = {

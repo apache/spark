@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -34,6 +35,8 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     operatorId: Long,
     storeVersion: Long,
     storeDirectory: String,
+    keySchema: StructType,
+    valueSchema: StructType,
     @transient private val storeCoordinator: Option[StateStoreCoordinator])
   extends RDD[U](dataRDD) {
 
@@ -49,7 +52,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
 
     Utils.tryWithSafeFinally {
       val storeId = StateStoreId(operatorId, partition.index)
-      store = StateStore.get(storeId, storeDirectory, storeVersion)
+      store = StateStore.get(storeId, storeDirectory, keySchema, valueSchema, storeVersion)
       val inputIter = dataRDD.compute(partition, ctxt)
       val outputIter = storeUpdateFunction(store, inputIter)
       assert(store.hasCommitted)

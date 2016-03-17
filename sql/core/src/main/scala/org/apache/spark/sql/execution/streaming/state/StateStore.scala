@@ -22,7 +22,11 @@ import java.util.{Timer, TimerTask}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import com.esotericsoftware.kryo.io.{Output, Input}
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Logging, SparkEnv}
 
 /** Unique identifier for a [[StateStore]] */
@@ -107,12 +111,17 @@ private[state] object StateStore extends Logging {
   @volatile private var managementTask: TimerTask = null
 
   /** Get or create a store associated with the id. */
-  def get(storeId: StateStoreId, directory: String, version: Long): StateStore = {
+  def get(
+    storeId: StateStoreId,
+    directory: String,
+    keySchema: StructType,
+    valueSchema: StructType,
+    version: Long): StateStore = {
     require(version >= 0)
     val storeProvider = loadedProviders.synchronized {
       startIfNeeded()
       val provider = loadedProviders.getOrElseUpdate(
-          storeId, new HDFSBackedStateStoreProvider(storeId, directory))
+        storeId, new HDFSBackedStateStoreProvider(storeId, directory, keySchema, valueSchema))
       reportActiveInstance(storeId)
       provider
     }
