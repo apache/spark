@@ -22,6 +22,7 @@ import java.util.LinkedHashMap
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
@@ -126,10 +127,11 @@ private[spark] class MemoryStore(
    *         iterator or call `close()` on it in order to free the storage memory consumed by the
    *         partially-unrolled block.
    */
-  private[storage] def putIterator(
+  private[storage] def putIterator[T](
       blockId: BlockId,
-      values: Iterator[Any],
-      level: StorageLevel): Either[PartiallyUnrolledIterator, Long] = {
+      values: Iterator[T],
+      level: StorageLevel,
+      classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
 
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
 
@@ -148,7 +150,7 @@ private[spark] class MemoryStore(
     // Keep track of unroll memory used by this particular block / putIterator() operation
     var unrollMemoryUsedByThisBlock = 0L
     // Underlying vector for unrolling the block
-    var vector = new SizeTrackingVector[Any]
+    var vector = new SizeTrackingVector[T]()(classTag)
 
     // Request enough memory to begin unrolling
     keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold)
@@ -261,7 +263,7 @@ private[spark] class MemoryStore(
       None
     } else {
       require(entry.deserialized, "should only call getValues on deserialized blocks")
-      Some(entry.value.asInstanceOf[Array[Any]].iterator)
+      Some(entry.value.asInstanceOf[Array[_]].iterator)
     }
   }
 
@@ -472,16 +474,16 @@ private[spark] class MemoryStore(
  * @param unrolled an iterator for the partially-unrolled values.
  * @param rest the rest of the original iterator passed to [[MemoryStore.putIterator()]].
  */
-private[storage] class PartiallyUnrolledIterator(
+private[storage] class PartiallyUnrolledIterator[T](
     memoryStore: MemoryStore,
     unrollMemory: Long,
-    unrolled: Iterator[Any],
-    rest: Iterator[Any])
-  extends Iterator[Any] {
+    unrolled: Iterator[T],
+    rest: Iterator[T])
+  extends Iterator[T] {
 
   private[this] var unrolledIteratorIsConsumed: Boolean = false
-  private[this] var iter: Iterator[Any] = {
-    val completionIterator = CompletionIterator[Any, Iterator[Any]](unrolled, {
+  private[this] var iter: Iterator[T] = {
+    val completionIterator = CompletionIterator[T, Iterator[T]](unrolled, {
       unrolledIteratorIsConsumed = true
       memoryStore.releaseUnrollMemoryForThisTask(unrollMemory)
     })
@@ -489,7 +491,7 @@ private[storage] class PartiallyUnrolledIterator(
   }
 
   override def hasNext: Boolean = iter.hasNext
-  override def next(): Any = iter.next()
+  override def next(): T = iter.next()
 
   /**
    * Called to dispose of this iterator and free its memory.
