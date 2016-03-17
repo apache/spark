@@ -248,7 +248,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("shuffle hash join") {
-    val N = 2 << 20
+    val N = 4 << 20
     sqlContext.setConf("spark.sql.shuffle.partitions", "2")
     sqlContext.setConf("spark.sql.autoBroadcastJoinThreshold", "10000000")
     runBenchmark("shuffle hash join", N) {
@@ -259,10 +259,10 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /**
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    shuffle hash join:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    shuffle hash join:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    shuffle hash join codegen=false            601 /  934          3.5         286.5       1.0X
-    shuffle hash join codegen=true             489 /  599          4.3         233.2       1.2X
+    shuffle hash join codegen=false          1168 / 1902          3.6         278.6       1.0X
+    shuffle hash join codegen=true            850 / 1196          4.9         202.8       1.4X
      */
   }
 
