@@ -202,3 +202,25 @@ object Unions {
     }
   }
 }
+
+/**
+ * A pattern that finds the original expression from a sequence of casts.
+ */
+object Casts {
+  def unapply(expr: Expression): Option[Attribute] = expr match {
+    case c: Cast => collectCasts(expr)
+    case _ => None
+  }
+
+  private def collectCasts(e: Expression): Option[Attribute] = {
+    if (e.isInstanceOf[Cast]) {
+      collectCasts(e.children(0))
+    } else {
+      if (e.isInstanceOf[Attribute]) {
+        Some(e.asInstanceOf[Attribute])
+      } else {
+        None
+      }
+    }
+  }
+}
