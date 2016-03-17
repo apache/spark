@@ -295,7 +295,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *  malformed string into a new field configured by `spark.sql.columnNameOfCorruptRecord`. When
    *  a schema is set by user, it sets `null` for extra fields.</li>
    *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *  <li>`FAILFAST` throws an exception when it meets corrupted records.</li>
+   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -328,7 +328,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *  malformed string into a new field configured by `spark.sql.columnNameOfCorruptRecord`. When
    *  a schema is set by user, it sets `null` for extra fields.</li>
    *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *  <li>`FAILFAST` throws an exception when it meets corrupted records.</li>
+   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
    *
    * @since 1.6.0
