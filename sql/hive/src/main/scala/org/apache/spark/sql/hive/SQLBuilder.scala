@@ -126,6 +126,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case w: Window =>
       windowToSQL(w)
 
+    case g: Generate =>
+      generateToSQL(g)
+
     case Limit(limitExpr, child) =>
       s"${toSQL(child)} LIMIT ${limitExpr.sql}"
 
@@ -247,6 +250,42 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       toSQL(plan.child),
       if (groupingSQL.isEmpty) "" else "GROUP BY",
       groupingSQL
+    )
+  }
+
+  private def generateToSQL(g: Generate): String = {
+    val columnAliases = g.generatorOutput.map(_.sql).mkString(",")
+
+    val childSQL = if (g.child == OneRowRelation) {
+      // This only happens when we put UDTF in project list and there is no FROM clause. Because we
+      // always generate LATERAL VIEW for `Generate`, here we use a trick to put a dummy sub-query
+      // after FROM clause, so that we can generate a valid LATERAL VIEW SQL string.
+      // For example, if the original SQL is: "SELECT EXPLODE(ARRAY(1, 2))", we will convert in to
+      // LATERAL VIEW format, and generate:
+      // SELECT col FROM (SELECT 1) sub-q0 LATERAL VIEW EXPLODE(ARRAY(1, 2)) sub_q1 AS col
+      s"(SELECT 1) ${SQLBuilder.newSubqueryName}"
+    } else {
+      toSQL(g.child)
+    }
+
+    // The final SQL string for Generate contains 7 parts:
+    //   1. the SQL of child, can be a table or sub-query
+    //   2. the LATERAL VIEW keyword
+    //   3. an optional OUTER keyword
+    //   4. the SQL of generator, e.g. EXPLODE(array_col)
+    //   5. the table alias for output columns of generator.
+    //   6. the AS keyword
+    //   7. the column alias, can be more than one, e.g. AS key, value
+    // An concrete example: "tbl LATERAL VIEW EXPLODE(map_col) sub_q AS key, value", and the builder
+    // will put it in FROM clause later.
+    build(
+      childSQL,
+      "LATERAL VIEW",
+      if (g.outer) "OUTER" else "",
+      g.generator.sql,
+      SQLBuilder.newSubqueryName,
+      "AS",
+      columnAliases
     )
   }
 
@@ -423,6 +462,17 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case j: Join => j.copy(
           left = addSubqueryIfNeeded(j.left),
           right = addSubqueryIfNeeded(j.right))
+
+        // A special case for Generate. When we put UDTF in project list, followed by WHERE, e.g.
+        // SELECT EXPLODE(arr) FROM tbl WHERE id > 1, the Filter operator will be under Generate
+        // operator and we need to add a sub-query between them, as it's not allowed to have a WHERE
+        // before LATERAL VIEW, e.g. "... FROM tbl WHERE id > 2 EXPLODE(arr) ..." is illegal.
+        case g @ Generate(_, _, _, _, _, f: Filter) =>
+          // Add an extra `Project` to make sure we can generate legal SQL string for sub-query,
+          // for example, Subquery -> Filter -> Table will generate "(tbl WHERE ...) AS name", which
+          // misses the SELECT part.
+          val proj = Project(f.output, f)
+          g.copy(child = addSubquery(proj))
       }
     }
 
@@ -431,13 +481,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     }
 
     private def addSubqueryIfNeeded(plan: LogicalPlan): LogicalPlan = plan match {
-      case _: SubqueryAlias => plan
-      case _: Filter => plan
-      case _: Join => plan
-      case _: LocalLimit => plan
-      case _: GlobalLimit => plan
-      case _: SQLTable => plan
-      case OneRowRelation => plan
+      case _: SubqueryAlias |
+           _: Filter |
+           _: Join |
+           _: LocalLimit |
+           _: GlobalLimit |
+           _: SQLTable |
+           _: Generate |
+           OneRowRelation => plan
       case _ => addSubquery(plan)
     }
   }
