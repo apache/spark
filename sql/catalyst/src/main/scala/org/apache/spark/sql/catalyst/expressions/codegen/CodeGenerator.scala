@@ -82,6 +82,8 @@ class CodegenContext {
    *
    * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
    * example, Join), this should be true.
+   *
+   * If an operator starts a new pipeline, this should be reset to false before calling `consume()`.
    */
   var copyResult: Boolean = false
 
