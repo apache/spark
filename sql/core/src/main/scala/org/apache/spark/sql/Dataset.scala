@@ -1060,7 +1060,8 @@ class Dataset[T] private[sql](
    *   ds.groupBy($"department", $"gender").agg(Map( "salary" -> "avg", "age" -> "max"))
    * }}}
    *
-   * @group untypedrel @since 2.0.0
+   * @group untypedrel
+   * @since 2.0.0
    */
   @scala.annotation.varargs def groupBy(cols: Column*): GroupedData = { GroupedData(toDF(),
   cols.map(_.expr), GroupedData.GroupByType) }
