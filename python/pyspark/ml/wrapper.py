@@ -34,10 +34,15 @@ class JavaWrapper(Params):
 
     __metaclass__ = ABCMeta
 
-    #: The wrapped Java companion object. Subclasses should initialize
-    #: it properly. The param values in the Java object should be
-    #: synced with the Python wrapper in fit/transform/evaluate/copy.
-    _java_obj = None
+    def __init__(self):
+        """
+        Initialize the wrapped java object to None
+        """
+        super(JavaWrapper, self).__init__()
+        #: The wrapped Java companion object. Subclasses should initialize
+        #: it properly. The param values in the Java object should be
+        #: synced with the Python wrapper in fit/transform/evaluate/copy.
+        self._java_obj = None
 
     @staticmethod
     def _new_java_obj(java_class, *args):
