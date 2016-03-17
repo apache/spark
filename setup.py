@@ -58,7 +58,7 @@ gcloud = [
 ]
 gcp_api = [
     'httplib2',
-    'google-api-python-client',
+    'google-api-python-client<=1.4.2',
     'oauth2client>=1.5.2, <2.0.0',
 ]
 hdfs = ['snakebite>=2.4.13']
