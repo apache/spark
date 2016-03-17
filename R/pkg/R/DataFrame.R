@@ -2296,12 +2296,8 @@ setMethod("fillna",
 #' }
 setMethod("as.data.frame",
           signature(x = "DataFrame"),
-          function(x, ...) {
-            # Check if additional parameters have been passed
-            if (length(list(...)) > 0) {
-              stop(paste("Unused argument(s): ", paste(list(...), collapse = ", ")))
-            }
-            collect(x)
+          function(x, row.names = NULL, optional = FALSE, ...) {
+            as.data.frame(collect(x), row.names, optional, ...)
           })
 
 #' The specified DataFrame is attached to the R search path. This means that
