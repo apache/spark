@@ -21,7 +21,8 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 
 

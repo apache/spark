@@ -27,8 +27,9 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.xbean.asm5._
 import org.apache.xbean.asm5.Opcodes._
 
-import org.apache.spark.{Logging, SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
 /**

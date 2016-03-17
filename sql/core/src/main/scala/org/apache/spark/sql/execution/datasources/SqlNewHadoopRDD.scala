@@ -32,6 +32,7 @@ import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader

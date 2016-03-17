@@ -17,7 +17,8 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
 import org.apache.spark.partial.PartialResult

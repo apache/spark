@@ -10,13 +10,10 @@ package org.apache.spark.repl
 
 import java.net.URL
 
-import org.apache.spark.annotation.DeveloperApi
-
 import scala.reflect.io.AbstractFile
 import scala.tools.nsc._
 import scala.tools.nsc.backend.JavaPlatform
 import scala.tools.nsc.interpreter._
-
 import scala.tools.nsc.interpreter.{Results => IR}
 import Predef.{println => _, _}
 import java.io.{BufferedReader, FileReader}
@@ -42,9 +39,10 @@ import scala.tools.reflect.StdRuntimeTags._
 import java.lang.{Class => jClass}
 import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 
-import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 

@@ -19,8 +19,9 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, Partitioner, RangePartitioner}
+import org.apache.spark.{Partitioner, RangePartitioner}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
@@ -45,8 +46,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
                           V: ClassTag,
                           P <: Product2[K, V] : ClassTag] @DeveloperApi() (
     self: RDD[P])
-  extends Logging with Serializable
-{
+  extends Logging with Serializable {
   private val ordering = implicitly[Ordering[K]]
 
   /**

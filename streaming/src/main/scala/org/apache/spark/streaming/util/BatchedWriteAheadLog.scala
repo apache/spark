@@ -27,7 +27,8 @@ import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 

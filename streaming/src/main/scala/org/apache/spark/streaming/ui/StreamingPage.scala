@@ -23,7 +23,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable.ArrayBuffer
 import scala.xml.{Node, Unparsed}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 

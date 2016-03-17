@@ -24,8 +24,9 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils

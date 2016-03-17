@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row, SQLContext}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, RowEncoder}
 import org.apache.spark.sql.catalyst.InternalRow

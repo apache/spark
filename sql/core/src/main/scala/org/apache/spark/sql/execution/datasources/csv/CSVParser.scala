@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets
 
 import com.univocity.parsers.csv.{CsvParser, CsvParserSettings, CsvWriter, CsvWriterSettings}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
   * Read and parse CSV-like input

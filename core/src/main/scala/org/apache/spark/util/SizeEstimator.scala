@@ -26,8 +26,8 @@ import scala.runtime.ScalaRunTime
 
 import com.google.common.collect.MapMaker
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.collection.OpenHashSet
 
 /**

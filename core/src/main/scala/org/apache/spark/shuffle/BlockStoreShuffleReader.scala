@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator

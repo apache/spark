@@ -19,10 +19,10 @@ package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils

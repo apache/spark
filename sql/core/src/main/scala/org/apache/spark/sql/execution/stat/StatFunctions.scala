@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.stat
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.{Cast, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation

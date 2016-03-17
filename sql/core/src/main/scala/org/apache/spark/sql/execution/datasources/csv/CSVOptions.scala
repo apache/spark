@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.CompressionCodecs
 
 private[sql] class CSVOptions(

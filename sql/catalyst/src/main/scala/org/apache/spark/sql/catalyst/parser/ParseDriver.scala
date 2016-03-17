@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 import org.antlr.runtime._
 import org.antlr.runtime.tree.CommonTree
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 
 /**

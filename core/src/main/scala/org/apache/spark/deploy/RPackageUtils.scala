@@ -26,8 +26,8 @@ import scala.collection.JavaConverters._
 
 import com.google.common.io.{ByteStreams, Files}
 
-import org.apache.spark.Logging
 import org.apache.spark.api.r.RUtils
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[deploy] object RPackageUtils extends Logging {

@@ -19,9 +19,9 @@ package org.apache.spark.mllib.clustering
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}

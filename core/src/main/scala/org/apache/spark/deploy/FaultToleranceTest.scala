@@ -32,8 +32,9 @@ import scala.sys.process._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

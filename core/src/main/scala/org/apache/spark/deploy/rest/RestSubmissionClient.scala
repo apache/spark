@@ -30,7 +30,8 @@ import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 
-import org.apache.spark.{Logging, SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

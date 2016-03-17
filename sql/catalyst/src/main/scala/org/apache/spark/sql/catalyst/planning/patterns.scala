@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.planning
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
