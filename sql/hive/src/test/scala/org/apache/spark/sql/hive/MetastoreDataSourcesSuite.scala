@@ -916,8 +916,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         options = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "false"),
         isExternal = false)
 
-      // As a proxy for verifying that the table was stored in Hive compatible format, we verify that
-      // each column of the table is of native type StringType.
+      // As a proxy for verifying that the table was stored in Hive compatible format,
+      // we verify that each column of the table is of native type StringType.
       assert(sessionState.catalog.client.getTable("default", "not_skip_hive_metadata").schema
         .forall(column => HiveMetastoreTypes.toDataType(column.dataType) == StringType))
 
