@@ -188,7 +188,7 @@ private[spark] class MemoryStore(
       val entry = if (level.deserialized) {
         new MemoryEntry(arrayValues, SizeEstimator.estimate(arrayValues), deserialized = true)
       } else {
-        val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
+        val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)(classTag)
         new MemoryEntry(bytes, bytes.limit, deserialized = false)
       }
       val size = entry.size

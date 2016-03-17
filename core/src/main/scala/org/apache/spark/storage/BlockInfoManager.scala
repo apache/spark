@@ -44,7 +44,7 @@ import org.apache.spark.internal.Logging
  */
 private[storage] class BlockInfo(
     val level: StorageLevel,
-    val classTag: ClassTag[_ <: Any],
+    val classTag: ClassTag[_],
     val tellMaster: Boolean) {
 
   /**
