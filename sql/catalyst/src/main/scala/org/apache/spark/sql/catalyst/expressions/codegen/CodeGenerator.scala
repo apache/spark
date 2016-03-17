@@ -174,7 +174,6 @@ class CodegenContext {
   /**
     * The map from a variable name to it's next ID.
     */
-  private val freshNameColumnarTypes = new mutable.HashSet[String]
   private val freshNameIds = new mutable.HashMap[String, Int]
   freshNameIds += INPUT_ROW -> 1
 
@@ -192,7 +191,7 @@ class CodegenContext {
     } else {
       s"${freshNamePrefix}_$name"
     }
-    val freshname = if (freshNameIds.contains(fullName)) {
+    if (freshNameIds.contains(fullName)) {
       val id = freshNameIds(fullName)
       freshNameIds(fullName) = id + 1
       s"$fullName$id"
@@ -200,14 +199,6 @@ class CodegenContext {
       freshNameIds += fullName -> 1
       fullName
     }
-    if (columnarInput) {
-      freshNameColumnarTypes.add(freshname)
-    }
-    freshname
-  }
-
-  def isColumnarType(name: String): Boolean = {
-    freshNameColumnarTypes.contains(name)
   }
 
   /**
@@ -221,8 +212,7 @@ class CodegenContext {
       case StringType => s"$input.getUTF8String($ordinal)"
       case BinaryType => s"$input.getBinary($ordinal)"
       case CalendarIntervalType => s"$input.getInterval($ordinal)"
-      case t: StructType => if (!isColumnarType(input)) { s"$input.getStruct($ordinal, ${t.size})" }
-        else { s"$input.getStruct($ordinal)" }
+      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
       case _: ArrayType => s"$input.getArray($ordinal)"
       case _: MapType => s"$input.getMap($ordinal)"
       case NullType => "null"
