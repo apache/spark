@@ -59,7 +59,7 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
+    require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${$(inputCol)} must be a vector column")
@@ -69,9 +69,6 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
     StructType(outputFields)
   }
 
-  override def validateParams(): Unit = {
-    require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
-  }
 }
 
 /**

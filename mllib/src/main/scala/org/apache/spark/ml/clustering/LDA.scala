@@ -263,13 +263,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
-  }
-
-  @Since("1.6.0")
-  override def validateParams(): Unit = {
     if (isSet(docConcentration)) {
       if (getDocConcentration.length != 1) {
         require(getDocConcentration.length == getK, s"LDA docConcentration was of length" +
@@ -297,6 +290,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
             s" must be >= 1.  Found value: $getTopicConcentration")
       }
     }
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }
 
   private[clustering] def getOldOptimizer: OldLDAOptimizer = getOptimizer match {

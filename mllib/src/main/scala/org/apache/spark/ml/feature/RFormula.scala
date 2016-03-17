@@ -167,7 +167,6 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     if (hasLabelCol(schema)) {
       StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
     } else {
@@ -200,7 +199,6 @@ class RFormulaModel private[feature](
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     checkCanTransform(schema)
     val withFeatures = pipelineModel.transformSchema(schema)
     if (hasLabelCol(withFeatures)) {
@@ -263,7 +261,6 @@ private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
   }
 
@@ -312,7 +309,6 @@ private class VectorAttributeRewriter(
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     StructType(
       schema.fields.filter(_.name != vectorCol) ++
       schema.fields.filter(_.name == vectorCol))

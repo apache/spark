@@ -66,7 +66,6 @@ class OneHotEncoder(override val uid: String) extends Transformer
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
 

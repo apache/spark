@@ -99,7 +99,6 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     if (fitting) {
       SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
