@@ -113,7 +113,6 @@ private[tree] class EntropyAggregator(numClasses: Int)
   def getCalculator(allStats: Array[Double], offset: Int): EntropyCalculator = {
     new EntropyCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
-
 }
 
 /**
