@@ -46,7 +46,9 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Internal catalog for managing table and database states.
    */
-  //lazy val sessionCatalog = new SessionCatalog(ctx.externalCatalog)
+  lazy val sessionCatalog = new SessionCatalog(ctx.externalCatalog)
+
+  // TODO: remove this; right now it's only used in RefreshTable.
   lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   /**
@@ -63,14 +65,14 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    */
   lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
+    new Analyzer(sessionCatalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(catalog))
+      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, sessionCatalog))
     }
   }
 

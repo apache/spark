@@ -35,8 +35,14 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   }
 
   /**
+   * Internal catalog for managing table and database states.
+   */
+  override lazy val sessionCatalog = new HiveSessionCatalog(ctx, ctx.externalCatalog)
+
+  /**
    * A metadata catalog that points to the Hive metastore.
    */
+  // TODO: remove this
   override lazy val catalog = new HiveMetastoreCatalog(ctx.metadataHive, ctx) with OverrideCatalog
 
   /**
@@ -51,7 +57,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    * An analyzer that uses the Hive metastore.
    */
   override lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
+    new Analyzer(sessionCatalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.CreateTables ::
@@ -61,7 +67,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(PreWriteCheck(catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck(conf, sessionCatalog))
     }
   }
 

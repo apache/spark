@@ -397,6 +397,24 @@ class SessionCatalogSuite extends SparkFunSuite {
       TableIdentifier("tbl1", Some("db2")), alias = Some(alias)) == relationWithAlias)
   }
 
+  test("table exists") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    assert(catalog.tableExists(TableIdentifier("tbl1", Some("db2"))))
+    assert(catalog.tableExists(TableIdentifier("tbl2", Some("db2"))))
+    assert(!catalog.tableExists(TableIdentifier("tbl3", Some("db2"))))
+    assert(!catalog.tableExists(TableIdentifier("tbl1", Some("db1"))))
+    assert(!catalog.tableExists(TableIdentifier("tbl2", Some("db1"))))
+    // If database is explicitly specified, do not check temporary tables
+    val tempTable = Range(1, 10, 1, 10, Seq())
+    catalog.createTempTable("tbl3", tempTable, ignoreIfExists = false)
+    assert(!catalog.tableExists(TableIdentifier("tbl3", Some("db2"))))
+    // If database is not explicitly specified, check the current database
+    catalog.setCurrentDatabase("db2")
+    assert(catalog.tableExists(TableIdentifier("tbl1")))
+    assert(catalog.tableExists(TableIdentifier("tbl2")))
+    assert(catalog.tableExists(TableIdentifier("tbl3")))
+  }
+
   test("list tables without pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val tempTable = Range(1, 10, 2, 10, Seq())

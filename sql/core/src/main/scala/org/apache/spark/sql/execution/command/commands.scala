@@ -299,7 +299,7 @@ case class DescribeCommand(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val relation = sqlContext.sessionState.catalog.lookupRelation(table)
+    val relation = sqlContext.sessionState.sessionCatalog.lookupRelation(table)
     relation.schema.fields.map { field =>
       val cmtKey = "comment"
       val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
@@ -330,10 +330,12 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
   override def run(sqlContext: SQLContext): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sqlContext.
-    val rows = sqlContext.sessionState.catalog.getTables(databaseName).map {
-      case (tableName, isTemporary) => Row(tableName, isTemporary)
+    val catalog = sqlContext.sessionState.sessionCatalog
+    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
+    val rows = sqlContext.sessionState.sessionCatalog.listTables(db).map { t =>
+      val isTemp = t.database.isEmpty
+      Row(t.table, isTemp)
     }
-
     rows
   }
 }
@@ -417,7 +419,7 @@ case class DescribeFunction(
 case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.setCurrentDatabase(databaseName)
+    sqlContext.sessionState.sessionCatalog.setCurrentDatabase(databaseName)
     Seq.empty[Row]
   }
 

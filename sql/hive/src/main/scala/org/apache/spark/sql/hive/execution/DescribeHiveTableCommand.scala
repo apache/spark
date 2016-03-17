@@ -43,7 +43,7 @@ case class DescribeHiveTableCommand(
     // For other tables, delegate to DescribeCommand.
 
     // In the future, we will consolidate the two and simply report what the catalog reports.
-    sqlContext.sessionState.catalog.lookupRelation(tableId) match {
+    sqlContext.sessionState.sessionCatalog.lookupRelation(tableId) match {
       case table: MetastoreRelation =>
         // Trying to mimic the format of Hive's output. But not exactly the same.
         var results: Seq[(String, String, String)] = Nil

@@ -697,8 +697,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sessionState.catalog.registerTable(
-      sessionState.sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
+    sessionState.sessionCatalog.createTempTable(tableName, df.logicalPlan, ignoreIfExists = true)
   }
 
   /**
@@ -711,7 +710,7 @@ class SQLContext private[sql](
    */
   def dropTempTable(tableName: String): Unit = {
     cacheManager.tryUncacheQuery(table(tableName))
-    sessionState.catalog.unregisterTable(TableIdentifier(tableName))
+    sessionState.sessionCatalog.dropTable(TableIdentifier(tableName), ignoreIfNotExists = true)
   }
 
   /**
@@ -796,7 +795,7 @@ class SQLContext private[sql](
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.newDataFrame(this, sessionState.catalog.lookupRelation(tableIdent))
+    Dataset.newDataFrame(this, sessionState.sessionCatalog.lookupRelation(tableIdent))
   }
 
   /**
@@ -838,9 +837,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(): Array[String] = {
-    sessionState.catalog.getTables(None).map {
-      case (tableName, _) => tableName
-    }.toArray
+    tableNames(sessionState.sessionCatalog.getCurrentDatabase)
   }
 
   /**
@@ -850,9 +847,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    sessionState.catalog.getTables(Some(databaseName)).map {
-      case (tableName, _) => tableName
-    }.toArray
+    sessionState.sessionCatalog.listTables(databaseName).map(_.unquotedString).toArray
   }
 
   @transient
