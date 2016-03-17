@@ -25,7 +25,7 @@ import scala.collection.mutable
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * :: DeveloperApi ::
