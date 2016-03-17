@@ -188,7 +188,7 @@
     </dependency>
     <!-- End Jersey dependencies -->
 
-    <!-- DB2 JCC driver installation instructions
+    <!-- DB2 JCC driver manual installation instructions
 
        You can build this datasource if you:
         1) have the DB2 artifacts installed in a local repo and supply the URL:
