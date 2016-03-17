@@ -19,6 +19,7 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.{ContinuousQueryManager, ExperimentalMethods, SQLContext, UDFRegistration}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegistry, SimpleCatalog}
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -45,6 +46,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Internal catalog for managing table and database states.
    */
+  //lazy val sessionCatalog = new SessionCatalog(ctx.externalCatalog)
   lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   /**
