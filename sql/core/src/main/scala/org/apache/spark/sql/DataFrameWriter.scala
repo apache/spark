@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -241,11 +243,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         className = source,
         options = extraOptions.toMap,
         partitionColumns = normalizedParCols.getOrElse(Nil))
-    // TODO: promote query name out of options
-    // TODO: figure out how metadata dir fits in the API
+
+    val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
+    val checkpointLocation = extraOptions.getOrElse("checkpointLocation", {
+      new Path(df.sqlContext.conf.checkpointLocation, queryName).toUri.toString
+    })
     df.sqlContext.sessionState.continuousQueryManager.startQuery(
-      extraOptions.getOrElse("queryName", StreamExecution.nextName),
-      extraOptions.getOrElse("metadata", sys.error("metadata must be specified")),
+      queryName,
+      checkpointLocation,
       df,
       dataSource.createSink())
   }

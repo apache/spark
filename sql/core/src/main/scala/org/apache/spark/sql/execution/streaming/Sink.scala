@@ -20,14 +20,16 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.DataFrame
 
 /**
- * An interface for systems that can collect the results of a streaming query.
- *
- * TODO
+ * An interface for systems that can collect the results of a streaming query. In order to preserve
+ * exactly once semantics a sink must be idempotent in the face of multiple attempts to add the same
+ * batch.
  */
 trait Sink {
 
   /**
-   * TODO
+   * Adds a batch of data to this sink.  The data for a given `batchId` is deterministic and if
+   * this method is called more than once with the same batchId (which will happen in the case of
+   * failures), then `data` should only be added once.
    */
   def addBatch(batchId: Long, data: DataFrame): Unit
 }

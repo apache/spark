@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.streaming.test
 
-import org.apache.spark.util.Utils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
@@ -25,6 +24,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 object LastOptions {
   var parameters: Map[String, String] = null
@@ -81,7 +81,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .stream()
       .write
       .format("org.apache.spark.sql.streaming.test")
-      .option("metadata", newMetadataDir)
+      .option("checkpointLocation", newMetadataDir)
       .startStream()
       .stop()
   }
@@ -92,7 +92,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .stream()
       .write
       .format("org.apache.spark.sql.streaming.test")
-      .option("metadata", newMetadataDir)
+      .option("checkpointLocation", newMetadataDir)
       .startStream()
       .stop()
   }
@@ -119,7 +119,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .option("opt1", "1")
       .options(Map("opt2" -> "2"))
       .options(map)
-      .option("metadata", newMetadataDir)
+      .option("checkpointLocation", newMetadataDir)
       .startStream()
       .stop()
 
@@ -135,14 +135,14 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
-      .option("metadata", newMetadataDir)
+      .option("checkpointLocation", newMetadataDir)
       .startStream()
       .stop()
     assert(LastOptions.partitionColumns == Nil)
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
-      .option("metadata", newMetadataDir)
+      .option("checkpointLocation", newMetadataDir)
       .partitionBy("a")
       .startStream()
       .stop()
@@ -151,7 +151,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     withSQLConf("spark.sql.caseSensitive" -> "false") {
       df.write
         .format("org.apache.spark.sql.streaming.test")
-        .option("metadata", newMetadataDir)
+        .option("checkpointLocation", newMetadataDir)
         .partitionBy("A")
         .startStream()
         .stop()
@@ -161,7 +161,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     intercept[AnalysisException] {
       df.write
         .format("org.apache.spark.sql.streaming.test")
-        .option("metadata", newMetadataDir)
+        .option("checkpointLocation", newMetadataDir)
         .partitionBy("b")
         .startStream()
         .stop()
@@ -171,7 +171,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
   test("stream paths") {
     val df = sqlContext.read
       .format("org.apache.spark.sql.streaming.test")
-      .option("metadata", newMetadataDir)
+      .option("checkpointLocation", newMetadataDir)
       .stream("/test")
 
     assert(LastOptions.parameters("path") == "/test")
@@ -180,7 +180,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
-      .option("metadata", newMetadataDir)
+      .option("checkpointLocation", newMetadataDir)
       .startStream("/test")
       .stop()
 
@@ -205,7 +205,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .option("intOpt", 56)
       .option("boolOpt", false)
       .option("doubleOpt", 6.7)
-      .option("metadata", newMetadataDir)
+      .option("checkpointLocation", newMetadataDir)
       .startStream("/test")
       .stop()
 
@@ -223,7 +223,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
         .stream("/test")
         .write
         .format("org.apache.spark.sql.streaming.test")
-        .option("metadata", newMetadataDir)
+        .option("checkpointLocation", newMetadataDir)
         .queryName(name)
         .startStream()
     }
@@ -235,7 +235,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
         .stream("/test")
         .write
         .format("org.apache.spark.sql.streaming.test")
-        .option("metadata", newMetadataDir)
+        .option("checkpointLocation", newMetadataDir)
         .startStream()
     }
 

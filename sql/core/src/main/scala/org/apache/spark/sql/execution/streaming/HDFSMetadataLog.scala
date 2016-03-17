@@ -27,7 +27,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SQLContext
@@ -116,7 +116,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
         try {
           // Try to commit the batch
           // It will fail if there is an existing file (someone has committed the batch)
-          logError(s"Attempting to write log ${batchFile(batchId)}")
+          logInfo(s"Attempting to write log ${batchFile(batchId)}")
           fc.rename(tempPath, batchFile(batchId), Options.Rename.NONE)
           return
         } catch {
@@ -165,7 +165,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
       val bytes = IOUtils.toByteArray(input)
       Some(serializer.deserialize[T](ByteBuffer.wrap(bytes)))
     } else {
-      logError(s"Unable to find batch $batchMetadataFile")
+      logDebug(s"Unable to find batch $batchMetadataFile")
       None
     }
   }

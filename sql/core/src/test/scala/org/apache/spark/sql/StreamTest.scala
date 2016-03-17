@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.lang.Thread.UncaughtExceptionHandler
 
-import org.apache.spark.util.Utils
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.experimental.macros
@@ -39,6 +37,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ro
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.util.Utils
 
 /**
  * A framework for implementing tests for streaming queries and sources.

@@ -93,7 +93,8 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
     val newBlocks = batches.slice(startOrdinal, endOrdinal)
 
-    logError(s"Running [$startOrdinal, $endOrdinal] on blocks ${newBlocks.mkString(", ")}")
+    logDebug(
+      s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
     newBlocks
       .map(_.toDF())
       .reduceOption(_ unionAll _)
@@ -126,12 +127,11 @@ class MemorySink(schema: StructType) extends Sink with Logging {
   }
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    logError(s"Committing $batchId to memory")
     if (batchId == batches.size) {
-      logError(s"Growing for batch $batchId")
+      logDebug(s"Committing batch $batchId")
       batches.append(data.collect())
     } else {
-      batches(batchId.toInt) = data.collect()
+      logDebug(s"Skipping already committed batch: $batchId")
     }
   }
 }
