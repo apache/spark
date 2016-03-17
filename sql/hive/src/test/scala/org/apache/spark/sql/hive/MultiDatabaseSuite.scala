@@ -22,13 +22,14 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
 class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  private lazy val df = sqlContext.range(10).coalesce(1)
+  private lazy val df = sqlContext.range(10).coalesce(1).toDF()
 
   private def checkTablePath(dbName: String, tableName: String): Unit = {
-    val metastoreTable = hiveContext.catalog.client.getTable(dbName, tableName)
-    val expectedPath = hiveContext.catalog.client.getDatabase(dbName).location + "/" + tableName
+    val metastoreTable = hiveContext.sessionState.catalog.client.getTable(dbName, tableName)
+    val expectedPath =
+      hiveContext.sessionState.catalog.client.getDatabase(dbName).locationUri + "/" + tableName
 
-    assert(metastoreTable.serdeProperties("path") === expectedPath)
+    assert(metastoreTable.storage.serdeProperties("path") === expectedPath)
   }
 
   test(s"saveAsTable() to non-default database - with USE - Overwrite") {

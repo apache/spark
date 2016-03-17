@@ -17,16 +17,15 @@
 
 package org.apache.spark.ui
 
-import java.net.ServerSocket
+import java.net.{BindException, ServerSocket}
 
 import scala.io.Source
-import scala.util.{Failure, Success, Try}
 
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 
 class UISuite extends SparkFunSuite {
@@ -43,6 +42,20 @@ class UISuite extends SparkFunSuite {
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
+  }
+
+  private def sslDisabledConf(): (SparkConf, SSLOptions) = {
+    val conf = new SparkConf
+    (conf, new SecurityManager(conf).getSSLOptions("ui"))
+  }
+
+  private def sslEnabledConf(): (SparkConf, SSLOptions) = {
+    val conf = new SparkConf()
+      .set("spark.ssl.ui.enabled", "true")
+      .set("spark.ssl.ui.keyStore", "./src/test/resources/spark.keystore")
+      .set("spark.ssl.ui.keyStorePassword", "123456")
+      .set("spark.ssl.ui.keyPassword", "123456")
+    (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 
   ignore("basic ui visibility") {
@@ -70,33 +83,92 @@ class UISuite extends SparkFunSuite {
   }
 
   test("jetty selects different port under contention") {
-    val server = new ServerSocket(0)
-    val startPort = server.getLocalPort
-    val serverInfo1 = JettyUtils.startJettyServer(
-      "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
-    val serverInfo2 = JettyUtils.startJettyServer(
-      "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
-    // Allow some wiggle room in case ports on the machine are under contention
-    val boundPort1 = serverInfo1.boundPort
-    val boundPort2 = serverInfo2.boundPort
-    assert(boundPort1 != startPort)
-    assert(boundPort2 != startPort)
-    assert(boundPort1 != boundPort2)
-    serverInfo1.server.stop()
-    serverInfo2.server.stop()
-    server.close()
+    var server: ServerSocket = null
+    var serverInfo1: ServerInfo = null
+    var serverInfo2: ServerInfo = null
+    val (conf, sslOptions) = sslDisabledConf()
+    try {
+      server = new ServerSocket(0)
+      val startPort = server.getLocalPort
+      serverInfo1 = JettyUtils.startJettyServer(
+        "0.0.0.0", startPort, sslOptions, Seq[ServletContextHandler](), conf)
+      serverInfo2 = JettyUtils.startJettyServer(
+        "0.0.0.0", startPort, sslOptions, Seq[ServletContextHandler](), conf)
+      // Allow some wiggle room in case ports on the machine are under contention
+      val boundPort1 = serverInfo1.boundPort
+      val boundPort2 = serverInfo2.boundPort
+      assert(boundPort1 != startPort)
+      assert(boundPort2 != startPort)
+      assert(boundPort1 != boundPort2)
+    } finally {
+      stopServer(serverInfo1)
+      stopServer(serverInfo2)
+      closeSocket(server)
+    }
+  }
+
+  test("jetty with https selects different port under contention") {
+    var server: ServerSocket = null
+    var serverInfo1: ServerInfo = null
+    var serverInfo2: ServerInfo = null
+    try {
+      server = new ServerSocket(0)
+      val startPort = server.getLocalPort
+      val (conf, sslOptions) = sslEnabledConf()
+      serverInfo1 = JettyUtils.startJettyServer(
+        "0.0.0.0", startPort, sslOptions, Seq[ServletContextHandler](), conf, "server1")
+      serverInfo2 = JettyUtils.startJettyServer(
+        "0.0.0.0", startPort, sslOptions, Seq[ServletContextHandler](), conf, "server2")
+      // Allow some wiggle room in case ports on the machine are under contention
+      val boundPort1 = serverInfo1.boundPort
+      val boundPort2 = serverInfo2.boundPort
+      assert(boundPort1 != startPort)
+      assert(boundPort2 != startPort)
+      assert(boundPort1 != boundPort2)
+    } finally {
+      stopServer(serverInfo1)
+      stopServer(serverInfo2)
+      closeSocket(server)
+    }
   }
 
   test("jetty binds to port 0 correctly") {
-    val serverInfo = JettyUtils.startJettyServer(
-      "0.0.0.0", 0, Seq[ServletContextHandler](), new SparkConf)
-    val server = serverInfo.server
-    val boundPort = serverInfo.boundPort
-    assert(server.getState === "STARTED")
-    assert(boundPort != 0)
-    Try { new ServerSocket(boundPort) } match {
-      case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
-      case Failure(e) =>
+    var socket: ServerSocket = null
+    var serverInfo: ServerInfo = null
+    val (conf, sslOptions) = sslDisabledConf()
+    try {
+      serverInfo = JettyUtils.startJettyServer(
+        "0.0.0.0", 0, sslOptions, Seq[ServletContextHandler](), conf)
+      val server = serverInfo.server
+      val boundPort = serverInfo.boundPort
+      assert(server.getState === "STARTED")
+      assert(boundPort != 0)
+      intercept[BindException] {
+        socket = new ServerSocket(boundPort)
+      }
+    } finally {
+      stopServer(serverInfo)
+      closeSocket(socket)
+    }
+  }
+
+  test("jetty with https binds to port 0 correctly") {
+    var socket: ServerSocket = null
+    var serverInfo: ServerInfo = null
+    try {
+      val (conf, sslOptions) = sslEnabledConf()
+      serverInfo = JettyUtils.startJettyServer(
+        "0.0.0.0", 0, sslOptions, Seq[ServletContextHandler](), conf)
+      val server = serverInfo.server
+      val boundPort = serverInfo.boundPort
+      assert(server.getState === "STARTED")
+      assert(boundPort != 0)
+      intercept[BindException] {
+        socket = new ServerSocket(boundPort)
+      }
+    } finally {
+      stopServer(serverInfo)
+      closeSocket(socket)
     }
   }
 
@@ -116,5 +188,13 @@ class UISuite extends SparkFunSuite {
       val boundPort = ui.boundPort
       assert(splitUIAddress(2).toInt == boundPort)
     }
+  }
+
+  def stopServer(info: ServerInfo): Unit = {
+    if (info != null && info.server != null) info.server.stop
+  }
+
+  def closeSocket(socket: ServerSocket): Unit = {
+    if (socket != null) socket.close
   }
 }

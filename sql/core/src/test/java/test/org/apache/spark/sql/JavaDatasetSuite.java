@@ -67,7 +67,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   private <T1, T2> Tuple2<T1, T2> tuple2(T1 t1, T2 t2) {
-    return new Tuple2<T1, T2>(t1, t2);
+    return new Tuple2<>(t1, t2);
   }
 
   @Test
@@ -111,24 +111,24 @@ public class JavaDatasetSuite implements Serializable {
 
     Dataset<String> parMapped = ds.mapPartitions(new MapPartitionsFunction<String, String>() {
       @Override
-      public Iterable<String> call(Iterator<String> it) throws Exception {
-        List<String> ls = new LinkedList<String>();
+      public Iterator<String> call(Iterator<String> it) {
+        List<String> ls = new LinkedList<>();
         while (it.hasNext()) {
-          ls.add(it.next().toUpperCase());
+          ls.add(it.next().toUpperCase(Locale.ENGLISH));
         }
-        return ls;
+        return ls.iterator();
       }
     }, Encoders.STRING());
     Assert.assertEquals(Arrays.asList("HELLO", "WORLD"), parMapped.collectAsList());
 
     Dataset<String> flatMapped = ds.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String s) throws Exception {
-        List<String> ls = new LinkedList<String>();
+      public Iterator<String> call(String s) {
+        List<String> ls = new LinkedList<>();
         for (char c : s.toCharArray()) {
           ls.add(String.valueOf(c));
         }
-        return ls;
+        return ls.iterator();
       }
     }, Encoders.STRING());
     Assert.assertEquals(
@@ -169,7 +169,7 @@ public class JavaDatasetSuite implements Serializable {
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
-    GroupedDataset<Integer, String> grouped = ds.groupBy(new MapFunction<String, Integer>() {
+    GroupedDataset<Integer, String> grouped = ds.groupByKey(new MapFunction<String, Integer>() {
       @Override
       public Integer call(String v) throws Exception {
         return v.length();
@@ -192,12 +192,12 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> flatMapped = grouped.flatMapGroups(
       new FlatMapGroupsFunction<Integer, String, String>() {
         @Override
-        public Iterable<String> call(Integer key, Iterator<String> values) throws Exception {
+        public Iterator<String> call(Integer key, Iterator<String> values) {
           StringBuilder sb = new StringBuilder(key.toString());
           while (values.hasNext()) {
             sb.append(values.next());
           }
-          return Collections.singletonList(sb.toString());
+          return Collections.singletonList(sb.toString()).iterator();
         }
       },
       Encoders.STRING());
@@ -217,7 +217,7 @@ public class JavaDatasetSuite implements Serializable {
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT());
-    GroupedDataset<Integer, Integer> grouped2 = ds2.groupBy(new MapFunction<Integer, Integer>() {
+    GroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(new MapFunction<Integer, Integer>() {
       @Override
       public Integer call(Integer v) throws Exception {
         return v / 2;
@@ -228,10 +228,7 @@ public class JavaDatasetSuite implements Serializable {
       grouped2,
       new CoGroupFunction<Integer, String, Integer, String>() {
         @Override
-        public Iterable<String> call(
-          Integer key,
-          Iterator<String> left,
-          Iterator<Integer> right) throws Exception {
+        public Iterator<String> call(Integer key, Iterator<String> left, Iterator<Integer> right) {
           StringBuilder sb = new StringBuilder(key.toString());
           while (left.hasNext()) {
             sb.append(left.next());
@@ -240,7 +237,7 @@ public class JavaDatasetSuite implements Serializable {
           while (right.hasNext()) {
             sb.append(right.next());
           }
-          return Collections.singletonList(sb.toString());
+          return Collections.singletonList(sb.toString()).iterator();
         }
       },
       Encoders.STRING());
@@ -253,7 +250,7 @@ public class JavaDatasetSuite implements Serializable {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
     GroupedDataset<Integer, String> grouped =
-      ds.groupBy(length(col("value"))).keyAs(Encoders.INT());
+      ds.groupByKey(length(col("value"))).keyAs(Encoders.INT());
 
     Dataset<String> mapped = grouped.mapGroups(
       new MapGroupsFunction<Integer, String, String>() {
@@ -298,24 +295,21 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> intersected = ds.intersect(ds2);
     Assert.assertEquals(Arrays.asList("xyz"), intersected.collectAsList());
 
-    Dataset<String> unioned = ds.union(ds2);
+    Dataset<String> unioned = ds.union(ds2).union(ds);
     Assert.assertEquals(
-      Arrays.asList("abc", "abc", "xyz", "xyz", "foo", "foo"),
+      Arrays.asList("abc", "abc", "xyz", "xyz", "foo", "foo", "abc", "abc", "xyz"),
       unioned.collectAsList());
 
     Dataset<String> subtracted = ds.subtract(ds2);
     Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
   }
 
-  private <T> Set<T> toSet(List<T> records) {
-    Set<T> set = new HashSet<T>();
-    for (T record : records) {
-      set.add(record);
-    }
-    return set;
+  private static <T> Set<T> toSet(List<T> records) {
+    return new HashSet<>(records);
   }
 
-  private <T> Set<T> asSet(T... records) {
+  @SafeVarargs
+  private static <T> Set<T> asSet(T... records) {
     return toSet(Arrays.asList(records));
   }
 
@@ -416,7 +410,7 @@ public class JavaDatasetSuite implements Serializable {
       Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
     Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
 
-    GroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupBy(
+    GroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupByKey(
       new MapFunction<Tuple2<String, Integer>, String>() {
         @Override
         public String call(Tuple2<String, Integer> value) throws Exception {
@@ -471,6 +465,9 @@ public class JavaDatasetSuite implements Serializable {
 
     @Override
     public boolean equals(Object other) {
+      if (this == other) return true;
+      if (other == null || getClass() != other.getClass()) return false;
+
       return this.value.equals(((KryoSerializable) other).value);
     }
 
@@ -489,6 +486,9 @@ public class JavaDatasetSuite implements Serializable {
 
     @Override
     public boolean equals(Object other) {
+      if (this == other) return true;
+      if (other == null || getClass() != other.getClass()) return false;
+
       return this.value.equals(((JavaSerializable) other).value);
     }
 
@@ -532,7 +532,7 @@ public class JavaDatasetSuite implements Serializable {
     Encoders.kryo(PrivateClassTest.class);
   }
 
-  public class SimpleJavaBean implements Serializable {
+  public static class SimpleJavaBean implements Serializable {
     private boolean a;
     private int b;
     private byte[] c;
@@ -615,7 +615,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class SimpleJavaBean2 implements Serializable {
+  public static class SimpleJavaBean2 implements Serializable {
     private Timestamp a;
     private Date b;
     private java.math.BigDecimal c;
@@ -637,7 +637,7 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
 
-      SimpleJavaBean that = (SimpleJavaBean) o;
+      SimpleJavaBean2 that = (SimpleJavaBean2) o;
 
       if (!a.equals(that.a)) return false;
       if (!b.equals(that.b)) return false;
@@ -653,7 +653,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class NestedJavaBean implements Serializable {
+  public static class NestedJavaBean implements Serializable {
     private SimpleJavaBean a;
 
     public SimpleJavaBean getA() {
@@ -748,7 +748,7 @@ public class JavaDatasetSuite implements Serializable {
     ds.collect();
   }
 
-  public class SmallBean implements Serializable {
+  public static class SmallBean implements Serializable {
     private String a;
 
     private int b;
@@ -783,7 +783,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class NestedSmallBean implements Serializable {
+  public static class NestedSmallBean implements Serializable {
     private SmallBean f;
 
     public SmallBean getF() {
@@ -828,7 +828,7 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
-      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       SmallBean smallBean = new SmallBean();
@@ -845,7 +845,7 @@ public class JavaDatasetSuite implements Serializable {
     {
       Row row = new GenericRow(new Object[] { null });
 
-      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       NestedSmallBean nestedSmallBean = new NestedSmallBean();
@@ -853,9 +853,7 @@ public class JavaDatasetSuite implements Serializable {
     }
 
     nullabilityCheck.expect(RuntimeException.class);
-    nullabilityCheck.expectMessage(
-      "Null value appeared in non-nullable field " +
-        "test.org.apache.spark.sql.JavaDatasetSuite$SmallBean.b of type int.");
+    nullabilityCheck.expectMessage("Null value appeared in non-nullable field");
 
     {
       Row row = new GenericRow(new Object[] {
@@ -864,7 +862,7 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
-      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       ds.collect();

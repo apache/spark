@@ -38,8 +38,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{IntegralType, StringType}
 
 /**
- * A shim that defines the interface between ClientWrapper and the underlying Hive library used to
- * talk to the metastore. Each Hive version has its own implementation of this class, defining
+ * A shim that defines the interface between [[HiveClientImpl]] and the underlying Hive library used
+ * to talk to the metastore. Each Hive version has its own implementation of this class, defining
  * version-specific version of needed functions.
  *
  * The guideline for writing shims is:
@@ -52,7 +52,6 @@ private[client] sealed abstract class Shim {
   /**
    * Set the current SessionState to the given SessionState. Also, set the context classloader of
    * the current thread to the one set in the HiveConf of this given `state`.
-   * @param state
    */
   def setCurrentSessionState(state: SessionState): Unit
 

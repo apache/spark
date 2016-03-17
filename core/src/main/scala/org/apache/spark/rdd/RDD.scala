@@ -37,7 +37,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
@@ -85,10 +85,14 @@ abstract class RDD[T: ClassTag](
   private def sc: SparkContext = {
     if (_sc == null) {
       throw new SparkException(
-        "RDD transformations and actions can only be invoked by the driver, not inside of other " +
-        "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid because " +
-        "the values transformation and count action cannot be performed inside of the rdd1.map " +
-        "transformation. For more information, see SPARK-5063.")
+        "This RDD lacks a SparkContext. It could happen in the following cases: \n(1) RDD " +
+        "transformations and actions are NOT invoked by the driver, but inside of other " +
+        "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid " +
+        "because the values transformation and count action cannot be performed inside of the " +
+        "rdd1.map transformation. For more information, see SPARK-5063.\n(2) When a Spark " +
+        "Streaming job recovers from checkpoint, this exception will be hit if a reference to " +
+        "an RDD not defined by the streaming job is used in DStream operations. For more " +
+        "information, See SPARK-13758.")
     }
     _sc
   }
@@ -112,6 +116,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
+   *
+   * The partitions in this array must satisfy the following property:
+   *   `rdd.partitions.zipWithIndex.forall { case (partition, index) => partition.index == index }`
    */
   protected def getPartitions: Array[Partition]
 
@@ -237,6 +244,10 @@ abstract class RDD[T: ClassTag](
     checkpointRDD.map(_.partitions).getOrElse {
       if (partitions_ == null) {
         partitions_ = getPartitions
+        partitions_.zipWithIndex.foreach { case (partition, index) =>
+          require(partition.index == index,
+            s"partitions($index).partition == ${partition.index}, but it should equal $index")
+        }
       }
       partitions_
     }
@@ -265,7 +276,7 @@ abstract class RDD[T: ClassTag](
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
-      SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)
+      getOrCompute(split, context)
     } else {
       computeOrReadCheckpoint(split, context)
     }
@@ -304,6 +315,35 @@ abstract class RDD[T: ClassTag](
       firstParent[T].iterator(split, context)
     } else {
       compute(split, context)
+    }
+  }
+
+  /**
+   * Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached.
+   */
+  private[spark] def getOrCompute(partition: Partition, context: TaskContext): Iterator[T] = {
+    val blockId = RDDBlockId(id, partition.index)
+    var readCachedBlock = true
+    // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
+    SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, () => {
+      readCachedBlock = false
+      computeOrReadCheckpoint(partition, context)
+    }) match {
+      case Left(blockResult) =>
+        if (readCachedBlock) {
+          val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
+          existingMetrics.incBytesReadInternal(blockResult.bytes)
+          new InterruptibleIterator[T](context, blockResult.data.asInstanceOf[Iterator[T]]) {
+            override def next(): T = {
+              existingMetrics.incRecordsReadInternal(1)
+              delegate.next()
+            }
+          }
+        } else {
+          new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
+        }
+      case Right(iter) =>
+        new InterruptibleIterator(context, iter.asInstanceOf[Iterator[T]])
     }
   }
 
@@ -473,6 +513,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a fixed-size sampled subset of this RDD in an array
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    *
    * @param withReplacement whether sampling is done with replacement
    * @param num size of the returned sample
@@ -679,7 +722,7 @@ abstract class RDD[T: ClassTag](
    *                        An example of pipe the RDD data of groupBy() in a streaming way,
    *                        instead of constructing a huge String to concat all the elements:
    *                        def printRDDElement(record:(String, Seq[String]), f:String=&gt;Unit) =
-   *                          for (e &lt;- record._2){f(e)}
+   *                          for (e &lt;- record._2) {f(e)}
    * @param separateWorkingDir Use separate working directories for each task.
    * @return the result RDD
    */
@@ -829,6 +872,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an array that contains all of the elements in this RDD.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def collect(): Array[T] = withScope {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
@@ -960,7 +1006,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
-   * given associative and commutative function and a neutral "zero value". The function
+   * given associative function and a neutral "zero value". The function
    * op(t1, t2) is allowed to modify t1 and return it as its result value to avoid object
    * allocation; however, it should not modify t2.
    *
@@ -1195,6 +1241,9 @@ abstract class RDD[T: ClassTag](
    * results from that partition to estimate the number of additional partitions needed to satisfy
    * the limit.
    *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
+   *
    * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
@@ -1256,6 +1305,9 @@ abstract class RDD[T: ClassTag](
    *   // returns Array(6, 5)
    * }}}
    *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
+   *
    * @param num k, the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
@@ -1275,6 +1327,9 @@ abstract class RDD[T: ClassTag](
    *   sc.parallelize(Seq(2, 3, 4, 5, 6)).takeOrdered(2)
    *   // returns Array(2, 3)
    * }}}
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    *
    * @param num k, the number of elements to return
    * @param ord the implicit ordering for T
@@ -1535,6 +1590,15 @@ abstract class RDD[T: ClassTag](
 
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
+  // Whether to checkpoint all ancestor RDDs that are marked for checkpointing. By default,
+  // we stop as soon as we find the first such RDD, an optimization that allows us to write
+  // less data but is not safe for all workloads. E.g. in streaming we may checkpoint both
+  // an RDD and its parent in every batch, in which case the parent may never be checkpointed
+  // and its lineage never truncated, leading to OOMs in the long run (SPARK-6847).
+  private val checkpointAllMarkedAncestors =
+    Option(sc.getLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS))
+      .map(_.toBoolean).getOrElse(false)
+
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassTag]: RDD[U] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
@@ -1578,6 +1642,13 @@ abstract class RDD[T: ClassTag](
       if (!doCheckpointCalled) {
         doCheckpointCalled = true
         if (checkpointData.isDefined) {
+          if (checkpointAllMarkedAncestors) {
+            // TODO We can collect all the RDDs that needs to be checkpointed, and then checkpoint
+            // them in parallel.
+            // Checkpoint parents first because our lineage will be truncated after we
+            // checkpoint ourselves
+            dependencies.foreach(_.rdd.doCheckpoint())
+          }
           checkpointData.get.checkpoint()
         } else {
           dependencies.foreach(_.rdd.doCheckpoint())
@@ -1696,6 +1767,9 @@ abstract class RDD[T: ClassTag](
  * key-value-pair RDDs, and enabling extra functionalities such as [[PairRDDFunctions.reduceByKey]].
  */
 object RDD {
+
+  private[spark] val CHECKPOINT_ALL_MARKED_ANCESTORS =
+    "spark.checkpoint.checkpointAllMarkedAncestors"
 
   // The following implicit functions were in SparkContext before 1.3 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find

@@ -22,7 +22,7 @@ if sys.version >= '3':
     basestring = str
     long = int
 
-from pyspark import since
+from pyspark import copy_func, since
 from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.types import *
@@ -219,17 +219,17 @@ class Column(object):
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
         >>> df.select(df.r.getField("b")).show()
-        +----+
-        |r[b]|
-        +----+
-        |   b|
-        +----+
+        +---+
+        |r.b|
+        +---+
+        |  b|
+        +---+
         >>> df.select(df.r.a).show()
-        +----+
-        |r[a]|
-        +----+
-        |   1|
-        +----+
+        +---+
+        |r.a|
+        +---+
+        |  1|
+        +---+
         """
         return self[name]
 
@@ -337,7 +337,7 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
-    astype = cast
+    astype = copy_func(cast, sinceversion=1.4, doc=":func:`astype` is an alias for :func:`cast`.")
 
     @since(1.3)
     def between(self, lowerBound, upperBound):
@@ -346,12 +346,12 @@ class Column(object):
         expression is between the given columns.
 
         >>> df.select(df.name, df.age.between(2, 4)).show()
-        +-----+--------------------------+
-        | name|((age >= 2) && (age <= 4))|
-        +-----+--------------------------+
-        |Alice|                      true|
-        |  Bob|                     false|
-        +-----+--------------------------+
+        +-----+---------------------------+
+        | name|((age >= 2) AND (age <= 4))|
+        +-----+---------------------------+
+        |Alice|                       true|
+        |  Bob|                      false|
+        +-----+---------------------------+
         """
         return (self >= lowerBound) & (self <= upperBound)
 

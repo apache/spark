@@ -162,7 +162,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     val ratingType = schema($(ratingCol)).dataType
@@ -220,7 +219,6 @@ class ALSModel private[ml] (
 
   @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
@@ -392,6 +390,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
       .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType), r)
+      .rdd
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
@@ -496,7 +495,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     }
 
     /**
-     * Solves a nonnegative least squares problem with L2 regularizatin:
+     * Solves a nonnegative least squares problem with L2 regularization:
      *
      *   min_x_  norm(A x - b)^2^ + lambda * n * norm(x)^2^
      *   subject to x >= 0
@@ -1301,7 +1300,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
    * Partitioner used by ALS. We requires that getPartition is a projection. That is, for any key k,
-   * we have getPartition(getPartition(k)) = getPartition(k). Since the the default HashPartitioner
+   * we have getPartition(getPartition(k)) = getPartition(k). Since the default HashPartitioner
    * satisfies this requirement, we simply use a type alias here.
    */
   private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner

@@ -23,12 +23,13 @@ import org.apache.spark.sql.SQLContext;
 
 // $example on$
 import java.util.Arrays;
+import java.util.List;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.PolynomialExpansion;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.Metadata;
@@ -58,11 +59,11 @@ public class JavaPolynomialExpansionExample {
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
     });
 
-    DataFrame df = jsql.createDataFrame(data, schema);
-    DataFrame polyDF = polyExpansion.transform(df);
+    Dataset<Row> df = jsql.createDataFrame(data, schema);
+    Dataset<Row> polyDF = polyExpansion.transform(df);
 
-    Row[] row = polyDF.select("polyFeatures").take(3);
-    for (Row r : row) {
+    List<Row> rows = polyDF.select("polyFeatures").takeAsList(3);
+    for (Row r : rows) {
       System.out.println(r.get(0));
     }
     // $example off$

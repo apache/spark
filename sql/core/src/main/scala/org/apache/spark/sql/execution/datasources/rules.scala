@@ -32,15 +32,12 @@ private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[Logica
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
       try {
-        val resolved = ResolvedDataSource(
+        val dataSource = DataSource(
           sqlContext,
-          userSpecifiedSchema = None,
-          partitionColumns = Array(),
-          bucketSpec = None,
-          provider = u.tableIdentifier.database.get,
-          options = Map("path" -> u.tableIdentifier.table))
-        val plan = LogicalRelation(resolved.relation)
-        u.alias.map(a => Subquery(u.alias.get, plan)).getOrElse(plan)
+          paths = u.tableIdentifier.table :: Nil,
+          className = u.tableIdentifier.database.get)
+        val plan = LogicalRelation(dataSource.resolveRelation())
+        u.alias.map(a => SubqueryAlias(u.alias.get, plan)).getOrElse(plan)
       } catch {
         case e: ClassNotFoundException => u
         case e: Exception =>
@@ -130,7 +127,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         LogicalRelation(r: HadoopFsRelation, _, _), part, query, overwrite, _) =>
         // We need to make sure the partition columns specified by users do match partition
         // columns of the relation.
-        val existingPartitionColumns = r.partitionColumns.fieldNames.toSet
+        val existingPartitionColumns = r.partitionSchema.fieldNames.toSet
         val specifiedPartitionColumns = part.keySet
         if (existingPartitionColumns != specifiedPartitionColumns) {
           failAnalysis(s"Specified partition columns " +
@@ -142,7 +139,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         }
 
         PartitioningUtils.validatePartitionColumnDataTypes(
-          r.schema, part.keySet.toArray, catalog.conf.caseSensitiveAnalysis)
+          r.schema, part.keySet.toSeq, catalog.conf.caseSensitiveAnalysis)
 
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
@@ -171,7 +168,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
         if (c.mode == SaveMode.Overwrite && catalog.tableExists(c.tableIdent)) {
           // Need to remove SubQuery operator.
-          EliminateSubQueries(catalog.lookupRelation(c.tableIdent)) match {
+          EliminateSubqueryAliases(catalog.lookupRelation(c.tableIdent)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation, _, _) =>

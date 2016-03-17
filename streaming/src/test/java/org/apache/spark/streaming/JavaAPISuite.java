@@ -18,7 +18,7 @@
 package org.apache.spark.streaming;
 
 import java.io.*;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -271,12 +271,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<String> mapped = stream.mapPartitions(
         new FlatMapFunction<Iterator<String>, String>() {
           @Override
-          public Iterable<String> call(Iterator<String> in) {
+          public Iterator<String> call(Iterator<String> in) {
             StringBuilder out = new StringBuilder();
             while (in.hasNext()) {
               out.append(in.next().toUpperCase(Locale.ENGLISH));
             }
-            return Arrays.asList(out.toString());
+            return Arrays.asList(out.toString()).iterator();
           }
         });
     JavaTestUtils.attachTestOutputStream(mapped);
@@ -759,8 +759,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaDStream<String> flatMapped = stream.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Arrays.asList(x.split("(?!^)"));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(x.split("(?!^)")).iterator();
       }
     });
     JavaTestUtils.attachTestOutputStream(flatMapped);
@@ -846,12 +846,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairDStream<Integer, String> flatMapped = stream.flatMapToPair(
       new PairFlatMapFunction<String, Integer, String>() {
         @Override
-        public Iterable<Tuple2<Integer, String>> call(String in) {
+        public Iterator<Tuple2<Integer, String>> call(String in) {
           List<Tuple2<Integer, String>> out = new ArrayList<>();
           for (String letter: in.split("(?!^)")) {
             out.add(new Tuple2<>(in.length(), letter));
           }
-          return out;
+          return out.iterator();
         }
       });
     JavaTestUtils.attachTestOutputStream(flatMapped);
@@ -1019,13 +1019,13 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairDStream<Integer, String> reversed = pairStream.mapPartitionsToPair(
         new PairFlatMapFunction<Iterator<Tuple2<String, Integer>>, Integer, String>() {
           @Override
-          public Iterable<Tuple2<Integer, String>> call(Iterator<Tuple2<String, Integer>> in) {
+          public Iterator<Tuple2<Integer, String>> call(Iterator<Tuple2<String, Integer>> in) {
             List<Tuple2<Integer, String>> out = new LinkedList<>();
             while (in.hasNext()) {
               Tuple2<String, Integer> next = in.next();
               out.add(next.swap());
             }
-            return out;
+            return out.iterator();
           }
         });
 
@@ -1089,12 +1089,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairDStream<Integer, String> flatMapped = pairStream.flatMapToPair(
         new PairFlatMapFunction<Tuple2<String, Integer>, Integer, String>() {
           @Override
-          public Iterable<Tuple2<Integer, String>> call(Tuple2<String, Integer> in) {
+          public Iterator<Tuple2<Integer, String>> call(Tuple2<String, Integer> in) {
             List<Tuple2<Integer, String>> out = new LinkedList<>();
             for (Character s : in._1().toCharArray()) {
               out.add(new Tuple2<>(in._2(), s.toString()));
             }
-            return out;
+            return out.iterator();
           }
         });
     JavaTestUtils.attachTestOutputStream(flatMapped);
@@ -1866,7 +1866,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         @Override
         public Iterable<String> call(InputStream in) throws IOException {
           List<String> out = new ArrayList<>();
-          try (BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
+          try (BufferedReader reader = new BufferedReader(
+              new InputStreamReader(in, StandardCharsets.UTF_8))) {
             for (String line; (line = reader.readLine()) != null;) {
               out.add(line);
             }
@@ -1930,7 +1931,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   private static List<List<String>> fileTestPrepare(File testDir) throws IOException {
     File existingFile = new File(testDir, "0");
-    Files.write("0\n", existingFile, Charset.forName("UTF-8"));
+    Files.write("0\n", existingFile, StandardCharsets.UTF_8);
     Assert.assertTrue(existingFile.setLastModified(1000));
     Assert.assertEquals(1000, existingFile.lastModified());
     return Arrays.asList(Arrays.asList("0"));

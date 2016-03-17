@@ -54,8 +54,9 @@ class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: Boosti
 
   /**
    * Method to train a gradient boosting model
+   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return a gradient boosted trees model that can be used for prediction
+   * @return GradientBoostedTreesModel that can be used for prediction.
    */
   @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
@@ -82,13 +83,14 @@ class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: Boosti
 
   /**
    * Method to validate a gradient boosting model
+   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @param validationInput Validation dataset.
    *                        This dataset should be different from the training dataset,
    *                        but it should follow the same distribution.
    *                        E.g., these two datasets could be created from an original dataset
    *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
-   * @return a gradient boosted trees model that can be used for prediction
+   * @return GradientBoostedTreesModel that can be used for prediction.
    */
   @Since("1.4.0")
   def runWithValidation(
@@ -132,7 +134,7 @@ object GradientBoostedTrees extends Logging {
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
    * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @return a gradient boosted trees model that can be used for prediction
+   * @return GradientBoostedTreesModel that can be used for prediction.
    */
   @Since("1.2.0")
   def train(
@@ -153,11 +155,11 @@ object GradientBoostedTrees extends Logging {
 
   /**
    * Internal method for performing regression using trees as base learners.
-   * @param input training dataset
-   * @param validationInput validation dataset, ignored if validate is set to false.
-   * @param boostingStrategy boosting parameters
-   * @param validate whether or not to use the validation dataset.
-   * @return a gradient boosted trees model that can be used for prediction
+   * @param input Training dataset.
+   * @param validationInput Validation dataset, ignored if validate is set to false.
+   * @param boostingStrategy Boosting parameters.
+   * @param validate Whether or not to use the validation dataset.
+   * @return GradientBoostedTreesModel that can be used for prediction.
    */
   private def boost(
       input: RDD[LabeledPoint],

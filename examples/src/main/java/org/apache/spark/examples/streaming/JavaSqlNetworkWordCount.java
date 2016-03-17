@@ -17,9 +17,9 @@
 
 package org.apache.spark.examples.streaming;
 
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.regex.Pattern;
-
-import com.google.common.collect.Lists;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
@@ -27,8 +27,9 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.VoidFunction2;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.api.java.StorageLevels;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.Time;
@@ -72,8 +73,8 @@ public final class JavaSqlNetworkWordCount {
         args[0], Integer.parseInt(args[1]), StorageLevels.MEMORY_AND_DISK_SER);
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Lists.newArrayList(SPACE.split(x));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(SPACE.split(x)).iterator();
       }
     });
 
@@ -92,13 +93,13 @@ public final class JavaSqlNetworkWordCount {
             return record;
           }
         });
-        DataFrame wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRecord.class);
+        Dataset<Row> wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRecord.class);
 
         // Register as table
         wordsDataFrame.registerTempTable("words");
 
         // Do word count on table using SQL and print it
-        DataFrame wordCountsDataFrame =
+        Dataset<Row> wordCountsDataFrame =
             sqlContext.sql("select word, count(*) as total from words group by word");
         System.out.println("========= " + time + "=========");
         wordCountsDataFrame.show();

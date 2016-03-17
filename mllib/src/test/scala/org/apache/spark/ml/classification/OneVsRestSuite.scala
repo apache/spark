@@ -81,9 +81,9 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val predictionColSchema = transformedDataset.schema(ovaModel.getPredictionCol)
     assert(MetadataUtils.getNumClasses(predictionColSchema) === Some(3))
 
-    val ovaResults = transformedDataset
-      .select("prediction", "label")
-      .map(row => (row.getDouble(0), row.getDouble(1)))
+    val ovaResults = transformedDataset.select("prediction", "label").rdd.map {
+      row => (row.getDouble(0), row.getDouble(1))
+    }
 
     val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.1).setNumIterations(100)
@@ -168,7 +168,7 @@ private class MockLogisticRegression(uid: String) extends LogisticRegression(uid
 
   setMaxIter(1)
 
-  override protected def train(dataset: DataFrame): LogisticRegressionModel = {
+  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
     val labelSchema = dataset.schema($(labelCol))
     // check for label attribute propagation.
     assert(MetadataUtils.getNumClasses(labelSchema).forall(_ == 2))

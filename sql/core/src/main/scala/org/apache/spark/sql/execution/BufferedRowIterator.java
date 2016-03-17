@@ -17,38 +17,61 @@
 
 package org.apache.spark.sql.execution;
 
+import java.io.IOException;
+import java.util.LinkedList;
+
 import scala.collection.Iterator;
 
+import org.apache.spark.TaskContext;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 
 /**
  * An iterator interface used to pull the output from generated function for multiple operators
  * (whole stage codegen).
- *
- * TODO: replaced it by batched columnar format.
  */
-public class BufferedRowIterator {
-  protected InternalRow currentRow;
-  protected Iterator<InternalRow> input;
+public abstract class BufferedRowIterator {
+  protected LinkedList<InternalRow> currentRows = new LinkedList<>();
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
 
-  public boolean hasNext() {
-    if (currentRow == null) {
+  public boolean hasNext() throws IOException {
+    if (currentRows.isEmpty()) {
       processNext();
     }
-    return currentRow != null;
+    return !currentRows.isEmpty();
   }
 
   public InternalRow next() {
-    InternalRow r = currentRow;
-    currentRow = null;
-    return r;
+    return currentRows.remove();
   }
 
-  public void setInput(Iterator<InternalRow> iter) {
-    input = iter;
+  /**
+   * Initializes from array of iterators of InternalRow.
+   */
+  public abstract void init(Iterator<InternalRow> iters[]);
+
+  /**
+   * Append a row to currentRows.
+   */
+  protected void append(InternalRow row) {
+    currentRows.add(row);
+  }
+
+  /**
+   * Returns whether `processNext()` should stop processing next row from `input` or not.
+   *
+   * If it returns true, the caller should exit the loop (return from processNext()).
+   */
+  protected boolean shouldStop() {
+    return !currentRows.isEmpty();
+  }
+
+  /**
+   * Increase the peak execution memory for current task.
+   */
+  protected void incPeakExecutionMemory(long size) {
+    TaskContext.get().taskMetrics().incPeakExecutionMemory(size);
   }
 
   /**
@@ -56,9 +79,5 @@ public class BufferedRowIterator {
    *
    * After it's called, if currentRow is still null, it means no more rows left.
    */
-  protected void processNext() {
-    if (input.hasNext()) {
-      currentRow = input.next();
-    }
-  }
+  protected abstract void processNext() throws IOException;
 }

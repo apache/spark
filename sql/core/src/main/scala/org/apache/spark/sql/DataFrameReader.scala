@@ -21,25 +21,21 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.util.StringUtils
-
 import org.apache.spark.{Logging, Partition}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystQl}
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.execution.datasources.json.JSONRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
+import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
  * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
- * key-value stores, etc). Use [[SQLContext.read]] to access this.
+ * key-value stores, etc) or data streams. Use [[SQLContext.read]] to access this.
  *
  * @since 1.4.0
  */
@@ -79,6 +75,27 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Boolean): DataFrameReader = option(key, value.toString)
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Long): DataFrameReader = option(key, value.toString)
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Double): DataFrameReader = option(key, value.toString)
+
+  /**
    * (Scala-specific) Adds input options for the underlying data source.
    *
    * @since 1.4.0
@@ -105,14 +122,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def load(): DataFrame = {
-    val resolved = ResolvedDataSource(
-      sqlContext,
-      userSpecifiedSchema = userSpecifiedSchema,
-      partitionColumns = Array.empty[String],
-      bucketSpec = None,
-      provider = source,
-      options = extraOptions.toMap)
-    DataFrame(sqlContext, LogicalRelation(resolved.relation))
+    val dataSource =
+      DataSource(
+        sqlContext,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = extraOptions.toMap)
+    Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -133,7 +149,42 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
+    if (paths.isEmpty) {
+      sqlContext.emptyDataFrame
+    } else {
+      sqlContext.baseRelationToDataFrame(
+        DataSource.apply(
+          sqlContext,
+          paths = paths,
+          userSpecifiedSchema = userSpecifiedSchema,
+          className = source,
+          options = extraOptions.toMap).resolveRelation())
+    }
+  }
+
+  /**
+   * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
+   * (e.g. external key-value stores).
+   *
+   * @since 2.0.0
+   */
+  def stream(): DataFrame = {
+    val dataSource =
+      DataSource(
+        sqlContext,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = extraOptions.toMap)
+    Dataset.newDataFrame(sqlContext, StreamingRelation(dataSource.createSource()))
+  }
+
+  /**
+   * Loads input in as a [[DataFrame]], for data streams that read from some path.
+   *
+   * @since 2.0.0
+   */
+  def stream(path: String): DataFrame = {
+    option("path", path).stream()
   }
 
   /**
@@ -165,7 +216,6 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
-   *
    * @since 1.4.0
    */
   def jdbc(
@@ -252,6 +302,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
+   * <li>`floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal
+   * type</li>
    * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
    * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
    * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
@@ -288,15 +340,32 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    sqlContext.baseRelationToDataFrame(
-      new JSONRelation(
-        Some(jsonRDD),
-        maybeDataSchema = userSpecifiedSchema,
-        maybePartitionSpec = None,
-        userDefinedPartitionColumns = None,
-        parameters = extraOptions.toMap)(sqlContext)
-    )
+    val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
+    val schema = userSpecifiedSchema.getOrElse {
+      InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)
+    }
+
+    Dataset.newDataFrame(
+      sqlContext,
+      LogicalRDD(
+        schema.toAttributes,
+        JacksonParser.parse(
+          jsonRDD,
+          schema,
+          sqlContext.conf.columnNameOfCorruptRecord,
+          parsedOptions))(sqlContext))
   }
+
+  /**
+   * Loads a CSV file and returns the result as a [[DataFrame]].
+   *
+   * This function goes through the input once to determine the input schema. To avoid going
+   * through the entire data once, specify the schema explicitly using [[schema]].
+   *
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
 
   /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
@@ -306,20 +375,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   @scala.annotation.varargs
   def parquet(paths: String*): DataFrame = {
-    if (paths.isEmpty) {
-      sqlContext.emptyDataFrame
-    } else {
-      val globbedPaths = paths.flatMap { path =>
-        val hdfsPath = new Path(path)
-        val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(qualified)
-      }.toArray
-
-      sqlContext.baseRelationToDataFrame(
-        new ParquetRelation(
-          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
-    }
+    format("parquet").load(paths: _*)
   }
 
   /**
@@ -337,13 +393,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    DataFrame(sqlContext,
-      sqlContext.catalog.lookupRelation(sqlContext.sqlParser.parseTableIdentifier(tableName)))
+    Dataset.newDataFrame(sqlContext,
+      sqlContext.sessionState.catalog.lookupRelation(
+        sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName)))
   }
 
   /**
-   * Loads a text file and returns a [[DataFrame]] with a single string column named "value".
-   * Each line in the text file is a new row in the resulting DataFrame. For example:
+   * Loads a text file and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * Each line in the text file is a new row in the resulting Dataset. For example:
    * {{{
    *   // Scala:
    *   sqlContext.read.text("/path/to/spark/README.md")
@@ -353,10 +412,12 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * }}}
    *
    * @param paths input path
-   * @since 1.6.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  def text(paths: String*): Dataset[String] = {
+    format("text").load(paths : _*).as[String](sqlContext.implicits.newStringEncoder)
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

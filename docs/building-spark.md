@@ -7,7 +7,7 @@ redirect_from: "building-with-maven.html"
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-Building Spark using Maven requires Maven 3.3.3 or newer and Java 7+.
+Building Spark using Maven requires Maven 3.3.9 or newer and Java 7+.
 The Spark build can supply a suitable Maven binary; see below.
 
 # Building with `build/mvn`
@@ -35,12 +35,12 @@ to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/
 
 To create a Spark distribution like those distributed by the
 [Spark Downloads](http://spark.apache.org/downloads.html) page, and that is laid out so as
-to be runnable, use `make-distribution.sh` in the project root directory. It can be configured
+to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
+    ./dev/make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
 
-For more information on usage, run `./make-distribution.sh --help`
+For more information on usage, run `./dev/make-distribution.sh --help`
 
 # Setting up Maven's Memory Usage
 
@@ -108,19 +108,17 @@ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests 
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 0.13.1 bindings.
+By default Spark will build with Hive 1.2.1 bindings.
 {% highlight bash %}
-# Apache Hadoop 2.4.X with Hive 13 support
+# Apache Hadoop 2.4.X with Hive 1.2.1 support
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
 
-# Building for Scala 2.11
-To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
+# Building for Scala 2.10
+To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:
 
-    ./dev/change-scala-version.sh 2.11
-    mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
-
-Spark does not yet support its JDBC component for Scala 2.11.
+    ./dev/change-scala-version.sh 2.10
+    mvn -Pyarn -Phadoop-2.4 -Dscala-2.10 -DskipTests clean package
 
 # Spark Tests in Maven
 

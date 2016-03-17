@@ -26,7 +26,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -231,6 +231,8 @@ private[spark] class ExecutorAllocationManager(
       }
     }
     executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+
+    client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
   }
 
   /**

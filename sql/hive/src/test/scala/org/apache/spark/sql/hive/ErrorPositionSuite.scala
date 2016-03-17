@@ -19,18 +19,32 @@ package org.apache.spark.sql.hive
 
 import scala.util.Try
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.parser.ParseDriver
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
+class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterEach {
   import hiveContext.implicits._
 
-  before {
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    if (sqlContext.tableNames().contains("src")) {
+      sqlContext.dropTempTable("src")
+    }
+    Seq((1, "")).toDF("key", "value").registerTempTable("src")
     Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")
+  }
+
+  override protected def afterEach(): Unit = {
+    try {
+      sqlContext.dropTempTable("src")
+      sqlContext.dropTempTable("dupAttributes")
+    } finally {
+      super.afterEach()
+    }
   }
 
   positionTest("ambiguous attribute reference 1",

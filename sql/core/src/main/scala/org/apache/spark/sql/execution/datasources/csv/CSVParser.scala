@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.{ByteArrayOutputStream, OutputStreamWriter, StringReader}
+import java.nio.charset.StandardCharsets
 
 import com.univocity.parsers.csv.{CsvParser, CsvParserSettings, CsvWriter, CsvWriterSettings}
 
@@ -29,7 +30,7 @@ import org.apache.spark.Logging
   * @param params Parameters object
   * @param headers headers for the columns
   */
-private[sql] abstract class CsvReader(params: CSVParameters, headers: Seq[String]) {
+private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) {
 
   protected lazy val parser: CsvParser = {
     val settings = new CsvParserSettings()
@@ -58,7 +59,7 @@ private[sql] abstract class CsvReader(params: CSVParameters, headers: Seq[String
   * @param params Parameters object for configuration
   * @param headers headers for columns
   */
-private[sql] class LineCsvWriter(params: CSVParameters, headers: Seq[String]) extends Logging {
+private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
 
@@ -76,7 +77,7 @@ private[sql] class LineCsvWriter(params: CSVParameters, headers: Seq[String]) ex
 
   def writeRow(row: Seq[String], includeHeader: Boolean): String = {
     val buffer = new ByteArrayOutputStream()
-    val outputWriter = new OutputStreamWriter(buffer)
+    val outputWriter = new OutputStreamWriter(buffer, StandardCharsets.UTF_8)
     val writer = new CsvWriter(outputWriter, writerSettings)
 
     if (includeHeader) {
@@ -93,7 +94,7 @@ private[sql] class LineCsvWriter(params: CSVParameters, headers: Seq[String]) ex
   *
   * @param params Parameters object
   */
-private[sql] class LineCsvReader(params: CSVParameters)
+private[sql] class LineCsvReader(params: CSVOptions)
   extends CsvReader(params, null) {
   /**
     * parse a line
@@ -118,7 +119,7 @@ private[sql] class LineCsvReader(params: CSVParameters)
   */
 private[sql] class BulkCsvReader(
     iter: Iterator[String],
-    params: CSVParameters,
+    params: CSVOptions,
     headers: Seq[String])
   extends CsvReader(params, headers) with Iterator[Array[String]] {
 

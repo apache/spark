@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
-private[json] object InferSchema {
+private[sql] object InferSchema {
 
   /**
    * Infer the type of a collection of json records in three stages:
@@ -134,8 +134,12 @@ private[json] object InferSchema {
             val v = parser.getDecimalValue
             DecimalType(v.precision(), v.scale())
           case FLOAT | DOUBLE =>
-            // TODO(davies): Should we use decimal if possible?
-            DoubleType
+            if (configOptions.floatAsBigDecimal) {
+              val v = parser.getDecimalValue
+              DecimalType(v.precision(), v.scale())
+            } else {
+              DoubleType
+            }
         }
 
       case VALUE_TRUE | VALUE_FALSE => BooleanType

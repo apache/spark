@@ -25,8 +25,6 @@ import scala.collection.mutable.HashSet
 
 import breeze.linalg.{squaredDistance, DenseVector, Vector}
 
-import org.apache.spark.SparkContext._
-
 /**
  * K-means clustering.
  *
@@ -43,7 +41,7 @@ object LocalKMeans {
 
   def generateData: Array[DenseVector[Double]] = {
     def generatePoint(i: Int): DenseVector[Double] = {
-      DenseVector.fill(D){rand.nextDouble * R}
+      DenseVector.fill(D) {rand.nextDouble * R}
     }
     Array.tabulate(N)(generatePoint)
   }

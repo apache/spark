@@ -67,6 +67,13 @@ setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 # @export
 setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("freqItems") })
 
+# @rdname statfunctions
+# @export
+setGeneric("approxQuantile",
+           function(x, col, probabilities, relativeError) {
+             standardGeneric("approxQuantile")
+           })
+
 # @rdname distinct
 # @export
 setGeneric("distinct", function(x, numPartitions = 1) { standardGeneric("distinct") })
@@ -77,7 +84,7 @@ setGeneric("filterRDD", function(x, f) { standardGeneric("filterRDD") })
 
 # @rdname first
 # @export
-setGeneric("first", function(x) { standardGeneric("first") })
+setGeneric("first", function(x, ...) { standardGeneric("first") })
 
 # @rdname flatMap
 # @export
@@ -418,15 +425,34 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 
 #' @rdname statfunctions
 #' @export
-setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
+setGeneric("cov", function(x, ...) {standardGeneric("cov") })
 
 #' @rdname statfunctions
 #' @export
 setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 
+#' @rdname statfunctions
+#' @export
+setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
+
+#' @rdname statfunctions
+#' @export
+setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
+
 #' @rdname summary
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
+
+#' @rdname drop
+#' @export
+setGeneric("drop", function(x, ...) { standardGeneric("drop") })
+
+#' @rdname dropduplicates
+#' @export
+setGeneric("dropDuplicates",
+           function(x, colNames = columns(x)) {
+             standardGeneric("dropDuplicates")
+           })
 
 #' @rdname nafunctions
 #' @export
@@ -528,7 +554,7 @@ setGeneric("sampleBy", function(x, col, fractions, seed) { standardGeneric("samp
 
 #' @rdname saveAsTable
 #' @export
-setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
+setGeneric("saveAsTable", function(df, tableName, source = NULL, mode = "error", ...) {
   standardGeneric("saveAsTable")
 })
 
@@ -541,7 +567,15 @@ setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
 
 #' @rdname write.df
 #' @export
-setGeneric("saveDF", function(df, path, ...) { standardGeneric("saveDF") })
+setGeneric("write.df", function(df, path, source = NULL, mode = "error", ...) {
+  standardGeneric("write.df")
+})
+
+#' @rdname write.df
+#' @export
+setGeneric("saveDF", function(df, path, source = NULL, mode = "error", ...) {
+  standardGeneric("saveDF")
+})
 
 #' @rdname write.json
 #' @export
@@ -573,7 +607,7 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 
 #' @rdname showDF
 #' @export
-setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
+setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
 
 # @rdname subset
 # @export
@@ -581,7 +615,7 @@ setGeneric("subset", function(x, ...) { standardGeneric("subset") })
 
 #' @rdname agg
 #' @export
-setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
+setGeneric("summarize", function(x, ...) { standardGeneric("summarize") })
 
 #' @rdname summary
 #' @export
@@ -855,7 +889,7 @@ setGeneric("lag", function(x, ...) { standardGeneric("lag") })
 
 #' @rdname last
 #' @export
-setGeneric("last", function(x) { standardGeneric("last") })
+setGeneric("last", function(x, ...) { standardGeneric("last") })
 
 #' @rdname last_day
 #' @export
@@ -1133,3 +1167,11 @@ setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
+
+#' @rdname kmeans
+#' @export
+setGeneric("kmeans")
+
+#' @rdname fitted
+#' @export
+setGeneric("fitted")

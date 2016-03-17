@@ -168,7 +168,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
   private  String[] createTopicAndSendData(String topic) {
     String[] data = { topic + "-1", topic + "-2", topic + "-3"};
-    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.createTopic(topic, 1);
     kafkaTestUtils.sendMessages(topic, data);
     return data;
   }

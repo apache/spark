@@ -86,11 +86,11 @@ class CoGroupedRDD[K: ClassTag](
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Array[CoGroup]
 
-  private var serializer: Option[Serializer] = None
+  private var serializer: Serializer = SparkEnv.get.serializer
 
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): CoGroupedRDD[K] = {
-    this.serializer = Option(serializer)
+    this.serializer = serializer
     this
   }
 
@@ -153,8 +153,7 @@ class CoGroupedRDD[K: ClassTag](
     }
     context.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
-    context.internalMetricsToAccumulators(
-      InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
+    context.taskMetrics().incPeakExecutionMemory(map.peakMemoryUsedBytes)
     new InterruptibleIterator(context,
       map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
   }

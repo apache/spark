@@ -17,13 +17,13 @@
 
 package org.apache.spark.streaming.rdd
 
-import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.rdd.{MapPartitionsRDD, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{State, StateImpl, Time}
 import org.apache.spark.streaming.util.{EmptyStateMap, StateMap}
 import org.apache.spark.util.Utils
@@ -57,7 +57,8 @@ private[streaming] object MapWithStateRDDRecord {
       val returned = mappingFunction(batchTime, key, Some(value), wrappedState)
       if (wrappedState.isRemoved) {
         newStateMap.remove(key)
-      } else if (wrappedState.isUpdated || timeoutThresholdTime.isDefined) {
+      } else if (wrappedState.isUpdated
+          || (wrappedState.exists && timeoutThresholdTime.isDefined)) {
         newStateMap.put(key, wrappedState.get(), batchTime.milliseconds)
       }
       mappedData ++= returned
