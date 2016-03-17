@@ -1362,10 +1362,7 @@ class Analyzer(
     val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
     val joinPairs = leftKeys.zip(rightKeys)
 
-    // Add joinPairs to joinConditions
-    val newCondition = (condition ++ joinPairs.map {
-      case (l, r) => EqualTo(l, r)
-    }).reduceOption(And)
+    val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
 
     // columns not in joinPairs
     val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
