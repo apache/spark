@@ -242,8 +242,8 @@ object DecimalPrecision extends Rule[LogicalPlan] {
    * side is a decimal.
    */
   private val nondecimalAndDecimal: PartialFunction[Expression, Expression] = {
-    // Promote integers inside a binary expression with fixed-precision decimals to decimals,
-    // and fixed-precision decimals in an expression with floats / doubles to doubles
+    // Promote different data types inside a binary expression
+    // with fixed-precision decimals to decimals
     case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
       (left.dataType, right.dataType) match {
         case (t: NumericType, DecimalType.Fixed(p, s)) if isNumericType(t) =>
