@@ -98,7 +98,7 @@ object ParquetReadBenchmark {
         parquetReaderBenchmark.addCase("ParquetReader Non-Vectorized") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             reader.initialize(p, ("id" :: Nil).asJava)
 
             while (reader.nextKeyValue()) {
@@ -113,7 +113,7 @@ object ParquetReadBenchmark {
         parquetReaderBenchmark.addCase("ParquetReader Vectorized") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -136,7 +136,7 @@ object ParquetReadBenchmark {
         parquetReaderBenchmark.addCase("ParquetReader Vectorized -> Row") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -207,7 +207,7 @@ object ParquetReadBenchmark {
           var sum1 = 0L
           var sum2 = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             reader.initialize(p, null)
             while (reader.nextKeyValue()) {
               val record = reader.getCurrentValue.asInstanceOf[InternalRow]
@@ -319,7 +319,7 @@ object ParquetReadBenchmark {
         benchmark.addCase("PR Vectorized") { num =>
           var sum = 0
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             try {
               reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -340,7 +340,7 @@ object ParquetReadBenchmark {
         benchmark.addCase("PR Vectorized (Null Filtering)") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             try {
               reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
               val batch = reader.resultBatch()
