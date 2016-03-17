@@ -208,7 +208,9 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-12469 Add consistent accumulators to Spark
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$deserialized_="),
-        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$value__=")
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$value__="),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.setRDDPartitionInfo"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.getRDDPartitionInfo")
       ) ++ Seq(
         // SPARK-12689 Migrate DDL parsing to the newly absorbed parser
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.execution.datasources.DDLParser"),
