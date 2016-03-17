@@ -209,9 +209,11 @@ private[sql] case class DataSourceScan(
     ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
     ctx.addMutableState("int", idx, s"$idx = 0;")
 
-    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
+    val exprCols = output.zipWithIndex.map(
+      x => new InputReference(x._2, x._1.dataType, x._1.nullable, true))
+    val exprRows = output.zipWithIndex.map(
+      x => new InputReference(x._2, x._1.dataType, x._1.nullable, false))
     val row = ctx.freshName("row")
-    val col = ctx.freshName("col", columnarInput = true)
     val numOutputRows = metricTerm(ctx, "numOutputRows")
 
     // The input RDD can either return (all) ColumnarBatches or InternalRows. We determine this
@@ -222,10 +224,10 @@ private[sql] case class DataSourceScan(
 
     ctx.INPUT_COL_ORDINAL = rowidx
     ctx.currentVars = null
-    val colVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2, columnarInput = true))
+    val colVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2))
     val colDeclarations = colVars.zipWithIndex.map(x => {
       (columnVectorClz + " " + x._1 + " = " + batch + ".column(" + x._2 + ");\n").trim} )
-    val columns1 = (exprs zip colVars).map(x => {
+    val columns1 = (exprCols zip colVars).map(x => {
       ctx.INPUT_ROW = x._2
       x._1.gen(ctx)
     })
@@ -255,7 +257,7 @@ private[sql] case class DataSourceScan(
 
     ctx.INPUT_ROW = row
     ctx.currentVars = null
-    val columns2 = exprs.map(_.gen(ctx))
+    val columns2 = exprRows.map(_.gen(ctx))
     val inputRow = if (outputUnsafeRows) row else null
     val scanRows = ctx.freshName("processRows")
     ctx.addNewFunction(scanRows,

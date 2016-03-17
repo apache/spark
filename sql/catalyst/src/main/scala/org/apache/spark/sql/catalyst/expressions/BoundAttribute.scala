@@ -60,11 +60,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val javaType = ctx.javaType(dataType)
-    val value = if (!ctx.isColumnarType(ctx.INPUT_ROW)) {
-      ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
-    } else {
-      ctx.getValue(ctx.INPUT_ROW, dataType, ctx.INPUT_COL_ORDINAL)
-    }
+    val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
     if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
       val oev = ctx.currentVars(ordinal)
       ev.isNull = oev.isNull
@@ -73,17 +69,10 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       oev.code = ""
       code
     } else if (nullable) {
-      if (!ctx.isColumnarType(ctx.INPUT_ROW)) {
-        s"""
-          boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
-          $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-        """
-      } else {
-        s"""
-          boolean ${ev.isNull} = ${ctx.INPUT_ROW}.getIsNull(${ctx.INPUT_COL_ORDINAL});
-          $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-        """
-      }
+      s"""
+        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
     } else {
       ev.isNull = "false"
       s"""
@@ -113,5 +102,40 @@ object BindReferences extends Logging {
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
+  }
+}
+
+case class InputReference(ordinal: Int, dataType: DataType, nullable: Boolean, isColumn: Boolean)
+  extends LeafExpression {
+
+  override def toString: String = s"input[$ordinal, ${dataType.simpleString}]"
+
+  override def eval(input: InternalRow): Any = {
+    null
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val javaType = ctx.javaType(dataType)
+    val value = if (!isColumn) {
+      ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
+    } else {
+      ctx.getValue(ctx.INPUT_ROW, dataType, ctx.INPUT_COL_ORDINAL)
+    }
+    if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
+      val oev = ctx.currentVars(ordinal)
+      ev.isNull = oev.isNull
+      ev.value = oev.value
+      oev.code
+    } else if (nullable) {
+      s"""
+        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        $javaType ${ev.value} = $value;
+      """
+    }
   }
 }
