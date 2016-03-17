@@ -2179,4 +2179,68 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(4) :: Nil)
     }
   }
+
+  test("join with using clause") {
+    val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
+      ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")
+    val df2 = Seq(("r1c1", "r1c2", "t2r1c3"),
+      ("r2c1", "r2c2", "t2r2c3"), ("r3c1y", "r3c2", "t2r3c3")).toDF("c1", "c2", "c3")
+    val df3 = Seq((null, "r1c2", "t3r1c3"),
+      ("r2c1", "r2c2", "t3r2c3"), ("r3c1y", "r3c2", "t3r3c3")).toDF("c1", "c2", "c3")
+    withTempTable("t1", "t2", "t3") {
+      df1.registerTempTable("t1")
+      df2.registerTempTable("t2")
+      df3.registerTempTable("t3")
+      // inner join with one using column
+      checkAnswer(
+        sql("SELECT * FROM t1 join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") :: Nil)
+
+      // inner join with two using columns
+      checkAnswer(
+        sql("SELECT * FROM t1 join t2 using (c1, c2)"),
+        Row("r1c1", "r1c2", "t1r1c3", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "t2r2c3") :: Nil)
+
+      // Left outer join with one using column.
+      checkAnswer(
+        sql("SELECT * FROM t1 left join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", null, null) :: Nil)
+
+      // Right outer join with one using column.
+      checkAnswer(
+        sql("SELECT * FROM t1 right join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
+          Row("r3c1y", null, null, "r3c2", "t2r3c3") :: Nil)
+
+      // Full outer join with one using column.
+      checkAnswer(
+        sql("SELECT * FROM t1 full outer join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
+          Row("r3c1y", null,
+            null, "r3c2", "t2r3c3") :: Nil)
+
+      // Full outer join with null value in join column.
+      checkAnswer(
+        sql("SELECT * FROM t1 full outer join t3 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", null, null) ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t3r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
+          Row("r3c1y", null, null, "r3c2", "t3r3c3") ::
+          Row(null, null, null, "r1c2", "t3r1c3") :: Nil)
+
+      // Self join with using columns.
+      checkAnswer(
+        sql("SELECT * FROM t1 join t1 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t1r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t1r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
+    }
+  }
 }

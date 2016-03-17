@@ -490,41 +490,12 @@ class Dataset[T] private[sql](
       Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None))
       .analyzed.asInstanceOf[Join]
 
-    val condition = usingColumns.map { col =>
-      catalyst.expressions.EqualTo(
-        withPlan(joined.left).resolve(col),
-        withPlan(joined.right).resolve(col))
-    }.reduceLeftOption[catalyst.expressions.BinaryExpression] { (cond, eqTo) =>
-      catalyst.expressions.And(cond, eqTo)
-    }
-
-    // Project only one of the join columns.
-    val joinedCols = JoinType(joinType) match {
-      case Inner | LeftOuter | LeftSemi =>
-        usingColumns.map(col => withPlan(joined.left).resolve(col))
-      case RightOuter =>
-        usingColumns.map(col => withPlan(joined.right).resolve(col))
-      case FullOuter =>
-        usingColumns.map { col =>
-          val leftCol = withPlan(joined.left).resolve(col).toAttribute.withNullability(true)
-          val rightCol = withPlan(joined.right).resolve(col).toAttribute.withNullability(true)
-          Alias(Coalesce(Seq(leftCol, rightCol)), col)()
-        }
-      case NaturalJoin(_) => sys.error("NaturalJoin with using clause is not supported.")
-    }
-    // The nullability of output of joined could be different than original column,
-    // so we can only compare them by exprId
-    val joinRefs = AttributeSet(condition.toSeq.flatMap(_.references))
-    val resultCols = joinedCols ++ joined.output.filterNot(joinRefs.contains(_))
     withPlan {
-      Project(
-        resultCols,
-        Join(
-          joined.left,
-          joined.right,
-          joinType = JoinType(joinType),
-          condition)
-      )
+      Join(
+        joined.left,
+        joined.right,
+        UsingJoin(JoinType(joinType), usingColumns.map(UnresolvedAttribute(_))),
+        None)
     }
   }
 
