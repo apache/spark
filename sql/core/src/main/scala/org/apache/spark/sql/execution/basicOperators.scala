@@ -21,6 +21,7 @@ import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
+import org.apache.spark.sql.catalyst.planning.Casts
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.types.LongType
@@ -80,11 +81,20 @@ case class Filter(condition: Expression, child: SparkPlan)
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
     case IsNotNull(a) if child.output.contains(a) => true
+    case IsNotNull(a) =>
+      a match {
+        case Casts(a) if child.output.contains(a) => true
+        case _ => false
+      }
     case _ => false
   }
 
-  // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
+  // The columns that will be filtered out by `IsNotNull` could be considered as not nullable.
   private val notNullAttributes = notNullPreds.flatMap(_.references)
+
+  // only the attributes those will be filtered out by `IsNotNull` should be evaluated
+  // before this plan, otherwise we could defer the evaluation until filtering out nulls.
+  override def usedInputs: AttributeSet = AttributeSet(notNullAttributes)
 
   override def output: Seq[Attribute] = {
     child.output.map { a =>
@@ -109,6 +119,9 @@ case class Filter(condition: Expression, child: SparkPlan)
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
+
+    val evaluated =
+      evaluateRequiredVariables(child.output, input, references -- usedInputs)
 
     // filter out the nulls
     val filterOutNull = notNullAttributes.map { a =>
@@ -142,6 +155,7 @@ case class Filter(condition: Expression, child: SparkPlan)
     }
     s"""
        |$filterOutNull
+       |$evaluated
        |$predicates
        |$numOutput.add(1);
        |${consume(ctx, resultVars)}
