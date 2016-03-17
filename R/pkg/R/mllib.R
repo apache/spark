@@ -80,10 +80,14 @@ setMethod("predict", signature(object = "PipelineModel"),
           function(object, newData) {
             modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                      "getModelName", object@model)
-            if (modelName == "NaiveBayesModel") {
+            jdf <- if (modelName == "NaiveBayesModel") {
               newData <- na.omit(newData)
+              callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                          "getNaiveBayesRawLabelsPrediction", object@model, newData@sdf)
+            } else {
+              callJMethod(object@model, "transform", newData@sdf)
             }
-            return(dataFrame(callJMethod(object@model, "transform", newData@sdf)))
+            return(dataFrame(jdf))
           })
 
 #' Get the summary of a model

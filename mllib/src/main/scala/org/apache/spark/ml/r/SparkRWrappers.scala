@@ -24,6 +24,7 @@ import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
 
 private[r] object SparkRWrappers {
   def fitRModelFormula(
@@ -169,6 +170,18 @@ private[r] object SparkRWrappers {
   def getNaiveBayesTheta(model: PipelineModel): Array[Double] = {
     model.stages.last match {
       case m: NaiveBayesModel => m.theta.toArray.map(math.exp)  // Use exp to reveal the probability
+      case other => throw new UnsupportedOperationException(
+        s"NaiveBayesModel required but ${other.getClass.getSimpleName} found.")
+    }
+  }
+
+  def getNaiveBayesRawLabelsPrediction(model: PipelineModel, test: DataFrame): DataFrame = {
+    model.stages.last match {
+      case m: NaiveBayesModel =>
+        val labels = getNaiveBayesLabels(model)
+        val predictRawLabelsUDF = udf { (label: Double) => labels(label.toInt) }
+        model.transform(test)
+          .withColumn("rawLabelsPrediction", predictRawLabelsUDF.apply(col(m.getLabelCol)))
       case other => throw new UnsupportedOperationException(
         s"NaiveBayesModel required but ${other.getClass.getSimpleName} found.")
     }

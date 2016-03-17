@@ -143,12 +143,12 @@ test_that("kmeans", {
 })
 
 test_that("naiveBayes", {
-  training <- createDataFrame(sqlContext, infert)
+  training <- suppressWarnings(createDataFrame(sqlContext, infert))
 
   model <- naiveBayes(education ~ ., data = training, lambda = 1, modelType = "multinomial")
-  sample <- take(select(predict(model, training), "prediction"), 1)
-  expect_equal(typeof(sample$prediction), "double")
-  expect_equal(sample$prediction, 2)
+  sample <- take(select(predict(model, training), "rawLabelsPrediction"), 1)
+  expect_equal(typeof(sample$rawLabelsPrediction), "character")
+  expect_equal(sample$rawLabelsPrediction, "0-5yrs")
 
   # Test summary works on naiveBayes
   summary.model <- summary(model)
@@ -161,6 +161,7 @@ test_that("naiveBayes", {
 
   # Test e1071::naiveBayes
   if (requireNamespace("e1071", quietly = TRUE)) {
-    expect_that(e1071::naiveBayes(education ~ ., data = infert), not(throws_error()))
+    expect_that(m <- e1071::naiveBayes(education ~ ., data = infert), not(throws_error()))
+    expect_equal(as.character(predict(m, infert[1, ])), "0-5yrs")
   }
 })
