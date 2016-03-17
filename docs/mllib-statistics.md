@@ -548,6 +548,8 @@ provides streaming hypothesis testing.
 <div data-lang="java" markdown="1">
 [`StreamingTest`](api/java/index.html#org.apache.spark.mllib.stat.test.StreamingTest)
 provides streaming hypothesis testing.
+
+{% include_example java/org/apache/spark/examples/mllib/JavaStreamingTestExample.java %}
 </div>
 </div>
 
