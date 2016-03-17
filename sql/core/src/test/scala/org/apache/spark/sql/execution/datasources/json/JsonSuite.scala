@@ -964,12 +964,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-13764 Parse modes in JSON data source") {
-    val schema = StructType(
+    val schemaOne = StructType(
       StructField("a", StringType, true) ::
         StructField("b", StringType, true) ::
         StructField("c", StringType, true) :: Nil)
 
-    val malformedSchema = StructType(
+    val schemaTwo = StructType(
         StructField("a", StringType, true) :: Nil)
 
     // `FAILFAST` mode should throw an exception for corrupt records.
@@ -983,7 +983,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val exceptionTwo = intercept[SparkException] {
       sqlContext.read
         .option("mode", "FAILFAST")
-        .schema(malformedSchema)
+        .schema(schemaTwo)
         .json(corruptRecords)
         .collect()
     }
@@ -998,13 +998,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       jsonDFOne,
       Row("str_a_4", "str_b_4", "str_c_4") :: Nil
     )
+    assert(jsonDFOne.schema === schemaOne)
+
     val jsonDFTwo = sqlContext.read
       .option("mode", "DROPMALFORMED")
-      .schema(malformedSchema)
+      .schema(schemaTwo)
       .json(corruptRecords)
     checkAnswer(
       jsonDFTwo,
       Row("str_a_4") :: Nil)
+    assert(jsonDFTwo.schema === schemaTwo)
   }
 
   test("Corrupt records") {
