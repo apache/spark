@@ -674,7 +674,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 /**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
-case object OneRowRelation extends LeafNode {
+case class OneRowRelation() extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
 
