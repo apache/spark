@@ -308,7 +308,8 @@ class HiveTypeCoercionSuite extends PlanTest {
 
     ruleTest(rule,
       If(Literal(true), Literal(Decimal(1)), Cast(Literal(1.0), DecimalType(19, 9))),
-      If(Literal(true), Cast(Literal(Decimal(1)), DecimalType(19, 9)), Cast(Literal(1.0), DecimalType(19, 9)))
+      If(Literal(true), Cast(Literal(Decimal(1)), DecimalType(19, 9)),
+        Cast(Literal(1.0), DecimalType(19, 9)))
     )
   }
 
