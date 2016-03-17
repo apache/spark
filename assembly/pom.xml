@@ -77,7 +77,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <scope>compile</scope>
+      <scope>${hadoop.deps.scope}</scope>
     </dependency>
   </dependencies>
 
