@@ -21,9 +21,10 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{Logging, Partition}
+import org.apache.spark.Partition
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -394,12 +395,15 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def table(tableName: String): DataFrame = {
     Dataset.newDataFrame(sqlContext,
-      sqlContext.catalog.lookupRelation(sqlContext.sqlParser.parseTableIdentifier(tableName)))
+      sqlContext.sessionState.catalog.lookupRelation(
+        sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName)))
   }
 
   /**
-   * Loads a text file and returns a [[DataFrame]] with a single string column named "value".
-   * Each line in the text file is a new row in the resulting DataFrame. For example:
+   * Loads a text file and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * Each line in the text file is a new row in the resulting Dataset. For example:
    * {{{
    *   // Scala:
    *   sqlContext.read.text("/path/to/spark/README.md")
@@ -409,10 +413,12 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * }}}
    *
    * @param paths input path
-   * @since 1.6.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  def text(paths: String*): Dataset[String] = {
+    format("text").load(paths : _*).as[String](sqlContext.implicits.newStringEncoder)
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

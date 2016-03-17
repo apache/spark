@@ -1205,7 +1205,6 @@ private[python] class PythonMLLibAPI extends Serializable {
 private[spark] object SerDe extends Serializable {
 
   val PYSPARK_PACKAGE = "pyspark.mllib"
-  val LATIN1 = "ISO-8859-1"
 
   /**
    * Base class used for pickle
@@ -1253,7 +1252,8 @@ private[spark] object SerDe extends Serializable {
       if (obj.getClass.isArray) {
         obj.asInstanceOf[Array[Byte]]
       } else {
-        obj.asInstanceOf[String].getBytes(LATIN1)
+        // This must be ISO 8859-1 / Latin 1, not UTF-8, to interoperate correctly
+        obj.asInstanceOf[String].getBytes(StandardCharsets.ISO_8859_1)
       }
     }
 

@@ -25,9 +25,10 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst._
@@ -60,6 +61,7 @@ import org.apache.spark.util.Utils
  * @groupname specificdata Specific Data Sources
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
+ * @groupname dataset Custom DataFrame Creation
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
@@ -79,7 +81,7 @@ class SQLContext private[sql](
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
-  // wants to create a new root SQLContext (a SLQContext that is not created by newSession).
+  // wants to create a new root SQLContext (a SQLContext that is not created by newSession).
   private val allowMultipleContexts =
     sparkContext.conf.getBoolean(
       SQLConf.ALLOW_MULTIPLE_CONTEXTS.key,
@@ -120,15 +122,6 @@ class SQLContext private[sql](
   @transient
   protected[sql] lazy val sessionState: SessionState = new SessionState(self)
   protected[sql] def conf: SQLConf = sessionState.conf
-  protected[sql] def catalog: Catalog = sessionState.catalog
-  protected[sql] def functionRegistry: FunctionRegistry = sessionState.functionRegistry
-  protected[sql] def analyzer: Analyzer = sessionState.analyzer
-  protected[sql] def optimizer: Optimizer = sessionState.optimizer
-  protected[sql] def sqlParser: ParserInterface = sessionState.sqlParser
-  protected[sql] def planner: SparkPlanner = sessionState.planner
-  protected[sql] def continuousQueryManager = sessionState.continuousQueryManager
-  protected[sql] def prepareForExecution: RuleExecutor[SparkPlan] =
-    sessionState.prepareForExecution
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -197,7 +190,7 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
+  protected[sql] def parseSql(sql: String): LogicalPlan = sessionState.sqlParser.parsePlan(sql)
 
   protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
 
@@ -244,7 +237,7 @@ class SQLContext private[sql](
    */
   @Experimental
   @transient
-  val experimental: ExperimentalMethods = new ExperimentalMethods(this)
+  def experimental: ExperimentalMethods = sessionState.experimentalMethods
 
   /**
    * :: Experimental ::
@@ -641,7 +634,7 @@ class SQLContext private[sql](
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -687,7 +680,7 @@ class SQLContext private[sql](
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
         tableIdent,
@@ -706,7 +699,8 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
+    sessionState.catalog.registerTable(
+      sessionState.sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
   }
 
   /**
@@ -719,58 +713,58 @@ class SQLContext private[sql](
    */
   def dropTempTable(tableName: String): Unit = {
     cacheManager.tryUncacheQuery(table(tableName))
-    catalog.unregisterTable(TableIdentifier(tableName))
+    sessionState.catalog.unregisterTable(TableIdentifier(tableName))
   }
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in an range from 0 to `end` (exclusive) with step value 1.
    *
-   * @since 1.4.1
-   * @group dataframe
+   * @since 2.0.0
+   * @group dataset
    */
   @Experimental
-  def range(end: Long): DataFrame = range(0, end)
+  def range(end: Long): Dataset[Long] = range(0, end)
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in an range from `start` to `end` (exclusive) with step value 1.
    *
-   * @since 1.4.0
-   * @group dataframe
+   * @since 2.0.0
+   * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long): DataFrame = {
+  def range(start: Long, end: Long): Dataset[Long] = {
     range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
   }
 
   /**
     * :: Experimental ::
-    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
     * in an range from `start` to `end` (exclusive) with an step value.
     *
     * @since 2.0.0
-    * @group dataframe
+    * @group dataset
     */
   @Experimental
-  def range(start: Long, end: Long, step: Long): DataFrame = {
+  def range(start: Long, end: Long, step: Long): Dataset[Long] = {
     range(start, end, step, numPartitions = sparkContext.defaultParallelism)
   }
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in an range from `start` to `end` (exclusive) with an step value, with partition number
    * specified.
    *
-   * @since 1.4.0
-   * @group dataframe
+   * @since 2.0.0
+   * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
-    Dataset.newDataFrame(this, Range(start, end, step, numPartitions))
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Long] = {
+    new Dataset(this, Range(start, end, step, numPartitions), implicits.newLongEncoder)
   }
 
   /**
@@ -800,11 +794,11 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(sqlParser.parseTableIdentifier(tableName))
+    table(sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.newDataFrame(this, catalog.lookupRelation(tableIdent))
+    Dataset.newDataFrame(this, sessionState.catalog.lookupRelation(tableIdent))
   }
 
   /**
@@ -837,9 +831,7 @@ class SQLContext private[sql](
    *
    * @since 2.0.0
    */
-  def streams: ContinuousQueryManager = {
-    continuousQueryManager
-  }
+  def streams: ContinuousQueryManager = sessionState.continuousQueryManager
 
   /**
    * Returns the names of tables in the current database as an array.
@@ -848,7 +840,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(): Array[String] = {
-    catalog.getTables(None).map {
+    sessionState.catalog.getTables(None).map {
       case (tableName, _) => tableName
     }.toArray
   }
@@ -860,7 +852,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    catalog.getTables(Some(databaseName)).map {
+    sessionState.catalog.getTables(Some(databaseName)).map {
       case (tableName, _) => tableName
     }.toArray
   }

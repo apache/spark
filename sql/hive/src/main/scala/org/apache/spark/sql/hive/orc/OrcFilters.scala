@@ -22,7 +22,7 @@ import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.serde2.io.DateWritable
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.sources._
 
 /**

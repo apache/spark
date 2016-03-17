@@ -22,11 +22,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -64,10 +64,10 @@ case class ReusedExchange(override val output: Seq[Attribute], child: Exchange) 
  * Find out duplicated exchanges in the spark plan, then use the same exchange for all the
  * references.
  */
-private[sql] case class ReuseExchange(sqlContext: SQLContext) extends Rule[SparkPlan] {
+case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!sqlContext.conf.exchangeReuseEnabled) {
+    if (!conf.exchangeReuseEnabled) {
       return plan
     }
     // Build a hash map using schema of exchanges to avoid O(N*N) sameResult calls.
