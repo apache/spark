@@ -1347,7 +1347,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
 }
 
 object RewriteAttributes {
-  def execute(outputs: AttributeSet, expr: Expression) = {
+  def execute(outputs: AttributeSet, expr: Expression): Expression = {
     val attributeRewrites = outputs.map(o => o.exprId -> o).toMap
     expr.transform {
       case a: AttributeReference if attributeRewrites.contains(a.exprId) =>
