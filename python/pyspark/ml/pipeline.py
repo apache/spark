@@ -46,9 +46,6 @@ def _stages_py2java(py_stages, cls):
     :return: A Java array of Java Stages.
     """
 
-    for stage in py_stages:
-        assert(isinstance(stage, JavaWrapper),
-               "Python side implementation is not supported in the meta-PipelineStage currently.")
     gateway = SparkContext._gateway
     java_stages = gateway.new_array(cls, len(py_stages))
     for idx, stage in enumerate(py_stages):
