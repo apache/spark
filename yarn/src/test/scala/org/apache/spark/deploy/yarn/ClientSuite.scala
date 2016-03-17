@@ -349,7 +349,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       sparkConf: SparkConf,
       conf: Configuration = new Configuration(),
       args: Array[String] = Array()): Client = {
-    val clientArgs = new ClientArguments(args, sparkConf)
+    val clientArgs = new ClientArguments(args)
     val client = spy(new Client(clientArgs, conf, sparkConf))
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
       any(classOf[Path]), anyShort())
