@@ -90,7 +90,7 @@ private[spark] object InformationGainStats {
  *              minimum number of instances per node
  */
 @DeveloperApi
-private[spark] class ImpurityStats(
+class ImpurityStats(
     val gain: Double,
     val impurity: Double,
     val impurityCalculator: ImpurityCalculator,

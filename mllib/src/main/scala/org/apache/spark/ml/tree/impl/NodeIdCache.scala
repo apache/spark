@@ -172,7 +172,7 @@ private[spark] class NodeIdCache(
 }
 
 @DeveloperApi
-private[spark] object NodeIdCache {
+object NodeIdCache {
   /**
    * Initialize the node Id cache with initial node Id values.
    * @param data The RDD of training rows.
