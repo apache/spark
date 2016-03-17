@@ -374,8 +374,7 @@ object ExcludedDependencies {
 }
 
 /**
- * project only exists to pull previous artifacts of Spark for generating
- * Mima ignores. For more information see: SPARK 2071
+ * Project to pull previous artifacts of Spark for generating Mima excludes.
  */
 object OldDeps {
 
