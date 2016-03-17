@@ -19,12 +19,16 @@ package org.apache.spark.examples.mllib;
 
 
 import org.apache.spark.Accumulator;
+// $example on$
 import org.apache.spark.api.java.function.VoidFunction;
+// $example off$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
+// $example on$
 import org.apache.spark.mllib.stat.test.BinarySample;
 import org.apache.spark.mllib.stat.test.StreamingTest;
 import org.apache.spark.mllib.stat.test.StreamingTestResult;
+// $example off$
 import org.apache.spark.SparkConf;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.Seconds;
