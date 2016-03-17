@@ -126,6 +126,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case w: Window =>
       windowToSQL(w)
 
+    case g: Generate =>
+      generateToSQL(g)
+
     case Limit(limitExpr, child) =>
       s"${toSQL(child)} LIMIT ${limitExpr.sql}"
 
@@ -250,6 +253,30 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     )
   }
 
+  private def generateToSQL(g: Generate): String = {
+    val columnAliases = g.generatorOutput.map(_.sql).mkString(",")
+
+    val childSQL = if (g.child == OneRowRelation) {
+      // This only happens when we put UDTF in project list and there is no FROM clause. Because we
+      // always generate LATERAL VIEW for `Generate`, here we use a trick to put a dummy sub-query
+      // after FROM clause, so that we can generate a valid LATERAL VIEW SQL string.
+      s"(SELECT 1) ${SQLBuilder.newSubqueryName}"
+    }
+    else {
+      toSQL(g.child)
+    }
+
+    build(
+      childSQL,
+      "LATERAL VIEW",
+      if (g.outer) "OUTER" else "",
+      g.generator.sql,
+      SQLBuilder.newSubqueryName,
+      "AS",
+      columnAliases
+    )
+  }
+
   private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
     output1.size == output2.size &&
       output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
@@ -362,6 +389,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         // operators on top of a table relation, merge the sample information into `SQLTable` of
         // that table relation, as we can only convert table sample to standard SQL string.
         ResolveSQLTable,
+        // Re-order operators to let them generate legal SQL string, e.g. we should push down
+        // `Generate` through `Filter`. We should enrich this rule in the future.
+        ReOrderOperators,
         // Insert sub queries on top of operators that need to appear after FROM clause.
         AddSubquery
       )
@@ -394,6 +424,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           Alias(attr, normalizedName(attr))(exprId = attr.exprId)
         }
         addSubquery(Project(aliasedOutput, table))
+      }
+    }
+
+    object ReOrderOperators extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+        case g @ Generate(_, _, _, _, _, f: Filter) =>
+          val newGenerate = g.copy(child = f.child)
+          f.copy(child = newGenerate)
       }
     }
 
@@ -437,6 +475,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       case _: LocalLimit => plan
       case _: GlobalLimit => plan
       case _: SQLTable => plan
+      case _: Generate => plan
       case OneRowRelation => plan
       case _ => addSubquery(plan)
     }
