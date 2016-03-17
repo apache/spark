@@ -168,7 +168,7 @@ class DataFrameReader(object):
                   record and puts the malformed string into a new field configured by \
                  ``spark.sql.columnNameOfCorruptRecord``. When a schema is set by user, it sets \
                  ``null`` for extra fields.
-                *  ``DROPMALFORMED`` : ignores the whole corrupted records and append.
+                *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` throws an exception when it meets corrupted records.
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')

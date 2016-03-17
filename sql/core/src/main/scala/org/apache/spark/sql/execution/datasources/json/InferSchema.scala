@@ -40,7 +40,7 @@ private[sql] object InferSchema {
       configOptions: JSONOptions): StructType = {
     require(configOptions.samplingRatio > 0,
       s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
-    val shouldHandleCorruptRecord = !configOptions.dropMalformed
+    val shouldHandleCorruptRecord = configOptions.permissive
     val schemaData = if (configOptions.samplingRatio > 0.99) {
       json
     } else {
