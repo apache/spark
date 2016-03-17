@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -33,7 +34,10 @@ case class LeftSemiJoinHash(
     rightKeys: Seq[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
+    condition: Option[Expression]) extends BinaryNode with HashJoin {
+
+  override val joinType = LeftSemi
+  override val buildSide = BuildRight
 
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
@@ -47,7 +51,7 @@ case class LeftSemiJoinHash(
     val numOutputRows = longMetric("numOutputRows")
 
     right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
-      val hashRelation = HashedRelation(buildIter.map(_.copy()), rightKeyGenerator)
+      val hashRelation = HashedRelation(buildIter.map(_.copy()), buildSideKeyGenerator)
       hashSemiJoin(streamIter, hashRelation, numOutputRows)
     }
   }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.OutputStream
+import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 
@@ -136,7 +137,7 @@ object EvaluatePython {
 
     case (c, StringType) => UTF8String.fromString(c.toString)
 
-    case (c: String, BinaryType) => c.getBytes("utf-8")
+    case (c: String, BinaryType) => c.getBytes(StandardCharsets.UTF_8)
     case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
 
     case (c: java.util.List[_], ArrayType(elementType, _)) =>
@@ -185,7 +186,8 @@ object EvaluatePython {
 
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       out.write(Opcodes.GLOBAL)
-      out.write((module + "\n" + "_parse_datatype_json_string" + "\n").getBytes("utf-8"))
+      out.write(
+        (module + "\n" + "_parse_datatype_json_string" + "\n").getBytes(StandardCharsets.UTF_8))
       val schema = obj.asInstanceOf[StructType]
       pickler.save(schema.json)
       out.write(Opcodes.TUPLE1)
@@ -209,7 +211,8 @@ object EvaluatePython {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write((module + "\n" + "_create_row_inbound_converter" + "\n").getBytes("utf-8"))
+        out.write(
+          (module + "\n" + "_create_row_inbound_converter" + "\n").getBytes(StandardCharsets.UTF_8))
       } else {
         // it will be memorized by Pickler to save some bytes
         pickler.save(this)

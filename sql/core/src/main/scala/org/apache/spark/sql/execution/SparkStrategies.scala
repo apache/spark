@@ -65,8 +65,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(
              LeftSemi, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
-        joins.BroadcastLeftSemiJoinHash(
-          leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
+        Seq(joins.BroadcastHashJoin(
+          leftKeys, rightKeys, LeftSemi, BuildRight, condition, planLater(left), planLater(right)))
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
         joins.LeftSemiJoinHash(
@@ -120,7 +120,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
         joins.SortMergeJoin(
-          leftKeys, rightKeys, condition, planLater(left), planLater(right)) :: Nil
+          leftKeys, rightKeys, Inner, condition, planLater(left), planLater(right)) :: Nil
 
       // --- Outer joins --------------------------------------------------------------------------
 
@@ -136,7 +136,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
-        joins.SortMergeOuterJoin(
+        joins.SortMergeJoin(
           leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
       // --- Cases where this strategy does not apply ---------------------------------------------

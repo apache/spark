@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.util.NoSuchElementException
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
@@ -330,7 +330,7 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
   override def run(sqlContext: SQLContext): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sqlContext.
-    val rows = sqlContext.catalog.getTables(databaseName).map {
+    val rows = sqlContext.sessionState.catalog.getTables(databaseName).map {
       case (tableName, isTemporary) => Row(tableName, isTemporary)
     }
 
@@ -417,7 +417,7 @@ case class DescribeFunction(
 case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.setCurrentDatabase(databaseName)
+    sqlContext.sessionState.catalog.setCurrentDatabase(databaseName)
     Seq.empty[Row]
   }
 

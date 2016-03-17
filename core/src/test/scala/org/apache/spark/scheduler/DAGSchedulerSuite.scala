@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -67,7 +68,7 @@ class MyRDD(
     numPartitions: Int,
     dependencies: List[Dependency[_]],
     locations: Seq[Seq[String]] = Nil,
-    @transient tracker: MapOutputTrackerMaster = null)
+    @(transient @param) tracker: MapOutputTrackerMaster = null)
   extends RDD[(Int, Int)](sc, dependencies) with Serializable {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =

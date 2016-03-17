@@ -88,7 +88,6 @@ final class ChiSqSelector(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
@@ -136,7 +135,6 @@ final class ChiSqSelectorModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val newField = prepOutputField(schema)
     val outputFields = schema.fields :+ newField

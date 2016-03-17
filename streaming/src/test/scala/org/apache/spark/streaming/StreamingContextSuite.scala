@@ -31,6 +31,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.storage.StorageLevel

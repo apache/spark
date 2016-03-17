@@ -29,7 +29,7 @@ import scala.math.{max, min}
 import scala.util.control.NonFatal
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -555,9 +555,9 @@ private[spark] class TaskSetManager(
         // Jump to the next locality level, and reset lastLaunchTime so that the next locality
         // wait timer doesn't immediately expire
         lastLaunchTime += localityWaits(currentLocalityIndex)
-        currentLocalityIndex += 1
-        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex)} after waiting for " +
+        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
+        currentLocalityIndex += 1
       } else {
         return myLocalityLevels(currentLocalityIndex)
       }

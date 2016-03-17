@@ -134,15 +134,24 @@ class Dataset[T] private[sql](
     this(sqlContext, sqlContext.executePlan(logicalPlan), encoder)
   }
 
-  @transient protected[sql] val logicalPlan: LogicalPlan = queryExecution.logical match {
-    // For various commands (like DDL) and queries with side effects, we force query optimization to
-    // happen right away to let these side effects take place eagerly.
-    case _: Command |
-         _: InsertIntoTable |
-         _: CreateTableUsingAsSelect =>
-      LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
-    case _ =>
-      queryExecution.analyzed
+  @transient protected[sql] val logicalPlan: LogicalPlan = {
+    def hasSideEffects(plan: LogicalPlan): Boolean = plan match {
+      case _: Command |
+           _: InsertIntoTable |
+           _: CreateTableUsingAsSelect => true
+      case _ => false
+    }
+
+    queryExecution.logical match {
+      // For various commands (like DDL) and queries with side effects, we force query execution
+      // to happen right away to let these side effects take place eagerly.
+      case p if hasSideEffects(p) =>
+        LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
+      case Union(children) if children.forall(hasSideEffects) =>
+        LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
+      case _ =>
+        queryExecution.analyzed
+    }
   }
 
   /**
@@ -166,15 +175,16 @@ class Dataset[T] private[sql](
   private implicit def classTag = unresolvedTEncoder.clsTag
 
   protected[sql] def resolve(colName: String): NamedExpression = {
-    queryExecution.analyzed.resolveQuoted(colName, sqlContext.analyzer.resolver).getOrElse {
-      throw new AnalysisException(
-        s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
-    }
+    queryExecution.analyzed.resolveQuoted(colName, sqlContext.sessionState.analyzer.resolver)
+      .getOrElse {
+        throw new AnalysisException(
+          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+      }
   }
 
   protected[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      queryExecution.analyzed.resolveQuoted(n.name, sqlContext.analyzer.resolver).get
+      queryExecution.analyzed.resolveQuoted(n.name, sqlContext.sessionState.analyzer.resolver).get
     }
   }
 
@@ -1400,7 +1410,7 @@ class Dataset[T] private[sql](
    * @since 1.3.0
    */
   def withColumn(colName: String, col: Column): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
+    val resolver = sqlContext.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
@@ -1421,7 +1431,7 @@ class Dataset[T] private[sql](
    * Returns a new [[DataFrame]] by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
+    val resolver = sqlContext.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
@@ -1445,7 +1455,7 @@ class Dataset[T] private[sql](
    * @since 1.3.0
    */
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
+    val resolver = sqlContext.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
     val shouldRename = output.exists(f => resolver(f.name, existingName))
     if (shouldRename) {
@@ -1480,7 +1490,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
+    val resolver = sqlContext.sessionState.analyzer.resolver
     val remainingCols =
       schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
     if (remainingCols.size == this.schema.size) {
@@ -1501,7 +1511,8 @@ class Dataset[T] private[sql](
   def drop(col: Column): DataFrame = {
     val expression = col match {
       case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(u.name, sqlContext.analyzer.resolver).getOrElse(u)
+        queryExecution.analyzed.resolveQuoted(
+          u.name, sqlContext.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
     }
     val attrs = this.logicalPlan.output
@@ -1987,9 +1998,9 @@ class Dataset[T] private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  def toJSON: RDD[String] = {
+  def toJSON: Dataset[String] = {
     val rowSchema = this.schema
-    queryExecution.toRdd.mapPartitions { iter =>
+    val rdd = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
@@ -2011,6 +2022,8 @@ class Dataset[T] private[sql](
         }
       }
     }
+    import sqlContext.implicits._
+    rdd.toDS
   }
 
   /**

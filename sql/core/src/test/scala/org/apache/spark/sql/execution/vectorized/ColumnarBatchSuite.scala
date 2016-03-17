@@ -727,4 +727,33 @@ class ColumnarBatchSuite extends SparkFunSuite {
   test("Random nested schema") {
     testRandomRows(false, 30)
   }
+
+  test("null filtered columns") {
+    val NUM_ROWS = 10
+    val schema = new StructType()
+      .add("key", IntegerType, nullable = false)
+      .add("value", StringType, nullable = true)
+    for (numNulls <- List(0, NUM_ROWS / 2, NUM_ROWS)) {
+      val rows = mutable.ArrayBuffer.empty[Row]
+      for (i <- 0 until NUM_ROWS) {
+        val row = if (i < numNulls) Row.fromSeq(Seq(i, null)) else Row.fromSeq(Seq(i, i.toString))
+        rows += row
+      }
+      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+        val batch = ColumnVectorUtils.toBatch(schema, memMode, rows.iterator.asJava)
+        batch.filterNullsInColumn(1)
+        batch.setNumRows(NUM_ROWS)
+        assert(batch.numRows() == NUM_ROWS)
+        val it = batch.rowIterator()
+        // Top numNulls rows should be filtered
+        var k = numNulls
+        while (it.hasNext) {
+          assert(it.next().getInt(0) == k)
+          k += 1
+        }
+        assert(k == NUM_ROWS)
+        batch.close()
+      }}
+    }
+  }
 }
