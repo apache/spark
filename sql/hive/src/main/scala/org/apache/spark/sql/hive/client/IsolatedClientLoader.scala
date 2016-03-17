@@ -26,6 +26,7 @@ import scala.language.reflectiveCalls
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkSubmitUtils
@@ -42,6 +43,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       hiveMetastoreVersion: String,
       hadoopVersion: String,
       sparkConf: SparkConf,
+      hadoopConf: Configuration,
       config: Map[String, String] = Map.empty,
       ivyPath: Option[String] = None,
       sharedPrefixes: Seq[String] = Seq.empty,
@@ -79,6 +81,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       hiveVersion(hiveMetastoreVersion),
       sparkConf,
       execJars = files,
+      hadoopConf = hadoopConf,
       config = config,
       sharesHadoopClasses = sharesHadoopClasses,
       sharedPrefixes = sharedPrefixes,
@@ -149,6 +152,7 @@ private[hive] object IsolatedClientLoader extends Logging {
 private[hive] class IsolatedClientLoader(
     val version: HiveVersion,
     val sparkConf: SparkConf,
+    val hadoopConf: Configuration,
     val execJars: Seq[URL] = Seq.empty,
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
@@ -238,7 +242,7 @@ private[hive] class IsolatedClientLoader(
   /** The isolated client interface to Hive. */
   private[hive] def createClient(): HiveClient = {
     if (!isolationOn) {
-      return new HiveClientImpl(version, sparkConf, config, baseClassLoader, this)
+      return new HiveClientImpl(version, sparkConf, hadoopConf, config, baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
@@ -249,7 +253,7 @@ private[hive] class IsolatedClientLoader(
       classLoader
         .loadClass(classOf[HiveClientImpl].getName)
         .getConstructors.head
-        .newInstance(version, sparkConf, config, classLoader, this)
+        .newInstance(version, sparkConf, hadoopConf, config, classLoader, this)
         .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>
