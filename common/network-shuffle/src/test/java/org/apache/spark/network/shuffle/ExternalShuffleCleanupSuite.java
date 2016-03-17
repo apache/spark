@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Random;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,8 +35,8 @@ import org.apache.spark.network.util.TransportConf;
 public class ExternalShuffleCleanupSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
-  Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
-  TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+  private Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
+  private TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
 
   @Test
   public void noCleanupAndCleanup() throws IOException {
@@ -123,27 +124,29 @@ public class ExternalShuffleCleanupSuite {
     assertCleanedUp(dataContext1);
   }
 
-  private void assertStillThere(TestShuffleDataContext dataContext) {
+  private static void assertStillThere(TestShuffleDataContext dataContext) {
     for (String localDir : dataContext.localDirs) {
       assertTrue(localDir + " was cleaned up prematurely", new File(localDir).exists());
     }
   }
 
-  private void assertCleanedUp(TestShuffleDataContext dataContext) {
+  private static void assertCleanedUp(TestShuffleDataContext dataContext) {
     for (String localDir : dataContext.localDirs) {
       assertFalse(localDir + " wasn't cleaned up", new File(localDir).exists());
     }
   }
 
-  private TestShuffleDataContext createSomeData() throws IOException {
+  private static TestShuffleDataContext createSomeData() throws IOException {
     Random rand = new Random(123);
     TestShuffleDataContext dataContext = new TestShuffleDataContext(10, 5);
 
     dataContext.create();
-    dataContext.insertSortShuffleData(rand.nextInt(1000), rand.nextInt(1000),
-      new byte[][] { "ABC".getBytes(), "DEF".getBytes() } );
-    dataContext.insertHashShuffleData(rand.nextInt(1000), rand.nextInt(1000) + 1000,
-      new byte[][] { "GHI".getBytes(), "JKLMNOPQRSTUVWXYZ".getBytes() } );
+    dataContext.insertSortShuffleData(rand.nextInt(1000), rand.nextInt(1000), new byte[][] {
+        "ABC".getBytes(StandardCharsets.UTF_8),
+        "DEF".getBytes(StandardCharsets.UTF_8)});
+    dataContext.insertHashShuffleData(rand.nextInt(1000), rand.nextInt(1000) + 1000, new byte[][] {
+        "GHI".getBytes(StandardCharsets.UTF_8),
+        "JKLMNOPQRSTUVWXYZ".getBytes(StandardCharsets.UTF_8)});
     return dataContext;
   }
 }

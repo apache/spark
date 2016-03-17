@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 
-import org.apache.spark.Logging
-import org.apache.spark.broadcast
+import org.apache.spark.{broadcast, SparkEnv}
+import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -52,7 +54,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
-  // the value of subexpressionEliminationEnabled will be set by the desserializer after the
+  // the value of subexpressionEliminationEnabled will be set by the deserializer after the
   // constructor has run.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.subexpressionEliminationEnabled
@@ -65,7 +67,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   private val prepareCalled = new AtomicBoolean(false)
 
-  /** Overridden make copy also propogates sqlContext to copied plan. */
+  /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     SQLContext.setActive(sqlContext)
     super.makeCopy(newArgs)
@@ -220,7 +222,47 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Runs this query returning the result as an array.
    */
   def executeCollect(): Array[InternalRow] = {
-    execute().map(_.copy()).collect()
+    // Packing the UnsafeRows into byte array for faster serialization.
+    // The byte arrays are in the following format:
+    // [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
+    //
+    // UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
+    // compressed.
+    val byteArrayRdd = execute().mapPartitionsInternal { iter =>
+      val buffer = new Array[Byte](4 << 10)  // 4K
+      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+      val bos = new ByteArrayOutputStream()
+      val out = new DataOutputStream(codec.compressedOutputStream(bos))
+      while (iter.hasNext) {
+        val row = iter.next().asInstanceOf[UnsafeRow]
+        out.writeInt(row.getSizeInBytes)
+        row.writeToStream(out, buffer)
+      }
+      out.writeInt(-1)
+      out.flush()
+      out.close()
+      Iterator(bos.toByteArray)
+    }
+
+    // Collect the byte arrays back to driver, then decode them as UnsafeRows.
+    val nFields = schema.length
+    val results = ArrayBuffer[InternalRow]()
+
+    byteArrayRdd.collect().foreach { bytes =>
+      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+      val bis = new ByteArrayInputStream(bytes)
+      val ins = new DataInputStream(codec.compressedInputStream(bis))
+      var sizeOfNextRow = ins.readInt()
+      while (sizeOfNextRow >= 0) {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(nFields)
+        row.pointTo(bs, sizeOfNextRow)
+        results += row
+        sizeOfNextRow = ins.readInt()
+      }
+    }
+    results.toArray
   }
 
   /**

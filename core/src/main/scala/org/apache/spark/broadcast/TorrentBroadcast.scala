@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BroadcastBlockId, StorageLevel}
@@ -74,7 +75,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     } else {
       None
     }
-    // Note: use getSizeAsKb (not bytes) to maintain compatiblity if no units are provided
+    // Note: use getSizeAsKb (not bytes) to maintain compatibility if no units are provided
     blockSize = conf.getSizeAsKb("spark.broadcast.blockSize", "4m").toInt * 1024
   }
   setConf(SparkEnv.get.conf)

@@ -19,10 +19,10 @@ package org.apache.spark.mllib.fpm
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.fpm.AssociationRules.Rule
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.rdd.RDD
@@ -58,7 +58,7 @@ class AssociationRules private[fpm] (
   /**
    * Computes the association rules with confidence above [[minConfidence]].
    * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
-   * @return a [[Set[Rule[Item]]] containing the assocation rules.
+   * @return a [[Set[Rule[Item]]] containing the association rules.
    *
    */
   @Since("1.5.0")

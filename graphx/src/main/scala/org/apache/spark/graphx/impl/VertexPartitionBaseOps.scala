@@ -21,9 +21,9 @@ import scala.language.higherKinds
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.collection.BitSet
 
 /**

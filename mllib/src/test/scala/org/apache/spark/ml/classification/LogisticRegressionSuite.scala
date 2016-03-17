@@ -23,7 +23,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -44,20 +44,6 @@ class LogisticRegressionSuite
 
     dataset = sqlContext.createDataFrame(generateLogisticInput(1.0, 1.0, nPoints = 100, seed = 42))
 
-    /*
-       Here is the instruction describing how to export the test data into CSV format
-       so we can validate the training accuracy compared with R's glmnet package.
-
-       import org.apache.spark.mllib.classification.LogisticRegressionSuite
-       val nPoints = 10000
-       val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
-       val xMean = Array(5.843, 3.057, 3.758, 1.199)
-       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
-       val data = sc.parallelize(LogisticRegressionSuite.generateMultinomialLogisticInput(
-         coefficients, xMean, xVariance, true, nPoints, 42), 1)
-       data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1) + ", "
-         + x.features(2) + ", " + x.features(3)).saveAsTextFile("path")
-     */
     binaryDataset = {
       val nPoints = 10000
       val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
@@ -65,10 +51,21 @@ class LogisticRegressionSuite
       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
 
       val testData =
-        generateMultinomialLogisticInput(coefficients, xMean, xVariance, true, nPoints, 42)
+        generateMultinomialLogisticInput(coefficients, xMean, xVariance,
+          addIntercept = true, nPoints, 42)
 
       sqlContext.createDataFrame(sc.parallelize(testData, 4))
     }
+  }
+
+  /**
+   * Enable the ignored test to export the dataset into CSV format,
+   * so we can validate the training accuracy compared with R's glmnet package.
+   */
+  ignore("export test data into CSV format") {
+    binaryDataset.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
   }
 
   test("params") {

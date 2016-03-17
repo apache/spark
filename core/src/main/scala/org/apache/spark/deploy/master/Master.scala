@@ -31,7 +31,7 @@ import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
   ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
@@ -40,6 +40,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
@@ -727,15 +728,28 @@ private[deploy] class Master(
    * every time a new app joins or resource availability changes.
    */
   private def schedule(): Unit = {
-    if (state != RecoveryState.ALIVE) { return }
+    if (state != RecoveryState.ALIVE) {
+      return
+    }
     // Drivers take strict precedence over executors
-    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
-    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
-      for (driver <- waitingDrivers) {
+    val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
+    val numWorkersAlive = shuffledAliveWorkers.size
+    var curPos = 0
+    for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
+      // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
+      // start from the last worker that was assigned a driver, and continue onwards until we have
+      // explored all alive workers.
+      var launched = false
+      var numWorkersVisited = 0
+      while (numWorkersVisited < numWorkersAlive && !launched) {
+        val worker = shuffledAliveWorkers(curPos)
+        numWorkersVisited += 1
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
+          launched = true
         }
+        curPos = (curPos + 1) % numWorkersAlive
       }
     }
     startExecutorsOnWorkers()

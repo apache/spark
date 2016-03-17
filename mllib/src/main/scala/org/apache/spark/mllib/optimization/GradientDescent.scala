@@ -21,8 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{norm, DenseVector => BDV}
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 

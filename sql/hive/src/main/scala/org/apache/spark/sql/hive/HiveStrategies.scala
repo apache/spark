@@ -102,18 +102,8 @@ private[hive] trait HiveStrategies {
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case describe: DescribeCommand =>
-        val resolvedTable = context.executePlan(describe.table).analyzed
-        resolvedTable match {
-          case t: MetastoreRelation =>
-            ExecutedCommand(
-              DescribeHiveTableCommand(t, describe.output, describe.isExtended)) :: Nil
-
-          case o: LogicalPlan =>
-            val resultPlan = context.executePlan(o).executedPlan
-            ExecutedCommand(RunnableDescribeCommand(
-              resultPlan, describe.output, describe.isExtended)) :: Nil
-        }
-
+        ExecutedCommand(
+          DescribeHiveTableCommand(describe.table, describe.output, describe.isExtended)) :: Nil
       case _ => Nil
     }
   }
