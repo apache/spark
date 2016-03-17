@@ -19,31 +19,37 @@ package org.apache.spark.examples.mllib;
 
 import org.apache.spark.Accumulator;
 import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.mllib.linalg.SingularValueDecomposition;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 import org.apache.spark.mllib.stat.test.BinarySample;
 import org.apache.spark.mllib.stat.test.StreamingTest;
 import org.apache.spark.mllib.stat.test.StreamingTestResult;
 import org.apache.spark.streaming.Duration;
-import org.apache.spark.streaming.StreamingContext;
 import org.apache.spark.streaming.Seconds;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.dstream.DStream;
 import org.apache.spark.util.Utils;
 import org.apache.spark.api.java.function.VoidFunction;
 
-import java.util.LinkedList;
-
 /**
- * Example for Streaming Testing.
+ * Perform streaming testing using Welch's 2-sample t-test on a stream of data, where the data
+ * stream arrives as text files in a directory. Stops when the two groups are statistically
+ * significant (p-value < 0.05) or after a user-specified timeout in number of batches is exceeded.
+ *
+ * The rows of the text files must be in the form `Boolean, Double`. For example:
+ *   false, -3.92
+ *   true, 99.32
+ *
+ * Usage:
+ *   JavaStreamingTestExample <dataDir> <batchDuration> <numBatchesTimeout>
+ *
+ * To run on your local machine using the directory `dataDir` with 5 seconds between each batch and
+ * a timeout after 100 insignificant batches, call:
+ *    $ bin/run-example mllib.JavaStreamingTestExample dataDir 5 100
+ *
+ * As you add text files to `dataDir` the significance test wil continually update every
+ * `batchDuration` seconds until the test becomes significant (p-value < 0.05) or the number of
+ * batches processed exceeds `numBatchesTimeout`.
  */
 public class JavaStreamingTestExample {
   public static void main(String[] args) {
