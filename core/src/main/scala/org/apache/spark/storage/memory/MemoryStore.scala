@@ -23,7 +23,8 @@ import java.util.LinkedHashMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Logging, SparkConf, TaskContext}
+import org.apache.spark.{SparkConf, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}

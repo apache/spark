@@ -49,7 +49,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       case j: BroadcastHashJoin => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
-      case j: BroadcastHashJoin => j
       case j: SortMergeJoin => j
     }
 

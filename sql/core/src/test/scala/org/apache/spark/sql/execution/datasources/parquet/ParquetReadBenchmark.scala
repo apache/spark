@@ -299,10 +299,100 @@ object ParquetReadBenchmark {
     }
   }
 
+  def stringWithNullsScanBenchmark(values: Int, fractionOfNulls: Double): Unit = {
+    withTempPath { dir =>
+      withTempTable("t1", "tempTable") {
+        sqlContext.range(values).registerTempTable("t1")
+        sqlContext.sql(s"select IF(rand(1) < $fractionOfNulls, NULL, cast(id as STRING)) as c1, " +
+          s"IF(rand(2) < $fractionOfNulls, NULL, cast(id as STRING)) as c2 from t1")
+          .write.parquet(dir.getCanonicalPath)
+        sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+
+        val benchmark = new Benchmark("String with Nulls Scan", values)
+
+        benchmark.addCase("SQL Parquet Vectorized") { iter =>
+          sqlContext.sql("select sum(length(c2)) from tempTable where c1 is " +
+            "not NULL and c2 is not NULL").collect()
+        }
+
+        val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
+        benchmark.addCase("PR Vectorized") { num =>
+          var sum = 0
+          files.map(_.asInstanceOf[String]).foreach { p =>
+            val reader = new UnsafeRowParquetRecordReader
+            try {
+              reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
+              val batch = reader.resultBatch()
+              while (reader.nextBatch()) {
+                val rowIterator = batch.rowIterator()
+                while (rowIterator.hasNext) {
+                  val row = rowIterator.next()
+                  val value = row.getUTF8String(0)
+                  if (!row.isNullAt(0) && !row.isNullAt(1)) sum += value.numBytes()
+                }
+              }
+            } finally {
+              reader.close()
+            }
+          }
+        }
+
+        benchmark.addCase("PR Vectorized (Null Filtering)") { num =>
+          var sum = 0L
+          files.map(_.asInstanceOf[String]).foreach { p =>
+            val reader = new UnsafeRowParquetRecordReader
+            try {
+              reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
+              val batch = reader.resultBatch()
+              batch.filterNullsInColumn(0)
+              batch.filterNullsInColumn(1)
+              while (reader.nextBatch()) {
+                val rowIterator = batch.rowIterator()
+                while (rowIterator.hasNext) {
+                  sum += rowIterator.next().getUTF8String(0).numBytes()
+                }
+              }
+            } finally {
+              reader.close()
+            }
+          }
+        }
+
+        /*
+        Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+        String with Nulls Scan (0%):        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        -------------------------------------------------------------------------------------------
+        SQL Parquet Vectorized                   1229 / 1648          8.5         117.2       1.0X
+        PR Vectorized                             833 /  846         12.6          79.4       1.5X
+        PR Vectorized (Null Filtering)            732 /  782         14.3          69.8       1.7X
+
+        Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+        String with Nulls Scan (50%):       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        -------------------------------------------------------------------------------------------
+        SQL Parquet Vectorized                    995 / 1053         10.5          94.9       1.0X
+        PR Vectorized                             732 /  772         14.3          69.8       1.4X
+        PR Vectorized (Null Filtering)            725 /  790         14.5          69.1       1.4X
+
+        Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+        String with Nulls Scan (95%):       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        -------------------------------------------------------------------------------------------
+        SQL Parquet Vectorized                    326 /  333         32.2          31.1       1.0X
+        PR Vectorized                             190 /  200         55.1          18.2       1.7X
+        PR Vectorized (Null Filtering)            168 /  172         62.2          16.1       1.9X
+        */
+
+        benchmark.run()
+      }
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     intScanBenchmark(1024 * 1024 * 15)
     intStringScanBenchmark(1024 * 1024 * 10)
     stringDictionaryScanBenchmark(1024 * 1024 * 10)
     partitionTableScanBenchmark(1024 * 1024 * 15)
+    for (fractionOfNulls <- List(0.0, 0.50, 0.95)) {
+      stringWithNullsScanBenchmark(1024 * 1024 * 10, fractionOfNulls)
+    }
   }
 }

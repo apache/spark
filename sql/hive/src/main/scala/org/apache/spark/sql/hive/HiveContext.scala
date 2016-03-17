@@ -28,6 +28,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
@@ -38,8 +39,9 @@ import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -101,7 +103,10 @@ class HiveContext private[hive](
   }
 
   def this(sc: SparkContext) = {
-    this(sc, HiveContext.newClientForExecution(sc.conf), HiveContext.newClientForMetadata(sc.conf))
+    this(
+      sc,
+      HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
+      HiveContext.newClientForMetadata(sc.conf, sc.hadoopConfiguration))
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)
@@ -570,12 +575,15 @@ private[hive] object HiveContext extends Logging {
    * correctly populated.  This copy of Hive is *not* used for storing persistent metadata,
    * and only point to a dummy metastore in a temporary directory.
    */
-  protected[hive] def newClientForExecution(conf: SparkConf): HiveClientImpl = {
+  protected[hive] def newClientForExecution(
+      conf: SparkConf,
+      hadoopConf: Configuration): HiveClientImpl = {
     logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       sparkConf = conf,
       execJars = Seq(),
+      hadoopConf = hadoopConf,
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
       baseClassLoader = Utils.getContextOrSparkClassLoader)
@@ -588,15 +596,16 @@ private[hive] object HiveContext extends Logging {
    * The version of the Hive client that is used here must match the metastore that is configured
    * in the hive-site.xml file.
    */
-  private def newClientForMetadata(conf: SparkConf): HiveClient = {
-    val hiveConf = new HiveConf
+  private def newClientForMetadata(conf: SparkConf, hadoopConf: Configuration): HiveClient = {
+    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     val configurations = hiveClientConfigurations(hiveConf)
-    newClientForMetadata(conf, hiveConf, configurations)
+    newClientForMetadata(conf, hiveConf, hadoopConf, configurations)
   }
 
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
       hiveConf: HiveConf,
+      hadoopConf: Configuration,
       configurations: Map[String, String]): HiveClient = {
     val sqlConf = new SQLConf
     val hiveMetastoreVersion = HiveContext.hiveMetastoreVersion(sqlConf)
@@ -642,6 +651,7 @@ private[hive] object HiveContext extends Logging {
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
+        hadoopConf = hadoopConf,
         execJars = jars.toSeq,
         config = allConfig,
         isolationOn = true,
@@ -655,6 +665,7 @@ private[hive] object HiveContext extends Logging {
         hiveMetastoreVersion = hiveMetastoreVersion,
         hadoopVersion = VersionInfo.getVersion,
         sparkConf = conf,
+        hadoopConf = hadoopConf,
         config = allConfig,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -683,6 +694,7 @@ private[hive] object HiveContext extends Logging {
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
+        hadoopConf = hadoopConf,
         execJars = jars.toSeq,
         config = allConfig,
         isolationOn = true,

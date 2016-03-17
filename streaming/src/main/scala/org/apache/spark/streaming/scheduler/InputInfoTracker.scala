@@ -19,8 +19,8 @@ package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.{StreamingContext, Time}
 
 /**

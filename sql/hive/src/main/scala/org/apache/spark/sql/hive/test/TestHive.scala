@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.implicitConversions
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
@@ -82,13 +83,13 @@ class TestHiveContext private[hive](
 
   private def this(
       sc: SparkContext,
-      hiveConf: HiveConf,
       warehousePath: File,
       scratchDirPath: File) {
     this(
       sc,
-      HiveContext.newClientForExecution(sc.conf),
-      TestHiveContext.newClientForMetadata(sc.conf, hiveConf, warehousePath, scratchDirPath),
+      HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
+      TestHiveContext.newClientForMetadata(
+        sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath),
       warehousePath,
       scratchDirPath)
   }
@@ -96,7 +97,6 @@ class TestHiveContext private[hive](
   def this(sc: SparkContext) {
     this(
       sc,
-      new HiveConf,
       Utils.createTempDir(namePrefix = "warehouse-"),
       Utils.createTempDir(namePrefix = "scratch-"))
   }
@@ -502,12 +502,14 @@ private[hive] object TestHiveContext {
    */
   private def newClientForMetadata(
       conf: SparkConf,
-      hiveConf: HiveConf,
+      hadoopConf: Configuration,
       warehousePath: File,
       scratchDirPath: File): HiveClient = {
+    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     HiveContext.newClientForMetadata(
       conf,
       hiveConf,
+      hadoopConf,
       hiveClientConfigurations(hiveConf, warehousePath, scratchDirPath))
   }
 
