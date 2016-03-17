@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg.distributed
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.{Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
@@ -263,6 +263,7 @@ class BlockMatrix @Since("1.3.0") (
     new CoordinateMatrix(entryRDD, numRows(), numCols())
   }
 
+
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
   @Since("1.3.0")
   def toIndexedRowMatrix(): IndexedRowMatrix = {
@@ -270,15 +271,21 @@ class BlockMatrix @Since("1.3.0") (
       s"numCols: ${numCols()}")
 
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
-      val dMat = mat.toBreeze.toDenseMatrix.t
-      (0 until mat.numRows).map(rowIds =>
-        blockRowIdx * rowsPerBlock + rowIds -> (blockColIdx, dMat(::, rowIds).toDenseVector)
-      )
+      mat.rowIter.zipWithIndex.map {
+        case (vector, rowIdx) =>
+          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.toBreeze)
+      }
     }.groupByKey().map { case (rowIdx, vectors) =>
-      val wholeVector = BDV.zeros[Double](numCols().toInt)
-      vectors.foreach { case (blockColIdx: Int, vec: BDV[Double]) =>
+
+      val wholeVector = vectors.head match {
+        case (idx, v: BDV[_]) => BDV.zeros[Double](numCols().toInt)
+        case (idx, v: BSV[_]) => BSV.zeros[Double](numCols().toInt)
+        case _ => throw new SparkException(s"Cannot convert an empty vector to an indexed row")
+      }
+
+      vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
         val offset = colsPerBlock * blockColIdx
-        wholeVector(offset until offset + vec.length) := vec
+        wholeVector(offset until offset + vec.size) := vec
       }
       new IndexedRow(rowIdx, Vectors.fromBreeze(wholeVector))
     }
