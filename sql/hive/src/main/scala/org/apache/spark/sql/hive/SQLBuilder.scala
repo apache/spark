@@ -438,7 +438,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         // SELECT EXPLODE(arr) FROM tbl WHERE id > 1, the Filter operator will be under Generate
         // operator and we need to add a sub-query between them, as it's not allowed to have a WHERE
         // before LATERAL VIEW, e.g. "... FROM tbl WHERE id > 2 EXPLODE(arr) ..." is illegal.
-        case g @ Generate(_,_, _, _, _, f: Filter) =>
+        case g @ Generate(_, _, _, _, _, f: Filter) =>
           // Add an extra `Project` to make sure we can generate legal SQL string for sub-query,
           // for example, Subquery -> Filter -> Table will generate "(tbl WHERE ...) AS name", which
           // misses the SELECT part.
