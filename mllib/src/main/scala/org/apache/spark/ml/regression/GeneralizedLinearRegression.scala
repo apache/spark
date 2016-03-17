@@ -32,6 +32,7 @@ import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Params for Generalized Linear Regression.
@@ -77,7 +78,10 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   import GeneralizedLinearRegression._
 
   @Since("2.0.0")
-  override def validateParams(): Unit = {
+  override def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
     if ($(solver) == "irls") {
       setDefault(maxIter -> 25)
     }
@@ -86,6 +90,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
         Family.fromName($(family)) -> Link.fromName($(link))), "Generalized Linear Regression " +
         s"with ${$(family)} family does not support ${$(link)} link function.")
     }
+    super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 }
 
