@@ -109,20 +109,16 @@ class FileStreamSource(
   /**
    * Returns the next batch of data that is available after `start`, if any is available.
    */
-  override def getNextBatch(start: Option[Offset]): Option[Batch] = {
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
-    val end = fetchMaxOffset()
-    val endId = end.offset
+    val endId = end.asInstanceOf[LongOffset].offset
 
-    if (startId + 1 <= endId) {
-      val files = metadataLog.get(Some(startId + 1), endId).map(_._2).flatten
-      logDebug(s"Return files from batches ${startId + 1}:$endId")
-      logDebug(s"Streaming ${files.mkString(", ")}")
-      Some(new Batch(end, dataFrameBuilder(files)))
-    }
-    else {
-      None
-    }
+    assert(startId <= endId)
+    val files = metadataLog.get(Some(startId + 1), endId).map(_._2).flatten
+    logDebug(s"Return files from batches ${startId + 1}:$endId")
+    logDebug(s"Streaming ${files.mkString(", ")}")
+    dataFrameBuilder(files)
+
   }
 
   private def fetchAllFiles(): Seq[String] = {
@@ -130,4 +126,6 @@ class FileStreamSource(
       .filterNot(_.getPath.getName.startsWith("_"))
       .map(_.getPath.toUri.toString)
   }
+
+  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
 }

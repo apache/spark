@@ -241,9 +241,13 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         className = source,
         options = extraOptions.toMap,
         partitionColumns = normalizedParCols.getOrElse(Nil))
-
+    // TODO: promote query name out of options
+    // TODO: figure out how metadata dir fits in the API
     df.sqlContext.sessionState.continuousQueryManager.startQuery(
-      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, dataSource.createSink())
+      extraOptions.getOrElse("queryName", StreamExecution.nextName),
+      extraOptions.getOrElse("metadata", sys.error("metadata must be specified")),
+      df,
+      dataSource.createSink())
   }
 
   /**

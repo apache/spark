@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -29,8 +30,10 @@ trait Source  {
   /** Returns the schema of the data from this source */
   def schema: StructType
 
+  def getOffset: Option[Offset]
+
   /**
    * Returns the next batch of data that is available after `start`, if any is available.
    */
-  def getNextBatch(start: Option[Offset]): Option[Batch]
+  def getBatch(start: Option[Offset], end: Offset): DataFrame
 }

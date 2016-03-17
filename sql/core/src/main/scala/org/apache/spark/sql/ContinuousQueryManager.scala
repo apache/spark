@@ -164,13 +164,17 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
   }
 
   /** Start a query */
-  private[sql] def startQuery(name: String, df: DataFrame, sink: Sink): ContinuousQuery = {
+  private[sql] def startQuery(
+      name: String,
+      metadataRoot: String,
+      df: DataFrame,
+      sink: Sink): ContinuousQuery = {
     activeQueriesLock.synchronized {
       if (activeQueries.contains(name)) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
-      val query = new StreamExecution(sqlContext, name, df.logicalPlan, sink)
+      val query = new StreamExecution(sqlContext, name, metadataRoot, df.logicalPlan, sink)
       query.start()
       activeQueries.put(name, query)
       query

@@ -51,8 +51,6 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
-  protected def blockManager = SparkEnv.get.blockManager
-
   def schema: StructType = encoder.schema
 
   def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
@@ -78,25 +76,31 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  override def getNextBatch(start: Option[Offset]): Option[Batch] = synchronized {
-    val newBlocks =
-      batches.drop(
-        start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1)
+  override def toString: String = s"MemoryStream[${output.mkString(",")}]"
 
-    if (newBlocks.nonEmpty) {
-      logDebug(s"Running [$start, $currentOffset] on blocks ${newBlocks.mkString(", ")}")
-      val df = newBlocks
-          .map(_.toDF())
-          .reduceOption(_ unionAll _)
-          .getOrElse(sqlContext.emptyDataFrame)
-
-      Some(new Batch(currentOffset, df))
-    } else {
-      None
-    }
+  override def getOffset: Option[Offset] = if (batches.isEmpty) {
+    None
+  } else {
+    Some(currentOffset)
   }
 
-  override def toString: String = s"MemoryStream[${output.mkString(",")}]"
+  /**
+   * Returns the next batch of data that is available after `start`, if any is available.
+   */
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+    val startOrdinal =
+      start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
+    val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
+    val newBlocks = batches.slice(startOrdinal, endOrdinal)
+
+    logError(s"Running [$startOrdinal, $endOrdinal] on blocks ${newBlocks.mkString(", ")}")
+    newBlocks
+      .map(_.toDF())
+      .reduceOption(_ unionAll _)
+      .getOrElse {
+        sys.error("No data selected!")
+      }
+  }
 }
 
 /**
@@ -105,45 +109,30 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
  */
 class MemorySink(schema: StructType) extends Sink with Logging {
   /** An order list of batches that have been written to this [[Sink]]. */
-  private var batches = new ArrayBuffer[Batch]()
-
-  /** Used to convert an [[InternalRow]] to an external [[Row]] for comparison in testing. */
-  private val externalRowConverter = RowEncoder(schema)
-
-  override def currentOffset: Option[Offset] = synchronized {
-    batches.lastOption.map(_.end)
-  }
-
-  override def addBatch(nextBatch: Batch): Unit = synchronized {
-    nextBatch.data.collect()  // 'compute' the batch's data and record the batch
-    batches.append(nextBatch)
-  }
+  private val batches = new ArrayBuffer[Array[Row]]()
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
-    batches
-        .map(_.data)
-        .reduceOption(_ unionAll _)
-        .map(_.collect().toSeq)
-        .getOrElse(Seq.empty)
-  }
-
-  /**
-   * Atomically drops the most recent `num` batches and resets the [[StreamProgress]] to the
-   * corresponding point in the input. This function can be used when testing to simulate data
-   * that has been lost due to buffering.
-   */
-  def dropBatches(num: Int): Unit = synchronized {
-    batches.dropRight(num)
+    batches.flatten
   }
 
   def toDebugString: String = synchronized {
-    batches.map { b =>
-      val dataStr = try b.data.collect().mkString(" ") catch {
+    batches.zipWithIndex.map { case (b, i) =>
+      val dataStr = try b.mkString(" ") catch {
         case NonFatal(e) => "[Error converting to string]"
       }
-      s"${b.end}: $dataStr"
+      s"$i: $dataStr"
     }.mkString("\n")
+  }
+
+  override def addBatch(batchId: Long, data: DataFrame): Unit = {
+    logError(s"Committing $batchId to memory")
+    if (batchId == batches.size) {
+      logError(s"Growing for batch $batchId")
+      batches.append(data.collect())
+    } else {
+      batches(batchId.toInt) = data.collect()
+    }
   }
 }
 

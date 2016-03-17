@@ -347,11 +347,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
     val textSource2 = createFileStreamSource("text", src.getCanonicalPath)
     assert(textSource2.currentOffset === textSource.currentOffset)
-    assertBatch(textSource2.getNextBatch(None), textSource.getNextBatch(None))
-    for (f <- 0L to textSource.currentOffset.offset) {
-      val offset = LongOffset(f)
-      assertBatch(textSource2.getNextBatch(Some(offset)), textSource.getNextBatch(Some(offset)))
-    }
+//    assertBatch(textSource2.getNextBatch(None), textSource.getNextBatch(None))
+//    for (f <- 0L to textSource.currentOffset.offset) {
+//      val offset = LongOffset(f)
+//      assertBatch(textSource2.getNextBatch(Some(offset)), textSource.getNextBatch(Some(offset)))
+//    }
 
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)

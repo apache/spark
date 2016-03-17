@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.lang.Thread.UncaughtExceptionHandler
 
+import org.apache.spark.util.Utils
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.experimental.macros
@@ -126,8 +128,6 @@ trait StreamTest extends QueryTest with Timeouts {
     override def toString: String = s"CheckAnswer: ${expectedAnswer.mkString(",")}"
   }
 
-  case class DropBatches(num: Int) extends StreamAction
-
   /** Stops the stream.  It must currently be running. */
   case object StopStream extends StreamAction with StreamMustBeRunning
 
@@ -202,7 +202,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }.mkString("\n")
 
     def currentOffsets =
-      if (currentStream != null) currentStream.streamProgress.toString else "not started"
+      if (currentStream != null) currentStream.committedOffsets.toString else "not started"
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
@@ -266,6 +266,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }
 
     val testThread = Thread.currentThread()
+    val metadataRoot = Utils.createTempDir("streaming.metadata").getCanonicalPath
 
     try {
       startedTest.foreach { action =>
@@ -276,7 +277,7 @@ trait StreamTest extends QueryTest with Timeouts {
             currentStream =
               sqlContext
                 .streams
-                .startQuery(StreamExecution.nextName, stream, sink)
+                .startQuery(StreamExecution.nextName, metadataRoot, stream, sink)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
@@ -307,10 +308,6 @@ trait StreamTest extends QueryTest with Timeouts {
               lastStream = currentStream
               currentStream = null
             }
-
-          case DropBatches(num) =>
-            verify(currentStream == null, "dropping batches while running leads to corruption")
-            sink.dropBatches(num)
 
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")

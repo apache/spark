@@ -52,6 +52,14 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
     case i if i == 0 => 0
     case i if i > 0 => 1
   }
+
+  def toStreamProgress(
+      sources: Seq[Source],
+      dest: StreamProgress = new StreamProgress): StreamProgress = {
+    assert(sources.size == offsets.size)
+    sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }.foreach(dest.update)
+    dest
+  }
 }
 
 object CompositeOffset {

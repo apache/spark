@@ -17,26 +17,25 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import scala.collection
 import scala.collection.mutable
 
 /**
  * A helper class that looks like a Map[Source, Offset].
  */
-class StreamProgress {
+class StreamProgress extends scala.collection.Map[Source, Offset] {
   private val currentOffsets = new mutable.HashMap[Source, Offset]
 
   private[streaming] def update(source: Source, newOffset: Offset): Unit = {
     currentOffsets.get(source).foreach(old =>
-      assert(newOffset > old, s"Stream going backwards $newOffset -> $old"))
+      assert(newOffset >= old, s"Stream going backwards $newOffset -> $old"))
     currentOffsets.put(source, newOffset)
   }
 
   private[streaming] def update(newOffset: (Source, Offset)): Unit =
     update(newOffset._1, newOffset._2)
 
-  private[streaming] def apply(source: Source): Offset = currentOffsets(source)
-  private[streaming] def get(source: Source): Option[Offset] = currentOffsets.get(source)
-  private[streaming] def contains(source: Source): Boolean = currentOffsets.contains(source)
+  def get(source: Source): Option[Offset] = currentOffsets.get(source)
 
   private[streaming] def ++(updates: Map[Source, Offset]): StreamProgress = {
     val updated = new StreamProgress
@@ -68,4 +67,21 @@ class StreamProgress {
   }
 
   override def hashCode: Int = currentOffsets.hashCode()
+
+  override def iterator: Iterator[(Source, Offset)] = {
+    currentOffsets.toIterator
+  }
+
+  override def -(key: Source): StreamProgress = {
+    val copied = new StreamProgress
+    currentOffsets.foreach {
+      case (k, v) if k != key => copied.update(k, v)
+      case _ =>
+    }
+    copied
+  }
+
+  override def +[B1 >: Offset](kv: (Source, B1)): collection.Map[Source, B1] = {
+    ++(Map(kv))
+  }
 }

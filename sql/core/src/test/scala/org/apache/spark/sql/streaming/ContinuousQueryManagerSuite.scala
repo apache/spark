@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.spark.util.Utils
+
 import scala.concurrent.Future
 import scala.util.Random
 import scala.util.control.NonFatal
@@ -235,9 +237,14 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
           @volatile var query: StreamExecution = null
           try {
             val df = ds.toDF
+            val metadataRoot = Utils.createTempDir("streaming.metadata").getCanonicalPath
             query = sqlContext
               .streams
-              .startQuery(StreamExecution.nextName, df, new MemorySink(df.schema))
+              .startQuery(
+                StreamExecution.nextName,
+                metadataRoot,
+                df,
+                new MemorySink(df.schema))
               .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>
