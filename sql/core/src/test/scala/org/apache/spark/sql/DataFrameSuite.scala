@@ -1383,8 +1383,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = sqlContext.createDataFrame(rowRDD, schema)
     df.registerTempTable("table")
 
-//    val query1 = sql("select count(*) from table where col between 0 and 1.49")
-//    checkAnswer(query1, Row(1) :: Nil)
+    val query1 = sql("select count(*) from table where col between 0 and 1.49")
+    checkAnswer(query1, Row(1) :: Nil)
 
     val query2 = sql("select count(*) from table where col = 1.49")
     checkAnswer(query2, Row(1) :: Nil)
