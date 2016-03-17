@@ -28,10 +28,9 @@ if __name__ == "__main__":
     sc = SparkContext(appName="SummaryStatisticsExample")  # SparkContext
 
     # $example on$
-    v1 = np.array([1.0, 10.0, 100.0])
-    v2 = np.array([2.0, 20.0, 200.0])
-    v3 = np.array([3.0, 30.0, 300.0])
-    mat = sc.parallelize([v1, v2, v3])  # an RDD of Vectors
+    mat = sc.parallelize(
+        [np.array([1.0, 10.0, 100.0]), np.array([2.0, 20.0, 200.0]), np.array([3.0, 30.0, 300.0])]
+    )  # an RDD of Vectors
 
     # Compute column summary statistics.
     summary = Statistics.colStats(mat)

@@ -35,14 +35,17 @@ object StratifiedSamplingExample {
     // specify the exact fraction desired from each key
     val fractions = Map(1 -> 0.1, 2 -> 0.6, 3 -> 0.3)
 
-    // Get an exact sample from each stratum
+    // Get an approximate sample from each stratum
     val approxSample = data.sampleByKey(withReplacement = false, fractions)
+    // Get an exact sample from each stratum
     val exactSample = data.sampleByKeyExact(withReplacement = false, fractions)
     // $example off$
 
-    approxSample.foreach(println)
-    println()
-    exactSample.foreach(println)
+    println("approxSample size is " + approxSample.collect().size.toString)
+    approxSample.collect().foreach(println)
+
+    println("exactSample its size is " + exactSample.collect().size.toString)
+    exactSample.collect().foreach(println)
 
     sc.stop()
   }

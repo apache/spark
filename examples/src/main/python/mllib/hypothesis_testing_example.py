@@ -25,7 +25,7 @@ from pyspark.mllib.stat import Statistics
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="HypothesisTestingExample")  # SparkContext
+    sc = SparkContext(appName="HypothesisTestingExample")
 
     # $example on$
     vec = Vectors.dense(0.1, 0.15, 0.2, 0.3, 0.25)  # a vector composed of the frequencies of events
@@ -33,21 +33,25 @@ if __name__ == "__main__":
     # compute the goodness of fit. If a second vector to test against
     # is not supplied as a parameter, the test runs against a uniform distribution.
     goodnessOfFitTestResult = Statistics.chiSqTest(vec)
-    print(goodnessOfFitTestResult)  # summary of the test including the p-value, degrees of freedom,
+
+    # summary of the test including the p-value, degrees of freedom,
     # test statistic, the method used, and the null hypothesis.
-    print()
+    print("%s\n" % goodnessOfFitTestResult)
 
     mat = Matrices.dense(3, 2, [1.0, 3.0, 5.0, 2.0, 4.0, 6.0])  # a contingency matrix
 
     # conduct Pearson's independence test on the input contingency matrix
     independenceTestResult = Statistics.chiSqTest(mat)
-    print(independenceTestResult)  # summary of the test including the p-value, degrees of freedom
-    print()
 
-    p1 = LabeledPoint(1.0, [1.0, 0.0, 3.0])
-    p2 = LabeledPoint(1.0, [1.0, 2.0, 0.0])
-    p3 = LabeledPoint(1.0, [-1.0, 0.0, -0.5])
-    obs = sc.parallelize([p1, p2, p3])  # LabeledPoint(feature, label)
+    # summary of the test including the p-value, degrees of freedom,
+    # test statistic, the method used, and the null hypothesis.
+    print("%s\n" % independenceTestResult)
+
+    obs = sc.parallelize(
+        [LabeledPoint(1.0, [1.0, 0.0, 3.0]),
+         LabeledPoint(1.0, [1.0, 2.0, 0.0]),
+         LabeledPoint(1.0, [-1.0, 0.0, -0.5])]
+    )  # LabeledPoint(feature, label)
 
     # The contingency table is constructed from an RDD of LabeledPoint and used to conduct
     # the independence test. Returns an array containing the ChiSquaredTestResult for every feature
@@ -55,9 +59,7 @@ if __name__ == "__main__":
     featureTestResults = Statistics.chiSqTest(obs)
 
     for i, result in enumerate(featureTestResults):
-        print("Column: " + str(i + 1))
-        print(result)
-        print()
+        print("Column %d:\n%s" % (i + 1, result))
     # $example off$
 
     sc.stop()

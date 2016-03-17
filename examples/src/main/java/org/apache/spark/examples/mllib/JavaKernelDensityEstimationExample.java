@@ -43,9 +43,9 @@ public class JavaKernelDensityEstimationExample {
 
     // Find density estimates for the given values
     double[] densities = kd.estimate(new double[]{-1.0, 2.0, 5.0});
-    // $example off$
 
     System.out.println(Arrays.toString(densities));
+    // $example off$
 
     jsc.stop();
   }

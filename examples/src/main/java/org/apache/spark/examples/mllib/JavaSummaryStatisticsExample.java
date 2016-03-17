@@ -36,11 +36,13 @@ public class JavaSummaryStatisticsExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
 
     // $example on$
-    Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
-    Vector v2 = Vectors.dense(2.0, 20.0, 200.0);
-    Vector v3 = Vectors.dense(3.0, 30.0, 300.0);
-
-    JavaRDD<Vector> mat = jsc.parallelize(Arrays.asList(v1, v2, v3)); // an RDD of Vectors
+    JavaRDD<Vector> mat = jsc.parallelize(
+      Arrays.asList(
+        Vectors.dense(1.0, 10.0, 100.0),
+        Vectors.dense(2.0, 20.0, 200.0),
+        Vectors.dense(3.0, 30.0, 300.0)
+      )
+    ); // an RDD of Vectors
 
     // Compute column summary statistics.
     MultivariateStatisticalSummary summary = Statistics.colStats(mat.rdd());

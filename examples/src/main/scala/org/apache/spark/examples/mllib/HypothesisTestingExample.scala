@@ -43,8 +43,7 @@ object HypothesisTestingExample {
     val goodnessOfFitTestResult = Statistics.chiSqTest(vec)
     // summary of the test including the p-value, degrees of freedom, test statistic, the method
     // used, and the null hypothesis.
-    println(goodnessOfFitTestResult)
-    println()
+    println(s"$goodnessOfFitTestResult\n")
 
     // a contingency matrix. Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
     val mat: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
@@ -52,22 +51,25 @@ object HypothesisTestingExample {
     // conduct Pearson's independence test on the input contingency matrix
     val independenceTestResult = Statistics.chiSqTest(mat)
     // summary of the test including the p-value, degrees of freedom
-    println(independenceTestResult)
-    println()
+    println(s"$independenceTestResult\n")
 
-    val p1 = LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0))
-    val p2 = LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 0.0))
-    val p3 = LabeledPoint(-1.0, Vectors.dense(-1.0, 0.0, -0.5))
-    val obs: RDD[LabeledPoint] = sc.parallelize(Seq(p1, p2, p3))  // (feature, label) pairs.
+    val obs: RDD[LabeledPoint] =
+      sc.parallelize(
+        Seq(
+          LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0)),
+          LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 0.0)),
+          LabeledPoint(-1.0, Vectors.dense(-1.0, 0.0, -0.5)
+          )
+        )
+      ) // (feature, label) pairs.
 
     // The contingency table is constructed from the raw (feature, label) pairs and used to conduct
     // the independence test. Returns an array containing the ChiSquaredTestResult for every feature
     // against the label.
     val featureTestResults: Array[ChiSqTestResult] = Statistics.chiSqTest(obs)
-    featureTestResults.zipWithIndex.foreach { result =>
-      println(s"Column " + (result._2 + 1).toString + ":")
-      println(result._1)
-      println()
+    featureTestResults.zipWithIndex.foreach { case (k, v) =>
+      println("Column " + (v + 1).toString + ":")
+      println(k)
     }  // summary of the test
     // $example off$
 

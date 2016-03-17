@@ -17,14 +17,12 @@
 
 package org.apache.spark.examples.mllib;
 
+import com.google.common.collect.ImmutableMap;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 
 // $example on$
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import scala.Tuple2;
 
@@ -39,42 +37,38 @@ public class JavaStratifiedSamplingExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
 
     // $example on$
-    List<Tuple2<Integer, Character>> list = new ArrayList<>();
-    list.add(new Tuple2(1, 'a'));
-    list.add(new Tuple2(1, 'b'));
-    list.add(new Tuple2(2, 'c'));
-    list.add(new Tuple2(2, 'd'));
-    list.add(new Tuple2(2, 'e'));
-    list.add(new Tuple2(3, 'f'));
+    List<Tuple2<Integer, Character>> list = new ArrayList<Tuple2<Integer, Character>>(
+      Arrays.<Tuple2<Integer, Character>>asList(
+        new Tuple2(1, 'a'),
+        new Tuple2(1, 'b'),
+        new Tuple2(2, 'c'),
+        new Tuple2(2, 'd'),
+        new Tuple2(2, 'e'),
+        new Tuple2(3, 'f')
+      )
+    );
 
-    // an RDD of any key value pairs JavaPairRDD<K, V>
     JavaPairRDD<Integer, Character> data = jsc.parallelizePairs(list);
 
     // specify the exact fraction desired from each key Map<K, Object>
-    Map<Integer, Object> fractions = new HashMap<>();
+    ImmutableMap<Integer, Object> fractions =
+      ImmutableMap.of(1, (Object)0.1, 2, (Object) 0.6, 3, (Object) 0.3);
 
-    fractions.put(1, 0.1);
-    fractions.put(2, 0.6);
-    fractions.put(3, 0.3);
-
+    // Get an approximate sample from each stratum
+    JavaPairRDD<Integer, Character> approxSample = data.sampleByKey(false, fractions);
     // Get an exact sample from each stratum
-    JavaPairRDD<Integer, Character> approxSample =
-      data.sampleByKey(false, fractions);  // JavaPairRDD<K, V>
-    JavaPairRDD<Integer, Character> exactSample =
-      data.sampleByKeyExact(false, fractions);  // JavaPairRDD<K, V>
+    JavaPairRDD<Integer, Character> exactSample = data.sampleByKeyExact(false, fractions);
     // $example off$
 
-    approxSample.foreach(new VoidFunction<Tuple2<Integer, Character>>() {
-      public void call(Tuple2<Integer, Character> t) throws Exception {
-        System.out.println(t._1() + " " + t._2());
-      }
-    });
-    System.out.println();
-    exactSample.foreach(new VoidFunction<Tuple2<Integer, Character>>() {
-      public void call(Tuple2<Integer, Character> t) throws Exception {
-        System.out.println(t._1() + " " + t._2());
-      }
-    });
+    System.out.println("approxSample size is " + approxSample.collect().size());
+    for (Tuple2<Integer, Character> t : approxSample.collect()) {
+      System.out.println(t._1() + " " + t._2());
+    }
+
+    System.out.println("exactSample size is " + exactSample.collect().size());
+    for (Tuple2<Integer, Character> t : exactSample.collect()) {
+      System.out.println(t._1() + " " + t._2());
+    }
 
     jsc.stop();
   }

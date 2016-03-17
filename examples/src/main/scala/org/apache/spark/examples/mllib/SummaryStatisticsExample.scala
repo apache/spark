@@ -32,11 +32,13 @@ object SummaryStatisticsExample {
     val sc = new SparkContext(conf)
 
     // $example on$
-    val v1 = Vectors.dense(1.0, 10.0, 100.0)
-    val v2 = Vectors.dense(2.0, 20.0, 200.0)
-    val v3 = Vectors.dense(3.0, 30.0, 300.0)
-
-    val observations = sc.parallelize(Seq(v1, v2, v3))
+    val observations = sc.parallelize(
+      Seq(
+        Vectors.dense(1.0, 10.0, 100.0),
+        Vectors.dense(2.0, 20.0, 200.0),
+        Vectors.dense(3.0, 30.0, 300.0)
+      )
+    )
 
     // Compute column summary statistics.
     val summary: MultivariateStatisticalSummary = Statistics.colStats(observations)

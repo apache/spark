@@ -48,8 +48,7 @@ public class JavaHypothesisTestingExample {
     ChiSqTestResult goodnessOfFitTestResult = Statistics.chiSqTest(vec);
     // summary of the test including the p-value, degrees of freedom, test statistic,
     // the method used, and the null hypothesis.
-    System.out.println(goodnessOfFitTestResult);
-    System.out.println();
+    System.out.println(goodnessOfFitTestResult + "\n");
 
     // Create a contingency matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
     Matrix mat = Matrices.dense(3, 2, new double[]{1.0, 3.0, 5.0, 2.0, 4.0, 6.0});
@@ -57,14 +56,16 @@ public class JavaHypothesisTestingExample {
     // conduct Pearson's independence test on the input contingency matrix
     ChiSqTestResult independenceTestResult = Statistics.chiSqTest(mat);
     // summary of the test including the p-value, degrees of freedom...
-    System.out.println(independenceTestResult);
-    System.out.println();
+    System.out.println(independenceTestResult + "\n");
 
-    LabeledPoint p1 = new LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0));
-    LabeledPoint p2 = new LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 0.0));
-    LabeledPoint p3 = new LabeledPoint(-1.0, Vectors.dense(-1.0, 0.0, -0.5));
     // an RDD of labeled points
-    JavaRDD<LabeledPoint> obs = jsc.parallelize(Arrays.asList(p1, p2, p3));
+    JavaRDD<LabeledPoint> obs = jsc.parallelize(
+      Arrays.asList(
+        new LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0)),
+        new LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 0.0)),
+        new LabeledPoint(-1.0, Vectors.dense(-1.0, 0.0, -0.5))
+      )
+    );
 
     // The contingency table is constructed from the raw (feature, label) pairs and used to conduct
     // the independence test. Returns an array containing the ChiSquaredTestResult for every feature
@@ -73,8 +74,7 @@ public class JavaHypothesisTestingExample {
     int i = 1;
     for (ChiSqTestResult result : featureTestResults) {
       System.out.println("Column " + i + ":");
-      System.out.println(result);  // summary of the test
-      System.out.println();
+      System.out.println(result + "\n");  // summary of the test
       i++;
     }
     // $example off$

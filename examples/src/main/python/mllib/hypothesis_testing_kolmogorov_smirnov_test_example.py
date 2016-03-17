@@ -23,7 +23,7 @@ from pyspark.mllib.stat import Statistics
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="HypothesisTestingKolmogorovSmirnovTestExample")  # SparkContext
+    sc = SparkContext(appName="HypothesisTestingKolmogorovSmirnovTestExample")
 
     # $example on$
     parallelData = sc.parallelize([0.1, 0.15, 0.2, 0.3, 0.25])
