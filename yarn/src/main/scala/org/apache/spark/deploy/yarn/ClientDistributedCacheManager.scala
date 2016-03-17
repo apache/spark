@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /** Client side methods to setup the Hadoop distributed cache */
 private[spark] class ClientDistributedCacheManager() extends Logging {

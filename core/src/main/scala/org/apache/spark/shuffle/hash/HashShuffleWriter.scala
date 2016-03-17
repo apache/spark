@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.hash
 import java.io.IOException
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle._
 import org.apache.spark.storage.DiskBlockObjectWriter
