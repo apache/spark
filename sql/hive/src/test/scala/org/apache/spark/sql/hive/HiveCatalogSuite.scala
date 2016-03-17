@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.SparkConf
@@ -33,7 +34,8 @@ class HiveCatalogSuite extends CatalogTestCases {
     IsolatedClientLoader.forVersion(
       hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
       hadoopVersion = VersionInfo.getVersion,
-      sparkConf = new SparkConf()).createClient()
+      sparkConf = new SparkConf(),
+      hadoopConf = new Configuration()).createClient()
   }
 
   protected override val utils: CatalogTestUtils = new CatalogTestUtils {
