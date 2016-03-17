@@ -247,7 +247,26 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       */
   }
 
-  ignore("rube") {
+  test("shuffle hash join") {
+    val N = 2 << 20
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+    sqlContext.setConf("spark.sql.autoBroadcastJoinThreshold", "10000000")
+    runBenchmark("shuffle hash join", N) {
+      val df1 = sqlContext.range(N).selectExpr(s"id as k1")
+      val df2 = sqlContext.range(N / 5).selectExpr(s"id * 3 as k2")
+      df1.join(df2, col("k1") === col("k2")).count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    shuffle hash join:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    shuffle hash join codegen=false            601 /  934          3.5         286.5       1.0X
+    shuffle hash join codegen=true             489 /  599          4.3         233.2       1.2X
+     */
+  }
+
+  ignore("cube") {
     val N = 5 << 20
 
     runBenchmark("cube", N) {

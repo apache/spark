@@ -69,8 +69,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           leftKeys, rightKeys, LeftSemi, BuildRight, condition, planLater(left), planLater(right)))
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
-        joins.LeftSemiJoinHash(
-          leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
+        Seq(joins.ShuffledHashJoin(
+          leftKeys, rightKeys, LeftSemi, BuildRight, condition, planLater(left), planLater(right)))
       case _ => Nil
     }
   }
@@ -80,8 +80,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object CanBroadcast {
     def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
-      if (conf.autoBroadcastJoinThreshold > 0 &&
-          plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold) {
+      if (plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold) {
         Some(plan)
       } else {
         None
@@ -101,9 +100,24 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame), then that side
    *     of the join will be broadcasted and the other side will be streamed, with no shuffling
    *     performed. If both sides of the join are eligible to be broadcasted then the
+   * - Shuffle hash join: if single partition is small enough to build a hash table.
    * - Sort merge: if the matching join keys are sortable.
    */
   object EquiJoinSelection extends Strategy with PredicateHelper {
+
+    /**
+     * Matches a plan whose single partition should be small enough to build a hash table.
+     */
+    def canBuildHash(plan: LogicalPlan): Boolean = {
+      plan.statistics.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
+    }
+
+    /**
+     * Returns whether plan a is much smaller (3X) than plan b.
+     */
+    private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
+      a.statistics.sizeInBytes * 3 < b.statistics.sizeInBytes
+    }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
@@ -116,6 +130,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
         Seq(joins.BroadcastHashJoin(
           leftKeys, rightKeys, Inner, BuildLeft, condition, planLater(left), planLater(right)))
+
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+        if canBuildHash(left) && muchSmaller(left, right) ||
+          canBuildHash(right) && muchSmaller(right, left) ||
+          !RowOrdering.isOrderable(leftKeys) =>
+        val buildSide =
+          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+            BuildRight
+          } else {
+            BuildLeft
+          }
+        Seq(joins.ShuffledHashJoin(
+          leftKeys, rightKeys, Inner, buildSide, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
@@ -132,6 +159,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(
           RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
         Seq(joins.BroadcastHashJoin(
+          leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
+
+      case ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, condition, left, right)
+         if canBuildHash(right) && muchSmaller(right, left) || !RowOrdering.isOrderable(leftKeys) =>
+        Seq(joins.ShuffledHashJoin(
+          leftKeys, rightKeys, LeftOuter, BuildRight, condition, planLater(left), planLater(right)))
+
+      case ExtractEquiJoinKeys(RightOuter, leftKeys, rightKeys, condition, left, right)
+         if canBuildHash(left) && muchSmaller(left, right) || !RowOrdering.isOrderable(leftKeys) =>
+        Seq(joins.ShuffledHashJoin(
           leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)

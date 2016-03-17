@@ -414,7 +414,7 @@ case class HadoopFsRelation(
   def refresh(): Unit = location.refresh()
 
   override def toString: String =
-    s"$fileFormat part: ${partitionSchema.simpleString}, data: ${dataSchema.simpleString}"
+    s"$fileFormat part: ${partitionSchema.simpleString}, "
 
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
