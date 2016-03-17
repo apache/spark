@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
@@ -105,15 +106,11 @@ class NaiveBayes @Since("1.5.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))
     val nbModel = copyValues(NaiveBayesModel.fromOld(oldModel, this))
-    val summary = new NaiveBayesSummary(
-      nbModel.transform(dataset),
-      $(predictionCol),
-      $(rawPredictionCol),
-      $(probabilityCol),
-      $(featuresCol),
-      $(labelCol))
-    nbModel.setSummary(summary)
-    nbModel
+    val attr = AttributeGroup.fromStructField(dataset.schema($(featuresCol))).attributes
+    if (attr.isDefined) {
+      nbModel.setFeatureNames(attr.get.map(_.name.getOrElse("NA")))
+    }
+    nbModel.setLabelNames(oldModel.labels.map(_.toString))
   }
 
   @Since("1.5.0")
@@ -237,22 +234,32 @@ class NaiveBayesModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new NaiveBayesModel.NaiveBayesModelWriter(this)
 
-  private var trainingSummary: Option[NaiveBayesSummary] = None
+  private var featureNames: Option[Array[String]] = None
+  private var labelNames: Option[Array[String]] = None
 
-  private[classification] def setSummary(summary: NaiveBayesSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[classification] def setFeatureNames(names: Array[String]): this.type = {
+    this.featureNames = Some(names)
     this
   }
 
-  /**
-   * Gets summary of model on training set. An exception is thrown if `trainingSummary == None`.
-   */
-  @Since("2.0.0")
-  def summary: NaiveBayesSummary = trainingSummary match {
-    case Some(summ) => summ
+  private[classification] def setLabelNames(names: Array[String]): this.type = {
+    this.labelNames = Some(names)
+    this
+  }
+
+  private[ml] def getFeatureNames: Array[String] = featureNames match {
+    case Some(names) => names
     case None =>
       throw new SparkException(
-        s"No training summary available for the ${this.getClass.getSimpleName}",
+        s"No training result available for the ${this.getClass.getSimpleName}",
+        new NullPointerException())
+  }
+
+  private[ml] def getLabelNames: Array[String] = labelNames match {
+    case Some(names) => names
+    case None =>
+      throw new SparkException(
+        s"No training result available for the ${this.getClass.getSimpleName}",
         new NullPointerException())
   }
 }
@@ -311,11 +318,3 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     }
   }
 }
-
-class NaiveBayesSummary private[classification] (
-    @Since("2.0.0") @transient val predictions: DataFrame,
-    @Since("2.0.0") val predictionCol: String,
-    @Since("2.0.0") val rawPredictionCol: String,
-    @Since("2.0.0") val probabilityCol: String,
-    @Since("2.0.0") val featuresCol: String,
-    @Since("2.0.0") val labelCol: String) extends Serializable {}

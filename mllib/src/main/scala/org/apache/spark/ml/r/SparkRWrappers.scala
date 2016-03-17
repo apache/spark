@@ -82,7 +82,7 @@ private[r] object SparkRWrappers {
 
   def getModelCoefficients(model: PipelineModel): Array[Double] = {
     model.stages.last match {
-      case m: LinearRegressionModel => {
+      case m: LinearRegressionModel =>
         val coefficientStandardErrorsR = Array(m.summary.coefficientStandardErrors.last) ++
           m.summary.coefficientStandardErrors.dropRight(1)
         val tValuesR = Array(m.summary.tValues.last) ++ m.summary.tValues.dropRight(1)
@@ -93,14 +93,12 @@ private[r] object SparkRWrappers {
         } else {
           m.coefficients.toArray ++ coefficientStandardErrorsR ++ tValuesR ++ pValuesR
         }
-      }
-      case m: LogisticRegressionModel => {
+      case m: LogisticRegressionModel =>
         if (m.getFitIntercept) {
           Array(m.intercept) ++ m.coefficients.toArray
         } else {
           m.coefficients.toArray
         }
-      }
       case m: KMeansModel =>
         m.clusterCenters.flatMap(_.toArray)
       case m: NaiveBayesModel => Array()  // A dummy result to prevent unmatched error.
@@ -156,10 +154,7 @@ private[r] object SparkRWrappers {
     // Otherwise, we extract the labels out and sort them as what mllib.NaiveBayes does.
     rFormulaModel.getOriginalLabels match {
       case Some(labels) => labels
-      case None =>
-        val summary = lastModel.asInstanceOf[NaiveBayesModel].summary
-        summary.predictions.select(summary.labelCol)
-          .distinct().collect().map(_.getDouble(0)).sorted.map(_.toString)
+      case None => lastModel.asInstanceOf[NaiveBayesModel].getLabelNames
     }
   }
 
@@ -201,10 +196,7 @@ private[r] object SparkRWrappers {
         val attrs = AttributeGroup.fromStructField(
           m.summary.predictions.schema(m.summary.featuresCol))
         attrs.attributes.get.map(_.name.get)
-      case m: NaiveBayesModel =>
-        val attrs = AttributeGroup.fromStructField(
-          m.summary.predictions.schema(m.summary.featuresCol))
-        attrs.attributes.get.map(_.name.get)
+      case m: NaiveBayesModel => m.getFeatureNames
     }
   }
 
