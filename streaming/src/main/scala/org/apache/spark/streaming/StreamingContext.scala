@@ -156,6 +156,7 @@ class StreamingContext private[streaming] (
     if (isCheckpointPresent) {
       _cp.graph.setContext(this)
       _cp.graph.restoreCheckpointData()
+      _cp.graph.recoveredFromCheckpoint = true
       _cp.graph
     } else {
       require(_batchDur != null, "Batch duration for StreamingContext cannot be null")
