@@ -147,7 +147,7 @@ class Pipeline @Since("1.4.0") (
             t
           case _ =>
             throw new IllegalArgumentException(
-              s"Do not support stage $stage of type ${stage.getClass}")
+              s"Does not support stage $stage of type ${stage.getClass}")
         }
         if (index < indexOfLastEstimator) {
           curDataset = transformer.transform(curDataset)

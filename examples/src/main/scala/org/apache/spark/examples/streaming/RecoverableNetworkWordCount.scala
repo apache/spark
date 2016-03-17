@@ -141,7 +141,7 @@ object RecoverableNetworkWordCount {
 
   def main(args: Array[String]) {
     if (args.length != 4) {
-      System.err.println("You arguments were " + args.mkString("[", ", ", "]"))
+      System.err.println("Your arguments were " + args.mkString("[", ", ", "]"))
       System.err.println(
         """
           |Usage: RecoverableNetworkWordCount <hostname> <port> <checkpoint-directory>
