@@ -182,7 +182,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
     )
 
-    val data2: Array[Vector] = Array.tabulate(25){ i: Int =>
+    val data2: Array[Vector] = Array.tabulate(25) { i: Int =>
       Vectors.dense(Array.tabulate(50)(i + _.toDouble))
     }
 

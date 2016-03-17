@@ -84,9 +84,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    * this might not be necessary if we maintained a pool of re-usable pages in the TaskMemoryManager
    * itself).
    */
-  private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<MemoryBlock>();
+  private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<>();
 
-  private final LinkedList<SpillInfo> spills = new LinkedList<SpillInfo>();
+  private final LinkedList<SpillInfo> spills = new LinkedList<>();
 
   /** Peak memory used by this sorter so far, in bytes. **/
   private long peakMemoryUsedBytes;

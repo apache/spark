@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -195,18 +195,18 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   def save(): Unit = {
     assertNotBucketed()
-    ResolvedDataSource(
+    val dataSource = DataSource(
       df.sqlContext,
-      source,
-      partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-      getBucketSpec,
-      mode,
-      extraOptions.toMap,
-      df)
+      className = source,
+      partitionColumns = partitioningColumns.getOrElse(Nil),
+      bucketSpec = getBucketSpec,
+      options = extraOptions.toMap)
+
+    dataSource.write(mode, df)
   }
 
   /**
-   * Specifies the name of the [[ContinuousQuery]] that can be started with `stream()`.
+   * Specifies the name of the [[ContinuousQuery]] that can be started with `startStream()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 2.0.0
@@ -223,8 +223,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def stream(path: String): ContinuousQuery = {
-    option("path", path).stream()
+  def startStream(path: String): ContinuousQuery = {
+    option("path", path).startStream()
   }
 
   /**
@@ -234,15 +234,16 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def stream(): ContinuousQuery = {
-    val sink = ResolvedDataSource.createSink(
-      df.sqlContext,
-      source,
-      extraOptions.toMap,
-      normalizedParCols.getOrElse(Nil))
+  def startStream(): ContinuousQuery = {
+    val dataSource =
+      DataSource(
+        df.sqlContext,
+        className = source,
+        options = extraOptions.toMap,
+        partitionColumns = normalizedParCols.getOrElse(Nil))
 
-    df.sqlContext.continuousQueryManager.startQuery(
-      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, sink)
+    df.sqlContext.sessionState.continuousQueryManager.startQuery(
+      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, dataSource.createSink())
   }
 
   /**
@@ -254,7 +255,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    insertInto(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
+    insertInto(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
@@ -322,7 +323,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   private def normalize(columnName: String, columnType: String): String = {
     val validColumnNames = df.logicalPlan.output.map(_.name)
-    validColumnNames.find(df.sqlContext.analyzer.resolver(_, columnName))
+    validColumnNames.find(df.sqlContext.sessionState.analyzer.resolver(_, columnName))
       .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
         s"existing columns (${validColumnNames.mkString(", ")})"))
   }
@@ -353,11 +354,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
+    saveAsTable(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    val tableExists = df.sqlContext.catalog.tableExists(tableIdent)
+    val tableExists = df.sqlContext.sessionState.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -365,13 +366,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       case (true, SaveMode.ErrorIfExists) =>
         throw new AnalysisException(s"Table $tableIdent already exists.")
-
-      case (true, SaveMode.Append) =>
-        // If it is Append, we just ask insertInto to handle it. We will not use insertInto
-        // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
-        // the table. But, insertInto with Overwrite requires the schema of data be the same
-        // the schema of the table.
-        insertInto(tableIdent)
 
       case _ =>
         val cmd =

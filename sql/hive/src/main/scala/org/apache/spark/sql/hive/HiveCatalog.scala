@@ -24,6 +24,7 @@ import org.apache.thrift.TException
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchItemException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -33,8 +34,8 @@ import org.apache.spark.sql.hive.client.HiveClient
  * A persistent implementation of the system catalog using Hive.
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Logging {
-  import Catalog._
+private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog with Logging {
+  import ExternalCatalog._
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(
@@ -73,10 +74,10 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Loggin
   }
 
   private def requireDbMatches(db: String, table: CatalogTable): Unit = {
-    if (table.specifiedDatabase != Some(db)) {
+    if (table.name.database != Some(db)) {
       throw new AnalysisException(
         s"Provided database $db does not much the one specified in the " +
-        s"table definition (${table.specifiedDatabase.getOrElse("n/a")})")
+        s"table definition (${table.name.database.getOrElse("n/a")})")
     }
   }
 
@@ -160,7 +161,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Loggin
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
-    val newTable = client.getTable(db, oldName).copy(name = newName)
+    val newTable = client.getTable(db, oldName).copy(name = TableIdentifier(newName, Some(db)))
     client.alterTable(oldName, newTable)
   }
 
@@ -173,7 +174,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Loggin
    */
   override def alterTable(db: String, tableDefinition: CatalogTable): Unit = withClient {
     requireDbMatches(db, tableDefinition)
-    requireTableExists(db, tableDefinition.name)
+    requireTableExists(db, tableDefinition.name.table)
     client.alterTable(tableDefinition)
   }
 

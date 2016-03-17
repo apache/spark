@@ -43,10 +43,10 @@ class MapWithStateSuite extends SparkFunSuite
   }
 
   after {
+    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
     if (checkpointDir != null) {
       Utils.deleteRecursively(checkpointDir)
     }
-    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
   }
 
   override def beforeAll(): Unit = {
@@ -518,7 +518,7 @@ class MapWithStateSuite extends SparkFunSuite
 
       val mapWithStateStream = dstream.map { _ -> 1 }.mapWithState(
         StateSpec.function(runningCount))
-      // Set internval make sure there is one RDD checkpointing
+      // Set interval make sure there is one RDD checkpointing
       mapWithStateStream.checkpoint(checkpointDuration)
       mapWithStateStream.stateSnapshots()
     }

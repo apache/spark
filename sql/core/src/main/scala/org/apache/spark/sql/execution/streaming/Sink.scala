@@ -38,7 +38,7 @@ trait Sink {
    * Accepts a new batch of data as well as a [[Offset]] that denotes how far in the input
    * data computation has progressed to.  When computation restarts after a failure, it is important
    * that a [[Sink]] returns the same [[Offset]] as the most recent batch of data that
-   * has been persisted durrably.  Note that this does not necessarily have to be the
+   * has been persisted durably.  Note that this does not necessarily have to be the
    * [[Offset]] for the most recent batch of data that was given to the sink.  For example,
    * it is valid to buffer data before persisting, as long as the [[Offset]] is stored
    * transactionally as data is eventually persisted.

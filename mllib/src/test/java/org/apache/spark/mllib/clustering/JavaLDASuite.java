@@ -45,9 +45,9 @@ public class JavaLDASuite implements Serializable {
   @Before
   public void setUp() {
     sc = new JavaSparkContext("local", "JavaLDA");
-    ArrayList<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<Tuple2<Long, Vector>>();
+    ArrayList<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<>();
     for (int i = 0; i < LDASuite.tinyCorpus().length; i++) {
-      tinyCorpus.add(new Tuple2<Long, Vector>((Long)LDASuite.tinyCorpus()[i]._1(),
+      tinyCorpus.add(new Tuple2<>((Long)LDASuite.tinyCorpus()[i]._1(),
           LDASuite.tinyCorpus()[i]._2()));
     }
     JavaRDD<Tuple2<Long, Vector>> tmpCorpus = sc.parallelize(tinyCorpus, 2);
@@ -189,8 +189,8 @@ public class JavaLDASuite implements Serializable {
     double logPerplexity = toyModel.logPerplexity(pairedDocs);
 
     // check: logLikelihood.
-    ArrayList<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<Tuple2<Long, Vector>>();
-    docsSingleWord.add(new Tuple2<Long, Vector>(0L, Vectors.dense(1.0, 0.0, 0.0)));
+    ArrayList<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<>();
+    docsSingleWord.add(new Tuple2<>(0L, Vectors.dense(1.0, 0.0, 0.0)));
     JavaPairRDD<Long, Vector> single = JavaPairRDD.fromJavaRDD(sc.parallelize(docsSingleWord));
     double logLikelihood = toyModel.logLikelihood(single);
   }

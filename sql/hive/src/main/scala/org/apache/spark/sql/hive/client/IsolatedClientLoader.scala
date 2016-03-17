@@ -26,8 +26,9 @@ import scala.language.reflectiveCalls
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
@@ -41,6 +42,8 @@ private[hive] object IsolatedClientLoader extends Logging {
   def forVersion(
       hiveMetastoreVersion: String,
       hadoopVersion: String,
+      sparkConf: SparkConf,
+      hadoopConf: Configuration,
       config: Map[String, String] = Map.empty,
       ivyPath: Option[String] = None,
       sharedPrefixes: Seq[String] = Seq.empty,
@@ -75,8 +78,10 @@ private[hive] object IsolatedClientLoader extends Logging {
     }
 
     new IsolatedClientLoader(
-      version = hiveVersion(hiveMetastoreVersion),
+      hiveVersion(hiveMetastoreVersion),
+      sparkConf,
       execJars = files,
+      hadoopConf = hadoopConf,
       config = config,
       sharesHadoopClasses = sharesHadoopClasses,
       sharedPrefixes = sharedPrefixes,
@@ -97,7 +102,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       hadoopVersion: String,
       ivyPath: Option[String]): Seq[URL] = {
     val hiveArtifacts = version.extraDeps ++
-      Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
+      Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde", "hive-cli")
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
       Seq("com.google.guava:guava:14.0.1",
         s"org.apache.hadoop:hadoop-client:$hadoopVersion")
@@ -146,6 +151,8 @@ private[hive] object IsolatedClientLoader extends Logging {
  */
 private[hive] class IsolatedClientLoader(
     val version: HiveVersion,
+    val sparkConf: SparkConf,
+    val hadoopConf: Configuration,
     val execJars: Seq[URL] = Seq.empty,
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
@@ -235,7 +242,7 @@ private[hive] class IsolatedClientLoader(
   /** The isolated client interface to Hive. */
   private[hive] def createClient(): HiveClient = {
     if (!isolationOn) {
-      return new HiveClientImpl(version, config, baseClassLoader, this)
+      return new HiveClientImpl(version, sparkConf, hadoopConf, config, baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
@@ -246,7 +253,7 @@ private[hive] class IsolatedClientLoader(
       classLoader
         .loadClass(classOf[HiveClientImpl].getName)
         .getConstructors.head
-        .newInstance(version, config, classLoader, this)
+        .newInstance(version, sparkConf, hadoopConf, config, classLoader, this)
         .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>

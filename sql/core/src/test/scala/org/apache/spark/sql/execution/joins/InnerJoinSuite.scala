@@ -98,7 +98,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         boundCondition,
         leftPlan,
         rightPlan)
-      EnsureRequirements(sqlContext).apply(broadcastJoin)
+      EnsureRequirements(sqlContext.sessionState.conf).apply(broadcastJoin)
     }
 
     def makeSortMergeJoin(
@@ -108,8 +108,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan) = {
       val sortMergeJoin =
-        joins.SortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan)
-      EnsureRequirements(sqlContext).apply(sortMergeJoin)
+        joins.SortMergeJoin(leftKeys, rightKeys, Inner, boundCondition, leftPlan, rightPlan)
+      EnsureRequirements(sqlContext.sessionState.conf).apply(sortMergeJoin)
     }
 
     test(s"$testName using BroadcastHashJoin (build=left)") {

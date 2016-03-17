@@ -20,18 +20,22 @@ package org.apache.spark.sql.catalyst.catalog
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 
 /**
  * Interface for the system catalog (of columns, partitions, tables, and databases).
  *
  * This is only used for non-temporary items, and implementations must be thread-safe as they
- * can be accessed in multiple threads.
+ * can be accessed in multiple threads. This is an external catalog because it is expected to
+ * interact with external systems.
  *
  * Implementations should throw [[AnalysisException]] when table or database don't exist.
  */
-abstract class Catalog {
-  import Catalog._
+abstract class ExternalCatalog {
+  import ExternalCatalog._
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
@@ -166,7 +170,7 @@ abstract class Catalog {
  * @param name name of the function
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
  */
-case class CatalogFunction(name: String, className: String)
+case class CatalogFunction(name: FunctionIdentifier, className: String)
 
 
 /**
@@ -198,7 +202,9 @@ case class CatalogColumn(
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
  */
-case class CatalogTablePartition(spec: Catalog.TablePartitionSpec, storage: CatalogStorageFormat)
+case class CatalogTablePartition(
+    spec: ExternalCatalog.TablePartitionSpec,
+    storage: CatalogStorageFormat)
 
 
 /**
@@ -208,8 +214,7 @@ case class CatalogTablePartition(spec: Catalog.TablePartitionSpec, storage: Cata
  * future once we have a better understanding of how we want to handle skewed columns.
  */
 case class CatalogTable(
-    specifiedDatabase: Option[String],
-    name: String,
+    name: TableIdentifier,
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
@@ -223,12 +228,12 @@ case class CatalogTable(
     viewText: Option[String] = None) {
 
   /** Return the database this table was specified to belong to, assuming it exists. */
-  def database: String = specifiedDatabase.getOrElse {
+  def database: String = name.database.getOrElse {
     throw new AnalysisException(s"table $name did not specify database")
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
-  def qualifiedName: String = s"$database.$name"
+  def qualifiedName: String = name.unquotedString
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -263,9 +268,26 @@ case class CatalogDatabase(
     properties: Map[String, String])
 
 
-object Catalog {
+object ExternalCatalog {
   /**
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+}
+
+
+/**
+ * A [[LogicalPlan]] that wraps [[CatalogTable]].
+ */
+case class CatalogRelation(
+    db: String,
+    metadata: CatalogTable,
+    alias: Option[String] = None)
+  extends LeafNode {
+
+  // TODO: implement this
+  override def output: Seq[Attribute] = Seq.empty
+
+  require(metadata.name.database == Some(db),
+    "provided database does not much the one specified in the table definition")
 }

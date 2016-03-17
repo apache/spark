@@ -29,11 +29,13 @@ import org.apache.spark.util.Utils
  */
 object ScalaReflection extends ScalaReflection {
   val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
-  // Since we are creating a runtime mirror usign the class loader of current thread,
+  // Since we are creating a runtime mirror using the class loader of current thread,
   // we need to use def at here. So, every time we call mirror, it is using the
   // class loader of the current thread.
-  override def mirror: universe.Mirror =
+  // SPARK-13640: Synchronize this because universe.runtimeMirror is not thread-safe in Scala 2.10.
+  override def mirror: universe.Mirror = ScalaReflectionLock.synchronized {
     universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
+  }
 
   import universe._
 
@@ -474,11 +476,17 @@ object ScalaReflection extends ScalaReflection {
             // For non-primitives, we can just extract the object from the Option and then recurse.
             case other =>
               val className = getClassNameFromType(optType)
-              val classObj = Utils.classForName(className)
-              val optionObjectType = ObjectType(classObj)
               val newPath = s"""- option value class: "$className"""" +: walkedTypePath
 
+              val optionObjectType: DataType = other match {
+                // Special handling is required for arrays, as getClassFromType(<Array>) will fail
+                // since Scala Arrays map to native Java constructs. E.g. "Array[Int]" will map to
+                // the Java type "[I".
+                case arr if arr <:< localTypeOf[Array[_]] => arrayClassFor(t)
+                case cls => ObjectType(getClassFromType(cls))
+              }
               val unwrapped = UnwrapOption(optionObjectType, inputObject)
+
               expressions.If(
                 IsNull(unwrapped),
                 expressions.Literal.create(null, silentSchemaFor(optType).dataType),
@@ -624,6 +632,9 @@ object ScalaReflection extends ScalaReflection {
     constructParams(t).map(_.name.toString)
   }
 
+  /*
+   * Retrieves the runtime class corresponding to the provided type.
+   */
   def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
 }
 
@@ -665,7 +676,8 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
-  def localTypeOf[T: TypeTag]: `Type` = {
+  // SPARK-13640: Synchronize this because TypeTag.tpe is not thread-safe in Scala 2.10.
+  def localTypeOf[T: TypeTag]: `Type` = ScalaReflectionLock.synchronized {
     val tag = implicitly[TypeTag[T]]
     tag.in(mirror).tpe.normalize
   }
@@ -673,9 +685,12 @@ trait ScalaReflection {
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
     val className = getClassNameFromType(tpe)
+
     tpe match {
+
       case t if Utils.classIsLoadable(className) &&
         Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+
         // Note: We check for classIsLoadable above since Utils.classForName uses Java reflection,
         //       whereas className is from Scala reflection.  This can make it hard to find classes
         //       in some cases, such as when a class is enclosed in an object (in which case
@@ -745,7 +760,16 @@ trait ScalaReflection {
     case _: UnsupportedOperationException => Schema(NullType, nullable = true)
   }
 
-  /** Returns the full class name for a type. */
+  /**
+    * Returns the full class name for a type. The returned name is the canonical
+    * Scala name, where each component is separated by a period. It is NOT the
+    * Java-equivalent runtime name (no dollar signs).
+    *
+    * In simple cases, both the Scala and Java names are the same, however when Scala
+    * generates constructs that do not map to a Java equivalent, such as singleton objects
+    * or nested classes in package objects, it uses the dollar sign ($) to create
+    * synthetic classes, emulating behaviour in Java bytecode.
+    */
   def getClassNameFromType(tpe: `Type`): String = {
     tpe.erasure.typeSymbol.asClass.fullName
   }
@@ -789,4 +813,5 @@ trait ScalaReflection {
     }
     params.flatten
   }
+
 }
