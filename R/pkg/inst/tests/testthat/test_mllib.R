@@ -154,8 +154,8 @@ test_that("naiveBayes", {
   summary.model <- summary(model)
   expect_equal(length(summary.model$pi), 3)
   expect_equal(sum(summary.model$pi), 1)
-  l1 <- summary.model$theta[1,]
-  l2 <- summary.model$theta[2,]
+  l1 <- summary.model$theta[1, ]
+  l2 <- summary.model$theta[2, ]
   expect_equal(sum(unlist(l1)), 1)
   expect_equal(sum(unlist(l2)), 1)
 
