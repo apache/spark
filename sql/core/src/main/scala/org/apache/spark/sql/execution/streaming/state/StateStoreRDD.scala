@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * An RDD that allows computations to be executed against [[StateStore]]s. It
@@ -32,18 +32,22 @@ import org.apache.spark.util.Utils
 class StateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
+    storeRootLocation: String,
     operatorId: Long,
     storeVersion: Long,
-    storeDirectory: String,
     keySchema: StructType,
     valueSchema: StructType,
     @transient private val storeCoordinator: Option[StateStoreCoordinator])
   extends RDD[U](dataRDD) {
 
+  // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
+  private val confBroadcast = dataRDD.context.broadcast(
+    new SerializableConfiguration(dataRDD.context.hadoopConfiguration))
+
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val storeId = StateStoreId(operatorId, partition.index)
+    val storeId = StateStoreId(storeRootLocation, operatorId, partition.index)
     storeCoordinator.flatMap(_.getLocation(storeId)).toSeq
   }
 
@@ -51,9 +55,10 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     var store: StateStore = null
 
     Utils.tryWithSafeFinally {
-      val storeId = StateStoreId(operatorId, partition.index)
-      store = StateStore.get(storeId, storeDirectory, keySchema, valueSchema, storeVersion)
-      val inputIter = dataRDD.compute(partition, ctxt)
+      val storeId = StateStoreId(storeRootLocation, operatorId, partition.index)
+      store = StateStore.get(
+        storeId, keySchema, valueSchema, storeVersion, confBroadcast.value.value)
+      val inputIter = dataRDD.iterator(partition, ctxt)
       val outputIter = storeUpdateFunction(store, inputIter)
       assert(store.hasCommitted)
       outputIter

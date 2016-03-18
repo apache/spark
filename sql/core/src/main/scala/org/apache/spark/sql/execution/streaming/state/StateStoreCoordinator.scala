@@ -63,10 +63,10 @@ class StateStoreCoordinator(rpcEnv: RpcEnv) {
   }
 
   /** Deactivate instances related to a set of operator */
-  def deactivateInstances(operatorIds: Set[Long]): Unit = {
+  def deactivateInstances(storeRootLocation: String): Unit = {
     instances.synchronized {
       val storeIdsToRemove =
-        instances.keys.filter(id => operatorIds.contains(id.operatorId)).toSeq
+        instances.keys.filter(_.rootLocation == storeRootLocation).toSeq
       instances --= storeIdsToRemove
     }
   }

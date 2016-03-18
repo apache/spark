@@ -27,7 +27,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   test("report, verify, getLocation") {
     withCoordinator(sc) { coordinator =>
-      val id = StateStoreId(0, 0)
+      val id = StateStoreId("x", 0, 0)
 
       assert(coordinator.verifyIfInstanceActive(id, "exec1") === false)
       assert(coordinator.getLocation(id) === None)
@@ -49,9 +49,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   test("make inactive") {
     withCoordinator(sc) { coordinator =>
-      val id1 = StateStoreId(0, 0)
-      val id2 = StateStoreId(1, 0)
-      val id3 = StateStoreId(0, 1)
+      val id1 = StateStoreId("x", 0, 0)
+      val id2 = StateStoreId("y", 1, 0)
+      val id3 = StateStoreId("x", 0, 1)
       val host = "hostX"
       val exec = "exec1"
 
@@ -63,7 +63,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       assert(coordinator.verifyIfInstanceActive(id2, exec) === true)
       assert(coordinator.verifyIfInstanceActive(id3, exec) === true)
 
-      coordinator.deactivateInstances(Set(0))
+      coordinator.deactivateInstances("x")
 
       assert(coordinator.verifyIfInstanceActive(id1, exec) === false)
       assert(coordinator.verifyIfInstanceActive(id2, exec) === true)
@@ -75,7 +75,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           Some(ExecutorCacheTaskLocation(host, exec).toString))
       assert(coordinator.getLocation(id3) === None)
 
-      coordinator.deactivateInstances(Set(1))
+      coordinator.deactivateInstances("y")
       assert(coordinator.verifyIfInstanceActive(id2, exec) === false)
       assert(coordinator.getLocation(id2) === None)
     }
@@ -84,7 +84,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
   test("communication") {
     withCoordinator(sc) { coordinator =>
       import StateStoreCoordinator._
-      val id = StateStoreId(0, 0)
+      val id = StateStoreId("x", 0, 0)
       val host = "hostX"
 
       val ref = RpcUtils.makeDriverRef("StateStoreCoordinator", sc.env.conf, sc.env.rpcEnv)

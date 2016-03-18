@@ -22,11 +22,13 @@ import java.io.File
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
@@ -38,6 +40,7 @@ import org.apache.spark.util.Utils
 class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester {
   type MapType = mutable.HashMap[UnsafeRow, UnsafeRow]
 
+  import HDFSBackedStateStoreProvider._
   import StateStoreCoordinatorSuite._
   import StateStoreSuite._
 
@@ -97,7 +100,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
     // New updates to the reloaded store with new version, and does not change old version
     val reloadedProvider = new HDFSBackedStateStoreProvider(
-      store.id, provider.directory, keySchema, valueSchema)
+      store.id, keySchema, valueSchema, new SparkConf, new Configuration)
     val reloadedStore = reloadedProvider.getStore(1)
     update(reloadedStore, "c", 4)
     assert(reloadedStore.commit() === 2)
@@ -220,7 +223,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
     updateVersionTo(2)
     require(getDataFromFiles(provider) === Set("a" -> 2))
-    provider.manage()               // should not generate snapshot files
+    provider.doMaintenance()               // should not generate snapshot files
     assert(getDataFromFiles(provider) === Set("a" -> 2))
 
     for (i <- 1 to currentVersion) {
@@ -231,7 +234,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     // After version 6, snapshotting should generate one snapshot file
     updateVersionTo(6)
     require(getDataFromFiles(provider) === Set("a" -> 6), "store not updated correctly")
-    provider.manage()       // should generate snapshot files
+    provider.doMaintenance()       // should generate snapshot files
     assert(getDataFromFiles(provider) === Set("a" -> 6), "snapshotting messed up the data")
     assert(getDataFromFiles(provider) === Set("a" -> 6))
 
@@ -241,7 +244,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     // After version 20, snapshotting should generate newer snapshot files
     updateVersionTo(20)
     require(getDataFromFiles(provider) === Set("a" -> 20), "store not updated correctly")
-    provider.manage()       // do snapshot
+    provider.doMaintenance()       // do snapshot
     assert(getDataFromFiles(provider) === Set("a" -> 20), "snapshotting messed up the data")
     assert(getDataFromFiles(provider) === Set("a" -> 20))
 
@@ -259,7 +262,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       val store = provider.getStore(i - 1)
       update(store, "a", i)
       store.commit()
-      provider.manage() // do cleanup
+      provider.doMaintenance() // do cleanup
     }
     require(
       rowsToSet(provider.latestIterator()) === Set("a" -> 20),
@@ -275,32 +278,32 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   test("StateStore.get") {
     quietly {
       val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
-      val storeId = StateStoreId(0, 0)
+      val storeId = StateStoreId(dir, 0, 0)
 
       // Verify that trying to get incorrect versions throw errors
       intercept[IllegalArgumentException] {
-        StateStore.get(storeId, dir, keySchema, valueSchema, -1)
+        StateStore.get(storeId, keySchema, valueSchema, -1, new Configuration)
       }
       assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
 
       intercept[IllegalStateException] {
-        StateStore.get(storeId, dir, keySchema, valueSchema, 1)
+        StateStore.get(storeId, keySchema, valueSchema, 1, new Configuration)
       }
 
       // Increase version of the store
-      val store0 = StateStore.get(storeId, dir, keySchema, valueSchema, 0)
+      val store0 = StateStore.get(storeId, keySchema, valueSchema, 0, new Configuration)
       assert(store0.version === 0)
       update(store0, "a", 1)
       store0.commit()
 
-      assert(StateStore.get(storeId, dir, keySchema, valueSchema, 1).version == 1)
-      assert(StateStore.get(storeId, dir, keySchema, valueSchema, 0).version == 0)
+      assert(StateStore.get(storeId, keySchema, valueSchema, 1, new Configuration).version == 1)
+      assert(StateStore.get(storeId, keySchema, valueSchema, 0, new Configuration).version == 0)
 
       // Verify that you can remove the store and still reload and use it
       StateStore.remove(storeId)
       assert(!StateStore.isLoaded(storeId))
 
-      val store1 = StateStore.get(storeId, dir, keySchema, valueSchema, 1)
+      val store1 = StateStore.get(storeId, keySchema, valueSchema, 1, new Configuration)
       assert(StateStore.isLoaded(storeId))
       update(store1, "a", 2)
       assert(store1.commit() === 2)
@@ -314,15 +317,16 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       .setAppName("test")
       .set("spark.sql.streaming.stateStore.managementInterval", "10ms")
     val opId = 0
-    val storeId = StateStoreId(opId, 0)
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
-    val provider = new HDFSBackedStateStoreProvider(storeId, dir, keySchema, valueSchema)
+    val storeId = StateStoreId(dir, opId, 0)
+    val provider = new HDFSBackedStateStoreProvider(
+      storeId, keySchema, valueSchema, conf, new Configuration)
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinator(sc) { coordinator =>
           for (i <- 1 to 20) {
-            val store = StateStore.get(storeId, dir, keySchema, valueSchema, i - 1)
+            val store = StateStore.get(storeId, keySchema, valueSchema, i - 1, new Configuration)
             update(store, "a", i)
             store.commit()
           }
@@ -341,13 +345,13 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
           // If driver decides to deactivate all instances of the store, then this instance
           // should be unloaded
-          coordinator.deactivateInstances(Set(opId))
+          coordinator.deactivateInstances(dir)
           eventually(timeout(4 seconds)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, dir, keySchema, valueSchema, 20)
+          StateStore.get(storeId, keySchema, valueSchema, 20, new Configuration)
           assert(StateStore.isLoaded(storeId))
 
           // If some other executor loads the store, then this instance should be unloaded
@@ -357,7 +361,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, dir, keySchema, valueSchema, 20)
+          StateStore.get(storeId, keySchema, valueSchema, 20, new Configuration)
           assert(StateStore.isLoaded(storeId))
         }
       }
@@ -373,11 +377,11 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       provider: HDFSBackedStateStoreProvider,
     version: Int = -1): Set[(String, Int)] = {
     val reloadedProvider = new HDFSBackedStateStoreProvider(
-      provider.id, provider.directory, keySchema, valueSchema)
+      provider.id, keySchema, valueSchema, new SparkConf, new Configuration)
     if (version < 0) {
-      reloadedProvider.latestIterator().map(rowsToKeyValue).toSet
+      reloadedProvider.latestIterator().map(rowsToStringInt).toSet
     } else {
-      reloadedProvider.iterator(version).map(rowsToKeyValue).toSet
+      reloadedProvider.iterator(version).map(rowsToStringInt).toSet
     }
   }
 
@@ -385,7 +389,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       testMapOption: Option[MapType],
       expectedMap: Map[String, Int]): Unit = {
     assert(testMapOption.nonEmpty, "no map present")
-    val convertedMap = testMapOption.get.map(rowsToKeyValue)
+    val convertedMap = testMapOption.get.map(rowsToStringInt)
     assert(convertedMap === expectedMap)
   }
 
@@ -414,22 +418,25 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   def newStoreProvider(
       opId: Long = Random.nextLong,
       partition: Int = 0,
-      maxDeltaChainForSnapshots: Int = 10
+      maxDeltaChainForSnapshots: Int = DEFAULT_MAX_DELTA_CHAIN_FOR_SNAPSHOTS
     ): HDFSBackedStateStoreProvider = {
+    val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    val sparkConf = new SparkConf()
+      .set(MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF, maxDeltaChainForSnapshots.toString)
     new HDFSBackedStateStoreProvider(
-      StateStoreId(opId, partition),
-      Utils.createDirectory(tempDir, Random.nextString(5)).toString,
-      StructType(Seq(StructField("key", StringType, true))),
-      StructType(Seq(StructField("value", IntegerType, true))),
-      maxDeltaChainForSnapshots = maxDeltaChainForSnapshots)
+      StateStoreId(dir, opId, partition),
+      keySchema,
+      valueSchema,
+      sparkConf,
+      new Configuration())
   }
 
   def remove(store: StateStore, condition: String => Boolean): Unit = {
-    store.remove(row => condition(rowToKey(row)))
+    store.remove(row => condition(rowToString(row)))
   }
 
   private def update(store: StateStore, key: String, value: Int): Unit = {
-    store.update(keyToRow(key), _ => valueToRow(value))
+    store.update(stringToRow(key), _ => intToRow(value))
   }
 }
 
@@ -441,37 +448,43 @@ private[state] object StateStoreSuite {
   case class Updated(key: String, value: Int) extends TestUpdate
   case class Removed(key: String) extends TestUpdate
 
-  def keyToRow(s: String): UnsafeRow = {
-    val projection = UnsafeProjection.create(Array[DataType](StringType))
-    projection.apply(new GenericInternalRow(Array[Any](UTF8String.fromString(s))))
+  val strProj = UnsafeProjection.create(Array[DataType](StringType))
+  val intProj = UnsafeProjection.create(Array[DataType](IntegerType))
+
+  def stringToRow(s: String): UnsafeRow = {
+    strProj.apply(new GenericInternalRow(Array[Any](UTF8String.fromString(s)))).copy()
   }
 
-  def valueToRow(i: Int): UnsafeRow = {
-    val projection = UnsafeProjection.create(Array[DataType](IntegerType))
-    projection.apply(new GenericInternalRow(Array[Any](i)))
+  def intToRow(i: Int): UnsafeRow = {
+    intProj.apply(new GenericInternalRow(Array[Any](i))).copy()
   }
 
-  def rowToKey(row: UnsafeRow): String = {
+  def rowToString(row: UnsafeRow): String = {
     row.getUTF8String(0).toString
   }
 
-  def rowToValue(row: UnsafeRow): Int = {
+  def rowToInt(row: UnsafeRow): Int = {
     row.getInt(0)
   }
 
-  def rowsToKeyValue(row: (UnsafeRow, UnsafeRow)): (String, Int) = {
-    (rowToKey(row._1), rowToValue(row._2))
+  def rowsToIntInt(row: (UnsafeRow, UnsafeRow)): (Int, Int) = {
+    (rowToInt(row._1), rowToInt(row._2))
+  }
+
+
+  def rowsToStringInt(row: (UnsafeRow, UnsafeRow)): (String, Int) = {
+    (rowToString(row._1), rowToInt(row._2))
   }
 
   def rowsToSet(iterator: Iterator[(UnsafeRow, UnsafeRow)]): Set[(String, Int)] = {
-    iterator.map(rowsToKeyValue).toSet
+    iterator.map(rowsToStringInt).toSet
   }
 
   def updatesToSet(iterator: Iterator[StoreUpdate]): Set[TestUpdate] = {
     iterator.map { _ match {
-      case ValueAdded(key, value) => Added(rowToKey(key), rowToValue(value))
-      case ValueUpdated(key, value) => Updated(rowToKey(key), rowToValue(value))
-      case KeyRemoved(key) => Removed(rowToKey(key))
+      case ValueAdded(key, value) => Added(rowToString(key), rowToInt(value))
+      case ValueUpdated(key, value) => Updated(rowToString(key), rowToInt(value))
+      case KeyRemoved(key) => Removed(rowToString(key))
     }}.toSet
   }
 }

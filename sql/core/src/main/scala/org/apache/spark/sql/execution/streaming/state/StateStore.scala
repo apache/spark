@@ -22,15 +22,15 @@ import java.util.{Timer, TimerTask}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import com.esotericsoftware.kryo.io.{Output, Input}
-import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.{SparkConf, Logging, SparkEnv}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.{Logging, SparkEnv}
+
 
 /** Unique identifier for a [[StateStore]] */
-case class StateStoreId(operatorId: Long, partitionId: Int)
+case class StateStoreId(rootLocation: String, operatorId: Long, partitionId: Int)
 
 /**
  * Base trait for a versioned key-value store used for streaming aggregations
@@ -89,7 +89,7 @@ trait StateStoreProvider {
   def getStore(version: Long): StateStore
 
   /** Optional method for providers to allow for background management */
-  def manage(): Unit = { }
+  def doMaintenance(): Unit = { }
 }
 
 sealed trait StoreUpdate
@@ -104,7 +104,8 @@ case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
  */
 private[state] object StateStore extends Logging {
 
-  private val MANAGEMENT_TASK_INTERVAL_SECS = 60
+  val MANAGEMENT_TASK_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
+  val MANAGEMENT_TASK_INTERVAL_SECS = 60
 
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
   private val managementTimer = new Timer("StateStore Timer", true)
@@ -113,15 +114,18 @@ private[state] object StateStore extends Logging {
   /** Get or create a store associated with the id. */
   def get(
     storeId: StateStoreId,
-    directory: String,
     keySchema: StructType,
     valueSchema: StructType,
-    version: Long): StateStore = {
+    version: Long,
+    hadoopConf: Configuration
+  ): StateStore = {
     require(version >= 0)
     val storeProvider = loadedProviders.synchronized {
       startIfNeeded()
+      val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
       val provider = loadedProviders.getOrElseUpdate(
-        storeId, new HDFSBackedStateStoreProvider(storeId, directory, keySchema, valueSchema))
+        storeId,
+        new HDFSBackedStateStoreProvider(storeId, keySchema, valueSchema, sparkConf, hadoopConf))
       reportActiveInstance(storeId)
       provider
     }
@@ -172,7 +176,7 @@ private[state] object StateStore extends Logging {
     loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
       try {
         if (verifyIfInstanceActive(id)) {
-          provider.manage()
+          provider.doMaintenance()
         } else {
           remove(id)
           logInfo(s"Unloaded $provider")

@@ -27,9 +27,9 @@ package object state {
   implicit class StateStoreOps[T: ClassTag](dataRDD: RDD[T]) {
     def mapPartitionWithStateStore[U: ClassTag](
       storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
+      storeRootLocation: String,
       operatorId: Long,
       storeVersion: Long,
-      storeDirectory: String,
       keySchema: StructType,
       valueSchema: StructType,
       storeCoordinator: Option[StateStoreCoordinator] = None
@@ -38,9 +38,9 @@ package object state {
       new StateStoreRDD(
         dataRDD,
         cleanedF,
+        storeRootLocation,
         operatorId,
         storeVersion,
-        storeDirectory,
         keySchema,
         valueSchema,
         storeCoordinator)
