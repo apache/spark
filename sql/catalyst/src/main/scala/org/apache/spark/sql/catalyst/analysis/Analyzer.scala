@@ -640,8 +640,7 @@ class Analyzer(
               failAnalysis(
                 "Integer in the Order/Sort By clause is not allowed " +
                 "when spark.sql.orderByOrdinal is set to false")
-            }
-            else {
+            } else {
               throw new UnresolvedException(s,
                 s"""Order/Sort By position: $index does not exist \n
                   |The Select List is indexed from 1 to ${child.output.size}""".stripMargin)
