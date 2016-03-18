@@ -156,8 +156,7 @@ sealed trait Matrix extends Serializable {
   def numActives: Int
 }
 
-@DeveloperApi
-class MatrixUDT extends UserDefinedType[Matrix] {
+private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense

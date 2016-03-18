@@ -34,7 +34,7 @@ import org.apache.spark.storage.StorageLevel
  * @param nodeIndex The current node index of a data point that this will update.
  */
 @DeveloperApi
-case class NodeIndexUpdater(
+private[tree] case class NodeIndexUpdater(
     split: Split,
     nodeIndex: Int) {
   /**
@@ -75,7 +75,7 @@ case class NodeIndexUpdater(
  *                           (how often should the cache be checkpointed.).
  */
 @DeveloperApi
-class NodeIdCache(
+private[spark] class NodeIdCache(
   var nodeIdsForInstances: RDD[Array[Int]],
   val checkpointInterval: Int) {
 
@@ -173,9 +173,7 @@ class NodeIdCache(
   }
 }
 
-
-@DeveloperApi
-object NodeIdCache {
+private[spark] object NodeIdCache {
   /**
    * Initialize the node Id cache with initial node Id values.
    * @param data The RDD of training rows.

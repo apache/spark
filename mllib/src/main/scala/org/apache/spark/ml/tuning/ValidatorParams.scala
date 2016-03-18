@@ -17,18 +17,15 @@
 
 package org.apache.spark.ml.tuning
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.Estimator
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: DeveloperApi ::
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
  */
-@DeveloperApi
-trait ValidatorParams extends Params {
+private[ml] trait ValidatorParams extends Params {
 
   /**
    * param for the estimator to be validated
