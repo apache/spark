@@ -27,95 +27,156 @@ from pyspark.ml.util import _jvm, JavaMLReader
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java, callMLlibFunc
 
 
-def _param_value_py2java(sc, obj):
-    from pyspark.ml.param import Params
-    if isinstance(obj, Params):
-        obj = _stage_py2java(obj)
-    elif isinstance(obj, list):
-        obj = ListConverter().\
-            convert([_param_value_py2java(sc, x) for x in obj], sc._gateway._gateway_client)
-        #gateway = SparkContext._gateway
-        #java_stages = gateway.new_array(_jvm().java.lang.Object, len(obj))
-        #for idx, stage in enumerate(obj):
-        #    java_stages[idx] = _param_value_py2java(sc, stage)
-        #obj = java_stages
-    else:
-        obj = _py2java(sc, obj)
-    return obj
+class JavaConvertible(Params):
+    """
+    Utility class to help convert stages that extend from :py:Params: between Java and Python
+    implementations.
+    """
 
-
-def _param_value_java2py(sc, r):
-    if callMLlibFunc("isInstanceOfParams", r):
-        r = _stage_java2py(r)
-    elif isinstance(r, (JavaArray, JavaList)):
-        r = [_param_value_java2py(sc, x) for x in r]
-    else:
-        r = _java2py(sc, r)
-    return r
-
-
-def _params_py2java(py_stage, java_stage):
-    sc = SparkContext._active_spark_context
-    paramMap = py_stage.extractParamMap()
-    for param in py_stage.params:
-        if param in paramMap:
-            py_value = paramMap[param]
-            java_param = java_stage.getParam(param.name)
-            java_value = _param_value_py2java(sc, py_value)
-            java_stage.set(java_param.w(java_value))
-
-
-def _params_java2py(py_stage, java_stage):
-    sc = SparkContext._active_spark_context
-    for param in py_stage.params:
-        if java_stage.hasParam(param.name):
-            java_param = java_stage.getParam(param.name)
-            if java_stage.isDefined(java_param):
-                java_value = java_stage.getOrDefault(java_param)
-                py_value = _param_value_java2py(sc, java_value)
-                py_stage._paramMap[param] = py_value
-
-
-def _stage_py2java(py_stage):
-    if isinstance(py_stage, JavaWrapper):
-        py_stage._transfer_params_to_java()
-        return py_stage._java_obj
-    else:
-        # TODO: not runnable
-        java_stage = JavaWrapper.\
-            _new_java_obj(JavaMLReader._java_loader_class(py_stage.__class__), py_stage.uid)
-        _params_py2java(py_stage, java_stage)
-        return java_stage
-
-
-def _stage_java2py(java_stage):
-    def __get_class(clazz):
+    @staticmethod
+    def _new_py_object(py_class, *args):
         """
-        Loads Python class from its name.
+        Construct a new Python object. Note that the extra args should be convertible from Java to
+        Python with the _java2py function, otherwise you need to convert the args yourself.
+
+        :param py_class: Full string name of the Python class.
+        :param args: Other arguments to construct a Python object.
+        :return: A new Python object.
         """
-        parts = clazz.split('.')
+        sc = SparkContext._active_spark_context
+        parts = py_class.split('.')
         module = ".".join(parts[:-1])
-        m = __import__(module)
+        py_obj = __import__(module)
         for comp in parts[1:]:
-            m = getattr(m, comp)
-        return m
-    stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
-    # Generate a default new instance from the stage_name class.
-    # TODO: not all python classes have the constructor
-    py_stage = __get_class(stage_name)()
-    # Load information from java_stage to the instance.
-    if isinstance(py_stage, JavaWrapper):
-        py_stage._java_obj = java_stage
-        py_stage._resetUid(java_stage.uid())
-        py_stage._transfer_params_from_java()
-    else:
-        py_stage._resetUid(java_stage.uid())
-        _params_java2py(py_stage, java_stage)
-    return py_stage
+            py_obj = getattr(py_obj, comp)
+        py_args = [_java2py(sc, arg) for arg in args]
+        return py_obj(*py_args)
+
+    @staticmethod
+    def _new_java_obj(java_class, *args):
+        """
+        Construct a new Java object. Note that the extra args should be convertible from Python to
+        Java with the _py2java function, otherwise you need to convert the args yourself.
+
+        :param java_class: Full string name of the Java class.
+        :param args: Other arguments to construct a Java object.
+        :return: A new Java object.
+        """
+        sc = SparkContext._active_spark_context
+        java_obj = _jvm()
+        for name in java_class.split("."):
+            java_obj = getattr(java_obj, name)
+        java_args = [_py2java(sc, arg) for arg in args]
+        return java_obj(*java_args)
+
+    def _create_java_stage(self):
+        """
+        Create a Java companion stage from the current Python stage. Here we provide a default
+        implementation which assumes the Java companion class has a constructor that only requires
+        an uid. Those classes that disagree with the assumption should override the method.
+        """
+        return self._new_java_obj(JavaMLReader._java_loader_class(self.__class__), self.uid)
+
+    def _create_py_stage(self, java_stage):
+        """
+        Create a Python stage from its Java companion. Here we provide a default implementation
+        which assumes that the Python class has a constructor that requires nothing. Those classes
+        that disagree with the assumption should override the method.
+        """
+        stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
+        # Generate a default new instance from the stage_name class.
+        py_stage = self._new_py_object(stage_name)
+        return py_stage
+
+    def _param_value_py2java(self, obj):
+        """
+        Utility method to convert Python param value to Java companion. If the param value is an
+        instance of :py:Params:, we convert it with _stage_py2java; Otherwise we use _py2java.
+        """
+        sc = SparkContext._active_spark_context
+        from pyspark.ml.param import Params
+        if isinstance(obj, Params):
+            obj = self._stage_py2java(obj)
+        elif isinstance(obj, list):
+            obj = ListConverter().convert(
+                    [self._param_value_py2java(x) for x in obj],
+                    sc._gateway._gateway_client)
+        else:
+            obj = _py2java(sc, obj)
+        return obj
+
+    def _param_value_java2py(self, r):
+        """
+        Utility method to convert Java param value to Python companion. If the param value is an
+        instance of Params, we convert it with _stage_java2py; Otherwise we use _java2py.
+        """
+        sc = SparkContext._active_spark_context
+        if callMLlibFunc("isInstanceOfParams", r):
+            r = self._stage_java2py(r)
+        elif isinstance(r, (JavaArray, JavaList)):
+            r = [self._param_value_java2py(x) for x in r]
+        else:
+            r = _java2py(sc, r)
+        return r
+
+    def _params_py2java(self, py_stage, java_stage):
+        """
+        Convert params of a Python stage to a Java stage.
+        """
+        paramMap = py_stage.extractParamMap()
+        for param in py_stage.params:
+            if param in paramMap:
+                py_value = paramMap[param]
+                java_param = java_stage.getParam(param.name)
+                java_value = self._param_value_py2java(py_value)
+                java_stage.set(java_param.w(java_value))
+
+    def _params_java2py(self, py_stage, java_stage):
+        """
+        Convert params of a Java stage to Python stage.
+        """
+        for param in py_stage.params:
+            if java_stage.hasParam(param.name):
+                java_param = java_stage.getParam(param.name)
+                if java_stage.isDefined(java_param):
+                    java_value = java_stage.getOrDefault(java_param)
+                    py_value = self._param_value_java2py(java_value)
+                    py_stage._paramMap[param] = py_value
+
+    def _stage_py2java(self, py_stage):
+        """
+        Convert a Python stage to a new Java stage.
+        """
+        if isinstance(py_stage, JavaWrapper):
+            py_stage._transfer_params_to_java()
+            return py_stage._java_obj
+        elif isinstance(py_stage, JavaConvertible):
+            java_stage = py_stage._create_java_stage()
+            self._params_py2java(py_stage, java_stage)
+            return java_stage
+        else:
+            raise NotImplementedError()
+
+    def _stage_java2py(self, java_stage):
+        """
+        Convert a Java stage to a new Python stage.
+        """
+        py_stage = self._create_py_stage(java_stage)
+        # Load information from java_stage to the instance.
+        if isinstance(py_stage, JavaWrapper):
+            py_stage._java_obj = java_stage
+            py_stage._resetUid(java_stage.uid())
+            py_stage._transfer_params_from_java()
+        elif isinstance(py_stage, JavaConvertible):
+            py_stage._resetUid(java_stage.uid())
+            self._params_java2py(py_stage, java_stage)
+        else:
+            raise NotImplementedError()
+        return py_stage
 
 
 @inherit_doc
-class JavaWrapper(Params):
+class JavaWrapper(JavaConvertible):
     """
     Utility class to help create wrapper classes from Java/Scala
     implementations of pipeline components.
@@ -128,29 +189,17 @@ class JavaWrapper(Params):
     #: synced with the Python wrapper in fit/transform/evaluate/copy.
     _java_obj = None
 
-    @staticmethod
-    def _new_java_obj(java_class, *args):
-        """
-        Construct a new Java object.
-        """
-        sc = SparkContext._active_spark_context
-        java_obj = _jvm()
-        for name in java_class.split("."):
-            java_obj = getattr(java_obj, name)
-        java_args = [_py2java(sc, arg) for arg in args]
-        return java_obj(*java_args)
-
     def _transfer_params_to_java(self):
         """
         Transforms the embedded params to the companion Java object.
         """
-        _params_py2java(self, self._java_obj)
+        self._params_py2java(self, self._java_obj)
 
     def _transfer_params_from_java(self):
         """
         Transforms the embedded params from the companion Java object.
         """
-        _params_java2py(self, self._java_obj)
+        self._params_java2py(self, self._java_obj)
 
     @staticmethod
     def _empty_java_param_map():
