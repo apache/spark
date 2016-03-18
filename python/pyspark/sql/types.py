@@ -649,8 +649,9 @@ class WrappedJStructType(StructType):
         names = list(self.names)
         fields = list(self.fields)
         needSerializeAnyField = self._needSerializeAnyField
+
         def converter(obj):
-            if _needSerializeAnyField:
+            if needSerializeAnyField:
                 if isinstance(obj, dict):
                     return tuple(f.toInternal(obj.get(n)) for n, f in zip(names, fields))
                 elif isinstance(obj, (tuple, list)):
@@ -715,6 +716,7 @@ class WrappedJStructType(StructType):
         schemas.
         """
         return _parse_datatype_json_string(self.json())
+
 
 class UserDefinedType(DataType):
     """User-defined type (UDT).

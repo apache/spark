@@ -443,7 +443,7 @@ class SQLContext(object):
         if isinstance(schema, WrappedJStructType):
             java_schema = schema._jstructtype
         else:
-            java_schema  = schema.json()
+            java_schema = schema.json()
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         jdf = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), java_schema)
         df = DataFrame(jdf, self)
