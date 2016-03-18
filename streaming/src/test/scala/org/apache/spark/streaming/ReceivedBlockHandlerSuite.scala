@@ -339,7 +339,7 @@ class ReceivedBlockHandlerSuite
 
     storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
-    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b)) })
+    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).toByteBuffer) })
   }
 
   /** Test error handling when blocks that cannot be stored */
