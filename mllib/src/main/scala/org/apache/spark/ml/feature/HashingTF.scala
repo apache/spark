@@ -53,7 +53,11 @@ class HashingTF(override val uid: String)
     ParamValidators.gt(0))
 
   /**
-   * Binary toggle ****
+   * Binary toggle to control term frequency counts.
+   * If true, all non-zero counts are set to 1.  This is useful for discrete probabilistic
+   * models that model binary events rather than integer counts.
+   * (default = false)
+   * @group param
    */
   val binary = new BooleanParam(this, "binary", "If true, all non zero counts are set to 1. " +
     "This is useful for discrete probabilistic models that model binary events rather " +
