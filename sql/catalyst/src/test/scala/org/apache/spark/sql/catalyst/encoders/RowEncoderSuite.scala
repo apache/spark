@@ -47,14 +47,11 @@ class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
   override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 
-  override def serialize(obj: Any): GenericArrayData = {
-    obj match {
-      case p: ExamplePoint =>
-        val output = new Array[Any](2)
-        output(0) = p.x
-        output(1) = p.y
-        new GenericArrayData(output)
-    }
+  override def serialize(p: ExamplePoint): GenericArrayData = {
+    val output = new Array[Any](2)
+    output(0) = p.x
+    output(1) = p.y
+    new GenericArrayData(output)
   }
 
   override def deserialize(datum: Any): ExamplePoint = {

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, StringWriter}
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
@@ -27,7 +28,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
-import org.scalactic.Tolerance._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -65,7 +65,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { parser =>
         parser.nextToken()
-        JacksonParser.convertField(factory, parser, dataType)
+        JacksonParser.convertRootField(factory, parser, dataType)
       }
     }
 
@@ -1292,7 +1292,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val constantValues =
       Seq(
-        "a string in binary".getBytes("UTF-8"),
+        "a string in binary".getBytes(StandardCharsets.UTF_8),
         null,
         true,
         1.toByte,
@@ -1423,6 +1423,23 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           )
         }
       }
+    }
+  }
+
+  test("Parse JSON rows having an array type and a struct type in the same field.") {
+    withTempDir { dir =>
+      val dir = Utils.createTempDir()
+      dir.delete()
+      val path = dir.getCanonicalPath
+      arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+
+      val schema =
+        StructType(
+          StructField("a", StructType(
+            StructField("b", StringType) :: Nil
+          )) :: Nil)
+      val jsonDF = sqlContext.read.schema(schema).json(path)
+      assert(jsonDF.count() == 2)
     }
   }
 

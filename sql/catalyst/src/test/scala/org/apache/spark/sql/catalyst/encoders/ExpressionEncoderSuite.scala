@@ -152,6 +152,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   productTest(InnerClass(1))
   encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
 
+  encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
+
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
   productTest(

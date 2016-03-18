@@ -457,12 +457,33 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
 
     /**
-     * Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     collect:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    collect 1 million                          775 / 1170          1.4         738.9       1.0X
-    collect 2 millions                        1153 / 1758          0.9        1099.3       0.7X
-    collect 4 millions                        4451 / 5124          0.2        4244.9       0.2X
+    collect 1 million                         439 /  654          2.4         418.7       1.0X
+    collect 2 millions                        961 / 1907          1.1         916.4       0.5X
+    collect 4 millions                       3193 / 3895          0.3        3044.7       0.1X
+     */
+  }
+
+  ignore("collect limit") {
+    val N = 1 << 20
+
+    val benchmark = new Benchmark("collect limit", N)
+    benchmark.addCase("collect limit 1 million") { iter =>
+      sqlContext.range(N * 4).limit(N).collect()
+    }
+    benchmark.addCase("collect limit 2 millions") { iter =>
+      sqlContext.range(N * 4).limit(N * 2).collect()
+    }
+    benchmark.run()
+
+    /**
+    model name      : Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    collect limit:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    collect limit 1 million                   833 / 1284          1.3         794.4       1.0X
+    collect limit 2 millions                 3348 / 4005          0.3        3193.3       0.2X
      */
   }
 }
