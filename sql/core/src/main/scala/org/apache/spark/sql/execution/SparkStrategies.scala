@@ -108,6 +108,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     /**
      * Matches a plan whose single partition should be small enough to build a hash table.
+     *
+     * Note: this assume that the number of partition is fixed, requires addtional work if it's
+     * dynamic.
      */
     def canBuildHashMap(plan: LogicalPlan): Boolean = {
       plan.statistics.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions

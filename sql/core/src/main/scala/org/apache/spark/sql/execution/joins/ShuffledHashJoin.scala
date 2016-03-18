@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.{SparkException, TaskContext, SparkEnv}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, Expression, JoinedRow}
+import org.apache.spark.sql.catalyst.expressions.{Expression, JoinedRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
@@ -69,7 +69,7 @@ case class ShuffledHashJoin(
 
     val copiedIter = iter.map { row =>
       // It's hard to guess what's exactly memory will be used, we have a raft guess here.
-      // TODO: use BytesToBytes instead of HashMap for memory efficiency
+      // TODO: use BytesToBytesMap instead of HashMap for memory efficiency
       val needed = 150 + row.getSizeInBytes
       if (needed > acquired - used) {
         val got = memoryManager.acquireExecutionMemory(
