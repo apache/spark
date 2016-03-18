@@ -104,7 +104,7 @@ public class JavaStreamingTestExample {
       public void call(JavaRDD<StreamingTestResult> rdd) {
         timeoutCounter -= 1;
 
-        boolean anySignificant = ! rdd.filter(new Function<StreamingTestResult, Boolean>() {
+        boolean anySignificant = !rdd.filter(new Function<StreamingTestResult, Boolean>() {
           @Override
           public Boolean call(StreamingTestResult v) {
             return v.pValue() < 0.05;
