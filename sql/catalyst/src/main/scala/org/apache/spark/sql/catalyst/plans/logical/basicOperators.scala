@@ -263,19 +263,29 @@ case class Join(
     constructIsNotNullConstraints(condition.toSet.flatMap(splitConjunctivePredicates))
       .filter(_.references.nonEmpty)
 
-  private lazy val leftNotNulls = left.constraints.union(notNullsFromCondition)
-    .filter(_.isInstanceOf[IsNotNull])
-    .filter(_.references.subsetOf(left.outputSet))
-    .flatMap(_.references.map(_.exprId))
+  private lazy val leftNotNulls = {
+    val constraints = joinType match {
+      case Inner | LeftSemi => left.constraints.union(notNullsFromCondition)
+      case _ => left.constraints
+    }
+    constraints.filter(_.isInstanceOf[IsNotNull])
+      .filter(_.references.subsetOf(left.outputSet))
+      .flatMap(_.references.map(_.exprId))
+  }
 
   private lazy val notNullLeftOutput = left.output.map { o =>
     if (leftNotNulls.contains(o.exprId)) o.withNullability(false) else o
   }
 
-  private lazy val rightNotNulls = right.constraints.union(notNullsFromCondition)
-    .filter(_.isInstanceOf[IsNotNull])
-    .filter(_.references.subsetOf(right.outputSet))
-    .flatMap(_.references.map(_.exprId))
+  private lazy val rightNotNulls = {
+    val constraints = joinType match {
+      case Inner => right.constraints.union(notNullsFromCondition)
+      case _ => right.constraints
+    }
+    constraints.filter(_.isInstanceOf[IsNotNull])
+      .filter(_.references.subsetOf(right.outputSet))
+      .flatMap(_.references.map(_.exprId))
+  }
 
   private lazy val notNullRightOutput = right.output.map { o =>
     if (rightNotNulls.contains(o.exprId)) o.withNullability(false) else o
