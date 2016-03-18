@@ -94,7 +94,7 @@ case class Generate(
   def output: Seq[Attribute] = {
     val qualified = qualifier.map(q =>
       // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifiers(q +: a.qualifiers))
+      generatorOutput.map(a => a.withQualifier(Some(q)))
     ).getOrElse(generatorOutput)
 
     if (join) child.output ++ qualified else qualified
@@ -615,7 +615,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 
 case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
 
 /**
