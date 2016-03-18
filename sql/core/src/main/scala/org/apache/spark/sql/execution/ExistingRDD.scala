@@ -210,9 +210,9 @@ private[sql] case class DataSourceScan(
     ctx.addMutableState("int", idx, s"$idx = 0;")
 
     val exprCols = output.zipWithIndex.map(
-      x => new InputReference(x._2, x._1.dataType, x._1.nullable, true))
+      x => new InputReference(x._2, x._1.dataType, x._1.nullable, rowidx))
     val exprRows = output.zipWithIndex.map(
-      x => new InputReference(x._2, x._1.dataType, x._1.nullable, false))
+      x => new InputReference(x._2, x._1.dataType, x._1.nullable))
     val row = ctx.freshName("row")
     val numOutputRows = metricTerm(ctx, "numOutputRows")
 
@@ -222,7 +222,6 @@ private[sql] case class DataSourceScan(
     // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
     // here which path to use. Fix this.
 
-    ctx.INPUT_COL_ORDINAL = rowidx
     ctx.currentVars = null
     val colVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2))
     val colDeclarations = colVars.zipWithIndex.map(x => {

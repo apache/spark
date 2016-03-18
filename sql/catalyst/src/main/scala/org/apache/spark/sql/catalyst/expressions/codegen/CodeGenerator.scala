@@ -168,9 +168,6 @@ class CodegenContext {
   /** The variable name of the input row in generated code. */
   final var INPUT_ROW = "i"
 
-  /** The variable name of the input col in generated code. */
-  var INPUT_COL_ORDINAL = "idx"
-
   /**
     * The map from a variable name to it's next ID.
     */
@@ -185,7 +182,7 @@ class CodegenContext {
   /**
    * Returns a term name that is unique within this instance of a `CodegenContext`.
    */
-  def freshName(name: String, columnarInput: Boolean = false): String = synchronized {
+  def freshName(name: String): String = synchronized {
     val fullName = if (freshNamePrefix == "") {
       name
     } else {
