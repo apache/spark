@@ -27,23 +27,15 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchItemException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.types.StructType
 
 
 /**
  * A persistent implementation of the system catalog using Hive.
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog with Logging {
+private[spark] class HiveCatalog(var client: HiveClient) extends ExternalCatalog with Logging {
   import ExternalCatalog._
-
-  // Legacy catalog for handling data source tables.
-  // TODO: integrate this in a better way; it's confusing to have a catalog in a catalog.
-  private var metastoreCatalog: HiveMetastoreCatalog = _
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(
@@ -93,18 +85,13 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
     withClient { getTable(db, table) }
   }
 
-  private def requireInitialized(): Unit = {
-    require(metastoreCatalog != null, "catalog not yet initialized!")
-  }
-
   /**
-   * Initialize [[HiveMetastoreCatalog]] when the [[HiveContext]] is ready.
-   * This is needed to avoid initialization order cycles with [[HiveContext]].
+   * Switch our client to one that belongs to the new session.
    */
-  def initialize(hiveContext: HiveContext): Unit = {
-    metastoreCatalog = new HiveMetastoreCatalog(client, hiveContext)
+  def newSession(newClient: HiveClient): this.type = {
+    client = newClient
+    this
   }
-
 
   // --------------------------------------------------------------------------
   // Databases
@@ -207,17 +194,11 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
   }
 
   override def listTables(db: String): Seq[String] = withClient {
-    requireDbExists(db)
     client.listTables(db)
   }
 
   override def listTables(db: String, pattern: String): Seq[String] = withClient {
-    requireDbExists(db)
     client.listTables(db, pattern)
-  }
-
-  override def refreshTable(db: String, table: String): Unit = {
-    refreshTable(TableIdentifier(table, Some(db)))
   }
 
   // --------------------------------------------------------------------------
@@ -317,71 +298,6 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withClient {
     client.listFunctions(db, pattern)
-  }
-
-
-  // ----------------------------------------------------------------
-  // | Methods and fields for interacting with HiveMetastoreCatalog |
-  // ----------------------------------------------------------------
-
-  lazy val ParquetConversions: Rule[LogicalPlan] = {
-    requireInitialized()
-    metastoreCatalog.ParquetConversions
-  }
-
-  lazy val CreateTables: Rule[LogicalPlan] = {
-    requireInitialized()
-    metastoreCatalog.CreateTables
-  }
-
-  lazy val PreInsertionCasts: Rule[LogicalPlan] = {
-    requireInitialized()
-    metastoreCatalog.PreInsertionCasts
-  }
-
-  def refreshTable(table: TableIdentifier): Unit = {
-    requireInitialized()
-    metastoreCatalog.refreshTable(table)
-  }
-
-  def invalidateTable(table: TableIdentifier): Unit = {
-    requireInitialized()
-    metastoreCatalog.invalidateTable(table)
-  }
-
-  def invalidateCache(): Unit = {
-    requireInitialized()
-    metastoreCatalog.cachedDataSourceTables.invalidateAll()
-  }
-
-  def createDataSourceTable(
-      table: TableIdentifier,
-      userSpecifiedSchema: Option[StructType],
-      partitionColumns: Array[String],
-      bucketSpec: Option[BucketSpec],
-      provider: String,
-      options: Map[String, String],
-      isExternal: Boolean): Unit = {
-    requireInitialized()
-    metastoreCatalog.createDataSourceTable(
-      table, userSpecifiedSchema, partitionColumns, bucketSpec, provider, options, isExternal)
-  }
-
-  def lookupRelation(table: TableIdentifier, alias: Option[String]): LogicalPlan = {
-    requireInitialized()
-    metastoreCatalog.lookupRelation(table, alias)
-  }
-
-  def hiveDefaultTableFilePath(table: TableIdentifier): String = {
-    requireInitialized()
-    metastoreCatalog.hiveDefaultTableFilePath(table)
-  }
-
-  // For testing only
-  private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
-    requireInitialized()
-    val key = metastoreCatalog.getQualifiedTableName(table)
-    metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
   }
 
 }

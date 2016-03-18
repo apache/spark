@@ -41,7 +41,13 @@ class SessionCatalog(externalCatalog: ExternalCatalog, caseSensitiveAnalysis: Bo
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
   // check whether the temporary table or function exists, then, if not, operate on
   // the corresponding item in the current database.
-  protected[this] var currentDb = "default"
+  protected[this] var currentDb = {
+    val defaultName = "default"
+    val defaultDbDefinition = CatalogDatabase(defaultName, "default database", "", Map())
+    // Initialize default database if it doesn't already exist
+    createDatabase(defaultDbDefinition, ignoreIfExists = true)
+    defaultName
+  }
 
   /**
    * Format table name, taking into account case sensitivity.
@@ -239,7 +245,7 @@ class SessionCatalog(externalCatalog: ExternalCatalog, caseSensitiveAnalysis: Bo
     if (name.database.isDefined || !tempTables.containsKey(table)) {
       externalCatalog.tableExists(db, table)
     } else {
-      true
+      true // it's a temporary table
     }
   }
 
@@ -264,11 +270,7 @@ class SessionCatalog(externalCatalog: ExternalCatalog, caseSensitiveAnalysis: Bo
   /**
    * Refresh the cache entry for a metastore table, if any.
    */
-  def refreshTable(name: TableIdentifier): Unit = {
-    val db = name.database.getOrElse(currentDb)
-    val table = formatTableName(name.table)
-    externalCatalog.refreshTable(db, table)
-  }
+  def refreshTable(name: TableIdentifier): Unit = { /* no-op */ }
 
   /**
    * Return a temporary table exactly as it was stored.

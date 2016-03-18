@@ -201,16 +201,16 @@ class InMemoryCatalog extends ExternalCatalog {
   }
 
   override def listTables(db: String): Seq[String] = synchronized {
-    requireDbExists(db)
-    catalog(db).tables.keySet.toSeq
+    if (databaseExists(db)) {
+      catalog(db).tables.keySet.toSeq
+    } else {
+      Seq()
+    }
   }
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
-    requireDbExists(db)
     filterPattern(listTables(db), pattern)
   }
-
-  override def refreshTable(db: String, table: String): Unit = { /* no-op */ }
 
   // --------------------------------------------------------------------------
   // Partitions

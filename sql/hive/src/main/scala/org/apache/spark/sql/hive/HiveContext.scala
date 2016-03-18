@@ -114,23 +114,22 @@ class HiveContext private[hive](
 
   logDebug("create HiveContext")
 
-  // Initialize catalog after context creation to avoid initialization ordering issues
-  hiveCatalog.initialize(this)
-
   /**
    * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
    * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
+    val newExecutionHive = executionHive.newSession()
+    val newMetadataHive = metadataHive.newSession()
     new HiveContext(
       sc = sc,
       cacheManager = cacheManager,
       listener = listener,
-      executionHive = executionHive.newSession(),
-      metadataHive = metadataHive.newSession(),
+      executionHive = newExecutionHive,
+      metadataHive = newMetadataHive,
       isRootContext = false,
-      hiveCatalog = hiveCatalog)
+      hiveCatalog = hiveCatalog.newSession(newMetadataHive))
   }
 
   @transient
@@ -211,12 +210,12 @@ class HiveContext private[hive](
    */
   def refreshTable(tableName: String): Unit = {
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    hiveCatalog.refreshTable(tableIdent)
+    sessionState.sessionCatalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    hiveCatalog.invalidateTable(tableIdent)
+    sessionState.sessionCatalog.invalidateTable(tableIdent)
   }
 
   /**

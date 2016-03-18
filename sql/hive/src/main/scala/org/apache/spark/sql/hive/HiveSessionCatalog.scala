@@ -20,15 +20,29 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.datasources.BucketSpec
+import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.types.StructType
 
 
-class HiveSessionCatalog(hiveCatalog: HiveCatalog) extends SessionCatalog(hiveCatalog) {
+class HiveSessionCatalog(
+    externalCatalog: HiveCatalog,
+    client: HiveClient,
+    context: HiveContext,
+    caseSensitiveAnalysis: Boolean)
+  extends SessionCatalog(externalCatalog, caseSensitiveAnalysis) {
+
+  override def setCurrentDatabase(db: String): Unit = {
+    super.setCurrentDatabase(db)
+    client.setCurrentDatabase(db)
+  }
 
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.containsKey(table)) {
       val newName = name.copy(table = table)
-      hiveCatalog.lookupRelation(newName, alias)
+      metastoreCatalog.lookupRelation(newName, alias)
     } else {
       val relation = tempTables.get(table)
       val tableWithQualifiers = SubqueryAlias(table, relation)
@@ -36,6 +50,54 @@ class HiveSessionCatalog(hiveCatalog: HiveCatalog) extends SessionCatalog(hiveCa
       // attributes are properly qualified with this alias.
       alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
     }
+  }
+
+  // ----------------------------------------------------------------
+  // | Methods and fields for interacting with HiveMetastoreCatalog |
+  // ----------------------------------------------------------------
+
+  // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
+  // essentially a cache for metastore tables. However, it relies on a lot of session-specific
+  // things so it would be a lot of work to split its functionality between HiveSessionCatalog
+  // and HiveCatalog. We should still do it at some point...
+  private val metastoreCatalog = new HiveMetastoreCatalog(client, context)
+
+  val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
+  val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
+  val PreInsertionCasts: Rule[LogicalPlan] = metastoreCatalog.PreInsertionCasts
+
+  override def refreshTable(name: TableIdentifier): Unit = {
+    metastoreCatalog.refreshTable(name)
+  }
+
+  def invalidateTable(name: TableIdentifier): Unit = {
+    metastoreCatalog.invalidateTable(name)
+  }
+
+  def invalidateCache(): Unit = {
+    metastoreCatalog.cachedDataSourceTables.invalidateAll()
+  }
+
+  def createDataSourceTable(
+      name: TableIdentifier,
+      userSpecifiedSchema: Option[StructType],
+      partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
+      provider: String,
+      options: Map[String, String],
+      isExternal: Boolean): Unit = {
+    metastoreCatalog.createDataSourceTable(
+      name, userSpecifiedSchema, partitionColumns, bucketSpec, provider, options, isExternal)
+  }
+
+  def hiveDefaultTableFilePath(name: TableIdentifier): String = {
+    metastoreCatalog.hiveDefaultTableFilePath(name)
+  }
+
+  // For testing only
+  private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
+    val key = metastoreCatalog.getQualifiedTableName(table)
+    metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
   }
 
 }

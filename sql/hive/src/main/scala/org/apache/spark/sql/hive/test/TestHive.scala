@@ -37,7 +37,9 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.command.CacheTableCommand
+import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
@@ -75,16 +77,47 @@ trait TestHiveSingleton {
  */
 class TestHiveContext private[hive](
     sc: SparkContext,
+    cacheManager: CacheManager,
+    listener: SQLListener,
     executionHive: HiveClientImpl,
     metadataHive: HiveClient,
+    isRootContext: Boolean,
+    hiveCatalog: HiveCatalog,
     val warehousePath: File,
     val scratchDirPath: File)
-  extends HiveContext(sc, executionHive, metadataHive) { self =>
+  extends HiveContext(
+    sc,
+    cacheManager,
+    listener,
+    executionHive,
+    metadataHive,
+    isRootContext,
+    hiveCatalog) { self =>
+
+  // Unfortunately, due to the complex interactions between the construction parameters
+  // and the limitations in scala constructors, we need many of these constructors to
+  // provide a shorthand to create a new TestHiveContext with only a SparkContext.
+  // This is not a great design pattern but it's necessary here.
 
   private def this(
       sc: SparkContext,
+      executionHive: HiveClientImpl,
+      metadataHive: HiveClient,
       warehousePath: File,
       scratchDirPath: File) {
+    this(
+      sc,
+      new CacheManager,
+      SQLContext.createListenerAndUI(sc),
+      executionHive,
+      metadataHive,
+      true,
+      new HiveCatalog(metadataHive),
+      warehousePath,
+      scratchDirPath)
+  }
+
+  private def this(sc: SparkContext, warehousePath: File, scratchDirPath: File) {
     this(
       sc,
       HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
@@ -97,12 +130,24 @@ class TestHiveContext private[hive](
   def this(sc: SparkContext) {
     this(
       sc,
-      Utils.createTempDir(namePrefix = "warehouse-"),
-      Utils.createTempDir(namePrefix = "scratch-"))
+      Utils.createTempDir(namePrefix = "warehouse"),
+      TestHiveContext.makeScratchDir())
   }
 
-  // Delete the scratch dir so we can use it to create directories and stuff
-  scratchDirPath.delete()
+  override def newSession(): HiveContext = {
+    val newExecutionHive = executionHive.newSession()
+    val newMetadataHive = metadataHive.newSession()
+    new TestHiveContext(
+      sc = sc,
+      cacheManager = cacheManager,
+      listener = listener,
+      executionHive = newExecutionHive,
+      metadataHive = newMetadataHive,
+      isRootContext = false,
+      hiveCatalog = hiveCatalog.newSession(newMetadataHive),
+      warehousePath = warehousePath,
+      scratchDirPath = scratchDirPath)
+  }
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
@@ -435,7 +480,7 @@ class TestHiveContext private[hive](
 
       cacheManager.clearCache()
       loadedTables.clear()
-      hiveCatalog.invalidateCache()
+      sessionState.sessionCatalog.invalidateCache()
       metadataHive.reset()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
@@ -526,6 +571,12 @@ private[hive] object TestHiveContext {
         ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
         ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1"
       )
+  }
+
+  private def makeScratchDir(): File = {
+    val scratchDir = Utils.createTempDir(namePrefix = "scratch")
+    scratchDir.delete()
+    scratchDir
   }
 
 }

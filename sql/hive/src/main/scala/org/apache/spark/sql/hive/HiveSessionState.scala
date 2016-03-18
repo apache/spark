@@ -37,7 +37,10 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Internal catalog for managing table and database states.
    */
-  override lazy val sessionCatalog = new HiveSessionCatalog(ctx.hiveCatalog)
+  override lazy val sessionCatalog = {
+    new HiveSessionCatalog(
+      ctx.hiveCatalog, ctx.metadataHive, ctx, caseSensitiveAnalysis = false)
+  }
 
   /**
    * Internal catalog for managing functions registered by the user.
@@ -53,9 +56,9 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   override lazy val analyzer: Analyzer = {
     new Analyzer(sessionCatalog, functionRegistry, conf) {
       override val extendedResolutionRules =
-        ctx.hiveCatalog.ParquetConversions ::
-        ctx.hiveCatalog.CreateTables ::
-        ctx.hiveCatalog.PreInsertionCasts ::
+        sessionCatalog.ParquetConversions ::
+        sessionCatalog.CreateTables ::
+        sessionCatalog.PreInsertionCasts ::
         python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
