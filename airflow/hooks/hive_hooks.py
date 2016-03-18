@@ -475,7 +475,7 @@ class HiveServer2Hook(BaseHook):
                 logging.info("Running query: " + hql)
                 cur.execute(hql)
                 schema = cur.description
-                with open(csv_filepath, 'w') as f:
+                with open(csv_filepath, 'wb') as f:
                     writer = csv.writer(f, delimiter=delimiter,
                         lineterminator=lineterminator)
                     if output_header:
