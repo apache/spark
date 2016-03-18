@@ -214,15 +214,13 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       )
       checkFilterPredicate(
         '_1 =!= 1,
-        """leaf-0 = (IS_NULL _1)
-          |leaf-1 = (EQUALS _1 1)
-          |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
+        """leaf-0 = (EQUALS _1 1)
+          |expr = (not leaf-0)""".stripMargin.trim
       )
       checkFilterPredicate(
         !('_1 < 4),
-        """leaf-0 = (IS_NULL _1)
-          |leaf-1 = (LESS_THAN _1 4)
-          |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
+        """leaf-0 = (LESS_THAN _1 4)
+          |expr = (leaf-0)""".stripMargin.trim
       )
       checkFilterPredicate(
         '_1 < 2 || '_1 > 3,
@@ -232,10 +230,9 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       )
       checkFilterPredicate(
         '_1 < 2 && '_1 > 3,
-        """leaf-0 = (IS_NULL _1)
-          |leaf-1 = (LESS_THAN _1 2)
-          |leaf-2 = (LESS_THAN_EQUALS _1 3)
-          |expr = (and (not leaf-0) leaf-1 (not leaf-2))""".stripMargin.trim
+        """leaf-0 = (LESS_THAN _1 2)
+          |leaf-1 = (LESS_THAN_EQUALS _1 3)
+          |expr = (and leaf-0 (not leaf-1))""".stripMargin.trim
       )
     }
   }
