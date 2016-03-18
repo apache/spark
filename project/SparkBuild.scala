@@ -723,6 +723,13 @@ object Java8TestSettings {
 object TestSettings {
   import BuildCommons._
 
+  private val scalaBinaryVersion =
+    if (System.getProperty("scala-2.10") == "true") {
+      "2.10"
+    } else {
+      "2.11"
+    }
+
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
@@ -732,6 +739,7 @@ object TestSettings {
       "SPARK_DIST_CLASSPATH" ->
         (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
       "SPARK_PREPEND_CLASSES" -> "1",
+      "SPARK_SCALA_VERSION" -> scalaBinaryVersion,
       "SPARK_TESTING" -> "1",
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
     javaOptions in Test += s"-Djava.io.tmpdir=$testTempDir",
