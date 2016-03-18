@@ -75,6 +75,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         ExpressionSet(filters.filter(_.references.subsetOf(partitionColumns)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
+      val dataColumns =
+        l.resolve(files.dataSchema, files.sqlContext.sessionState.analyzer.resolver)
+
       val bucketColumns =
         AttributeSet(
           files.bucketSpec
@@ -95,14 +98,12 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val filterAttributes = AttributeSet(afterScanFilters)
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
-      val requiredAttributeNames = requiredAttributes.map(_.name).toSet
 
-      val resolver = files.sqlContext.conf.resolver
-      val prunedDataSchema =
-        StructType(
-          files.dataSchema.filter {f =>
-            requiredAttributeNames.exists(a => resolver(f.name, a))
-          })
+      val readDataColumns =
+        dataColumns
+            .filter(requiredAttributes.contains)
+            .filterNot(partitionColumns.contains)
+      val prunedDataSchema = readDataColumns.toStructType
       logInfo(s"Pruned Data Schema: ${prunedDataSchema.simpleString(5)}")
 
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
@@ -186,7 +187,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val scan =
         DataSourceScan(
-          l.output.filter(a => requiredAttributes.contains(a) || partitionColumns.contains(a)),
+          readDataColumns ++ partitionColumns,
           new FileScanRDD(
             files.sqlContext,
             readFile,

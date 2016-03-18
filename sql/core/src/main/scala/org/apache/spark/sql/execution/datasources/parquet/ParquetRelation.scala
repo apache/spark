@@ -368,18 +368,19 @@ private[sql] class DefaultSource
         unsafeReader.initialize(split, hadoopAttemptContext)
 
         if (enableVectorizedParquetReader) {
-          logError(s"Appending $partitionSchema ${file.partitionValues}")
+          logDebug(s"Appending $partitionSchema ${file.partitionValues}")
           unsafeReader.initBatch(partitionSchema, file.partitionValues)
           // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
           // TODO: fix column appending
           if (enableWholestageCodegen) {
+            logDebug(s"Enabling batch returning")
             unsafeReader.enableReturningBatches()
           }
         }
         unsafeReader
       } catch {
         case NonFatal(e) =>
-          logError(s"Falling back to parquet-mr: $e", e)
+          logDebug(s"Falling back to parquet-mr: $e", e)
           val reader = pushed match {
             case Some(filter) =>
               new ParquetRecordReader[InternalRow](
@@ -397,7 +398,6 @@ private[sql] class DefaultSource
       // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
       if (parquetReader.isInstanceOf[UnsafeRowParquetRecordReader] &&
           enableVectorizedParquetReader) {
-        logError("Vectorized partition appending")
         iter.asInstanceOf[Iterator[InternalRow]]
       } else {
         val fullSchema = dataSchema.toAttributes ++ partitionSchema.toAttributes
