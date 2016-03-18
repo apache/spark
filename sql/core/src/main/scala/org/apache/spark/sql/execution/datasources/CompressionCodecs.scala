@@ -59,7 +59,7 @@ private[datasources] object CompressionCodecs {
   def setCodecConfiguration(conf: Configuration, codec: String): Unit = {
     if (codec != null) {
       conf.set("mapreduce.output.fileoutputformat.compress", "true")
-      conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
+      conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.RECORD.toString)
       conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
       conf.set("mapreduce.map.output.compress", "true")
       conf.set("mapreduce.map.output.compress.codec", codec)
