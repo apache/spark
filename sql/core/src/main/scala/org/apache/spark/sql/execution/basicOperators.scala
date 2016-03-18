@@ -79,12 +79,13 @@ case class Filter(condition: Expression, child: SparkPlan)
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
-    case IsNotNull(a) if child.output.contains(a) => true
+    case IsNotNull(a) if a.references.subsetOf(child.outputSet) => true
     case _ => false
   }
 
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
-  private val notNullAttributes = notNullPreds.flatMap(_.references)
+  private val notNullAttributes =
+    notNullPreds.flatMap(_.references) ++ child.output.filterNot(_.nullable)
 
   override def output: Seq[Attribute] = {
     child.output.map { a =>
