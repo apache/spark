@@ -709,6 +709,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true): Boolean = {
     require(bytes != null, "Bytes is null")
+    logInfo(s"Putting block $blockId with the size of ${bytes.size} bytes in ${level.description}")
     doPutBytes(blockId, bytes, level, tellMaster)
   }
 
