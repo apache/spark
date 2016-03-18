@@ -444,7 +444,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   override def toString: String = treeString
 
   def toOriginString: String =
-    if (this.origin.callSite.isDefined && !this.isInstanceOf[BoundReference]) {
+    if (this.origin.callSite.isDefined) {
       this.toString + " @ " + this.origin.callSite.get
     } else {
       this.toString
