@@ -147,6 +147,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
+    resultBatch();
+
     if (returnColumnarBatch) return nextBatch();
 
     if (batchIdx >= numBatched) {
