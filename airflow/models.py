@@ -496,7 +496,7 @@ class Connection(Base):
             elif self.conn_type == 'oracle':
                 return hooks.OracleHook(oracle_conn_id=self.conn_id)
             elif self.conn_type == 'vertica':
-                return hooks.VerticaHook(vertica_conn_id=self.conn_id)
+                return contrib_hooks.VerticaHook(vertica_conn_id=self.conn_id)
         except:
             return None
 
