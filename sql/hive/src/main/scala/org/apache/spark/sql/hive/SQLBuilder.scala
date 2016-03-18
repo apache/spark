@@ -54,6 +54,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
   def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
 
+  private val nextSubqueryId = new AtomicLong(0)
+  private def newSubqueryName(): String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
+
   def toSQL: String = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
     val outputNames = logicalPlan.output.map(_.name)
@@ -64,7 +67,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val finalName = if (qualifiers.length == 1) {
       qualifiers.head
     } else {
-      SQLBuilder.newSubqueryName
+      newSubqueryName()
     }
 
     // Canonicalizer will remove all naming information, we should add it back by adding an extra
@@ -254,7 +257,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   }
 
   private def generateToSQL(g: Generate): String = {
-    val columnAliases = g.generatorOutput.map(_.sql).mkString(",")
+    val columnAliases = g.generatorOutput.map(_.sql).mkString(", ")
 
     val childSQL = if (g.child == OneRowRelation) {
       // This only happens when we put UDTF in project list and there is no FROM clause. Because we
@@ -262,8 +265,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       // after FROM clause, so that we can generate a valid LATERAL VIEW SQL string.
       // For example, if the original SQL is: "SELECT EXPLODE(ARRAY(1, 2))", we will convert in to
       // LATERAL VIEW format, and generate:
-      // SELECT col FROM (SELECT 1) sub-q0 LATERAL VIEW EXPLODE(ARRAY(1, 2)) sub_q1 AS col
-      s"(SELECT 1) ${SQLBuilder.newSubqueryName}"
+      // SELECT col FROM (SELECT 1) sub_q0 LATERAL VIEW EXPLODE(ARRAY(1, 2)) sub_q1 AS col
+      s"(SELECT 1) ${newSubqueryName()}"
     } else {
       toSQL(g.child)
     }
@@ -283,7 +286,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       "LATERAL VIEW",
       if (g.outer) "OUTER" else "",
       g.generator.sql,
-      SQLBuilder.newSubqueryName,
+      newSubqueryName(),
       "AS",
       columnAliases
     )
@@ -387,8 +390,6 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         // `Aggregate`s.
         CollapseProject),
       Batch("Recover Scoping Info", Once,
-        // Remove all sub queries, as we will insert new ones when it's necessary.
-        EliminateSubqueryAliases,
         // A logical plan is allowed to have same-name outputs with different qualifiers(e.g. the
         // `Join` operator). However, this kind of plan can't be put under a sub query as we will
         // erase and assign a new qualifier to all outputs and make it impossible to distinguish
@@ -397,6 +398,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         // qualifiers, as attributes have unique names now and we don't need qualifiers to resolve
         // ambiguity.
         NormalizedAttribute,
+        // Our analyzer will add one or more sub-queries above table relation, this rule removes
+        // these sub-queries so that next rule can combine adjacent table relation and sample to
+        // SQLTable.
+        RemoveSubqueriesAboveSQLTable,
         // Finds the table relations and wrap them with `SQLTable`s.  If there are any `Sample`
         // operators on top of a table relation, merge the sample information into `SQLTable` of
         // that table relation, as we can only convert table sample to standard SQL string.
@@ -412,6 +417,12 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           AttributeReference(normalizedName(a), a.dataType)(exprId = a.exprId, qualifiers = Nil)
         case a: Alias =>
           Alias(a.child, normalizedName(a))(exprId = a.exprId, qualifiers = Nil)
+      }
+    }
+
+    object RemoveSubqueriesAboveSQLTable extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+        case SubqueryAlias(_, t @ ExtractSQLTable(_)) => t
       }
     }
 
@@ -477,18 +488,18 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     }
 
     private def addSubquery(plan: LogicalPlan): SubqueryAlias = {
-      SubqueryAlias(SQLBuilder.newSubqueryName, plan)
+      SubqueryAlias(newSubqueryName(), plan)
     }
 
     private def addSubqueryIfNeeded(plan: LogicalPlan): LogicalPlan = plan match {
-      case _: SubqueryAlias |
-           _: Filter |
-           _: Join |
-           _: LocalLimit |
-           _: GlobalLimit |
-           _: SQLTable |
-           _: Generate |
-           OneRowRelation => plan
+      case _: SubqueryAlias => plan
+      case _: Filter => plan
+      case _: Join => plan
+      case _: LocalLimit => plan
+      case _: GlobalLimit => plan
+      case _: SQLTable => plan
+      case _: Generate => plan
+      case OneRowRelation => plan
       case _ => addSubquery(plan)
     }
   }
@@ -513,10 +524,4 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       case _ => None
     }
   }
-}
-
-object SQLBuilder {
-  private val nextSubqueryId = new AtomicLong(0)
-
-  private def newSubqueryName: String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
 }
