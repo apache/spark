@@ -142,16 +142,23 @@ test_that("kmeans", {
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 })
 
-test_that("survreg vs survival::survreg", {
-  data <- list(list(4, 1, 0, 0), list(3, 1, 2, 0), list(1, 1, 1, 0),
-          list(1, 0, 1, 0), list(2, 1, 1, 1), list(2, 1, 0, 1), list(3, 0, 0, 1))
-  df <- createDataFrame(sqlContext, data, c("time", "status", "x", "sex"))
-  model <- survreg(Surv(time, status) ~ x + sex, df)
+test_that("SparkR::survreg vs survival::survreg", {
+  library(survival)
+  data(ovarian)
+  df <- suppressWarnings(createDataFrame(sqlContext, ovarian))
+
+  model <- SparkR::survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
   stats <- summary(model)
-  coefs <- as.vector(stats$coefficients[, 1])
-  rCoefs <- c(1.3149571, -0.1903409, -0.2532618, -1.1599802)
+  coefs <- as.vector(stats$coefficients[, 1][1:3])
+  scale <- exp(stats$coefficients[, 1][4])
+
+  rModel <- survival::survreg(Surv(futime, fustat) ~ ecog.ps + rx, ovarian)
+  rCoefs <- as.vector(coef(rModel))
+  rScale <- rModel$scale
+
   expect_true(all(abs(rCoefs - coefs) < 1e-4))
+  expect_true(abs(rScale - scale) < 1e-4)
   expect_true(all(
     rownames(stats$coefficients) ==
-    c("(Intercept)", "x", "sex", "Log(scale)")))
+    c("(Intercept)", "ecog_ps", "rx", "Log(scale)")))
 })
