@@ -29,8 +29,12 @@ import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success, Try}
 import scala.util.control.NonFatal
 
+<<<<<<< HEAD
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.{Logging, HttpFileServer, SecurityManager, SparkConf}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
 import org.apache.spark.network.netty.SparkTransportConf
@@ -55,6 +59,16 @@ private[netty] class NettyRpcEnv(
 
   private val streamManager = new NettyStreamManager(this)
 
+<<<<<<< HEAD
+=======
+  private val _fileServer =
+    if (conf.getBoolean("spark.rpc.useNettyFileServer", false)) {
+      streamManager
+    } else {
+      new HttpBasedFileServer(conf, securityManager)
+    }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   private val transportContext = new TransportContext(transportConf,
     new NettyRpcHandler(dispatcher, this, streamManager))
 
@@ -182,11 +196,15 @@ private[netty] class NettyRpcEnv(
     val remoteAddr = message.receiver.address
     if (remoteAddr == address) {
       // Message to a local RPC endpoint.
+<<<<<<< HEAD
       try {
         dispatcher.postOneWayMessage(message)
       } catch {
         case e: RpcEnvStoppedException => logWarning(e.getMessage)
       }
+=======
+      dispatcher.postOneWayMessage(message)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     } else {
       // Message to a remote RPC endpoint.
       postToOutbox(message.receiver, OneWayOutboxMessage(serialize(message)))
@@ -215,6 +233,7 @@ private[netty] class NettyRpcEnv(
         }
     }
 
+<<<<<<< HEAD
     try {
       if (remoteAddr == address) {
         val p = Promise[Any]()
@@ -246,6 +265,35 @@ private[netty] class NettyRpcEnv(
       case NonFatal(e) =>
         onFailure(e)
     }
+=======
+    if (remoteAddr == address) {
+      val p = Promise[Any]()
+      p.future.onComplete {
+        case Success(response) => onSuccess(response)
+        case Failure(e) => onFailure(e)
+      }(ThreadUtils.sameThread)
+      dispatcher.postLocalMessage(message, p)
+    } else {
+      val rpcMessage = RpcOutboxMessage(serialize(message),
+        onFailure,
+        (client, response) => onSuccess(deserialize[Any](client, response)))
+      postToOutbox(message.receiver, rpcMessage)
+      promise.future.onFailure {
+        case _: TimeoutException => rpcMessage.onTimeout()
+        case _ =>
+      }(ThreadUtils.sameThread)
+    }
+
+    val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
+      override def run(): Unit = {
+        promise.tryFailure(
+          new TimeoutException(s"Cannot receive any reply in ${timeout.duration}"))
+      }
+    }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
+    promise.future.onComplete { v =>
+      timeoutCancelable.cancel(true)
+    }(ThreadUtils.sameThread)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
@@ -310,7 +358,11 @@ private[netty] class NettyRpcEnv(
     }
   }
 
+<<<<<<< HEAD
   override def fileServer: RpcEnvFileServer = streamManager
+=======
+  override def fileServer: RpcEnvFileServer = _fileServer
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override def openChannel(uri: String): ReadableByteChannel = {
     val parsedUri = new URI(uri)
@@ -368,6 +420,7 @@ private[netty] class NettyRpcEnv(
     }
 
     override def read(dst: ByteBuffer): Int = {
+<<<<<<< HEAD
       Try(source.read(dst)) match {
         case Success(bytesRead) => bytesRead
         case Failure(readErr) =>
@@ -376,6 +429,17 @@ private[netty] class NettyRpcEnv(
           } else {
             throw readErr
           }
+=======
+      val result = if (error == null) {
+        Try(source.read(dst))
+      } else {
+        Failure(error)
+      }
+
+      result match {
+        case Success(bytesRead) => bytesRead
+        case Failure(error) => throw error
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
     }
 
@@ -401,7 +465,11 @@ private[netty] class NettyRpcEnv(
     }
 
     override def onFailure(streamId: String, cause: Throwable): Unit = {
+<<<<<<< HEAD
       logDebug(s"Error downloading stream $streamId.", cause)
+=======
+      logError(s"Error downloading stream $streamId.", cause)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       source.setError(cause)
       sink.close()
     }
@@ -556,6 +624,9 @@ private[netty] class NettyRpcHandler(
   // A variable to track the remote RpcEnv addresses of all clients
   private val remoteAddresses = new ConcurrentHashMap[RpcAddress, RpcAddress]()
 
+  // A variable to track the remote RpcEnv addresses of all clients
+  private val remoteAddresses = new ConcurrentHashMap[RpcAddress, RpcAddress]()
+
   override def receive(
       client: TransportClient,
       message: ByteBuffer,
@@ -621,6 +692,10 @@ private[netty] class NettyRpcHandler(
   override def channelInactive(client: TransportClient): Unit = {
     val addr = client.getChannel.remoteAddress().asInstanceOf[InetSocketAddress]
     if (addr != null) {
+<<<<<<< HEAD
+=======
+      clients.remove(client)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
       nettyEnv.removeOutbox(clientAddr)
       dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))

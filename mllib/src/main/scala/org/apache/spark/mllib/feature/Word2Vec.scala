@@ -165,9 +165,12 @@ class Word2Vec extends Serializable with Logging {
   private var vocabSize = 0
   @transient private var vocab: Array[VocabWord] = null
   @transient private var vocabHash = mutable.HashMap.empty[String, Int]
+<<<<<<< HEAD
 
   private def learnVocab[S <: Iterable[String]](dataset: RDD[S]): Unit = {
     val words = dataset.flatMap(x => x)
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     vocab = words.map(w => (w, 1))
       .reduceByKey(_ + _)
@@ -333,7 +336,11 @@ class Word2Vec extends Serializable with Logging {
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
         val syn0Modify = new Array[Int](vocabSize)
         val syn1Modify = new Array[Int](vocabSize)
+<<<<<<< HEAD
         val model = iter.foldLeft((bcSyn0Global.value, bcSyn1Global.value, 0L, 0L)) {
+=======
+        val model = iter.foldLeft((syn0Global, syn1Global, 0L, 0L)) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           case ((syn0, syn1, lastWordCount, wordCount), sentence) =>
             var lwc = lastWordCount
             var wc = wordCount

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis._
 private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
 
+<<<<<<< HEAD
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determin if two
    * identifiers are equal.
@@ -33,6 +34,9 @@ private[spark] trait CatalystConf {
       caseInsensitiveResolution
     }
   }
+=======
+  protected[spark] def specializeSingleDistinctAggPlanning: Boolean
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
@@ -43,8 +47,16 @@ object EmptyConf extends CatalystConf {
   override def caseSensitiveAnalysis: Boolean = {
     throw new UnsupportedOperationException
   }
+
+  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean = {
+    throw new UnsupportedOperationException
+  }
 }
 
 /** A CatalystConf that can be used for local testing. */
 case class SimpleCatalystConf(caseSensitiveAnalysis: Boolean) extends CatalystConf {
+<<<<<<< HEAD
+=======
+  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean = true
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

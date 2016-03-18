@@ -18,7 +18,11 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable
+<<<<<<< HEAD
 import scala.xml.{Node, Unparsed}
+=======
+import scala.xml.{Unparsed, Node}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.ui.jobs.UIData.StageUIData

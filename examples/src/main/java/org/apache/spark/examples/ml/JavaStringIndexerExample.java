@@ -26,7 +26,11 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.StringIndexer;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.StructField;
@@ -54,13 +58,25 @@ public class JavaStringIndexerExample {
       createStructField("id", IntegerType, false),
       createStructField("category", StringType, false)
     });
+<<<<<<< HEAD
     Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
     StringIndexer indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex");
     Dataset<Row> indexed = indexer.fit(df).transform(df);
+=======
+    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    StringIndexer indexer = new StringIndexer()
+      .setInputCol("category")
+      .setOutputCol("categoryIndex");
+    DataFrame indexed = indexer.fit(df).transform(df);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     indexed.show();
     // $example off$
     jsc.stop();
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

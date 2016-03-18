@@ -23,8 +23,12 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.io.orc.{CompressionKind, OrcFile}
 
 import org.apache.spark.deploy.SparkHadoopUtil
+<<<<<<< HEAD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.internal.SQLConf
+=======
+import org.apache.spark.sql.{Row, SQLConf}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
@@ -84,6 +88,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       }
     }
   }
+<<<<<<< HEAD
 
   test("SPARK-13543: Support for specifying compression codec for ORC via option()") {
     withTempPath { dir =>
@@ -108,4 +113,6 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       checkAnswer(df, copyDf)
     }
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

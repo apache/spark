@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.File
 
+<<<<<<< HEAD
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
@@ -27,6 +28,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
+=======
+import org.apache.hadoop.util.VersionInfo
+
+import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.catalyst.expressions.{NamedExpression, Literal, AttributeReference, EqualTo}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.IntegerType
@@ -42,8 +50,11 @@ import org.apache.spark.util.Utils
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
+<<<<<<< HEAD
   private val sparkConf = new SparkConf()
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   // In order to speed up test execution during development or in Jenkins, you can specify the path
   // of an existing Ivy cache:
   private val ivyPath: Option[String] = {
@@ -64,6 +75,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     val badClient = IsolatedClientLoader.forVersion(
       hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
       hadoopVersion = VersionInfo.getVersion,
+<<<<<<< HEAD
       sparkConf = sparkConf,
       hadoopConf = new Configuration(),
       config = buildConf(),
@@ -83,6 +95,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
       config = buildConf(),
       ivyPath = ivyPath).createClient()
     assert("success" === client.getConf("test", null))
+=======
+      config = buildConf(),
+      ivyPath = ivyPath).createClient()
+    val db = new HiveDatabase("default", "")
+    badClient.createDatabase(db)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   private def getNestedMessages(e: Throwable): String = {
@@ -113,8 +131,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
         IsolatedClientLoader.forVersion(
           hiveMetastoreVersion = "13",
           hadoopVersion = VersionInfo.getVersion,
+<<<<<<< HEAD
           sparkConf = sparkConf,
           hadoopConf = new Configuration(),
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           config = buildConf(),
           ivyPath = ivyPath).createClient()
       }
@@ -134,8 +155,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
         IsolatedClientLoader.forVersion(
           hiveMetastoreVersion = version,
           hadoopVersion = VersionInfo.getVersion,
+<<<<<<< HEAD
           sparkConf = sparkConf,
           hadoopConf = new Configuration(),
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           config = buildConf(),
           ivyPath = ivyPath).createClient()
     }

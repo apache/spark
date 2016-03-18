@@ -54,7 +54,10 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
         body = in.body().convertToNetty();
         isBodyInFrame = in.isBodyInFrame();
       } catch (Exception e) {
+<<<<<<< HEAD:common/network-common/src/main/java/org/apache/spark/network/protocol/MessageEncoder.java
         in.body().release();
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/main/java/org/apache/spark/network/protocol/MessageEncoder.java
         if (in instanceof AbstractResponseMessage) {
           AbstractResponseMessage resp = (AbstractResponseMessage) in;
           // Re-encode this message as a failure response.

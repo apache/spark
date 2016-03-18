@@ -89,8 +89,11 @@ private[r] object SparkRWrappers {
           m.coefficients.toArray
         }
       }
+<<<<<<< HEAD
       case m: KMeansModel =>
         m.clusterCenters.flatMap(_.toArray)
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 
@@ -101,6 +104,7 @@ private[r] object SparkRWrappers {
       case m: LogisticRegressionModel =>
         throw new UnsupportedOperationException(
           "No deviance residuals available for LogisticRegressionModel")
+<<<<<<< HEAD
     }
   }
 
@@ -126,6 +130,8 @@ private[r] object SparkRWrappers {
         }
       case other => throw new UnsupportedOperationException(
         s"KMeansModel required but ${other.getClass.getSimpleName} found.")
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 
@@ -147,10 +153,13 @@ private[r] object SparkRWrappers {
         } else {
           attrs.attributes.get.map(_.name.get)
         }
+<<<<<<< HEAD
       case m: KMeansModel =>
         val attrs = AttributeGroup.fromStructField(
           m.summary.predictions.schema(m.summary.featuresCol))
         attrs.attributes.get.map(_.name.get)
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 
@@ -160,8 +169,11 @@ private[r] object SparkRWrappers {
         "LinearRegressionModel"
       case m: LogisticRegressionModel =>
         "LogisticRegressionModel"
+<<<<<<< HEAD
       case m: KMeansModel =>
         "KMeansModel"
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 }

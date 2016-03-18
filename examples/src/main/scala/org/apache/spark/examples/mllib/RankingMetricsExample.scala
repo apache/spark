@@ -18,12 +18,21 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+<<<<<<< HEAD
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.evaluation.{RankingMetrics, RegressionMetrics}
 import org.apache.spark.mllib.recommendation.{ALS, Rating}
 // $example off$
 import org.apache.spark.sql.SQLContext
+=======
+// $example on$
+import org.apache.spark.mllib.evaluation.{RegressionMetrics, RankingMetrics}
+import org.apache.spark.mllib.recommendation.{ALS, Rating}
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkContext, SparkConf}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 object RankingMetricsExample {
   def main(args: Array[String]) {

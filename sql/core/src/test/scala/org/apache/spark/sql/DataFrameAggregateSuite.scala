@@ -100,6 +100,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(cube0.where("date IS NULL").count > 0)
   }
 
+<<<<<<< HEAD
   test("grouping and grouping_id") {
     checkAnswer(
       courseSales.cube("course", "year")
@@ -143,6 +144,8 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("rollup overlapping columns") {
     checkAnswer(
       testData2.rollup($"a" + $"b" as "foo", $"b" as "bar").agg(sum($"a" - $"b") as "foo"),

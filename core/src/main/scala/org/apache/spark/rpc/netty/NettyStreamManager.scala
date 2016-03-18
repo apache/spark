@@ -26,6 +26,7 @@ import org.apache.spark.util.Utils
 
 /**
  * StreamManager implementation for serving files from a NettyRpcEnv.
+<<<<<<< HEAD
  *
  * Three kinds of resources can be registered in this manager, all backed by actual files:
  *
@@ -35,13 +36,18 @@ import org.apache.spark.util.Utils
  *   respecting the directory's hierarchy.
  *
  * Only streaming (openStream) is supported.
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
  */
 private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   extends StreamManager with RpcEnvFileServer {
 
   private val files = new ConcurrentHashMap[String, File]()
   private val jars = new ConcurrentHashMap[String, File]()
+<<<<<<< HEAD
   private val dirs = new ConcurrentHashMap[String, File]()
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override def getChunk(streamId: Long, chunkIndex: Int): ManagedBuffer = {
     throw new UnsupportedOperationException()
@@ -52,6 +58,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     val file = ftype match {
       case "files" => files.get(fname)
       case "jars" => jars.get(fname)
+<<<<<<< HEAD
       case other =>
         val dir = dirs.get(ftype)
         require(dir != null, s"Invalid stream URI: $ftype not found.")
@@ -63,6 +70,13 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     } else {
       null
     }
+=======
+      case _ => throw new IllegalArgumentException(s"Invalid file type: $ftype")
+    }
+
+    require(file != null && file.isFile(), s"File not found: $streamId")
+    new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   override def addFile(file: File): String = {
@@ -77,6 +91,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     s"${rpcEnv.address.toSparkURL}/jars/${Utils.encodeFileNameToURIRawPath(file.getName())}"
   }
 
+<<<<<<< HEAD
   override def addDirectory(baseUri: String, path: File): String = {
     val fixedBaseUri = validateDirectoryUri(baseUri)
     require(dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path) == null,
@@ -84,4 +99,6 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

@@ -54,6 +54,7 @@ private[ui] class ExecutorsPage(
   private val GCTimePercent = 0.1
 
   def render(request: HttpServletRequest): Seq[Node] = {
+<<<<<<< HEAD
     val (activeExecutorInfo, deadExecutorInfo) = listener.synchronized {
       // The follow codes should be protected by `listener` to make sure no executors will be
       // removed before we query their status. See SPARK-12784.
@@ -69,6 +70,21 @@ private[ui] class ExecutorsPage(
     }
 
     val execInfo = activeExecutorInfo ++ deadExecutorInfo
+=======
+    val (storageStatusList, execInfo) = listener.synchronized {
+      // The follow codes should be protected by `listener` to make sure no executors will be
+      // removed before we query their status. See SPARK-12784.
+      val _storageStatusList = listener.storageStatusList
+      val _execInfo = {
+        for (statusId <- 0 until _storageStatusList.size)
+          yield ExecutorsPage.getExecInfo(listener, statusId)
+      }
+      (_storageStatusList, _execInfo)
+    }
+    val maxMem = storageStatusList.map(_.maxMem).sum
+    val memUsed = storageStatusList.map(_.memUsed).sum
+    val diskUsed = storageStatusList.map(_.diskUsed).sum
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 

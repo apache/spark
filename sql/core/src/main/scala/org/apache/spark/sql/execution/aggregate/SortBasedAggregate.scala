@@ -29,8 +29,15 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 case class SortBasedAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
+<<<<<<< HEAD
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
+=======
+    nonCompleteAggregateExpressions: Seq[AggregateExpression],
+    nonCompleteAggregateAttributes: Seq[Attribute],
+    completeAggregateExpressions: Seq[AggregateExpression],
+    completeAggregateAttributes: Seq[Attribute],
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
@@ -77,6 +84,12 @@ case class SortBasedAggregate(
         // so return an empty iterator.
         Iterator[UnsafeRow]()
       } else {
+<<<<<<< HEAD
+=======
+        val groupingKeyProjection =
+          UnsafeProjection.create(groupingExpressions, child.output)
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         val outputIter = new SortBasedAggregationIterator(
           groupingExpressions,
           child.output,

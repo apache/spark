@@ -163,6 +163,7 @@ private[spark] trait RpcEnvFileServer {
    */
   def addJar(file: File): String
 
+<<<<<<< HEAD
   /**
    * Adds a local directory to be served via this file server.
    *
@@ -181,6 +182,8 @@ private[spark] trait RpcEnvFileServer {
     fixedBaseUri
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 private[spark] case class RpcEnvConfig(

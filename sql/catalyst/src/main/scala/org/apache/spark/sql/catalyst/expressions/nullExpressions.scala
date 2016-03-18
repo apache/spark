@@ -61,7 +61,11 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     result
   }
 
+<<<<<<< HEAD
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+=======
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val first = children(0)
     val rest = children.drop(1)
     val firstEval = first.gen(ctx)

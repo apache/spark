@@ -63,6 +63,7 @@ trait HashJoin {
     case BuildRight => (rightKeys, leftKeys)
   }
 
+<<<<<<< HEAD
   /**
     * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
     *
@@ -124,6 +125,19 @@ trait HashJoin {
 
   protected def createResultProjection: (InternalRow) => InternalRow =
     UnsafeProjection.create(self.schema)
+=======
+  override def output: Seq[Attribute] = left.output ++ right.output
+
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
+
+  protected def buildSideKeyGenerator: Projection =
+    UnsafeProjection.create(buildKeys, buildPlan.output)
+
+  protected def streamSideKeyGenerator: Projection =
+    UnsafeProjection.create(streamedKeys, streamedPlan.output)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   protected def hashJoin(
       streamIter: Iterator[InternalRow],
@@ -136,6 +150,7 @@ trait HashJoin {
 
       // Mutable per row objects.
       private[this] val joinRow = new JoinedRow
+<<<<<<< HEAD
       private[this] val resultProjection = createResultProjection
 
       private[this] val joinKeys = streamSideKeyGenerator
@@ -189,6 +204,10 @@ trait HashJoin {
       }
     }
   }
+=======
+      private[this] val resultProjection: (InternalRow) => InternalRow =
+        UnsafeProjection.create(self.schema)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   @transient protected[this] lazy val EMPTY_LIST = CompactBuffer[InternalRow]()
 

@@ -17,19 +17,34 @@
 
 package org.apache.spark.sql.catalyst
 
+<<<<<<< HEAD
 import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.{Iterable => JIterable}
 import java.util.{Iterator => JIterator, List => JList, Map => JMap}
+=======
+import java.beans.{PropertyDescriptor, Introspector}
+import java.lang.{Iterable => JIterable}
+import java.util.{Iterator => JIterator, Map => JMap, List => JList}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import scala.language.existentials
 
 import com.google.common.reflect.TypeToken
 
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+=======
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.unsafe.types.UTF8String
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * Type-inference utilities for POJOs and Java collections.

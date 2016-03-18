@@ -22,7 +22,11 @@ import scala.collection.mutable.{ListBuffer, StringBuilder}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+<<<<<<< HEAD
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.Logging
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 

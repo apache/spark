@@ -146,8 +146,12 @@ abstract class AbstractCommandBuilder {
       String scala = getScalaVersion();
       List<String> projects = Arrays.asList("core", "repl", "mllib", "graphx",
         "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
+<<<<<<< HEAD
         "yarn", "launcher",
         "common/network-common", "common/network-shuffle", "common/network-yarn");
+=======
+        "yarn", "launcher", "network/common", "network/shuffle", "network/yarn");
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       if (prependClasses) {
         if (!isTesting) {
           System.err.println(

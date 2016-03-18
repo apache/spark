@@ -21,11 +21,18 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
+<<<<<<< HEAD
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.ManualClock
+<<<<<<< HEAD
+=======
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * Tests whether scope information is passed from DStream operations to RDDs correctly.
@@ -35,7 +42,10 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
   private val batchDuration: Duration = Seconds(1)
 
   override def beforeAll(): Unit = {
+<<<<<<< HEAD
     super.beforeAll()
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val conf = new SparkConf().setMaster("local").setAppName("test")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     ssc = new StreamingContext(new SparkContext(conf), batchDuration)

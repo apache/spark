@@ -188,6 +188,8 @@ class CheckpointWriter(
 
   @volatile private var latestCheckpointTime: Time = null
 
+  @volatile private var latestCheckpointTime: Time = null
+
   class CheckpointWriteHandler(
       checkpointTime: Time,
       bytes: Array[Byte],
@@ -206,7 +208,11 @@ class CheckpointWriter(
       // also use the latest checkpoint time as the file name, so that we can recovery from the
       // latest checkpoint file.
       //
+<<<<<<< HEAD
       // Note: there is only one thread writing the checkpoint files, so we don't need to worry
+=======
+      // Note: there is only one thread writting the checkpoint files, so we don't need to worry
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       // about thread-safety.
       val checkpointFile = Checkpoint.checkpointFile(checkpointDir, latestCheckpointTime)
       val backupFile = Checkpoint.checkpointBackupFile(checkpointDir, latestCheckpointTime)

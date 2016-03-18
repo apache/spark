@@ -25,7 +25,10 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
+<<<<<<< HEAD
 import org.apache.spark.{SparkContext, SparkException}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
@@ -34,6 +37,10 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
+<<<<<<< HEAD
+=======
+import org.apache.spark.sql.catalyst.errors.DialectException
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -48,7 +55,9 @@ import org.apache.spark.sql.internal.SQLConf.SQLConfEntry
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkContext, SparkException}
 
 /**
  * The entry point for working with structured data (rows and columns) in Spark.  Allows the
@@ -291,10 +300,17 @@ class SQLContext private[sql](
   }
 
   /**
+<<<<<<< HEAD
    * Returns true if the [[Queryable]] is currently cached in-memory.
    * @group cachemgmt
    * @since 1.3.0
    */
+=======
+    * Returns true if the [[Queryable]] is currently cached in-memory.
+    * @group cachemgmt
+    * @since 1.3.0
+    */
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   private[sql] def isCached(qName: Queryable): Boolean = {
     cacheManager.lookupCachedData(qName).nonEmpty
   }
@@ -473,6 +489,10 @@ class SQLContext private[sql](
     createDataset(data.asScala)
   }
 
+  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
+    createDataset(data.asScala)
+  }
+
   /**
    * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
    * converted to Catalyst rows.
@@ -557,7 +577,11 @@ class SQLContext private[sql](
     val className = beanClass.getName
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
+<<<<<<< HEAD
     Dataset.newDataFrame(self, LocalRelation(attrSeq, rows.toSeq))
+=======
+    DataFrame(self, LocalRelation(attrSeq, rows.toArray))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**
@@ -900,13 +924,315 @@ class SQLContext private[sql](
     }
   }
 
+<<<<<<< HEAD
   // Register a successfully instantiated context to the singleton. This should be at the end of
+=======
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // Deprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd, beanClass)
+  }
+
+  /**
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
+    createDataFrame(rdd, beanClass)
+  }
+
+  /**
+   * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
+   * [[DataFrame]] if no paths are passed in.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().parquet()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.parquet(). This will be removed in Spark 2.0.", "1.4.0")
+  @scala.annotation.varargs
+  def parquetFile(paths: String*): DataFrame = {
+    if (paths.isEmpty) {
+      emptyDataFrame
+    } else {
+      read.parquet(paths : _*)
+    }
+  }
+
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  def jsonFile(path: String): DataFrame = {
+    read.json(path)
+  }
+
+  /**
+   * Loads a JSON file (one object per line) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  def jsonFile(path: String, schema: StructType): DataFrame = {
+    read.schema(schema).json(path)
+  }
+
+  /**
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(path)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[DataFrame]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
+    read.schema(schema).json(json)
+  }
+
+  /**
+   * Loads an JavaRDD<String> storing JSON objects (one object per record) and applies the given
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
+    read.schema(schema).json(json)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record) inferring the
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(json)
+  }
+
+  /**
+   * Loads a JavaRDD[String] storing JSON objects (one object per record) inferring the
+   * schema, returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
+    read.option("samplingRatio", samplingRatio.toString).json(json)
+  }
+
+  /**
+   * Returns the dataset stored at path as a DataFrame,
+   * using the default data source configured by spark.sql.sources.default.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().load(path)`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.load(path). This will be removed in Spark 2.0.", "1.4.0")
+  def load(path: String): DataFrame = {
+    read.load(path)
+  }
+
+  /**
+   * Returns the dataset stored at path as a DataFrame, using the given data source.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).load(path)`.
+   *             This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.format(source).load(path). This will be removed in Spark 2.0.", "1.4.0")
+  def load(path: String, source: String): DataFrame = {
+    read.format(source).load(path)
+  }
+
+  /**
+   * (Java-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
+   *             This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.format(source).options(options).load(). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
+  def load(source: String, options: java.util.Map[String, String]): DataFrame = {
+    read.options(options).format(source).load()
+  }
+
+  /**
+   * (Scala-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).options(options).load(). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
+  def load(source: String, options: Map[String, String]): DataFrame = {
+    read.options(options).format(source).load()
+  }
+
+  /**
+   * (Java-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).schema(schema).options(options).load(). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
+  def load(source: String, schema: StructType, options: java.util.Map[String, String]): DataFrame =
+  {
+    read.format(source).schema(schema).options(options).load()
+  }
+
+  /**
+   * (Scala-specific) Returns the dataset specified by the given data source and
+   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
+   *
+   * @group genericdata
+   * @deprecated As of 1.4.0, replaced by
+   *            `read().format(source).schema(schema).options(options).load()`.
+   */
+  @deprecated("Use read.format(source).schema(schema).options(options).load(). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
+  def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
+    read.format(source).schema(schema).options(options).load()
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
+  def jdbc(url: String, table: String): DataFrame = {
+    read.jdbc(url, table, new Properties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
+   * passed to this function.
+   *
+   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride
+   * @param upperBound the maximum value of `columnName` used to decide partition stride
+   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
+   *                      evenly into this many partitions
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
+  def jdbc(
+      url: String,
+      table: String,
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): DataFrame = {
+    read.jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, new Properties)
+  }
+
+  /**
+   * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
+   * url named table. The theParts parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition
+   * of the [[DataFrame]].
+   *
+   * @group specificdata
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use read.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
+  def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
+    read.jdbc(url, table, theParts, new Properties)
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // End of deprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
+
+  // Register a succesfully instantiatd context to the singleton. This should be at the end of
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   // the class definition so that the singleton is updated only if there is no exception in the
   // construction of the instance.
   sparkContext.addSparkListener(new SparkListener {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       SQLContext.clearInstantiatedContext()
+<<<<<<< HEAD
       SQLContext.clearSqlListener()
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   })
 

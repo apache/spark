@@ -22,10 +22,14 @@ import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+<<<<<<< HEAD
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.{Locale, Properties, Random, UUID}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import java.util.concurrent._
+import java.util.{Locale, Properties, Random, UUID}
 import javax.net.ssl.HttpsURLConnection
 
 import scala.annotation.tailrec
@@ -46,7 +50,12 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
+<<<<<<< HEAD
 import org.slf4j.Logger
+=======
+import tachyon.TachyonURI
+import tachyon.client.{TachyonFS, TachyonFile}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -2266,6 +2275,7 @@ private[spark] object Utils extends Logging {
   def tempFileWith(path: File): File = {
     new File(path.getAbsolutePath + "." + UUID.randomUUID())
   }
+<<<<<<< HEAD
 
   /**
    * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
@@ -2283,6 +2293,8 @@ private[spark] object Utils extends Logging {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalLogger.register(log)
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**

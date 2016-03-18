@@ -21,7 +21,11 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 
+<<<<<<< HEAD
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.Logging
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * Implements policies and bookkeeping for sharing a adjustable-sized pool of memory between tasks.

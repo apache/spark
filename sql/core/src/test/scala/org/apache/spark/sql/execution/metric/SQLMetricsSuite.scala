@@ -114,6 +114,19 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
+<<<<<<< HEAD
+=======
+  test("Project metrics") {
+    // Assume the execution plan is
+    // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
+    val df = person.select('name)
+    testSparkPlanMetrics(df, 1, Map(
+      0L ->("Project", Map(
+        "number of rows" -> 2L)))
+    )
+  }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("Filter metrics") {
     // Assume the execution plan is
     // PhysicalRDD(nodeId = 1) -> Filter(nodeId = 0)
@@ -124,6 +137,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
+<<<<<<< HEAD
   test("WholeStageCodegen metrics") {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
@@ -132,6 +146,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("TungstenAggregate metrics") {
     // Assume the execution plan is
     // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
@@ -139,8 +155,15 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df = testData2.groupBy().count() // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> ("TungstenAggregate", Map(
+<<<<<<< HEAD
         "number of output rows" -> 2L)),
       0L -> ("TungstenAggregate", Map(
+=======
+        "number of input rows" -> 6L,
+        "number of output rows" -> 2L)),
+      0L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 2L,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         "number of output rows" -> 1L)))
     )
 
@@ -148,6 +171,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df2 = testData2.groupBy('a).count()
     testSparkPlanMetrics(df2, 1, Map(
       2L -> ("TungstenAggregate", Map(
+<<<<<<< HEAD
         "number of output rows" -> 4L)),
       0L -> ("TungstenAggregate", Map(
         "number of output rows" -> 3L)))
@@ -159,6 +183,14 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
     val ds = sqlContext.range(10).sort('id)
     testSparkPlanMetrics(ds.toDF(), 2, Map.empty)
+=======
+        "number of input rows" -> 6L,
+        "number of output rows" -> 4L)),
+      0L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 4L,
+        "number of output rows" -> 3L)))
+    )
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   test("SortMergeJoin metrics") {
@@ -172,34 +204,64 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = sqlContext.sql(
         "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
+<<<<<<< HEAD
         0L -> ("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+=======
+        1L -> ("SortMergeJoin", Map(
+          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          "number of left rows" -> 4L,
+          "number of right rows" -> 2L,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           "number of output rows" -> 4L)))
       )
     }
   }
 
+<<<<<<< HEAD
   test("SortMergeJoin(outer) metrics") {
     // Because SortMergeJoin may skip different rows if the number of partitions is different,
+=======
+  test("SortMergeOuterJoin metrics") {
+    // Because SortMergeOuterJoin may skip different rows if the number of partitions is different,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     // this test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.registerTempTable("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
+<<<<<<< HEAD
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
       val df = sqlContext.sql(
         "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
         0L -> ("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+=======
+      // ... -> SortMergeOuterJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+      val df = sqlContext.sql(
+        "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+      testSparkPlanMetrics(df, 1, Map(
+        1L -> ("SortMergeOuterJoin", Map(
+          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          "number of left rows" -> 6L,
+          "number of right rows" -> 2L,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           "number of output rows" -> 8L)))
       )
 
       val df2 = sqlContext.sql(
         "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df2, 1, Map(
+<<<<<<< HEAD
         0L -> ("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+=======
+        1L -> ("SortMergeOuterJoin", Map(
+          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          "number of left rows" -> 2L,
+          "number of right rows" -> 6L,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           "number of output rows" -> 8L)))
       )
     }
@@ -213,6 +275,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df = df1.join(broadcast(df2), "key")
     testSparkPlanMetrics(df, 2, Map(
       1L -> ("BroadcastHashJoin", Map(
+<<<<<<< HEAD
         "number of output rows" -> 2L)))
     )
   }
@@ -231,6 +294,32 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
     testSparkPlanMetrics(df3, 2, Map(
       0L -> ("BroadcastHashJoin", Map(
+=======
+        "number of left rows" -> 2L,
+        "number of right rows" -> 4L,
+        "number of output rows" -> 2L)))
+    )
+  }
+
+  test("BroadcastHashOuterJoin metrics") {
+    val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
+    val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
+    // Assume the execution plan is
+    // ... -> BroadcastHashOuterJoin(nodeId = 0)
+    val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
+    testSparkPlanMetrics(df, 2, Map(
+      0L -> ("BroadcastHashOuterJoin", Map(
+        "number of left rows" -> 3L,
+        "number of right rows" -> 4L,
+        "number of output rows" -> 5L)))
+    )
+
+    val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
+    testSparkPlanMetrics(df3, 2, Map(
+      0L -> ("BroadcastHashOuterJoin", Map(
+        "number of left rows" -> 3L,
+        "number of right rows" -> 4L,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         "number of output rows" -> 6L)))
     )
   }
@@ -246,6 +335,11 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
           "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
       testSparkPlanMetrics(df, 3, Map(
         1L -> ("BroadcastNestedLoopJoin", Map(
+<<<<<<< HEAD
+=======
+          "number of left rows" -> 12L, // left needs to be scanned twice
+          "number of right rows" -> 2L,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           "number of output rows" -> 12L)))
       )
     }
@@ -259,11 +353,20 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
       0L -> ("BroadcastLeftSemiJoinHash", Map(
+<<<<<<< HEAD
+=======
+        "number of left rows" -> 2L,
+        "number of right rows" -> 4L,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         "number of output rows" -> 2L)))
     )
   }
 
+<<<<<<< HEAD
   test("ShuffledHashJoin metrics") {
+=======
+  test("LeftSemiJoinHash metrics") {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
@@ -271,10 +374,33 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       // ... -> ShuffledHashJoin(nodeId = 0)
       val df = df1.join(df2, $"key" === $"key2", "leftsemi")
       testSparkPlanMetrics(df, 1, Map(
+<<<<<<< HEAD
         0L -> ("ShuffledHashJoin", Map(
           "number of output rows" -> 2L)))
       )
     }
+=======
+        0L -> ("LeftSemiJoinHash", Map(
+          "number of left rows" -> 2L,
+          "number of right rows" -> 4L,
+          "number of output rows" -> 2L)))
+      )
+    }
+  }
+
+  test("LeftSemiJoinBNL metrics") {
+    val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
+    // Assume the execution plan is
+    // ... -> LeftSemiJoinBNL(nodeId = 0)
+    val df = df1.join(df2, $"key" < $"key2", "leftsemi")
+    testSparkPlanMetrics(df, 2, Map(
+      0L -> ("LeftSemiJoinBNL", Map(
+        "number of left rows" -> 2L,
+        "number of right rows" -> 4L,
+        "number of output rows" -> 2L)))
+    )
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   test("CartesianProduct metrics") {

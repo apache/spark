@@ -29,7 +29,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+=======
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, DateTimeUtils}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -138,9 +142,13 @@ private[sql] object JDBCRDD extends Logging {
             val fieldScale = rsmd.getScale(i + 1)
             val isSigned = rsmd.isSigned(i + 1)
             val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+<<<<<<< HEAD
             val metadata = new MetadataBuilder()
               .putString("name", columnName)
               .putLong("scale", fieldScale)
+=======
+            val metadata = new MetadataBuilder().putString("name", columnName)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             val columnType =
               dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
                 getCatalystType(dataType, fieldSize, fieldScale, isSigned))
@@ -174,6 +182,7 @@ private[sql] object JDBCRDD extends Logging {
     new StructType(columns.map(name => fieldMap(name)))
   }
 
+<<<<<<< HEAD
   /**
    * Converts value to SQL expression.
    */
@@ -229,6 +238,9 @@ private[sql] object JDBCRDD extends Logging {
       case _ => null
     })
   }
+=======
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 
 
@@ -302,6 +314,35 @@ private[sql] class JDBCRDD(
   }
 
   /**
+<<<<<<< HEAD
+=======
+   * Converts value to SQL expression.
+   */
+  private def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case dateValue: Date => "'" + dateValue + "'"
+    case _ => value
+  }
+
+  private def escapeSql(value: String): String =
+    if (value == null) null else StringUtils.replace(value, "'", "''")
+
+  /**
+   * Turns a single Filter into a String representing a SQL expression.
+   * Returns null for an unhandled filter.
+   */
+  private def compileFilter(f: Filter): String = f match {
+    case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
+    case LessThan(attr, value) => s"$attr < ${compileValue(value)}"
+    case GreaterThan(attr, value) => s"$attr > ${compileValue(value)}"
+    case LessThanOrEqual(attr, value) => s"$attr <= ${compileValue(value)}"
+    case GreaterThanOrEqual(attr, value) => s"$attr >= ${compileValue(value)}"
+    case _ => null
+  }
+
+  /**
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
   private val filterWhereClause: String =
@@ -511,7 +552,11 @@ private[sql] class JDBCRDD(
             try {
               conn.commit()
             } catch {
+<<<<<<< HEAD
               case NonFatal(e) => logWarning("Exception committing transaction", e)
+=======
+              case e: Throwable => logWarning("Exception committing transaction", e)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             }
           }
           conn.close()

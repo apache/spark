@@ -350,11 +350,14 @@ object SQLConf {
     defaultValue = Some(true),
     doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
 
+<<<<<<< HEAD:sql/core/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala
   val PARQUET_VECTORIZED_READER_ENABLED = booleanConf(
     key = "spark.sql.parquet.enableVectorizedReader",
     defaultValue = Some(true),
     doc = "Enables vectorized parquet decoding.")
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/main/scala/org/apache/spark/sql/SQLConf.scala
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
     defaultValue = Some(false),
     doc = "When true, enable filter pushdown for ORC files.")
@@ -490,6 +493,7 @@ object SQLConf {
     doc = "When true, we could use `datasource`.`path` as table in SQL query"
   )
 
+<<<<<<< HEAD:sql/core/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala
   val PARSER_SUPPORT_QUOTEDID = booleanConf("spark.sql.parser.supportQuotedIdentifiers",
     defaultValue = Some(true),
     isPublic = false,
@@ -518,6 +522,19 @@ object SQLConf {
     defaultValue = Some(true),
     doc = "When true, the planner will try to find out duplicated exchanges and re-use them",
     isPublic = false)
+=======
+  val SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING =
+    booleanConf("spark.sql.specializeSingleDistinctAggPlanning",
+      defaultValue = Some(false),
+      isPublic = false,
+      doc = "When true, if a query only has a single distinct column and it has " +
+        "grouping expressions, we will use our planner rule to handle this distinct " +
+        "column (other cases are handled by DistinctAggregationRewriter). " +
+        "When false, we will always use DistinctAggregationRewriter to plan " +
+        "aggregation queries with DISTINCT keyword. This is an internal flag that is " +
+        "used to benchmark the performance impact of using DistinctAggregationRewriter to " +
+        "plan aggregation queries with a single distinct column.")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/main/scala/org/apache/spark/sql/SQLConf.scala
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -578,6 +595,7 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   def nativeView: Boolean = getConf(NATIVE_VIEW)
 
+<<<<<<< HEAD:sql/core/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
@@ -590,6 +608,12 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+=======
+  def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
+
+  private[spark] def subexpressionEliminationEnabled: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/main/scala/org/apache/spark/sql/SQLConf.scala
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
@@ -637,6 +661,9 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def supportQuotedId: Boolean = getConf(PARSER_SUPPORT_QUOTEDID)
 
   def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
+
+  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean =
+    getConf(SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING)
 
   /** ********************** SQLConf functionality methods ************ */
 

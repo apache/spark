@@ -17,8 +17,13 @@
 
 package org.apache.spark.deploy.mesos
 
+<<<<<<< HEAD
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+=======
+import java.net.SocketAddress
+import java.nio.ByteBuffer
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import scala.collection.JavaConverters._
 
@@ -74,6 +79,11 @@ private[mesos] class MesosExternalShuffleBlockHandler(
             logWarning(s"Received ShuffleServiceHeartbeat from an unknown app (remote " +
               s"address $address, appId '$appId').")
         }
+<<<<<<< HEAD
+=======
+        connectedApps(address) = appId
+        callback.onSuccess(ByteBuffer.allocate(0))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       case _ => super.handleMessage(message, client, callback)
     }
   }

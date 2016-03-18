@@ -332,7 +332,11 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     // TODO: Support persisting partitioned data source relations in Hive compatible format
     val qualifiedTableName = tableIdent.quotedString
     val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
+<<<<<<< HEAD
     val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.resolveRelation()) match {
+=======
+    val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.relation) match {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       case _ if skipHiveMetadata =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
@@ -444,6 +448,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
 
     val parquetOptions = Map(
+<<<<<<< HEAD
+=======
+      ParquetRelation.METASTORE_SCHEMA -> metastoreSchema.json,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString,
       ParquetRelation.METASTORE_TABLE_NAME -> TableIdentifier(
         metastoreRelation.tableName,
@@ -809,12 +817,16 @@ private[hive] case class MetastoreRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] = table :: sqlContext :: Nil
 
+<<<<<<< HEAD
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {
     new FieldSchema(c.name, c.dataType, c.comment.orNull)
   }
 
   // TODO: merge this with HiveClientImpl#toHiveTable
   @transient val hiveQlTable: HiveTable = {
+=======
+  @transient val hiveQlTable: Table = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     // We start by constructing an API table as Hive performs several important transformations
     // internally when converting an API table to a QL table.
     val tTable = new org.apache.hadoop.hive.metastore.api.Table()
@@ -899,10 +911,17 @@ private[hive] case class MetastoreRelation(
       val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
       sd.setSerdeInfo(serdeInfo)
       // maps and lists should be set only after all elements are ready (see HIVE-7975)
+<<<<<<< HEAD
       p.storage.serde.foreach(serdeInfo.setSerializationLib)
 
       val serdeParameters = new java.util.HashMap[String, String]()
       table.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+=======
+      serdeInfo.setSerializationLib(p.storage.serde)
+
+      val serdeParameters = new java.util.HashMap[String, String]()
+      table.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
       serdeInfo.setParameters(serdeParameters)
 

@@ -22,7 +22,11 @@ import scala.math.Ordering
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.DeveloperApi
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.util.ArrayData
+=======
+import org.apache.spark.sql.catalyst.util.{ArrayData => _}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 object ArrayType extends AbstractDataType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */

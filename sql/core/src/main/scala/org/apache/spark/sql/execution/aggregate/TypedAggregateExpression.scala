@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import scala.language.existentials
 
+<<<<<<< HEAD
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,6 +27,15 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ou
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.expressions.Aggregator
+=======
+import org.apache.spark.Logging
+import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.{OuterScopes, encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
+import org.apache.spark.sql.catalyst.expressions._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.types._
 
 object TypedAggregateExpression {

@@ -18,6 +18,10 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.{Experimental, Since}
+<<<<<<< HEAD
+=======
+import org.apache.spark.ml.tree.impl.RandomForest
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.tree.impl.RandomForest

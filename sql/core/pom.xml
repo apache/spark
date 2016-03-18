@@ -21,8 +21,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
+<<<<<<< HEAD
     <artifactId>spark-parent_2.11</artifactId>
     <version>2.0.0-SNAPSHOT</version>
+=======
+    <artifactId>spark-parent_2.10</artifactId>
+    <version>1.6.2-SNAPSHOT</version>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     <relativePath>../../pom.xml</relativePath>
   </parent>
 

@@ -78,6 +78,13 @@ case class SortMergeJoin(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
 
+<<<<<<< HEAD
+=======
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
     // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
     keys.map(SortOrder(_, Ascending))
@@ -93,6 +100,7 @@ case class SortMergeJoin(
     val numOutputRows = longMetric("numOutputRows")
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
+<<<<<<< HEAD
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
           newPredicate(cond, left.output ++ right.output)
@@ -128,6 +136,32 @@ case class SortMergeJoin(
             private[this] val joinRow = new JoinedRow
             private[this] val resultProjection: (InternalRow) => InternalRow =
               UnsafeProjection.create(schema)
+=======
+      new RowIterator {
+        // The projection used to extract keys from input rows of the left child.
+        private[this] val leftKeyGenerator = UnsafeProjection.create(leftKeys, left.output)
+
+        // The projection used to extract keys from input rows of the right child.
+        private[this] val rightKeyGenerator = UnsafeProjection.create(rightKeys, right.output)
+
+        // An ordering that can be used to compare keys from both sides.
+        private[this] val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
+        private[this] var currentLeftRow: InternalRow = _
+        private[this] var currentRightMatches: ArrayBuffer[InternalRow] = _
+        private[this] var currentMatchIdx: Int = -1
+        private[this] val smjScanner = new SortMergeJoinScanner(
+          leftKeyGenerator,
+          rightKeyGenerator,
+          keyOrdering,
+          RowIterator.fromScala(leftIter),
+          numLeftRows,
+          RowIterator.fromScala(rightIter),
+          numRightRows
+        )
+        private[this] val joinRow = new JoinedRow
+        private[this] val resultProjection: (InternalRow) => InternalRow =
+          UnsafeProjection.create(schema)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
             if (smjScanner.findNextInnerJoinRows()) {
               currentRightMatches = smjScanner.getBufferedMatches

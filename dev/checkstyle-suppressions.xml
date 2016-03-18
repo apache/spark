@@ -15,9 +15,18 @@
   ~ limitations under the License.
   -->
 
+<<<<<<< HEAD:dev/checkstyle-suppressions.xml
 <!DOCTYPE suppressions PUBLIC
 "-//Puppy Crawl//DTD Suppressions 1.1//EN"
 "http://www.puppycrawl.com/dtds/suppressions_1_1.dtd">
+=======
+  <fileSets>
+    <fileSet>
+      <directory>${project.build.directory}/scala-${scala.binary.version}/test-classes</directory>
+      <outputDirectory></outputDirectory>
+    </fileSet>
+  </fileSets>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:external/mqtt/src/main/assembly/assembly.xml
 
 <!--
 

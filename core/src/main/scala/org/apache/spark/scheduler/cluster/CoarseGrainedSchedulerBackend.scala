@@ -501,8 +501,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @param executorIds identifiers of executors to kill
    * @param replace whether to replace the killed executors with new ones
    * @param force whether to force kill busy executors
+<<<<<<< HEAD
    * @return whether the kill request is acknowledged. If list to kill is empty, it will return
    *         false.
+=======
+   * @return whether the kill request is acknowledged.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    */
   final def killExecutors(
       executorIds: Seq[String],

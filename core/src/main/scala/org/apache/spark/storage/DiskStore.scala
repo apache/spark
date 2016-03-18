@@ -107,7 +107,24 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
     }
   }
 
+<<<<<<< HEAD
   def remove(blockId: BlockId): Boolean = {
+=======
+  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+    val file = diskManager.getFile(blockId.name)
+    getBytes(file, 0, file.length)
+  }
+
+  def getBytes(segment: FileSegment): Option[ByteBuffer] = {
+    getBytes(segment.file, segment.offset, segment.length)
+  }
+
+  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
+    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
+  }
+
+  override def remove(blockId: BlockId): Boolean = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val file = diskManager.getFile(blockId.name)
     if (file.exists()) {
       val ret = file.delete()

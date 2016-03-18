@@ -18,9 +18,13 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.ByteArrayOutputStream
-
 import scala.collection.mutable.ArrayBuffer
 
+<<<<<<< HEAD
+import scala.collection.mutable.ArrayBuffer
+
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
@@ -28,7 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{ArrayBasedMapData => _, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -52,6 +56,7 @@ object JacksonParser {
    * This is an wrapper for the method `convertField()` to handle a row wrapped
    * with an array.
    */
+<<<<<<< HEAD
   def convertRootField(
         factory: JsonFactory,
         parser: JsonParser,
@@ -74,6 +79,9 @@ object JacksonParser {
   }
 
   private def convertField(
+=======
+  def convertField(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       factory: JsonFactory,
       parser: JsonParser,
       schema: DataType): Any = {
@@ -277,7 +285,11 @@ object JacksonParser {
           Utils.tryWithResource(factory.createParser(record)) { parser =>
             parser.nextToken()
 
+<<<<<<< HEAD
             convertRootField(factory, parser, schema) match {
+=======
+            convertField(factory, parser, schema) match {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
               case null => failedRecord(record)
               case row: InternalRow => row :: Nil
               case array: ArrayData =>

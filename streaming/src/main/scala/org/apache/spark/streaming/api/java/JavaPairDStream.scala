@@ -31,7 +31,11 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.Partitioner
 import org.apache.spark.annotation.Experimental
+<<<<<<< HEAD
 import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils, Optional}
+=======
+import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}

@@ -15,15 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.tags;
 
-import java.io.Serializable;
+import java.lang.annotation.*;
+import org.scalatest.TagAnnotation;
 
-/**
- * Base interface for a function used in Dataset's foreach function.
- *
- * Spark will invoke the call function on each element in the input Dataset.
- */
-public interface ForeachFunction<T> extends Serializable {
-  void call(T t) throws Exception;
-}
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface DockerTest { }

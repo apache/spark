@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.plans.logical.Generate
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
@@ -191,7 +193,11 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {
+<<<<<<< HEAD
     val plan = parser.parsePlan(
+=======
+    val plan = HiveQl.parseSql(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       """
         |SELECT *
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
@@ -200,6 +206,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     assert(plan.children.head.asInstanceOf[Generate].generator.isInstanceOf[JsonTuple])
   }
+<<<<<<< HEAD
 
   test("use backticks in output of Script Transform") {
     val plan = parser.parsePlan(
@@ -228,4 +235,6 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
         |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
       """.stripMargin)
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

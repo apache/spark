@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
+<<<<<<< HEAD
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescribeCommand, _}
@@ -32,6 +33,12 @@ import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDes
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.internal.SQLConf
+=======
+import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
+import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
+import org.apache.spark.sql.{Strategy, execution}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -100,7 +107,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame), then that side
    *     of the join will be broadcasted and the other side will be streamed, with no shuffling
    *     performed. If both sides of the join are eligible to be broadcasted then the
+<<<<<<< HEAD
    * - Shuffle hash join: if single partition is small enough to build a hash table.
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * - Sort merge: if the matching join keys are sortable.
    */
   object EquiJoinSelection extends Strategy with PredicateHelper {
@@ -148,6 +158,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           leftKeys, rightKeys, Inner, BuildLeft, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+<<<<<<< HEAD
         if !conf.preferSortMergeJoin && shouldShuffleHashJoin(left, right) ||
           !RowOrdering.isOrderable(leftKeys) =>
         val buildSide =
@@ -163,6 +174,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if RowOrdering.isOrderable(leftKeys) =>
         joins.SortMergeJoin(
           leftKeys, rightKeys, Inner, condition, planLater(left), planLater(right)) :: Nil
+=======
+        if RowOrdering.isOrderable(leftKeys) =>
+        val mergeJoin =
+          joins.SortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
+        condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
       // --- Outer joins --------------------------------------------------------------------------
 
@@ -176,6 +193,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         Seq(joins.BroadcastHashJoin(
           leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
 
+<<<<<<< HEAD
       case ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, condition, left, right)
          if !conf.preferSortMergeJoin && canBuildHashMap(right) && muchSmaller(right, left) ||
            !RowOrdering.isOrderable(leftKeys) =>
@@ -193,6 +211,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joins.SortMergeJoin(
           leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
+=======
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+        if RowOrdering.isOrderable(leftKeys) =>
+        joins.SortMergeOuterJoin(
+          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       // --- Cases where this strategy does not apply ---------------------------------------------
 
       case _ => Nil
@@ -365,6 +390,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Distinct(child) =>
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
+<<<<<<< HEAD
       case logical.Intersect(left, right) =>
         throw new IllegalStateException(
           "logical intersect operator should have been replaced by semi-join in the optimizer")
@@ -378,6 +404,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.CoGroup(f, keyObj, lObj, rObj, out, lGroup, rGroup, lAttr, rAttr, left, right) =>
         execution.CoGroup(
           f, keyObj, lObj, rObj, out, lGroup, rGroup, lAttr, rAttr,
+=======
+
+      case logical.MapPartitions(f, tEnc, uEnc, output, child) =>
+        execution.MapPartitions(f, tEnc, uEnc, output, planLater(child)) :: Nil
+      case logical.AppendColumns(f, tEnc, uEnc, newCol, child) =>
+        execution.AppendColumns(f, tEnc, uEnc, newCol, planLater(child)) :: Nil
+      case logical.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, child) =>
+        execution.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, planLater(child)) :: Nil
+      case logical.CoGroup(f, kEnc, leftEnc, rightEnc, rEnc, output,
+        leftGroup, rightGroup, left, right) =>
+        execution.CoGroup(f, kEnc, leftEnc, rightEnc, rEnc, output, leftGroup, rightGroup,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           planLater(left), planLater(right)) :: Nil
 
       case logical.Repartition(numPartitions, shuffle, child) =>
@@ -398,8 +436,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Filter(condition, planLater(child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.Expand(e.projections, e.output, planLater(child)) :: Nil
+<<<<<<< HEAD
       case logical.Window(windowExprs, partitionSpec, orderSpec, child) =>
         execution.Window(windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+=======
+      case logical.Window(projectList, windowExprs, partitionSpec, orderSpec, child) =>
+        execution.Window(
+          projectList, windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
@@ -422,8 +466,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
         exchange.ShuffleExchange(HashPartitioning(
           expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
+<<<<<<< HEAD
       case e @ python.EvaluatePython(udf, child, _) =>
         python.BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
+=======
+      case e @ EvaluatePython(udf, child, _) =>
+        BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
       case _ => Nil

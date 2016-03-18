@@ -113,6 +113,7 @@ class KafkaUtils(object):
 
         def funcWithoutMessageHandler(k_v):
             return (keyDecoder(k_v[0]), valueDecoder(k_v[1]))
+<<<<<<< HEAD
 
         def funcWithMessageHandler(m):
             m._set_key_decoder(keyDecoder)
@@ -134,6 +135,36 @@ class KafkaUtils(object):
             jstream = helper.createDirectStreamWithMessageHandler(
                 ssc._jssc, kafkaParams, set(topics), jfromOffsets)
 
+=======
+
+        def funcWithMessageHandler(m):
+            m._set_key_decoder(keyDecoder)
+            m._set_value_decoder(valueDecoder)
+            return messageHandler(m)
+
+        try:
+            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
+            helper = helperClass.newInstance()
+
+            jfromOffsets = dict([(k._jTopicAndPartition(helper),
+                                  v) for (k, v) in fromOffsets.items()])
+            if messageHandler is None:
+                ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
+                func = funcWithoutMessageHandler
+                jstream = helper.createDirectStreamWithoutMessageHandler(
+                    ssc._jssc, kafkaParams, set(topics), jfromOffsets)
+            else:
+                ser = AutoBatchedSerializer(PickleSerializer())
+                func = funcWithMessageHandler
+                jstream = helper.createDirectStreamWithMessageHandler(
+                    ssc._jssc, kafkaParams, set(topics), jfromOffsets)
+        except Py4JJavaError as e:
+            if 'ClassNotFoundException' in str(e.java_exception):
+                KafkaUtils._printErrorMsg(ssc.sparkContext)
+            raise e
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         stream = DStream(jstream, ssc, ser).map(func)
         return KafkaDStream(stream._jdstream, ssc, stream._jrdd_deserializer)
 
@@ -172,6 +203,7 @@ class KafkaUtils(object):
             m._set_value_decoder(valueDecoder)
             return messageHandler(m)
 
+<<<<<<< HEAD
         helper = KafkaUtils._get_helper(sc)
 
         joffsetRanges = [o._jOffsetRange(helper) for o in offsetRanges]
@@ -197,6 +229,30 @@ class KafkaUtils(object):
             if str(e) == "'JavaPackage' object is not callable":
                 KafkaUtils._printErrorMsg(sc)
             raise
+=======
+        try:
+            helperClass = sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
+            helper = helperClass.newInstance()
+            joffsetRanges = [o._jOffsetRange(helper) for o in offsetRanges]
+            jleaders = dict([(k._jTopicAndPartition(helper),
+                              v._jBroker(helper)) for (k, v) in leaders.items()])
+            if messageHandler is None:
+                jrdd = helper.createRDDWithoutMessageHandler(
+                    sc._jsc, kafkaParams, joffsetRanges, jleaders)
+                ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
+                rdd = RDD(jrdd, sc, ser).map(funcWithoutMessageHandler)
+            else:
+                jrdd = helper.createRDDWithMessageHandler(
+                    sc._jsc, kafkaParams, joffsetRanges, jleaders)
+                rdd = RDD(jrdd, sc).map(funcWithMessageHandler)
+        except Py4JJavaError as e:
+            if 'ClassNotFoundException' in str(e.java_exception):
+                KafkaUtils._printErrorMsg(sc)
+            raise e
+
+        return KafkaRDD(rdd._jrdd, sc, rdd._jrdd_deserializer)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     @staticmethod
     def _printErrorMsg(sc):

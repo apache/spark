@@ -35,8 +35,13 @@ import org.apache.spark.network.util.TransportConf;
 public class ExternalShuffleCleanupSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
+<<<<<<< HEAD:common/network-shuffle/src/test/java/org/apache/spark/network/shuffle/ExternalShuffleCleanupSuite.java
   private Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
   private TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+=======
+  Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
+  TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/shuffle/src/test/java/org/apache/spark/network/shuffle/ExternalShuffleCleanupSuite.java
 
   @Test
   public void noCleanupAndCleanup() throws IOException {

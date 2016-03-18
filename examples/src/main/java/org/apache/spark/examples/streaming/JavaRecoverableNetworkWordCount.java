@@ -21,7 +21,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.Iterator;
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -33,7 +36,14 @@ import org.apache.spark.Accumulator;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+<<<<<<< HEAD
 import org.apache.spark.api.java.function.*;
+=======
+import org.apache.spark.api.java.function.FlatMapFunction;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.Function2;
+import org.apache.spark.api.java.function.PairFunction;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.Time;
@@ -153,7 +163,11 @@ public final class JavaRecoverableNetworkWordCount {
 
     wordCounts.foreachRDD(new VoidFunction2<JavaPairRDD<String, Integer>, Time>() {
       @Override
+<<<<<<< HEAD
       public void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
+=======
+      public Void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         // Get or register the blacklist Broadcast
         final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
         // Get or register the droppedWordsCounter Accumulator
@@ -161,7 +175,11 @@ public final class JavaRecoverableNetworkWordCount {
         // Use blacklist to drop words and use droppedWordsCounter to count them
         String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
           @Override
+<<<<<<< HEAD
           public Boolean call(Tuple2<String, Integer> wordCount) {
+=======
+          public Boolean call(Tuple2<String, Integer> wordCount) throws Exception {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             if (blacklist.value().contains(wordCount._1())) {
               droppedWordsCounter.add(wordCount._2());
               return false;
@@ -175,6 +193,10 @@ public final class JavaRecoverableNetworkWordCount {
         System.out.println("Dropped " + droppedWordsCounter.value() + " word(s) totally");
         System.out.println("Appending to " + outputFile.getAbsolutePath());
         Files.append(output + "\n", outputFile, Charset.defaultCharset());
+<<<<<<< HEAD
+=======
+        return null;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
     });
 

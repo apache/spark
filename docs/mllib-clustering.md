@@ -399,12 +399,15 @@ Refer to the [`BisectingKMeans` Java docs](api/java/org/apache/spark/mllib/clust
 
 {% include_example java/org/apache/spark/examples/mllib/JavaBisectingKMeansExample.java %}
 </div>
+<<<<<<< HEAD
 
 <div data-lang="python" markdown="1">
 Refer to the [`BisectingKMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.BisectingKMeans) and [`BisectingKMeansModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.BisectingKMeansModel) for more details on the API.
 
 {% include_example python/mllib/bisecting_k_means_example.py %}
 </div>
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 
 ## Streaming k-means

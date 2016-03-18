@@ -79,7 +79,11 @@ private[spark] abstract class Task[T](
       kill(interruptThread = false)
     }
     try {
+<<<<<<< HEAD
       runTask(context)
+=======
+      (runTask(context), context.collectAccumulators())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     } catch { case e: Throwable =>
       // Catch all errors; run task failure callbacks, and rethrow the exception.
       context.markTaskFailed(e)

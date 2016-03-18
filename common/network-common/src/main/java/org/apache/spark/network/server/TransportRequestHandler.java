@@ -19,6 +19,10 @@ package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
 
+<<<<<<< HEAD:common/network-common/src/main/java/org/apache/spark/network/server/TransportRequestHandler.java
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/main/java/org/apache/spark/network/server/TransportRequestHandler.java
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;

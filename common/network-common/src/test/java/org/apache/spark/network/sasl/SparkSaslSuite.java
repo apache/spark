@@ -161,7 +161,11 @@ public class SparkSaslSuite {
       long deadline = System.nanoTime() + TimeUnit.NANOSECONDS.convert(10, TimeUnit.SECONDS);
       while (deadline > System.nanoTime()) {
         try {
+<<<<<<< HEAD:common/network-common/src/test/java/org/apache/spark/network/sasl/SparkSaslSuite.java
           verify(rpcHandler, times(2)).channelInactive(any(TransportClient.class));
+=======
+          verify(rpcHandler, times(2)).connectionTerminated(any(TransportClient.class));
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/test/java/org/apache/spark/network/sasl/SparkSaslSuite.java
           error = null;
           break;
         } catch (Throwable t) {

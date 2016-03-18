@@ -23,14 +23,20 @@ import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
 
 import com.google.common.io.Files
+<<<<<<< HEAD
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * Manages the execution of one executor process.

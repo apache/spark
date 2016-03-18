@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.hive
 
+<<<<<<< HEAD
 import org.scalatest.BeforeAndAfterAll
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton

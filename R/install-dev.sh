@@ -53,4 +53,8 @@ echo "USING R_HOME = $R_HOME"
 cd $LIB_DIR
 jar cfM "$LIB_DIR/sparkr.zip" SparkR
 
+# Zip the SparkR package so that it can be distributed to worker nodes on YARN
+cd $LIB_DIR
+jar cfM "$LIB_DIR/sparkr.zip" SparkR
+
 popd > /dev/null

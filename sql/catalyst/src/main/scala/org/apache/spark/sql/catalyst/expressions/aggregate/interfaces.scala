@@ -91,9 +91,15 @@ private[sql] case class AggregateExpression(
     AttributeSet(childReferences)
   }
 
+<<<<<<< HEAD
   override def toString: String = s"($aggregateFunction,mode=$mode,isDistinct=$isDistinct)"
 
   override def sql: String = aggregateFunction.sql(isDistinct)
+=======
+  override def prettyString: String = aggregateFunction.prettyString
+
+  override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
@@ -143,6 +149,12 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
    */
   def defaultResult: Option[Literal] = None
 
+<<<<<<< HEAD
+=======
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   /**
    * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] because
    * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
@@ -163,11 +175,14 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
     AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
   }
+<<<<<<< HEAD
 
   def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     s"$prettyName($distinct${children.map(_.sql).mkString(", ")})"
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
@@ -188,7 +203,11 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
  * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
  * and `inputAggBufferAttributes`.
  */
+<<<<<<< HEAD
 abstract class ImperativeAggregate extends AggregateFunction with CodegenFallback {
+=======
+abstract class ImperativeAggregate extends AggregateFunction {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * The offset of this function's first buffer value in the underlying shared mutable aggregation

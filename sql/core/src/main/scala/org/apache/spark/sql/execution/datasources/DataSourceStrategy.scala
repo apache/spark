@@ -19,7 +19,10 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable.ArrayBuffer
 
+<<<<<<< HEAD
 import org.apache.spark.TaskContext
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
@@ -32,9 +35,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.DataSourceScan.{INPUT_PATHS, PUSHED_FILTERS}
+=======
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
+import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.ExecutedCommand
 import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVectorUtils}
@@ -144,9 +152,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (partitionAndNormalColumnAttrs ++ projects).toSeq
       }
 
+<<<<<<< HEAD
       // Prune the buckets based on the pushed filters that do not contain partitioning key
       // since the bucketing key is not allowed to use the columns in partitioning key
       val bucketSet = getBuckets(pushedFilters, t.bucketSpec)
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       val scan = buildPartitionedTableScan(
         l,
         partitionAndNormalColumnProjs,
@@ -169,8 +180,23 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         }
       ).getOrElse(scan) :: Nil
 
+<<<<<<< HEAD
     // TODO: The code for planning bucketed/unbucketed/partitioned/unpartitioned tables contains
     // a lot of duplication and produces overly complicated RDDs.
+=======
+      // Add a Projection to guarantee the original projection:
+      // this is because "partitionAndNormalColumnAttrs" may be different
+      // from the original "projects", in elements or their ordering
+
+      partitionAndNormalColumnFilters.reduceLeftOption(expressions.And).map(cf =>
+        if (projects.isEmpty || projects == partitionAndNormalColumnProjs) {
+          // if the original projection is empty, no need for the additional Project either
+          execution.Filter(cf, scan)
+        } else {
+          execution.Project(projects, execution.Filter(cf, scan))
+        }
+      ).getOrElse(scan) :: Nil
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _, _)) =>
@@ -591,7 +617,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       }
 
       relation.relation match {
+<<<<<<< HEAD
         case r: HadoopFsRelation => pairs += INPUT_PATHS -> r.location.paths.mkString(", ")
+=======
+        case r: HadoopFsRelation => pairs += INPUT_PATHS -> r.paths.mkString(", ")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         case _ =>
       }
 

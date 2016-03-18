@@ -21,8 +21,13 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
+<<<<<<< HEAD:common/network-common/src/main/java/org/apache/spark/network/client/StreamCallback.java
  * Callback for streaming data. Stream data will be offered to the {@link #onData(String, ByteBuffer)}
  * method as it arrives. Once all the stream data is received, {@link #onComplete(String)} will be
+=======
+ * Callback for streaming data. Stream data will be offered to the {@link onData(String, ByteBuffer)}
+ * method as it arrives. Once all the stream data is received, {@link onComplete(String)} will be
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/main/java/org/apache/spark/network/client/StreamCallback.java
  * called.
  * <p>
  * The network library guarantees that a single thread will call these methods at a time, but

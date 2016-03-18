@@ -29,8 +29,13 @@ import org.apache.xbean.asm5.Opcodes._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
+<<<<<<< HEAD
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ParentClassLoader, Utils}
+=======
+import org.apache.spark.util.Utils
+import org.apache.spark.util.ParentClassLoader
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
@@ -59,6 +64,14 @@ class ExecutorClassLoader(
     case _ =>
       val fileSystem = FileSystem.get(uri, SparkHadoopUtil.get.newConfiguration(conf))
       getClassFileInputStreamFromFileSystem(fileSystem)
+  }
+
+  override def getResource(name: String): URL = {
+    parentLoader.getResource(name)
+  }
+
+  override def getResources(name: String): java.util.Enumeration[URL] = {
+    parentLoader.getResources(name)
   }
 
   override def getResource(name: String): URL = {

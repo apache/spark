@@ -151,6 +151,11 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+<<<<<<< HEAD:sql/core/src/main/scala/org/apache/spark/sql/execution/command/commands.scala
+=======
+      (keyValueOutput, runFunc)
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/main/scala/org/apache/spark/sql/execution/commands.scala
     case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(

@@ -144,8 +144,16 @@ case class UnresolvedFunction(
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
+<<<<<<< HEAD
   override def prettyName: String = name
   override def toString: String = s"'$name(${children.mkString(", ")})"
+=======
+  override def prettyString: String = {
+    s"${name}(${children.map(_.prettyString).mkString(",")})"
+  }
+
+  override def toString: String = s"'$name(${children.mkString(",")})"
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
@@ -208,7 +216,11 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
             Alias(extract, f.name)()
         }
 
+<<<<<<< HEAD
         case _ =>
+=======
+        case _ => {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           throw new AnalysisException("Can only star expand struct data types. Attribute: `" +
             target.get + "`")
       }

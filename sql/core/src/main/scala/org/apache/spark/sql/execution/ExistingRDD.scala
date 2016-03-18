@@ -101,11 +101,19 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
+<<<<<<< HEAD
     override val nodeName: String) extends LeafNode {
+=======
+    override val nodeName: String,
+    override val metadata: Map[String, String] = Map.empty,
+    override val outputsUnsafeRows: Boolean = false)
+  extends LeafNode {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
+<<<<<<< HEAD
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     rdd.mapPartitionsInternal { iter =>
@@ -285,3 +293,26 @@ private[sql] object DataSourceScan {
   val INPUT_PATHS = "InputPaths"
   val PUSHED_FILTERS = "PushedFilters"
 }
+=======
+  override def simpleString: String = {
+    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
+    s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+  }
+}
+
+private[sql] object PhysicalRDD {
+  // Metadata keys
+  val INPUT_PATHS = "InputPaths"
+  val PUSHED_FILTERS = "PushedFilters"
+
+  def createFromDataSource(
+      output: Seq[Attribute],
+      rdd: RDD[InternalRow],
+      relation: BaseRelation,
+      metadata: Map[String, String] = Map.empty): PhysicalRDD = {
+    // All HadoopFsRelations output UnsafeRows
+    val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
+    PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
+  }
+}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

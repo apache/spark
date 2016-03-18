@@ -27,7 +27,11 @@ import java.util.Arrays;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.RegexTokenizer;
 import org.apache.spark.ml.feature.Tokenizer;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -54,12 +58,21 @@ public class JavaTokenizerExample {
       new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
     });
 
+<<<<<<< HEAD
     Dataset<Row> sentenceDataFrame = sqlContext.createDataFrame(jrdd, schema);
 
     Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
 
     Dataset<Row> wordsDataFrame = tokenizer.transform(sentenceDataFrame);
     for (Row r : wordsDataFrame.select("words", "label").takeAsList(3)) {
+=======
+    DataFrame sentenceDataFrame = sqlContext.createDataFrame(jrdd, schema);
+
+    Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
+
+    DataFrame wordsDataFrame = tokenizer.transform(sentenceDataFrame);
+    for (Row r : wordsDataFrame.select("words", "label"). take(3)) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       java.util.List<String> words = r.getList(0);
       for (String word : words) System.out.print(word + " ");
       System.out.println();

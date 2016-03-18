@@ -238,6 +238,28 @@ object SparkEnv extends Logging {
     val systemName = if (isDriver) driverSystemName else executorSystemName
     val rpcEnv = RpcEnv.create(systemName, hostname, port, conf, securityManager,
       clientMode = !isDriver)
+<<<<<<< HEAD
+=======
+    val actorSystem: ActorSystem =
+      if (rpcEnv.isInstanceOf[AkkaRpcEnv]) {
+        rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
+      } else {
+        val actorSystemPort =
+          if (port == 0 || rpcEnv.address == null) {
+            port
+          } else {
+            rpcEnv.address.port + 1
+          }
+        // Create a ActorSystem for legacy codes
+        AkkaUtils.createActorSystem(
+          actorSystemName + "ActorSystem",
+          hostname,
+          actorSystemPort,
+          conf,
+          securityManager
+        )._1
+      }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Figure out which port RpcEnv actually bound to in case the original port is 0 or occupied.
     // In the non-driver case, the RPC env's address may be null since it may not be listening
@@ -336,6 +358,11 @@ object SparkEnv extends Logging {
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
+<<<<<<< HEAD
+=======
+    val cacheManager = new CacheManager(blockManager)
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
       // We need to wait for the task scheduler to give us an app ID.

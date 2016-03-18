@@ -224,7 +224,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Reschedule jobs for these times
     val timesToReschedule = (pendingTimes ++ downTimes).filter { _ < restartTime }
       .distinct.sorted(Time.ordering)
+<<<<<<< HEAD
     logInfo("Batches to reschedule (" + timesToReschedule.length + " batches): " +
+=======
+    logInfo("Batches to reschedule (" + timesToReschedule.size + " batches): " +
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       timesToReschedule.mkString(", "))
     timesToReschedule.foreach { time =>
       // Allocate the related blocks when recovering from failure, because some blocks that were

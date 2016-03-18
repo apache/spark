@@ -130,9 +130,17 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
+<<<<<<< HEAD
             if type(path) != list:
                 path = [path]
             return self._df(self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
+=======
+            if type(path) == list:
+                return self._df(
+                    self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
+            else:
+                return self._df(self._jreader.load(path))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         else:
             return self._df(self._jreader.load())
 
@@ -152,16 +160,22 @@ class DataFrameReader(object):
         You can set the following JSON-specific options to deal with non-standard JSON files:
             * ``primitivesAsString`` (default ``false``): infers all primitive values as a string \
                 type
+<<<<<<< HEAD
             * `floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal \
                 type
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             * ``allowComments`` (default ``false``): ignores Java/C++ style comment in JSON records
             * ``allowUnquotedFieldNames`` (default ``false``): allows unquoted JSON field names
             * ``allowSingleQuotes`` (default ``true``): allows single quotes in addition to double \
                 quotes
             * ``allowNumericLeadingZeros`` (default ``false``): allows leading zeros in numbers \
                 (e.g. 00012)
+<<<<<<< HEAD
             * ``allowBackslashEscapingAnyCharacter`` (default ``false``): allows accepting quoting \
                 of all character using backslash quoting mechanism
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -232,6 +246,7 @@ class DataFrameReader(object):
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+<<<<<<< HEAD
 
     @since(2.0)
     def csv(self, paths):
@@ -249,6 +264,8 @@ class DataFrameReader(object):
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     @since(1.5)
     def orc(self, path):

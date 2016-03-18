@@ -274,6 +274,7 @@ setMethod("corr", signature(x = "Column"),
             jc <- callJStatic("org.apache.spark.sql.functions", "corr", x@jc, col2@jc)
             column(jc)
           })
+<<<<<<< HEAD
 
 #' cov
 #'
@@ -332,6 +333,8 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
             jc <- callJStatic("org.apache.spark.sql.functions", "covar_pop", col1, col2)
             column(jc)
           })
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 #' cos
 #'

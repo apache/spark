@@ -23,6 +23,10 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.util.control.NonFatal
 
+<<<<<<< HEAD
+=======
+import com.google.common.cache._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -102,7 +106,21 @@ class HistoryServer(
   }
 
   def getSparkUI(appKey: String): Option[SparkUI] = {
+<<<<<<< HEAD
     appCache.getSparkUI(appKey)
+=======
+    try {
+      val ui = appCache.get(appKey)
+      Some(ui)
+    } catch {
+      case NonFatal(e) => e.getCause() match {
+        case nsee: NoSuchElementException =>
+          None
+
+        case cause: Exception => throw cause
+      }
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   initialize()

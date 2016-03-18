@@ -147,8 +147,17 @@ _binary_mathfunctions = {
 }
 
 _window_functions = {
+<<<<<<< HEAD
     'row_number':
         """returns a sequential number starting at 1 within a window partition.""",
+=======
+    'rowNumber':
+        """.. note:: Deprecated in 1.6, use row_number instead.""",
+    'row_number':
+        """returns a sequential number starting at 1 within a window partition.""",
+    'denseRank':
+        """.. note:: Deprecated in 1.6, use dense_rank instead.""",
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     'dense_rank':
         """returns the rank of rows within a window partition, without any gaps.
 
@@ -165,9 +174,19 @@ _window_functions = {
         place and that the next person came in third.
 
         This is equivalent to the RANK function in SQL.""",
+<<<<<<< HEAD
     'cume_dist':
         """returns the cumulative distribution of values within a window partition,
         i.e. the fraction of rows that are below the current row.""",
+=======
+    'cumeDist':
+        """.. note:: Deprecated in 1.6, use cume_dist instead.""",
+    'cume_dist':
+        """returns the cumulative distribution of values within a window partition,
+        i.e. the fraction of rows that are below the current row.""",
+    'percentRank':
+        """.. note:: Deprecated in 1.6, use percent_rank instead.""",
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     'percent_rank':
         """returns the relative rank (i.e. percentile) of rows within a window partition.""",
 }
@@ -250,16 +269,26 @@ def corr(col1, col2):
     """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1``
     and ``col2``.
 
+<<<<<<< HEAD
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
     >>> df = sqlContext.createDataFrame(zip(a, b), ["a", "b"])
     >>> df.agg(corr("a", "b").alias('c')).collect()
     [Row(c=1.0)]
+=======
+    >>> a = [x * x - 2 * x + 3.5 for x in range(20)]
+    >>> b = range(20)
+    >>> corrDf = sqlContext.createDataFrame(zip(a, b))
+    >>> corrDf = corrDf.agg(corr(corrDf._1, corrDf._2).alias('c'))
+    >>> corrDf.selectExpr('abs(c - 0.9572339139475857) < 1e-16 as t').collect()
+    [Row(t=True)]
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
 
 
+<<<<<<< HEAD
 @since(2.0)
 def covar_pop(col1, col2):
     """Returns a new :class:`Column` for the population covariance of ``col1``
@@ -290,6 +319,8 @@ def covar_samp(col1, col2):
     return Column(sc._jvm.functions.covar_samp(_to_java_column(col1), _to_java_column(col2)))
 
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 @since(1.3)
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
@@ -305,6 +336,7 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
+<<<<<<< HEAD
 @since(1.3)
 def first(col, ignorenulls=False):
     """Aggregate function: returns the first value in a group.
@@ -361,6 +393,8 @@ def grouping_id(*cols):
     return Column(jc)
 
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 @since(1.6)
 def input_file_name():
     """Creates a string column for the file name of the current Spark task.
@@ -393,6 +427,7 @@ def isnull(col):
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
 
 
+<<<<<<< HEAD
 @since(1.3)
 def last(col, ignorenulls=False):
     """Aggregate function: returns the last value in a group.
@@ -403,6 +438,14 @@ def last(col, ignorenulls=False):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)
     return Column(jc)
+=======
+@since(1.4)
+def monotonicallyIncreasingId():
+    """
+    .. note:: Deprecated in 1.6, use monotonically_increasing_id instead.
+    """
+    return monotonically_increasing_id()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 
 @since(1.6)
@@ -513,6 +556,17 @@ def shiftRightUnsigned(col, numBits):
     return Column(jc)
 
 
+<<<<<<< HEAD
+=======
+@since(1.4)
+def sparkPartitionId():
+    """
+    .. note:: Deprecated in 1.6, use spark_partition_id instead.
+    """
+    return spark_partition_id()
+
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 @since(1.6)
 def spark_partition_id():
     """A column for partition ID of the Spark task.
@@ -1645,8 +1699,14 @@ class UserDefinedFunction(object):
         f, returnType = self.func, self.returnType  # put them in closure `func`
         func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
         ser = AutoBatchedSerializer(PickleSerializer())
+<<<<<<< HEAD
         sc = SparkContext.getOrCreate()
         wrapped_func = _wrap_function(sc, func, ser, ser)
+=======
+        command = (func, None, ser, ser)
+        sc = SparkContext.getOrCreate()
+        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:

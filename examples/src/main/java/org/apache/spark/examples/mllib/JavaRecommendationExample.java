@@ -29,7 +29,11 @@ import org.apache.spark.SparkConf;
 // $example off$
 
 public class JavaRecommendationExample {
+<<<<<<< HEAD
   public static void main(String[] args) {
+=======
+  public static void main(String args[]) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     // $example on$
     SparkConf conf = new SparkConf().setAppName("Java Collaborative Filtering Example");
     JavaSparkContext jsc = new JavaSparkContext(conf);
@@ -64,7 +68,12 @@ public class JavaRecommendationExample {
       model.predict(JavaRDD.toRDD(userProducts)).toJavaRDD().map(
         new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
           public Tuple2<Tuple2<Integer, Integer>, Double> call(Rating r){
+<<<<<<< HEAD
             return new Tuple2<>(new Tuple2<>(r.user(), r.product()), r.rating());
+=======
+            return new Tuple2<Tuple2<Integer, Integer>, Double>(
+              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           }
         }
       ));
@@ -72,7 +81,12 @@ public class JavaRecommendationExample {
       JavaPairRDD.fromJavaRDD(ratings.map(
         new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
           public Tuple2<Tuple2<Integer, Integer>, Double> call(Rating r){
+<<<<<<< HEAD
             return new Tuple2<>(new Tuple2<>(r.user(), r.product()), r.rating());
+=======
+            return new Tuple2<Tuple2<Integer, Integer>, Double>(
+              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           }
         }
       )).join(predictions).values();
@@ -91,7 +105,10 @@ public class JavaRecommendationExample {
     MatrixFactorizationModel sameModel = MatrixFactorizationModel.load(jsc.sc(),
       "target/tmp/myCollaborativeFilter");
     // $example off$
+<<<<<<< HEAD
 
     jsc.stop();
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

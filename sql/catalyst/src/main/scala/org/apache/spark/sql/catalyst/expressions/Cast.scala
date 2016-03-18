@@ -949,3 +949,12 @@ case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[Str
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
 }
+
+/**
+ * Cast the child expression to the target data type, but will throw error if the cast might
+ * truncate, e.g. long -> int, timestamp -> data.
+ */
+case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String])
+  extends UnaryExpression with Unevaluable {
+  override lazy val resolved = false
+}

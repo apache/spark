@@ -19,7 +19,10 @@ package org.apache.spark.examples.ml;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
@@ -27,6 +30,10 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.Binarizer;
+<<<<<<< HEAD
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -51,18 +58,32 @@ public class JavaBinarizerExample {
       new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
       new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
     });
+<<<<<<< HEAD
     Dataset<Row> continuousDataFrame = jsql.createDataFrame(jrdd, schema);
+=======
+    DataFrame continuousDataFrame = jsql.createDataFrame(jrdd, schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     Binarizer binarizer = new Binarizer()
       .setInputCol("feature")
       .setOutputCol("binarized_feature")
       .setThreshold(0.5);
+<<<<<<< HEAD
     Dataset<Row> binarizedDataFrame = binarizer.transform(continuousDataFrame);
     Dataset<Row> binarizedFeatures = binarizedDataFrame.select("binarized_feature");
     for (Row r : binarizedFeatures.collectAsList()) {
+=======
+    DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
+    DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
+    for (Row r : binarizedFeatures.collect()) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       Double binarized_value = r.getDouble(0);
       System.out.println(binarized_value);
     }
     // $example off$
     jsc.stop();
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

@@ -17,6 +17,10 @@
 
 package org.apache.spark.examples.streaming;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import com.google.common.io.Closeables;
 
 import org.apache.spark.SparkConf;
@@ -131,8 +135,12 @@ public class JavaCustomReceiver extends Receiver<String> {
       try {
         // connect to the server
         socket = new Socket(host, port);
+<<<<<<< HEAD
         reader = new BufferedReader(
             new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+=======
+        reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         // Until stopped or connection broken continue reading
         while (!isStopped() && (userInput = reader.readLine()) != null) {
           System.out.println("Received data '" + userInput + "'");

@@ -23,9 +23,14 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
+<<<<<<< HEAD
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.annotation.{Experimental, Since}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -463,7 +468,11 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
  */
 @Since("1.4.0")
 @Experimental
+<<<<<<< HEAD
 class LogisticRegressionModel private[spark] (
+=======
+class LogisticRegressionModel private[ml] (
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     @Since("1.4.0") override val uid: String,
     @Since("1.6.0") val coefficients: Vector,
     @Since("1.3.0") val intercept: Double)
@@ -509,6 +518,7 @@ class LogisticRegressionModel private[spark] (
    * thrown if `trainingSummary == None`.
    */
   @Since("1.5.0")
+<<<<<<< HEAD
   def summary: LogisticRegressionTrainingSummary = trainingSummary.getOrElse {
     throw new SparkException("No training summary available for this LogisticRegressionModel")
   }
@@ -526,6 +536,14 @@ class LogisticRegressionModel private[spark] (
         (copy(ParamMap.empty).setProbabilityCol(probabilityColName), probabilityColName)
       case p => (this, p)
     }
+=======
+  def summary: LogisticRegressionTrainingSummary = trainingSummary match {
+    case Some(summ) => summ
+    case None =>
+      throw new SparkException(
+        "No training summary available for this LogisticRegressionModel",
+        new NullPointerException())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   private[classification] def setSummary(
@@ -613,6 +631,7 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("1.6.0")
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
+<<<<<<< HEAD
 }
 
 
@@ -673,6 +692,68 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 }
 
 
+=======
+}
+
+
+@Since("1.6.0")
+object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): LogisticRegressionModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[LogisticRegressionModel]] */
+  private[LogisticRegressionModel]
+  class LogisticRegressionModelWriter(instance: LogisticRegressionModel)
+    extends MLWriter with Logging {
+
+    private case class Data(
+        numClasses: Int,
+        numFeatures: Int,
+        intercept: Double,
+        coefficients: Vector)
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: numClasses, numFeatures, intercept, coefficients
+      val data = Data(instance.numClasses, instance.numFeatures, instance.intercept,
+        instance.coefficients)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class LogisticRegressionModelReader
+    extends MLReader[LogisticRegressionModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[LogisticRegressionModel].getName
+
+    override def load(path: String): LogisticRegressionModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.format("parquet").load(dataPath)
+        .select("numClasses", "numFeatures", "intercept", "coefficients").head()
+      // We will need numClasses, numFeatures in the future for multinomial logreg support.
+      // val numClasses = data.getInt(0)
+      // val numFeatures = data.getInt(1)
+      val intercept = data.getDouble(2)
+      val coefficients = data.getAs[Vector](3)
+      val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+}
+
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 /**
  * MultiClassSummarizer computes the number of distinct labels and corresponding counts,
  * and validates the data to see if the labels used for k class multi-label classification

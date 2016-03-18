@@ -20,7 +20,10 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
+<<<<<<< HEAD
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -69,6 +72,7 @@ class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     }
   }
 
+<<<<<<< HEAD
   test("Binarize vector of continuous features with default parameter") {
     val defaultBinarized: Array[Double] = data.map(x => if (x > 0.0) 1.0 else 0.0)
     val dataFrame: DataFrame = sqlContext.createDataFrame(Seq(
@@ -104,6 +108,8 @@ class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("read/write") {
     val t = new Binarizer()
       .setInputCol("myInputCol")

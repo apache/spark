@@ -602,6 +602,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("unionAll should union DataFrames with UDTs (SPARK-13410)") {
+    val rowRDD1 = sparkContext.parallelize(Seq(Row(1, new ExamplePoint(1.0, 2.0))))
+    val schema1 = StructType(Array(StructField("label", IntegerType, false),
+      StructField("point", new ExamplePointUDT(), false)))
+    val rowRDD2 = sparkContext.parallelize(Seq(Row(2, new ExamplePoint(3.0, 4.0))))
+    val schema2 = StructType(Array(StructField("label", IntegerType, false),
+      StructField("point", new ExamplePointUDT(), false)))
+    val df1 = sqlContext.createDataFrame(rowRDD1, schema1)
+    val df2 = sqlContext.createDataFrame(rowRDD2, schema2)
+
+    checkAnswer(
+      df1.unionAll(df2).orderBy("label"),
+      Seq(Row(1, new ExamplePoint(1.0, 2.0)), Row(2, new ExamplePoint(3.0, 4.0)))
+    )
+  }
+
   ignore("show") {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()
@@ -666,8 +682,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("showString: binary") {
     val df = Seq(
+<<<<<<< HEAD
       ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
       ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
+=======
+      ("12".getBytes, "ABC.".getBytes),
+      ("34".getBytes, "12346".getBytes)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     ).toDF()
     val expectedAnswer = """+-------+----------------+
                            ||     _1|              _2|
@@ -1271,6 +1292,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
   }
 
+<<<<<<< HEAD
   test("SPARK-12398 truncated toString") {
     val df1 = Seq((1L, "row1")).toDF("id", "name")
     assert(df1.toString() === "[id: bigint, name: string]")
@@ -1351,11 +1373,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.withColumn("col.c", lit("c")), Row("a", "b", "c"))
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("SPARK-12841: cast in filter") {
     checkAnswer(
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
   }
+<<<<<<< HEAD
 
   test("SPARK-12982: Add table name validation in temp table registration") {
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
@@ -1376,4 +1401,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

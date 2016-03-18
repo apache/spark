@@ -89,9 +89,14 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
     val leftResults = left.execute().asInstanceOf[RDD[UnsafeRow]]
     val rightResults = right.execute().asInstanceOf[RDD[UnsafeRow]]
 
+<<<<<<< HEAD
     val pair = new UnsafeCartesianRDD(leftResults, rightResults, right.output.size)
     pair.mapPartitionsInternal { iter =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
+=======
+    leftResults.cartesian(rightResults).mapPartitionsInternal { iter =>
+      val joinedRow = new JoinedRow
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       iter.map { r =>
         numOutputRows += 1
         joiner.join(r._1, r._2)

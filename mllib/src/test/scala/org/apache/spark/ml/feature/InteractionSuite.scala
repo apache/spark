@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
 
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.ParamsSuite

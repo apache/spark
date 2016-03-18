@@ -20,8 +20,12 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
+<<<<<<< HEAD
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+=======
+import org.apache.spark.ml.util.MLTestingUtils
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
@@ -74,7 +78,11 @@ class DecisionTreeClassifierSuite
       .setMaxDepth(2)
       .setMaxBins(100)
       .setSeed(1)
+<<<<<<< HEAD
     val categoricalFeatures = Map(0 -> 3, 1 -> 3)
+=======
+    val categoricalFeatures = Map(0 -> 3, 1-> 3)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val numClasses = 2
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)
   }
@@ -306,6 +314,7 @@ class DecisionTreeClassifierSuite
         n.split match {
           case s: CategoricalSplit =>
             assert(s.leftCategories === Array(1.0))
+<<<<<<< HEAD
           case other =>
             fail(s"All splits should be categorical, but got ${other.getClass.getName}: $other.")
         }
@@ -335,6 +344,12 @@ class DecisionTreeClassifierSuite
     assert(importances.toArray.forall(_ >= 0.0))
   }
 
+=======
+        }
+    }
+  }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////

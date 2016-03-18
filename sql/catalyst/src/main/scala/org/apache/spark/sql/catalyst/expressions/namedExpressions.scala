@@ -288,7 +288,11 @@ case class AttributeReference(
   }
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
+<<<<<<< HEAD
     exprId :: qualifiers :: isGenerated :: Nil
+=======
+    exprId :: qualifiers :: Nil
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
@@ -296,17 +300,21 @@ case class AttributeReference(
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.
   override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
+<<<<<<< HEAD
 
   override def sql: String = {
     val qualifiersString = if (qualifiers.isEmpty) "" else qualifiers.head + "."
     s"$qualifiersString${quoteIdentifier(name)}"
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
+<<<<<<< HEAD
 case class PrettyAttribute(
     name: String,
     dataType: DataType = NullType)
@@ -317,6 +325,10 @@ case class PrettyAttribute(
     case a: PrettyAttribute => a.dataType
     case _ => NullType
   })
+=======
+case class PrettyAttribute(name: String, dataType: DataType = NullType)
+  extends Attribute with Unevaluable {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override def toString: String = name
   override def sql: String = toString

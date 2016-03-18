@@ -346,7 +346,11 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_apply_schema_to_row(self):
         df = self.sqlCtx.read.json(self.sc.parallelize(["""{"a":2}"""]))
+<<<<<<< HEAD
         df2 = self.sqlCtx.createDataFrame(df.rdd.map(lambda x: x), df.schema)
+=======
+        df2 = self.sqlCtx.createDataFrame(df.map(lambda x: x), df.schema)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         self.assertEqual(df.collect(), df2.collect())
 
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
@@ -369,7 +373,13 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(3)).map(lambda i: Row(a=i))
         schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
         df = self.sqlCtx.createDataFrame(rdd, schema)
+<<<<<<< HEAD
         self.assertRaises(Exception, lambda: df.show())
+=======
+        message = ".*Input row doesn't have expected number of values required by the schema.*"
+        with self.assertRaisesRegexp(Exception, message):
+            df.show()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     def test_serialize_nested_array_and_map(self):
         d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]

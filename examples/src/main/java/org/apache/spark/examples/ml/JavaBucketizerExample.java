@@ -26,7 +26,11 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.Bucketizer;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -53,7 +57,11 @@ public class JavaBucketizerExample {
     StructType schema = new StructType(new StructField[]{
       new StructField("features", DataTypes.DoubleType, false, Metadata.empty())
     });
+<<<<<<< HEAD
     Dataset<Row> dataFrame = jsql.createDataFrame(data, schema);
+=======
+    DataFrame dataFrame = jsql.createDataFrame(data, schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     Bucketizer bucketizer = new Bucketizer()
       .setInputCol("features")
@@ -61,7 +69,11 @@ public class JavaBucketizerExample {
       .setSplits(splits);
 
     // Transform original data into its bucket index.
+<<<<<<< HEAD
     Dataset<Row> bucketedData = bucketizer.transform(dataFrame);
+=======
+    DataFrame bucketedData = bucketizer.transform(dataFrame);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     bucketedData.show();
     // $example off$
     jsc.stop();

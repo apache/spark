@@ -17,15 +17,22 @@
 
 package org.apache.spark.ml.feature
 
+<<<<<<< HEAD
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.annotation.{Experimental, Since}
+=======
+import org.apache.spark.annotation.{Since, Experimental}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
+<<<<<<< HEAD
 import org.apache.spark.mllib.linalg._
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._

@@ -29,8 +29,12 @@ import org.apache.spark.ml.util.MetadataUtils;
 import org.apache.spark.mllib.evaluation.MulticlassMetrics;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.StructField;
 // $example off$
@@ -82,9 +86,15 @@ public class JavaOneVsRestExample {
     OneVsRest ovr = new OneVsRest().setClassifier(classifier);
 
     String input = params.input;
+<<<<<<< HEAD
     Dataset<Row> inputData = jsql.read().format("libsvm").load(input);
     Dataset<Row> train;
     Dataset<Row> test;
+=======
+    DataFrame inputData = jsql.read().format("libsvm").load(input);
+    DataFrame train;
+    DataFrame test;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // compute the train/ test split: if testInput is not provided use part of input
     String testInput = params.testInput;
@@ -96,7 +106,11 @@ public class JavaOneVsRestExample {
         String.valueOf(numFeatures)).load(testInput);
     } else {
       double f = params.fracTest;
+<<<<<<< HEAD
       Dataset<Row>[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
+=======
+      DataFrame[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       train = tmp[0];
       test = tmp[1];
     }
@@ -105,7 +119,11 @@ public class JavaOneVsRestExample {
     OneVsRestModel ovrModel = ovr.fit(train.cache());
 
     // score the model on test data
+<<<<<<< HEAD
     Dataset<Row> predictions = ovrModel.transform(test.cache())
+=======
+    DataFrame predictions = ovrModel.transform(test.cache())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       .select("prediction", "label");
 
     // obtain metrics

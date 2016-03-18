@@ -669,11 +669,15 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.max.executor.failures" -> Seq(
       AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
     "spark.memory.offHeap.enabled" -> Seq(
+<<<<<<< HEAD
       AlternateConfig("spark.unsafe.offHeap", "1.6")),
     "spark.rpc.message.maxSize" -> Seq(
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0"))
+=======
+      AlternateConfig("spark.unsafe.offHeap", "1.6"))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     )
 
   /**

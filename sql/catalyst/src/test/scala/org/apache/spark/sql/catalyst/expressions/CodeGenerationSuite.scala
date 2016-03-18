@@ -63,6 +63,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val clauses = 20
 
     // Generate an individual case
+<<<<<<< HEAD
     def generateCase(n: Int): (Expression, Expression) = {
       val condition = (1 to clauses)
         .map(c => EqualTo(BoundReference(0, StringType, false), Literal(s"$c:$n")))
@@ -71,6 +72,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     val expression = CaseWhen((1 to cases).map(generateCase(_)))
+=======
+    def generateCase(n: Int): Seq[Expression] = {
+      val condition = (1 to clauses)
+        .map(c => EqualTo(BoundReference(0, StringType, false), Literal(s"$c:$n")))
+        .reduceLeft[Expression]((l, r) => Or(l, r))
+      Seq(condition, Literal(n))
+    }
+
+    val expression = CaseWhen((1 to cases).flatMap(generateCase(_)))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     val plan = GenerateMutableProjection.generate(Seq(expression))()
     val input = new GenericMutableRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
@@ -79,6 +90,10 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual(0) == cases)
   }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("test generated safe and unsafe projection") {
     val schema = new StructType(Array(
       StructField("a", StringType, true),

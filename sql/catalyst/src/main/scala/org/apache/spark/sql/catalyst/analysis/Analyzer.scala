@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,6 +33,14 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
+=======
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.{ScalaReflection, SimpleCatalystConf, CatalystConf}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.types._
 
 /**
@@ -72,8 +81,12 @@ class Analyzer(
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
+<<<<<<< HEAD
       WindowsSubstitution,
       EliminateUnions),
+=======
+      WindowsSubstitution),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -91,10 +104,16 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
+      DistinctAggregationRewriter(conf) ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
+<<<<<<< HEAD
       PullOutNondeterministic),
+=======
+      PullOutNondeterministic,
+      ComputeCurrentTime),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     Batch("UDF", Once,
       HandleNullInputsForUDF),
     Batch("Cleanup", fixedPoint,
@@ -162,7 +181,11 @@ class Analyzer(
       exprs.zipWithIndex.map {
         case (expr, i) =>
           expr transformUp {
+<<<<<<< HEAD
             case u @ UnresolvedAlias(child, optionalAliasName) => child match {
+=======
+            case u @ UnresolvedAlias(child) => child match {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
@@ -183,6 +206,10 @@ class Analyzer(
 
       case g: GroupingSets if g.child.resolved && hasUnresolvedAlias(g.aggregations) =>
         g.copy(aggregations = assignAliases(g.aggregations))
+
+      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child)
+        if child.resolved && hasUnresolvedAlias(groupByExprs) =>
+        Pivot(assignAliases(groupByExprs), pivotColumn, pivotValues, aggregates, child)
 
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child)
         if child.resolved && hasUnresolvedAlias(groupByExprs) =>
@@ -250,6 +277,7 @@ class Analyzer(
 
         val nonNullBitmask = x.bitmasks.reduce(_ & _)
 
+<<<<<<< HEAD
         val groupByAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
           a.toAttribute.withNullability((nonNullBitmask & 1 << idx) == 0)
         }
@@ -294,13 +322,40 @@ class Analyzer(
               } else {
                 groupByAttributes(index)
               }
+=======
+        val attributeMap = groupByAliases.zipWithIndex.map { case (a, idx) =>
+          if ((nonNullBitmask & 1 << idx) == 0) {
+            (a -> a.toAttribute.withNullability(true))
+          } else {
+            (a -> a.toAttribute)
+          }
+        }.toMap
+
+        val aggregations: Seq[NamedExpression] = x.aggregations.map {
+          // If an expression is an aggregate (contains a AggregateExpression) then we dont change
+          // it so that the aggregation is computed on the unmodified value of its argument
+          // expressions.
+          case expr if expr.find(_.isInstanceOf[AggregateExpression]).nonEmpty => expr
+          // If not then its a grouping expression and we need to use the modified (with nulls from
+          // Expand) value of the expression.
+          case expr => expr.transformDown {
+            case e =>
+              groupByAliases.find(_.child.semanticEquals(e)).map(attributeMap(_)).getOrElse(e)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           }.asInstanceOf[NamedExpression]
         }
+
+        val child = Project(x.child.output ++ groupByAliases, x.child)
+        val groupByAttributes = groupByAliases.map(attributeMap(_))
 
         Aggregate(
           groupByAttributes :+ VirtualColumn.groupingIdAttribute,
           aggregations,
+<<<<<<< HEAD
           Expand(x.bitmasks, groupByAliases, groupByAttributes, gid, x.child))
+=======
+          Expand(x.bitmasks, groupByAttributes, gid, child))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 
@@ -329,12 +384,20 @@ class Analyzer(
               throw new AnalysisException(
                 s"Aggregate expression required for pivot, found '$aggregate'")
             }
+<<<<<<< HEAD
             val name = if (singleAgg) value.toString else value + "_" + aggregate.sql
+=======
+            val name = if (singleAgg) value.toString else value + "_" + aggregate.prettyString
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             Alias(filteredAggregate, name)()
           }
         }
         val newGroupByExprs = groupByExprs.map {
+<<<<<<< HEAD
           case UnresolvedAlias(e, _) => e
+=======
+          case UnresolvedAlias(e) => e
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           case e => e
         }
         Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
@@ -715,10 +778,13 @@ class Analyzer(
                   AggregateExpression(max, Complete, isDistinct = false)
                 case min: Min if isDistinct =>
                   AggregateExpression(min, Complete, isDistinct = false)
+<<<<<<< HEAD
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
                 case wf: AggregateWindowFunction => wf
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
@@ -817,8 +883,12 @@ class Analyzer(
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
           val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
+<<<<<<< HEAD
           val aliasedOrdering =
             unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")(isGenerated = true))
+=======
+          val aliasedOrdering = unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
@@ -1291,6 +1361,7 @@ class Analyzer(
       }
     }
   }
+<<<<<<< HEAD
 
   /**
    * Check and add proper window frames for all window functions.
@@ -1392,6 +1463,8 @@ class Analyzer(
   }
 
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
@@ -1477,11 +1550,35 @@ object CleanupAliases extends Rule[LogicalPlan] {
 }
 
 /**
+<<<<<<< HEAD
+=======
+ * Computes the current date and time to make sure we return the same result in a single query.
+ */
+object ComputeCurrentTime extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val dateExpr = CurrentDate()
+    val timeExpr = CurrentTimestamp()
+    val currentDate = Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
+    val currentTime = Literal.create(timeExpr.eval(EmptyRow), timeExpr.dataType)
+
+    plan transformAllExpressions {
+      case CurrentDate() => currentDate
+      case CurrentTimestamp() => currentTime
+    }
+  }
+}
+
+/**
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
  * Replace the `UpCast` expression by `Cast`, and throw exceptions if the cast may truncate.
  */
 object ResolveUpCast extends Rule[LogicalPlan] {
   private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
+<<<<<<< HEAD
     throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
+=======
+    throw new AnalysisException(s"Cannot up cast `${from.prettyString}` from " +
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
       "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
       "You can either add an explicit cast to the input data or choose a higher precision " +

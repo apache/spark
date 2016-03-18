@@ -18,7 +18,11 @@
 package org.apache.spark.memory
 
 import org.apache.spark.SparkConf
+<<<<<<< HEAD
 import org.apache.spark.storage.BlockId
+=======
+import org.apache.spark.storage.{BlockStatus, BlockId}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
@@ -54,10 +58,17 @@ private[spark] class UnifiedMemoryManager private[memory] (
     numCores,
     storageRegionSize,
     maxMemory - storageRegionSize) {
+<<<<<<< HEAD
 
   // We always maintain this invariant:
   assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
 
+=======
+
+  // We always maintain this invariant:
+  assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   override def maxStorageMemory: Long = synchronized {
     maxMemory - onHeapExecutionMemoryPool.memoryUsed
   }
@@ -131,7 +142,14 @@ private[spark] class UnifiedMemoryManager private[memory] (
     }
   }
 
+<<<<<<< HEAD
   override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
+=======
+  override def acquireStorageMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
     assert(numBytes >= 0)
     if (numBytes > maxStorageMemory) {
@@ -147,11 +165,22 @@ private[spark] class UnifiedMemoryManager private[memory] (
       onHeapExecutionMemoryPool.decrementPoolSize(memoryBorrowedFromExecution)
       storageMemoryPool.incrementPoolSize(memoryBorrowedFromExecution)
     }
+<<<<<<< HEAD
     storageMemoryPool.acquireMemory(blockId, numBytes)
   }
 
   override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
     acquireStorageMemory(blockId, numBytes)
+=======
+    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+  }
+
+  override def acquireUnrollMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+    acquireStorageMemory(blockId, numBytes, evictedBlocks)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }
 
@@ -183,6 +212,7 @@ object UnifiedMemoryManager {
     val minSystemMemory = reservedMemory * 1.5
     if (systemMemory < minSystemMemory) {
       throw new IllegalArgumentException(s"System memory $systemMemory must " +
+<<<<<<< HEAD
         s"be at least $minSystemMemory. Please increase heap size using the --driver-memory " +
         s"option or spark.driver.memory in Spark configuration.")
     }
@@ -194,6 +224,9 @@ object UnifiedMemoryManager {
           s"$minSystemMemory. Please increase executor memory using the " +
           s"--executor-memory option or spark.executor.memory in Spark configuration.")
       }
+=======
+        s"be at least $minSystemMemory. Please use a larger heap size.")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
     val usableMemory = systemMemory - reservedMemory
     val memoryFraction = conf.getDouble("spark.memory.fraction", 0.75)

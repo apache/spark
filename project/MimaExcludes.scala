@@ -669,6 +669,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.hashCode"),
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.NoopDialect$")
       ) ++ Seq (
+<<<<<<< HEAD
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.status.api.v1.ApplicationInfo.this"),
         ProblemFilters.exclude[MissingMethodProblem](
@@ -676,6 +677,13 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-11766 add toJson to Vector
         ProblemFilters.exclude[MissingMethodProblem](
+=======
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.status.api.v1.ApplicationInfo.this")
+      ) ++ Seq(
+        // SPARK-11766 add toJson to Vector
+        ProblemFilters.exclude[MissingMethodProblem](
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           "org.apache.spark.mllib.linalg.Vector.toJson")
       ) ++ Seq(
         // SPARK-9065 Support message handler in Kafka Python API
@@ -698,6 +706,7 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-3580 Add getNumPartitions method to JavaRDD
         ProblemFilters.exclude[MissingMethodProblem](
+<<<<<<< HEAD
           "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
       ) ++ Seq(
         // SPARK-12149 Added new fields to ExecutorSummary
@@ -706,6 +715,16 @@ object MimaExcludes {
       // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
       // private class.
       MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
+=======
+          "org.apache.spark.api.java.JavaRDDLike.getNumPartitions"),
+        // SPARK-13465 TaskContext.
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.addTaskFailureListener")
+      ) ++ Seq(
+        // SPARK-12591 Register OpenHashMapBasedStateMap for Kryo
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.KryoInputDataInputBridge"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.KryoOutputDataOutputBridge")
+      )
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),

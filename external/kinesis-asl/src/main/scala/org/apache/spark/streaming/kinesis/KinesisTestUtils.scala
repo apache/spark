@@ -243,7 +243,11 @@ private[kinesis] class SimpleDataGenerator(
     val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
     data.foreach { num =>
       val str = num.toString
+<<<<<<< HEAD:external/kinesis-asl/src/main/scala/org/apache/spark/streaming/kinesis/KinesisTestUtils.scala
       val data = ByteBuffer.wrap(str.getBytes(StandardCharsets.UTF_8))
+=======
+      val data = ByteBuffer.wrap(str.getBytes())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:extras/kinesis-asl/src/main/scala/org/apache/spark/streaming/kinesis/KinesisTestUtils.scala
       val putRecordRequest = new PutRecordRequest().withStreamName(streamName)
         .withData(data)
         .withPartitionKey(str)

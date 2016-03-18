@@ -29,12 +29,21 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
 import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
 
+<<<<<<< HEAD
+=======
+import org.apache.spark.annotation.DeveloperApi
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
+<<<<<<< HEAD
+=======
+import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
+import org.apache.spark.deploy.SparkHadoopUtil
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
 
@@ -157,8 +166,13 @@ class NewHadoopRDD[K, V](
           configurable.setConf(conf)
         case _ =>
       }
+<<<<<<< HEAD
       val attemptId = new TaskAttemptID(jobTrackerId, id, TaskType.MAP, split.index, 0)
       val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+=======
+      val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
+      val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       private var reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)

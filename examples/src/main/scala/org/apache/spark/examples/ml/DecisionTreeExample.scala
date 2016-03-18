@@ -33,7 +33,12 @@ import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.{MulticlassMetrics, RegressionMetrics}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLUtils
+<<<<<<< HEAD
 import org.apache.spark.sql.{DataFrame, SQLContext}
+=======
+import org.apache.spark.sql.{SQLContext, DataFrame}
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * An example runner for decision trees. Run with

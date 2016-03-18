@@ -664,7 +664,10 @@ private[columnar] case class MAP(dataType: MapType)
 }
 
 private[columnar] object ColumnType {
+<<<<<<< HEAD:sql/core/src/main/scala/org/apache/spark/sql/execution/columnar/ColumnType.scala
   @tailrec
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/main/scala/org/apache/spark/sql/execution/columnar/ColumnType.scala
   def apply(dataType: DataType): ColumnType[_] = {
     dataType match {
       case NullType => NULL

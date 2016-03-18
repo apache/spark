@@ -45,7 +45,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
+import org.apache.spark.util.{AsynchronousListenerBus, CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -541,9 +541,15 @@ class StreamingContext private[streaming] (
    *
    * Return the current state of the context. The context can be in three possible states -
    *
+<<<<<<< HEAD
    *  - StreamingContextState.INITIALIZED - The context has been created, but not started yet.
    *    Input DStreams, transformations and output operations can be created on the context.
    *  - StreamingContextState.ACTIVE - The context has been started, and not stopped.
+=======
+   *  - StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *    Input DStreams, transformations and output operations can be created on the context.
+   *  - StreamingContextState.ACTIVE - The context has been started, and been not stopped.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    *    Input DStreams, transformations and output operations cannot be created on the context.
    *  - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
    */
@@ -648,9 +654,15 @@ class StreamingContext private[streaming] (
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = {
     var shutdownHookRefToRemove: AnyRef = null
+<<<<<<< HEAD
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
         s"Cannot stop StreamingContext within listener thread of ${LiveListenerBus.name}")
+=======
+    if (AsynchronousListenerBus.withinListenerThread.value) {
+      throw new SparkException("Cannot stop StreamingContext within listener thread of" +
+        " AsynchronousListenerBus")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
     synchronized {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet

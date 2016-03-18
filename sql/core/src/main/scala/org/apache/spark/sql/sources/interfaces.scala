@@ -21,8 +21,13 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
+<<<<<<< HEAD
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
+=======
+import org.apache.hadoop.fs.{PathFilter, FileStatus, FileSystem, Path}
+import org.apache.hadoop.mapred.{JobConf, FileInputFormat}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.SparkContext
@@ -380,6 +385,7 @@ abstract class OutputWriter {
 }
 
 /**
+<<<<<<< HEAD
  * Acts as a container for all of the metadata required to read from a datasource. All discovery,
  * resolution and merging logic for schemas and partitions has been removed.
  *
@@ -420,10 +426,51 @@ case class HadoopFsRelation(
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
     location.allFiles().map(_.getPath.toUri.toString).toArray
+=======
+ * ::Experimental::
+ * A [[BaseRelation]] that provides much of the common code required for relations that store their
+ * data to an HDFS compatible filesystem.
+ *
+ * For the read path, similar to [[PrunedFilteredScan]], it can eliminate unneeded columns and
+ * filter using selected predicates before producing an RDD containing all matching tuples as
+ * [[Row]] objects. In addition, when reading from Hive style partitioned tables stored in file
+ * systems, it's able to discover partitioning information from the paths of input directories, and
+ * perform partition pruning before start reading the data. Subclasses of [[HadoopFsRelation()]]
+ * must override one of the four `buildScan` methods to implement the read path.
+ *
+ * For the write path, it provides the ability to write to both non-partitioned and partitioned
+ * tables.  Directory layout of the partitioned tables is compatible with Hive.
+ *
+ * @constructor This constructor is for internal uses only. The [[PartitionSpec]] argument is for
+ *              implementing metastore table conversion.
+ *
+ * @param maybePartitionSpec An [[HadoopFsRelation]] can be created with an optional
+ *        [[PartitionSpec]], so that partition discovery can be skipped.
+ *
+ * @since 1.4.0
+ */
+@Experimental
+abstract class HadoopFsRelation private[sql](
+    maybePartitionSpec: Option[PartitionSpec],
+    parameters: Map[String, String])
+  extends BaseRelation with FileRelation with Logging {
+
+  override def toString: String = getClass.getSimpleName
+
+  def this() = this(None, Map.empty[String, String])
+
+  def this(parameters: Map[String, String]) = this(None, parameters)
+
+  private[sql] def this(maybePartitionSpec: Option[PartitionSpec]) =
+    this(maybePartitionSpec, Map.empty[String, String])
+
+  private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override def sizeInBytes: Long = location.allFiles().map(_.getLen).sum
 }
 
+<<<<<<< HEAD
 /**
  * Used to read and write data stored in files to/from the [[InternalRow]] format.
  */
@@ -437,6 +484,10 @@ trait FileFormat {
       sqlContext: SQLContext,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType]
+=======
+  private class FileStatusCache {
+    var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
@@ -449,6 +500,7 @@ trait FileFormat {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
 
+<<<<<<< HEAD
   def buildInternalScan(
       sqlContext: SQLContext,
       dataSchema: StructType,
@@ -458,6 +510,29 @@ trait FileFormat {
       inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow]
+=======
+    private def listLeafFiles(paths: Array[String]): mutable.LinkedHashSet[FileStatus] = {
+      if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
+        HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
+      } else {
+        val statuses = paths.flatMap { path =>
+          val hdfsPath = new Path(path)
+          val fs = hdfsPath.getFileSystem(hadoopConf)
+          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+          logInfo(s"Listing $qualified on driver")
+          // Dummy jobconf to get to the pathFilter defined in configuration
+          val jobConf = new JobConf(hadoopConf, this.getClass())
+          val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+          if (pathFilter != null) {
+            Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
+          } else {
+            Try(fs.listStatus(qualified)).getOrElse(Array.empty)
+          }
+        }.filterNot { status =>
+          val name = status.getPath.getName
+          HadoopFsRelation.shouldFilterOut(name)
+        }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
@@ -484,6 +559,7 @@ trait FileFormat {
   }
 }
 
+<<<<<<< HEAD
 /**
  * A collection of data files from a partitioned relation, along with the partition values in the
  * form of an [[InternalRow]].
@@ -509,11 +585,22 @@ trait FileCatalog {
    *                filters will not need to be evaluated again on the returned data.
    */
   def listFiles(filters: Seq[Expression]): Seq[Partition]
+=======
+        // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
+        if (dirs.isEmpty) {
+          mutable.LinkedHashSet(files: _*)
+        } else {
+          mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath.toString))
+        }
+      }
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   def allFiles(): Seq[FileStatus]
 
   def getStatus(path: Path): Array[FileStatus]
 
+<<<<<<< HEAD
   def refresh(): Unit
 }
 
@@ -542,12 +629,22 @@ class HDFSFileCatalog(
   def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
       cachedPartitionSpec = inferPartitioning(partitionSchema)
+=======
+      leafFiles ++= files.map(f => f.getPath -> f)
+      leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
 
     cachedPartitionSpec
   }
 
+<<<<<<< HEAD
   refresh()
+=======
+  protected def cachedLeafStatuses(): mutable.LinkedHashSet[FileStatus] = {
+    mutable.LinkedHashSet(fileStatusCache.leafFiles.values.toArray: _*)
+  }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
     if (partitionSpec().partitionColumns.isEmpty) {
@@ -559,6 +656,7 @@ class HDFSFileCatalog(
     }
   }
 
+<<<<<<< HEAD
   protected def prunePartitions(
       predicates: Seq[Expression],
       partitionSpec: PartitionSpec): Seq[PartitionDirectory] = {
@@ -573,6 +671,41 @@ class HDFSFileCatalog(
         partitionPruningPredicates
             .reduceOption(expressions.And)
             .getOrElse(Literal(true))
+=======
+  /**
+   * Paths of this relation.  For partitioned relations, it should be root directories
+   * of all partition directories.
+   *
+   * @since 1.4.0
+   */
+  def paths: Array[String]
+
+  /**
+   * Contains a set of paths that are considered as the base dirs of the input datasets.
+   * The partitioning discovery logic will make sure it will stop when it reaches any
+   * base path. By default, the paths of the dataset provided by users will be base paths.
+   * For example, if a user uses `sqlContext.read.parquet("/path/something=true/")`, the base path
+   * will be `/path/something=true/`, and the returned DataFrame will not contain a column of
+   * `something`. If users want to override the basePath. They can set `basePath` in the options
+   * to pass the new base path to the data source.
+   * For the above example, if the user-provided base path is `/path/`, the returned
+   * DataFrame will have the column of `something`.
+   */
+  private def basePaths: Set[Path] = {
+    val userDefinedBasePath = parameters.get("basePath").map(basePath => Set(new Path(basePath)))
+    userDefinedBasePath.getOrElse {
+      // If the user does not provide basePath, we will just use paths.
+      val pathSet = paths.toSet
+      pathSet.map(p => new Path(p))
+    }.map { hdfsPath =>
+      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+      val fs = hdfsPath.getFileSystem(hadoopConf)
+      hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    }
+  }
+
+  override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
       val boundPredicate = InterpretedPredicate.create(predicate.transform {
         case a: AttributeReference =>
@@ -656,6 +789,10 @@ class HDFSFileCatalog(
           part.copy(values = castPartitionValuesToUserSchema(part.values))
         })
       case _ =>
+<<<<<<< HEAD
+=======
+        // user did not provide a partitioning schema
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         PartitioningUtils.parsePartitions(
           leafDirs,
           PartitioningUtils.DEFAULT_PARTITION_NAME,
@@ -693,10 +830,65 @@ class HDFSFileCatalog(
     leafFiles.clear()
     leafDirToChildrenFiles.clear()
 
+<<<<<<< HEAD
     leafFiles ++= files.map(f => f.getPath -> f)
     leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
 
     cachedPartitionSpec = null
+=======
+  /**
+   * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
+   * this relation. For partitioned relations, this method is called for each selected partition,
+   * and builds an `RDD[Row]` containing all rows within that single partition.
+   *
+   * @param requiredColumns Required columns.
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
+   *
+   * @since 1.4.0
+   */
+  // TODO Tries to eliminate the extra Catalyst-to-Scala conversion when `needConversion` is true
+  //
+  // PR #7626 separated `Row` and `InternalRow` completely.  One of the consequences is that we can
+  // no longer treat an `InternalRow` containing Catalyst values as a `Row`.  Thus we have to
+  // introduce another row value conversion for data sources whose `needConversion` is true.
+  def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
+    // Yeah, to workaround serialization...
+    val dataSchema = this.dataSchema
+    val needConversion = this.needConversion
+
+    val requiredOutput = requiredColumns.map { col =>
+      val field = dataSchema(col)
+      BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
+    }.toSeq
+
+    val rdd: RDD[Row] = buildScan(inputFiles)
+    val converted: RDD[InternalRow] =
+      if (needConversion) {
+        RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
+      } else {
+        rdd.asInstanceOf[RDD[InternalRow]]
+      }
+
+    converted.mapPartitions { rows =>
+      val buildProjection =
+        GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
+
+      val projectedRows = {
+        val mutableProjection = buildProjection()
+        rows.map(r => mutableProjection(r))
+      }
+
+      if (needConversion) {
+        val requiredSchema = StructType(requiredColumns.map(dataSchema(_)))
+        val toScala = CatalystTypeConverters.createToScalaConverter(requiredSchema)
+        projectedRows.map(toScala(_).asInstanceOf[Row])
+      } else {
+        projectedRows
+      }
+    }.asInstanceOf[RDD[Row]]
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -721,6 +913,34 @@ private[sql] object HadoopFsRelation extends Logging {
     pathName == "_SUCCESS" || pathName == "_temporary" || pathName.startsWith(".")
   }
 
+<<<<<<< HEAD
+=======
+  /**
+   * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
+   * be put here.  For example, user defined output committer can be configured here
+   * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
+   *
+   * Note that the only side effect expected here is mutating `job` via its setters.  Especially,
+   * Spark SQL caches [[BaseRelation]] instances for performance, mutating relation internal states
+   * may cause unexpected behaviors.
+   *
+   * @since 1.4.0
+   */
+  def prepareJobForWrite(job: Job): OutputWriterFactory
+}
+
+private[sql] object HadoopFsRelation extends Logging {
+
+  /** Checks if we should filter out this path name. */
+  def shouldFilterOut(pathName: String): Boolean = {
+    // TODO: We should try to filter out all files/dirs starting with "." or "_".
+    // The only reason that we are not doing it now is that Parquet needs to find those
+    // metadata files from leaf files returned by this methods. We should refactor
+    // this logic to not mix metadata files with data files.
+    pathName == "_SUCCESS" || pathName == "_temporary" || pathName.startsWith(".")
+  }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   // We don't filter files/directories whose name start with "_" except "_temporary" here, as
   // specific data sources may take advantages over them (e.g. Parquet _metadata and
   // _common_metadata files). "_temporary" directories are explicitly ignored since failed
@@ -737,10 +957,17 @@ private[sql] object HadoopFsRelation extends Logging {
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       val statuses =
         if (pathFilter != null) {
+<<<<<<< HEAD
           val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDirectory)
           files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
         } else {
           val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
+=======
+          val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDir)
+          files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+        } else {
+          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
         }
       statuses.filterNot(status => shouldFilterOut(status.getPath.getName))

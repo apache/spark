@@ -23,9 +23,17 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
 import org.apache.spark.sql.catalyst.plans._
+=======
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.FullOuter
+import org.apache.spark.sql.catalyst.plans.LeftOuter
+import org.apache.spark.sql.catalyst.plans.RightOuter
+import org.apache.spark.sql.catalyst.plans.LeftSemi
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
@@ -84,9 +92,14 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+<<<<<<< HEAD
       SimplifyConditionals,
       RemoveDispensableExpressions,
       PruneFilters,
+=======
+      RemoveDispensableExpressions,
+      SimplifyFilters,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       EliminateSerialization) ::
@@ -320,6 +333,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+<<<<<<< HEAD
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
@@ -334,6 +348,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
         }.unzip._1
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
+=======
+    case a @ Aggregate(_, _, e @ Expand(_, _, child))
+      if (child.outputSet -- e.references -- a.references).nonEmpty =>
+      a.copy(child = e.copy(child = prunedChild(child, e.references ++ a.references)))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Prunes the unused columns from child of MapPartitions
     case mp @ MapPartitions(_, _, _, child) if (child.outputSet -- mp.references).nonEmpty =>
@@ -917,7 +936,11 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
       // Predicates that reference attributes produced by the `Generate` operator cannot
       // be pushed below the operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+<<<<<<< HEAD
         cond.references.subsetOf(g.child.outputSet) && cond.deterministic
+=======
+        cond.references subsetOf g.child.outputSet
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)

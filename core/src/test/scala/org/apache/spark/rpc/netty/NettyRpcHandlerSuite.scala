@@ -25,7 +25,11 @@ import org.mockito.Matchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
+<<<<<<< HEAD
 import org.apache.spark.network.client.{TransportClient, TransportResponseHandler}
+=======
+import org.apache.spark.network.client.{TransportResponseHandler, TransportClient}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.network.server.StreamManager
 import org.apache.spark.rpc._
 

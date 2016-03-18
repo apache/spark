@@ -6,7 +6,10 @@
   url: ml-classification-regression.html
 - text: Clustering
   url: ml-clustering.html
+<<<<<<< HEAD
 - text: Collaborative filtering
   url: ml-collaborative-filtering.html
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 - text: Advanced topics
   url: ml-advanced.html

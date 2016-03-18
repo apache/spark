@@ -19,9 +19,14 @@ package org.apache.spark.sql.hive
 
 import scala.collection.JavaConverters._
 
+<<<<<<< HEAD
 import org.apache.hadoop.{io => hadoopIo}
 import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
+=======
+import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructField, _}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
@@ -30,8 +35,13 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+<<<<<<< HEAD
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
+=======
+import org.apache.spark.sql.types.{ArrayBasedMapData => _, _}
+import org.apache.spark.sql.{AnalysisException, types}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -396,6 +406,15 @@ private[hive] trait HiveInspectors {
         if (o != null) {
           val s = o.asInstanceOf[UTF8String].toString
           new HiveChar(s, s.length)
+        } else {
+          null
+        }
+
+    case _: JavaHiveCharObjectInspector =>
+      (o: Any) =>
+        if (o != null) {
+          val s = o.asInstanceOf[UTF8String].toString
+          new HiveChar(s, s.size)
         } else {
           null
         }

@@ -24,9 +24,14 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
 
+<<<<<<< HEAD
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.annotation.{Experimental, Since}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
@@ -274,6 +279,7 @@ private[ml] object DefaultParamsReader {
       sparkVersion: String,
       params: JValue,
       metadata: JValue,
+<<<<<<< HEAD
       metadataJson: String) {
 
     /**
@@ -297,6 +303,9 @@ private[ml] object DefaultParamsReader {
       }
     }
   }
+=======
+      metadataJson: String)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Load metadata from file.
@@ -325,7 +334,10 @@ private[ml] object DefaultParamsReader {
   /**
    * Extract Params from metadata, and set them in the instance.
    * This works if all Params implement [[org.apache.spark.ml.param.Param.jsonDecode()]].
+<<<<<<< HEAD
    * TODO: Move to [[Metadata]] method
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    */
   def getAndSetParams(instance: Params, metadata: Metadata): Unit = {
     implicit val format = DefaultFormats

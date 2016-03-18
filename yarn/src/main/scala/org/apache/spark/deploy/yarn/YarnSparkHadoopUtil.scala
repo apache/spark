@@ -502,7 +502,11 @@ object YarnSparkHadoopUtil {
   /**
    * Getting the initial target number of executors depends on whether dynamic allocation is
    * enabled.
+<<<<<<< HEAD
    * If not using dynamic allocation it gets the number of executors requested by the user.
+=======
+   * If not using dynamic allocation it gets the number of executors reqeusted by the user.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    */
   def getInitialTargetExecutorNumber(
       conf: SparkConf,

@@ -182,18 +182,27 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     val collected = new mutable.HashSet[Int]
     stream.map { bytes => new String(bytes).toInt }.foreachRDD { rdd =>
+<<<<<<< HEAD:external/kinesis-asl/src/test/scala/org/apache/spark/streaming/kinesis/KinesisStreamSuite.scala
       collected.synchronized {
         collected ++= rdd.collect()
         logInfo("Collected = " + collected.mkString(", "))
       }
+=======
+      collected ++= rdd.collect()
+      logInfo("Collected = " + collected.mkString(", "))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:extras/kinesis-asl/src/test/scala/org/apache/spark/streaming/kinesis/KinesisStreamSuite.scala
     }
     ssc.start()
 
     val testData = 1 to 10
     eventually(timeout(120 seconds), interval(10 second)) {
       testUtils.pushData(testData, aggregateTestData)
+<<<<<<< HEAD:external/kinesis-asl/src/test/scala/org/apache/spark/streaming/kinesis/KinesisStreamSuite.scala
       assert(collected.synchronized { collected === testData.toSet },
         "\nData received does not match data sent")
+=======
+      assert(collected === testData.toSet, "\nData received does not match data sent")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:extras/kinesis-asl/src/test/scala/org/apache/spark/streaming/kinesis/KinesisStreamSuite.scala
     }
     ssc.stop(stopSparkContext = false)
   }
@@ -210,10 +219,15 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     val collected = new mutable.HashSet[Int]
     stream.foreachRDD { rdd =>
+<<<<<<< HEAD:external/kinesis-asl/src/test/scala/org/apache/spark/streaming/kinesis/KinesisStreamSuite.scala
       collected.synchronized {
         collected ++= rdd.collect()
         logInfo("Collected = " + collected.mkString(", "))
       }
+=======
+      collected ++= rdd.collect()
+      logInfo("Collected = " + collected.mkString(", "))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:extras/kinesis-asl/src/test/scala/org/apache/spark/streaming/kinesis/KinesisStreamSuite.scala
     }
     ssc.start()
 

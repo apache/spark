@@ -114,6 +114,7 @@ if __name__ == "__main__":
         ("predictionCol", "prediction column name.", "'prediction'", str),
         ("probabilityCol", "Column name for predicted class conditional probabilities. " +
          "Note: Not all models output well-calibrated probability estimates! These probabilities " +
+<<<<<<< HEAD
          "should be treated as confidences, not precise probabilities.", "'probability'", str),
         ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", "'rawPrediction'",
          str),
@@ -126,6 +127,19 @@ if __name__ == "__main__":
         ("seed", "random seed.", "hash(type(self).__name__)", int),
         ("tol", "the convergence tolerance for iterative algorithms.", None, float),
         ("stepSize", "Step size to be used for each iteration of optimization.", None, float),
+=======
+         "should be treated as confidences, not precise probabilities.", "'probability'"),
+        ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", "'rawPrediction'"),
+        ("inputCol", "input column name.", None),
+        ("inputCols", "input column names.", None),
+        ("outputCol", "output column name.", "self.uid + '__output'"),
+        ("numFeatures", "number of features.", None),
+        ("checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). " +
+         "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None),
+        ("seed", "random seed.", "hash(type(self).__name__)"),
+        ("tol", "the convergence tolerance for iterative algorithms.", None),
+        ("stepSize", "Step size to be used for each iteration of optimization.", None),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
          "out rows with bad values), or error (which will throw an errror). More options may be " +
          "added later.", None, str),

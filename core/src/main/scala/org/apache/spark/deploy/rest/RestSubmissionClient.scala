@@ -19,20 +19,32 @@ package org.apache.spark.deploy.rest
 
 import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
+<<<<<<< HEAD
 import java.nio.charset.StandardCharsets
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
+<<<<<<< HEAD
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+=======
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 
+<<<<<<< HEAD
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.internal.Logging
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SPARK_VERSION => sparkVersion, SparkConf}
 
 /**
  * A client that submits applications to a [[RestSubmissionServer]].

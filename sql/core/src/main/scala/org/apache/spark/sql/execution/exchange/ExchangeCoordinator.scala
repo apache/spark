@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.execution.exchange
 
+<<<<<<< HEAD:sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/ExchangeCoordinator.scala
 import java.util.{HashMap => JHashMap, Map => JMap}
+=======
+import java.util.{Map => JMap, HashMap => JHashMap}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/main/scala/org/apache/spark/sql/execution/ExchangeCoordinator.scala
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
@@ -102,7 +106,11 @@ private[sql] class ExchangeCoordinator(
    * be called in the `doPrepare` method of an [[ShuffleExchange]] operator.
    */
   @GuardedBy("this")
+<<<<<<< HEAD:sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/ExchangeCoordinator.scala
   def registerExchange(exchange: ShuffleExchange): Unit = synchronized {
+=======
+  def registerExchange(exchange: Exchange): Unit = synchronized {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/main/scala/org/apache/spark/sql/execution/ExchangeCoordinator.scala
     exchanges += exchange
   }
 

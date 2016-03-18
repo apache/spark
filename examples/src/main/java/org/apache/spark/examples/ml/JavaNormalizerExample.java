@@ -23,8 +23,12 @@ import org.apache.spark.sql.SQLContext;
 
 // $example on$
 import org.apache.spark.ml.feature.Normalizer;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 // $example off$
 
 public class JavaNormalizerExample {
@@ -34,7 +38,11 @@ public class JavaNormalizerExample {
     SQLContext jsql = new SQLContext(jsc);
 
     // $example on$
+<<<<<<< HEAD
     Dataset<Row> dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+=======
+    DataFrame dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Normalize each Vector using $L^1$ norm.
     Normalizer normalizer = new Normalizer()
@@ -42,14 +50,26 @@ public class JavaNormalizerExample {
       .setOutputCol("normFeatures")
       .setP(1.0);
 
+<<<<<<< HEAD
     Dataset<Row> l1NormData = normalizer.transform(dataFrame);
     l1NormData.show();
 
     // Normalize each Vector using $L^\infty$ norm.
     Dataset<Row> lInfNormData =
+=======
+    DataFrame l1NormData = normalizer.transform(dataFrame);
+    l1NormData.show();
+
+    // Normalize each Vector using $L^\infty$ norm.
+    DataFrame lInfNormData =
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       normalizer.transform(dataFrame, normalizer.p().w(Double.POSITIVE_INFINITY));
     lInfNormData.show();
     // $example off$
     jsc.stop();
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

@@ -15,15 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.network.protocol;
 
-import java.io.Serializable;
+import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
- * Base interface for a function used in Dataset's filter function.
- *
- * If the function returns true, the element is discarded in the returned Dataset.
+ * Abstract class for response messages.
  */
-public interface FilterFunction<T> extends Serializable {
-  boolean call(T value) throws Exception;
+public abstract class AbstractResponseMessage extends AbstractMessage implements ResponseMessage {
+
+  protected AbstractResponseMessage(ManagedBuffer body, boolean isBodyInFrame) {
+    super(body, isBodyInFrame);
+  }
+
+  public abstract ResponseMessage createFailureResponse(String error);
 }

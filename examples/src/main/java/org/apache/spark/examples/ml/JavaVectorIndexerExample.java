@@ -26,8 +26,12 @@ import java.util.Map;
 
 import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 // $example off$
 
 public class JavaVectorIndexerExample {
@@ -37,7 +41,11 @@ public class JavaVectorIndexerExample {
     SQLContext jsql = new SQLContext(jsc);
 
     // $example on$
+<<<<<<< HEAD
     Dataset<Row> data = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+=======
+    DataFrame data = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     VectorIndexer indexer = new VectorIndexer()
       .setInputCol("features")
@@ -54,9 +62,17 @@ public class JavaVectorIndexerExample {
     System.out.println();
 
     // Create new column "indexed" with categorical values transformed to indices
+<<<<<<< HEAD
     Dataset<Row> indexedData = indexerModel.transform(data);
+=======
+    DataFrame indexedData = indexerModel.transform(data);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     indexedData.show();
     // $example off$
     jsc.stop();
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

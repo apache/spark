@@ -145,7 +145,11 @@ private[parquet] class CatalystSchemaConverter(
           case INT_16 => ShortType
           case INT_32 | null => IntegerType
           case DATE => DateType
+<<<<<<< HEAD
           case DECIMAL => makeDecimalType(Decimal.MAX_INT_DIGITS)
+=======
+          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT32)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           case UINT_8 => typeNotSupported()
           case UINT_16 => typeNotSupported()
           case UINT_32 => typeNotSupported()
@@ -156,7 +160,11 @@ private[parquet] class CatalystSchemaConverter(
       case INT64 =>
         originalType match {
           case INT_64 | null => LongType
+<<<<<<< HEAD
           case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
+=======
+          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT64)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           case UINT_64 => typeNotSupported()
           case TIMESTAMP_MILLIS => typeNotImplemented()
           case _ => illegalType()

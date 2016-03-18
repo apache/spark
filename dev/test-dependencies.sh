@@ -28,15 +28,24 @@ export LC_ALL=C
 
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
+<<<<<<< HEAD
 # NOTE: These should match those in the release publishing script
 HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pyarn -Phive"
 MVN="build/mvn --force"
 HADOOP_PROFILES=(
+=======
+MVN="build/mvn --force"
+HADOOP_PROFILES=(
+    hadoop-1
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     hadoop-2.2
     hadoop-2.3
     hadoop-2.4
     hadoop-2.6
+<<<<<<< HEAD
     hadoop-2.7
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 )
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
@@ -70,6 +79,7 @@ $MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /de
 
 # Generate manifests for each Hadoop profile:
 for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
+<<<<<<< HEAD
   echo "Performing Maven install for $HADOOP_PROFILE"
   $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install clean -q
 
@@ -79,6 +89,24 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   echo "Generating dependency manifest for $HADOOP_PROFILE"
   mkdir -p dev/pr-deps
   $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
+=======
+  if [[ $HADOOP_PROFILE = hadoop-1* ]]; then
+    # NOTE: These should match those in the release publishing script
+    HADOOP_MODULE_PROFILES="-Phive-thriftserver -Phive"
+  else
+    # NOTE: These should match those in the release publishing script
+    HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pyarn -Phive"
+  fi
+  echo "Performing Maven install for $HADOOP_PROFILE"
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install clean -q
+
+  echo "Performing Maven validate for $HADOOP_PROFILE"
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE validate -q
+
+  echo "Generating dependency manifest for $HADOOP_PROFILE"
+  mkdir -p dev/pr-deps
+  $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     | grep "Building Spark Project Assembly" -A 5 \
     | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
     | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE

@@ -136,7 +136,11 @@ class CodegenContext {
    * For expressions that appear more than once, generate additional code to prevent
    * recomputing the value.
    *
+<<<<<<< HEAD
    * For example, consider two expression generated from this SQL statement:
+=======
+   * For example, consider two exprsesion generated from this SQL statement:
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    *  SELECT (col1 + col2), (col1 + col2) / col3.
    *
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
@@ -150,12 +154,17 @@ class CodegenContext {
   // Foreach expression that is participating in subexpression elimination, the state to use.
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
+<<<<<<< HEAD
   // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   def declareAddedFunctions(): String = {
     addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
   }
+=======
+  // The collection of sub-exression result resetting methods that need to be called on each row.
+  val subExprResetVariables = mutable.ArrayBuffer.empty[String]
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -423,18 +432,28 @@ class CodegenContext {
   }
 
   /**
+<<<<<<< HEAD
    * Generates code for greater of two expressions.
    *
    * @param dataType data type of the expressions
    * @param c1 name of the variable of expression 1's output
    * @param c2 name of the variable of expression 2's output
    */
+=======
+    * Generates code for greater of two expressions.
+    *
+    * @param dataType data type of the expressions
+    * @param c1 name of the variable of expression 1's output
+    * @param c2 name of the variable of expression 2's output
+    */
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
     case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
     case _ => s"(${genComp(dataType, c1, c2)}) > 0"
   }
 
   /**
+<<<<<<< HEAD
    * Generates code to do null safe execution, i.e. only execute the code when the input is not
    * null by adding null check if necessary.
    *
@@ -455,6 +474,8 @@ class CodegenContext {
   }
 
   /**
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * List of java data types that have special accessors and setters in [[InternalRow]].
    */
   val primitiveTypes =
@@ -516,14 +537,24 @@ class CodegenContext {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
+<<<<<<< HEAD
     // Get all the expressions that appear at least twice and set up the state for subexpression
+=======
+    // Get all the exprs that appear at least twice and set up the state for subexpression
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     commonExprs.foreach(e => {
       val expr = e.head
+<<<<<<< HEAD
       val fnName = freshName("evalExpr")
       val isNull = s"${fnName}IsNull"
       val value = s"${fnName}Value"
+=======
+      val isNull = freshName("isNull")
+      val value = freshName("value")
+      val fnName = freshName("evalExpr")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
       // Generate the code for this expression tree and wrap it in a function.
       val code = expr.gen(this)
@@ -558,7 +589,11 @@ class CodegenContext {
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
+<<<<<<< HEAD
       subexprFunctions += s"$fnName($INPUT_ROW);"
+=======
+      subExprResetVariables += s"$fnName($INPUT_ROW);"
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
     })
@@ -570,7 +605,11 @@ class CodegenContext {
    * expression will be combined in the `expressions` order.
    */
   def generateExpressions(expressions: Seq[Expression],
+<<<<<<< HEAD
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
+=======
+      doSubexpressionElimination: Boolean = false): Seq[GeneratedExpressionCode] = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     if (doSubexpressionElimination) subexpressionElimination(expressions)
     expressions.map(e => e.gen(this))
   }
@@ -593,6 +632,23 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
+<<<<<<< HEAD
+=======
+  protected def declareMutableStates(ctx: CodeGenContext): String = {
+    ctx.mutableStates.map { case (javaType, variableName, _) =>
+      s"private $javaType $variableName;"
+    }.mkString("\n")
+  }
+
+  protected def initMutableStates(ctx: CodeGenContext): String = {
+    ctx.mutableStates.map(_._3).mkString("\n")
+  }
+
+  protected def declareAddedFunctions(ctx: CodeGenContext): String = {
+    ctx.addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n").trim
+  }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
    * already available.

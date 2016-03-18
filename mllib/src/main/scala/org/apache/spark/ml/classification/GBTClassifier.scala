@@ -19,8 +19,13 @@ package org.apache.spark.ml.classification
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
+<<<<<<< HEAD
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.Logging
+import org.apache.spark.annotation.{Experimental, Since}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel

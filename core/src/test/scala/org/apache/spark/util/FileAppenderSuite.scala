@@ -18,12 +18,19 @@
 package org.apache.spark.util
 
 import java.io._
+<<<<<<< HEAD
 import java.nio.charset.StandardCharsets
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable.HashSet
 import scala.reflect._
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Charsets.UTF_8
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import com.google.common.io.Files
 import org.apache.log4j.{Appender, Level, Logger}
 import org.apache.log4j.spi.LoggingEvent
@@ -197,7 +204,11 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   test("file appender async close stream abruptly") {
     // Test FileAppender reaction to closing InputStream using a mock logging appender
     val mockAppender = mock(classOf[Appender])
+<<<<<<< HEAD
     val loggingEventCaptor = ArgumentCaptor.forClass(classOf[LoggingEvent])
+=======
+    val loggingEventCaptor = new ArgumentCaptor[LoggingEvent]
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Make sure only logging errors
     val logger = Logger.getRootLogger
@@ -224,7 +235,11 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   test("file appender async close stream gracefully") {
     // Test FileAppender reaction to closing InputStream using a mock logging appender
     val mockAppender = mock(classOf[Appender])
+<<<<<<< HEAD
     val loggingEventCaptor = ArgumentCaptor.forClass(classOf[LoggingEvent])
+=======
+    val loggingEventCaptor = new ArgumentCaptor[LoggingEvent]
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Make sure only logging errors
     val logger = Logger.getRootLogger

@@ -65,6 +65,11 @@ object GenerateMIMAIgnore {
           isPackagePrivate(classSymbol) ||
           isPackagePrivateModule(moduleSymbol) ||
           classSymbol.isPrivate
+<<<<<<< HEAD
+=======
+        val developerApi = isDeveloperApi(classSymbol) || isDeveloperApi(moduleSymbol)
+        val experimental = isExperimental(classSymbol) || isExperimental(moduleSymbol)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
         lazy val indirectlyPrivateSpark = {

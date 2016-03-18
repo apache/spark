@@ -36,8 +36,12 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.TestUtils.JavaSourceFromString
+<<<<<<< HEAD
 import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, Utils}
 
+=======
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * Removes the TaskResult from the BlockManager before delegating to a normal TaskResultGetter.
@@ -213,6 +217,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
       Thread.currentThread.setContextClassLoader(originalClassLoader)
     }
   }
+<<<<<<< HEAD
 
   test("task result size is set on the driver, not the executors") {
     import InternalAccumulator._
@@ -247,5 +252,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     assert(resSizeAfter.exists(_.toString.toLong > 0L))
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 

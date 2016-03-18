@@ -30,9 +30,14 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
+<<<<<<< HEAD
 import org.apache.spark.Partitioner
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.{Logging, Partitioner}
+import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -309,8 +314,12 @@ object ALSModel extends MLReadable[ALSModel] {
  * preferences rather than explicit ratings given to items.
  */
 @Experimental
+<<<<<<< HEAD
 @Since("1.3.0")
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
+=======
+class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   with DefaultParamsWritable {
 
   import org.apache.spark.ml.recommendation.ALS.Rating

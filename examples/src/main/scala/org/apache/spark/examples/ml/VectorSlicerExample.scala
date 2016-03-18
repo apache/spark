@@ -18,7 +18,10 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+<<<<<<< HEAD
 import org.apache.spark.{SparkConf, SparkContext}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 // $example on$
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.feature.VectorSlicer
@@ -27,6 +30,10 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
 // $example off$
 import org.apache.spark.sql.SQLContext
+<<<<<<< HEAD
+=======
+import org.apache.spark.{SparkConf, SparkContext}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 object VectorSlicerExample {
   def main(args: Array[String]): Unit = {

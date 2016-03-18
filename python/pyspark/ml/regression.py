@@ -35,7 +35,11 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
+<<<<<<< HEAD
                        HasStandardization, HasSolver, HasWeightCol, MLWritable, MLReadable):
+=======
+                       HasStandardization, HasSolver, HasWeightCol):
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     """
     Linear regression.
 

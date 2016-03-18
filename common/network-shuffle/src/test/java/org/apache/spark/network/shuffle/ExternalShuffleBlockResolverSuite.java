@@ -43,8 +43,12 @@ public class ExternalShuffleBlockResolverSuite {
 
   private static TestShuffleDataContext dataContext;
 
+<<<<<<< HEAD:common/network-shuffle/src/test/java/org/apache/spark/network/shuffle/ExternalShuffleBlockResolverSuite.java
   private static final TransportConf conf =
       new TransportConf("shuffle", new SystemPropertyConfigProvider());
+=======
+  static TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/shuffle/src/test/java/org/apache/spark/network/shuffle/ExternalShuffleBlockResolverSuite.java
 
   @BeforeClass
   public static void beforeAll() throws IOException {

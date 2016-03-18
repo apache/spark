@@ -458,6 +458,93 @@ class SQLContext(object):
     @since(1.6)
     def dropTempTable(self, tableName):
         """ Remove the temp table from catalog.
+<<<<<<< HEAD
+=======
+
+        >>> sqlContext.registerDataFrameAsTable(df, "table1")
+        >>> sqlContext.dropTempTable("table1")
+        """
+        self._ssql_ctx.dropTempTable(tableName)
+
+    def parquetFile(self, *paths):
+        """Loads a Parquet file, returning the result as a :class:`DataFrame`.
+
+        .. note:: Deprecated in 1.4, use :func:`DataFrameReader.parquet` instead.
+
+        >>> sqlContext.parquetFile('python/test_support/sql/parquet_partitioned').dtypes
+        [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+        """
+        warnings.warn("parquetFile is deprecated. Use read.parquet() instead.")
+        gateway = self._sc._gateway
+        jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
+        for i in range(0, len(paths)):
+            jpaths[i] = paths[i]
+        jdf = self._ssql_ctx.parquetFile(jpaths)
+        return DataFrame(jdf, self)
+
+    def jsonFile(self, path, schema=None, samplingRatio=1.0):
+        """Loads a text file storing one JSON object per line as a :class:`DataFrame`.
+
+        .. note:: Deprecated in 1.4, use :func:`DataFrameReader.json` instead.
+
+        >>> sqlContext.jsonFile('python/test_support/sql/people.json').dtypes
+        [('age', 'bigint'), ('name', 'string')]
+        """
+        warnings.warn("jsonFile is deprecated. Use read.json() instead.")
+        if schema is None:
+            df = self._ssql_ctx.jsonFile(path, samplingRatio)
+        else:
+            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
+            df = self._ssql_ctx.jsonFile(path, scala_datatype)
+        return DataFrame(df, self)
+
+    @ignore_unicode_prefix
+    @since(1.0)
+    def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
+        """Loads an RDD storing one JSON object per string as a :class:`DataFrame`.
+
+        If the schema is provided, applies the given schema to this JSON dataset.
+        Otherwise, it samples the dataset with ratio ``samplingRatio`` to determine the schema.
+
+        >>> df1 = sqlContext.jsonRDD(json)
+        >>> df1.first()
+        Row(field1=1, field2=u'row1', field3=Row(field4=11, field5=None), field6=None)
+
+        >>> df2 = sqlContext.jsonRDD(json, df1.schema)
+        >>> df2.first()
+        Row(field1=1, field2=u'row1', field3=Row(field4=11, field5=None), field6=None)
+
+        >>> from pyspark.sql.types import *
+        >>> schema = StructType([
+        ...     StructField("field2", StringType()),
+        ...     StructField("field3",
+        ...                 StructType([StructField("field5", ArrayType(IntegerType()))]))
+        ... ])
+        >>> df3 = sqlContext.jsonRDD(json, schema)
+        >>> df3.first()
+        Row(field2=u'row1', field3=Row(field5=None))
+        """
+
+        def func(iterator):
+            for x in iterator:
+                if not isinstance(x, basestring):
+                    x = unicode(x)
+                if isinstance(x, unicode):
+                    x = x.encode("utf-8")
+                yield x
+        keyed = rdd.mapPartitions(func)
+        keyed._bypass_serializer = True
+        jrdd = keyed._jrdd.map(self._jvm.BytesToString())
+        if schema is None:
+            df = self._ssql_ctx.jsonRDD(jrdd.rdd(), samplingRatio)
+        else:
+            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
+            df = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
+        return DataFrame(df, self)
+
+    def load(self, path=None, source=None, schema=None, **options):
+        """Returns the dataset in a data source as a :class:`DataFrame`.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")

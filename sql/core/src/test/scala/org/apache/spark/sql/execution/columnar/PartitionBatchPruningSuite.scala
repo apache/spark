@@ -16,8 +16,11 @@
  */
 
 package org.apache.spark.sql.execution.columnar
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/execution/columnar/PartitionBatchPruningSuite.scala
 
 import org.scalatest.BeforeAndAfterEach
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/test/scala/org/apache/spark/sql/execution/columnar/PartitionBatchPruningSuite.scala
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.internal.SQLConf

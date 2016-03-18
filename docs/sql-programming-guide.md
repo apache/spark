@@ -122,6 +122,16 @@ Spark build. If these dependencies are not a problem for your application then u
 is recommended for the 1.3 release of Spark. Future releases will focus on bringing `SQLContext` up
 to feature parity with a `HiveContext`.
 
+<<<<<<< HEAD
+=======
+The specific variant of SQL that is used to parse queries can also be selected using the
+`spark.sql.dialect` option. This parameter can be changed using either the `setConf` method on
+a `SQLContext` or by using a `SET key=value` command in SQL. For a `SQLContext`, the only dialect
+available is "sql" which uses a simple SQL parser provided by Spark SQL. In a `HiveContext`, the
+default is "hiveql", though "sql" is also available. Since the HiveQL parser is much more complete,
+this is recommended for most use cases.
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 ## Creating DataFrames
 
@@ -2143,8 +2153,11 @@ options.
      --conf spark.sql.hive.thriftServer.singleSession=true \
      ...
    {% endhighlight %}
+<<<<<<< HEAD
  - Since 1.6.1, withColumn method in sparkR supports adding a new column to or replacing existing columns
    of the same name of a DataFrame.
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
  - From Spark 1.6, LongType casts to TimestampType expect seconds instead of microseconds. This
    change was made to match the behavior of Hive 1.2 for more consistent type casting to TimestampType

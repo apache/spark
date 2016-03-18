@@ -38,13 +38,21 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.hive.HiveShim._
+<<<<<<< HEAD
 import org.apache.spark.sql.hive.client.HiveClientImpl
+=======
+import org.apache.spark.sql.hive.client.ClientWrapper
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.types._
 
 
 private[hive] class HiveFunctionRegistry(
     underlying: analysis.FunctionRegistry,
+<<<<<<< HEAD
     executionHive: HiveClientImpl)
+=======
+    executionHive: ClientWrapper)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   extends analysis.FunctionRegistry with HiveInspectors {
 
   def getFunctionInfo(name: String): FunctionInfo = {

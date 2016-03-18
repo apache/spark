@@ -19,8 +19,11 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
 
+<<<<<<< HEAD
 import org.apache.avro.reflect.Nullable;
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
@@ -68,9 +71,13 @@ public final class UnsafeInMemorySorter {
 
   private final MemoryConsumer consumer;
   private final TaskMemoryManager memoryManager;
+<<<<<<< HEAD
   @Nullable
   private final Sorter<RecordPointerAndKeyPrefix, LongArray> sorter;
   @Nullable
+=======
+  private final Sorter<RecordPointerAndKeyPrefix, LongArray> sorter;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
   /**
@@ -102,6 +109,7 @@ public final class UnsafeInMemorySorter {
       LongArray array) {
     this.consumer = consumer;
     this.memoryManager = memoryManager;
+<<<<<<< HEAD
     if (recordComparator != null) {
       this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
@@ -109,6 +117,10 @@ public final class UnsafeInMemorySorter {
       this.sorter = null;
       this.sortComparator = null;
     }
+=======
+    this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
+    this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     this.array = array;
   }
 
@@ -172,7 +184,11 @@ public final class UnsafeInMemorySorter {
     pos++;
   }
 
+<<<<<<< HEAD
   public final class SortedIterator extends UnsafeSorterIterator implements Cloneable {
+=======
+  public final class SortedIterator extends UnsafeSorterIterator {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     private final int numRecords;
     private int position;
@@ -186,7 +202,11 @@ public final class UnsafeInMemorySorter {
       this.position = 0;
     }
 
+<<<<<<< HEAD
     public SortedIterator clone() {
+=======
+    public SortedIterator clone () {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       SortedIterator iter = new SortedIterator(numRecords);
       iter.position = position;
       iter.baseObject = baseObject;
@@ -197,6 +217,7 @@ public final class UnsafeInMemorySorter {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumRecords() {
       return numRecords;
     }
@@ -204,6 +225,14 @@ public final class UnsafeInMemorySorter {
     @Override
     public boolean hasNext() {
       return position / 2 < numRecords;
+=======
+    public boolean hasNext() {
+      return position / 2 < numRecords;
+    }
+
+    public int numRecordsLeft() {
+      return numRecords - position / 2;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
 
     @Override
@@ -235,9 +264,13 @@ public final class UnsafeInMemorySorter {
    * {@code next()} will return the same mutable object.
    */
   public SortedIterator getSortedIterator() {
+<<<<<<< HEAD
     if (sorter != null) {
       sorter.sort(array, 0, pos / 2, sortComparator);
     }
+=======
+    sorter.sort(array, 0, pos / 2, sortComparator);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     return new SortedIterator(pos / 2);
   }
 }

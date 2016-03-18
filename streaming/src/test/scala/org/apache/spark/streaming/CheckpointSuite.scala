@@ -18,8 +18,11 @@
 package org.apache.spark.streaming
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, ObjectOutputStream}
+<<<<<<< HEAD
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentLinkedQueue
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -38,14 +41,22 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
+<<<<<<< HEAD
 import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties,
   Utils}
+=======
+import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, Utils}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * A input stream that records the times of restore() invoked
  */
 private[streaming]
+<<<<<<< HEAD
 class CheckpointInputDStream(_ssc: StreamingContext) extends InputDStream[Int](_ssc) {
+=======
+class CheckpointInputDStream(ssc_ : StreamingContext) extends InputDStream[Int](ssc_) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
   override def start(): Unit = { }
   override def stop(): Unit = { }
@@ -106,7 +117,11 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     val operatedStream = operation(inputStream)
     operatedStream.print()
     val outputStream = new TestOutputStreamWithPartitions(operatedStream,
+<<<<<<< HEAD
       new ConcurrentLinkedQueue[Seq[Seq[V]]])
+=======
+      new ArrayBuffer[Seq[Seq[V]]] with SynchronizedBuffer[Seq[Seq[V]]])
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     outputStream.register()
     ssc.checkpoint(checkpointDir)
 
@@ -133,6 +148,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     new StreamingContext(SparkContext.getOrCreate(conf), batchDuration)
   }
 
+<<<<<<< HEAD
   /**
    * Get the first TestOutputStreamWithPartitions, does not check the provided generic type.
    */
@@ -144,6 +160,8 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
   }
 
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   protected def generateOutput[V: ClassTag](
       ssc: StreamingContext,
       targetBatchTime: Time,
@@ -161,7 +179,13 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
       clock.setTime(targetBatchTime.milliseconds)
       logInfo("Manual clock after advancing = " + clock.getTimeMillis())
 
+<<<<<<< HEAD
       val outputStream = getTestOutputStream[V](ssc.graph.getOutputStreams())
+=======
+      val outputStream = ssc.graph.getOutputStreams().filter { dstream =>
+        dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
+      }.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
       eventually(timeout(10 seconds)) {
         ssc.awaitTerminationOrTimeout(10)
@@ -176,7 +200,11 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
         // are written to make sure that both of them have been written.
         assert(checkpointFilesOfLatestTime.size === 2)
       }
+<<<<<<< HEAD
       outputStream.output.asScala.map(_.flatten).toSeq
+=======
+      outputStream.output.map(_.flatten)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     } finally {
       ssc.stop(stopSparkContext = stopSparkContext)
@@ -207,8 +235,12 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
  * the checkpointing of a DStream's RDDs as well as the checkpointing of
  * the whole DStream graph.
  */
+<<<<<<< HEAD
 class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
   with ResetSystemProperties {
+=======
+class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   var ssc: StreamingContext = null
 
@@ -220,12 +252,18 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
   }
 
   override def afterFunction() {
+<<<<<<< HEAD
     try {
       if (ssc != null) { ssc.stop() }
       Utils.deleteRecursively(new File(checkpointDir))
     } finally {
       super.afterFunction()
     }
+=======
+    super.afterFunction()
+    if (ssc != null) { ssc.stop() }
+    Utils.deleteRecursively(new File(checkpointDir))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
@@ -830,6 +868,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     assert(Files.toByteArray(checkpointFiles(0)) === bytes2)
     assert(Files.toByteArray(checkpointFiles(1)) === bytes1)
     checkpointWriter.stop()
+<<<<<<< HEAD
   }
 
   test("SPARK-6847: stack overflow when updateStateByKey is followed by a checkpointed dstream") {
@@ -899,6 +938,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     batchCounter.waitUntilBatchesCompleted(1, 10000)
     assert(shouldCheckpointAllMarkedRDDs === true)
     assert(rddsCheckpointed === true)
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**

@@ -168,6 +168,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
+<<<<<<< HEAD
   test("CountVectorizerModel with binary") {
     val df = sqlContext.createDataFrame(Seq(
       (0, split("a a a b b c"), Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
@@ -185,6 +186,8 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("CountVectorizer read/write") {
     val t = new CountVectorizer()
       .setInputCol("myInputCol")

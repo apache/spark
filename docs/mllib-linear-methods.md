@@ -356,7 +356,40 @@ values. We compute the mean squared error at the end to evaluate
 
 Refer to the [`LinearRegressionWithSGD` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD) and [`LinearRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionModel) for details on the API.
 
+<<<<<<< HEAD
 {% include_example scala/org/apache/spark/examples/mllib/LinearRegressionWithSGDExample.scala %}
+=======
+{% highlight scala %}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.regression.LinearRegressionModel
+import org.apache.spark.mllib.regression.LinearRegressionWithSGD
+import org.apache.spark.mllib.linalg.Vectors
+
+// Load and parse the data
+val data = sc.textFile("data/mllib/ridge-data/lpsa.data")
+val parsedData = data.map { line =>
+  val parts = line.split(',')
+  LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
+}.cache()
+
+// Building the model
+val numIterations = 100
+val stepSize = 0.00000001
+val model = LinearRegressionWithSGD.train(parsedData, numIterations, stepSize)
+
+// Evaluate model on training examples and compute training error
+val valuesAndPreds = parsedData.map { point =>
+  val prediction = model.predict(point.features)
+  (point.label, prediction)
+}
+val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.mean()
+println("training Mean Squared Error = " + MSE)
+
+// Save and load model
+model.save(sc, "myModelPath")
+val sameModel = LinearRegressionModel.load(sc, "myModelPath")
+{% endhighlight %}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 [`RidgeRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
 and [`LassoWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD) can be used in a similar fashion as `LinearRegressionWithSGD`.
@@ -372,7 +405,74 @@ the Scala snippet provided, is presented below:
 
 Refer to the [`LinearRegressionWithSGD` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionWithSGD.html) and [`LinearRegressionModel` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionModel.html) for details on the API.
 
+<<<<<<< HEAD
 {% include_example java/org/apache/spark/examples/mllib/JavaLinearRegressionWithSGDExample.java %}
+=======
+{% highlight java %}
+import scala.Tuple2;
+
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.regression.LinearRegressionModel;
+import org.apache.spark.mllib.regression.LinearRegressionWithSGD;
+import org.apache.spark.SparkConf;
+
+public class LinearRegression {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("Linear Regression Example");
+    JavaSparkContext sc = new JavaSparkContext(conf);
+
+    // Load and parse the data
+    String path = "data/mllib/ridge-data/lpsa.data";
+    JavaRDD<String> data = sc.textFile(path);
+    JavaRDD<LabeledPoint> parsedData = data.map(
+      new Function<String, LabeledPoint>() {
+        public LabeledPoint call(String line) {
+          String[] parts = line.split(",");
+          String[] features = parts[1].split(" ");
+          double[] v = new double[features.length];
+          for (int i = 0; i < features.length - 1; i++)
+            v[i] = Double.parseDouble(features[i]);
+          return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
+        }
+      }
+    );
+    parsedData.cache();
+
+    // Building the model
+    int numIterations = 100;
+    double stepSize = 0.00000001;
+    final LinearRegressionModel model =
+      LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations, stepSize);
+
+    // Evaluate model on training examples and compute training error
+    JavaRDD<Tuple2<Double, Double>> valuesAndPreds = parsedData.map(
+      new Function<LabeledPoint, Tuple2<Double, Double>>() {
+        public Tuple2<Double, Double> call(LabeledPoint point) {
+          double prediction = model.predict(point.features());
+          return new Tuple2<Double, Double>(prediction, point.label());
+        }
+      }
+    );
+    double MSE = new JavaDoubleRDD(valuesAndPreds.map(
+      new Function<Tuple2<Double, Double>, Object>() {
+        public Object call(Tuple2<Double, Double> pair) {
+          return Math.pow(pair._1() - pair._2(), 2.0);
+        }
+      }
+    ).rdd()).mean();
+    System.out.println("training Mean Squared Error = " + MSE);
+
+    // Save and load model
+    model.save(sc.sc(), "myModelPath");
+    LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(), "myModelPath");
+  }
+}
+{% endhighlight %}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 
 <div data-lang="python" markdown="1">
@@ -385,7 +485,33 @@ Note that the Python API does not yet support model save/load but will in the fu
 
 Refer to the [`LinearRegressionWithSGD` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.LinearRegressionWithSGD) and [`LinearRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.LinearRegressionModel) for more details on the API.
 
+<<<<<<< HEAD
 {% include_example python/mllib/linear_regression_with_sgd_example.py %}
+=======
+{% highlight python %}
+from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD, LinearRegressionModel
+
+# Load and parse the data
+def parsePoint(line):
+    values = [float(x) for x in line.replace(',', ' ').split(' ')]
+    return LabeledPoint(values[0], values[1:])
+
+data = sc.textFile("data/mllib/ridge-data/lpsa.data")
+parsedData = data.map(parsePoint)
+
+# Build the model
+model = LinearRegressionWithSGD.train(parsedData, iterations=100, step=0.00000001)
+
+# Evaluate the model on training data
+valuesAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
+MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y) / valuesAndPreds.count()
+print("Mean Squared Error = " + str(MSE))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = LinearRegressionModel.load(sc, "myModelPath")
+{% endhighlight %}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 </div>
 

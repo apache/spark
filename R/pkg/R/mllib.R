@@ -54,7 +54,11 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
           function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
             standardize = TRUE, solver = "auto") {
             family <- match.arg(family)
+<<<<<<< HEAD
             formula <- paste(deparse(formula), collapse = "")
+=======
+            formula <- paste(deparse(formula), collapse="")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                  "fitRModelFormula", formula, data@sdf, family, lambda,
                                  alpha, standardize, solver)
@@ -104,11 +108,19 @@ setMethod("predict", signature(object = "PipelineModel"),
 setMethod("summary", signature(object = "PipelineModel"),
           function(object, ...) {
             modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+<<<<<<< HEAD
                                      "getModelName", object@model)
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                     "getModelFeatures", object@model)
             coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                         "getModelCoefficients", object@model)
+=======
+                                   "getModelName", object@model)
+            features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelFeatures", object@model)
+            coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelCoefficients", object@model)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             if (modelName == "LinearRegressionModel") {
               devianceResiduals <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                                "getModelDevianceResiduals", object@model)
@@ -119,11 +131,16 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
               rownames(coefficients) <- unlist(features)
               return(list(devianceResiduals = devianceResiduals, coefficients = coefficients))
+<<<<<<< HEAD
             } else if (modelName == "LogisticRegressionModel") {
+=======
+            } else {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
               coefficients <- as.matrix(unlist(coefficients))
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
               return(list(coefficients = coefficients))
+<<<<<<< HEAD
             } else if (modelName == "KMeansModel") {
               modelSize <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                        "getKMeansModelSize", object@model)
@@ -190,5 +207,7 @@ setMethod("fitted", signature(object = "PipelineModel"),
               return(dataFrame(fittedResult))
             } else {
               stop(paste("Unsupported model", modelName, sep = " "))
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             }
           })

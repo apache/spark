@@ -40,7 +40,11 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
+<<<<<<< HEAD
 import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
+=======
+import org.apache.spark.{SparkException, SparkUserAppException, SPARK_VERSION}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}

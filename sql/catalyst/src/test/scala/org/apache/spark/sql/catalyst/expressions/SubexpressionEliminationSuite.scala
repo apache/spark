@@ -97,7 +97,11 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExprTree(add2, true)
 
     // Should only have one equivalence for `one + two`
+<<<<<<< HEAD
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 1)
+=======
+    assert(equivalence.getAllEquivalentExprs.filter(_.size > 1).size == 1)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assert(equivalence.getAllEquivalentExprs.filter(_.size > 1).head.size == 4)
 
     // Set up the expressions
@@ -116,7 +120,11 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExprTree(sum, true)
 
     // (one * two), (one * two) * (one * two) and sqrt( (one * two) * (one * two) ) should be found
+<<<<<<< HEAD
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 3)
+=======
+    assert(equivalence.getAllEquivalentExprs.filter(_.size > 1).size == 3)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assert(equivalence.getEquivalentExprs(mul).size == 3)
     assert(equivalence.getEquivalentExprs(mul2).size == 3)
     assert(equivalence.getEquivalentExprs(sqrt).size == 2)
@@ -144,7 +152,11 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExprTree(price, false)
     equivalence.addExprTree(discount, false)
     // quantity, price, discount and (price * (1 - discount))
+<<<<<<< HEAD
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 4)
+=======
+    assert(equivalence.getAllEquivalentExprs.filter(_.size > 1).size == 4)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   test("Expression equivalence - non deterministic") {
@@ -154,6 +166,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExpr(sum)
     assert(equivalence.getAllEquivalentExprs.isEmpty)
   }
+<<<<<<< HEAD
 
   test("Children of CodegenFallback") {
     val one = Literal(1)
@@ -167,4 +180,6 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
     assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 3)  // add, two, explode
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

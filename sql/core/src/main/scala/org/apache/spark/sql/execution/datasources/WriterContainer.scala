@@ -124,9 +124,15 @@ private[sql] abstract class BaseWriterContainer(
     }
   }
 
+<<<<<<< HEAD
   protected def newOutputWriter(path: String, bucketId: Option[Int] = None): OutputWriter = {
     try {
       outputWriterFactory.newInstance(path, bucketId, dataSchema, taskAttemptContext)
+=======
+  protected def newOutputWriter(path: String): OutputWriter = {
+    try {
+      outputWriterFactory.newInstance(path, dataSchema, taskAttemptContext)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     } catch {
       case e: org.apache.hadoop.fs.FileAlreadyExistsException =>
         if (outputCommitter.isInstanceOf[parquet.DirectParquetOutputCommitter]) {
@@ -420,6 +426,7 @@ private[sql] class DynamicPartitionWriterContainer(
     // If anything below fails, we should abort the task.
     var currentWriter: OutputWriter = null
     try {
+<<<<<<< HEAD
       var currentKey: UnsafeRow = null
       while (sortedIterator.next()) {
         val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
@@ -432,6 +439,69 @@ private[sql] class DynamicPartitionWriterContainer(
           logDebug(s"Writing partition: $currentKey")
 
           currentWriter = newOutputWriter(currentKey, getPartitionString)
+=======
+      // This will be filled in if we have to fall back on sorting.
+      var sorter: UnsafeKVExternalSorter = null
+      while (iterator.hasNext && sorter == null) {
+        val inputRow = iterator.next()
+        val currentKey = getPartitionKey(inputRow)
+        currentWriter = outputWriters.get(currentKey)
+
+        if (currentWriter == null) {
+          if (outputWriters.size < maxOpenFiles) {
+            currentWriter = newOutputWriter(currentKey)
+            outputWriters.put(currentKey.copy(), currentWriter)
+            currentWriter.writeInternal(getOutputRow(inputRow))
+          } else {
+            logInfo(s"Maximum partitions reached, falling back on sorting.")
+            sorter = new UnsafeKVExternalSorter(
+              StructType.fromAttributes(partitionColumns),
+              StructType.fromAttributes(dataColumns),
+              SparkEnv.get.blockManager,
+              TaskContext.get().taskMemoryManager().pageSizeBytes)
+            sorter.insertKV(currentKey, getOutputRow(inputRow))
+          }
+        } else {
+          currentWriter.writeInternal(getOutputRow(inputRow))
+        }
+      }
+      // current writer is included in outputWriters
+      currentWriter = null
+
+      // If the sorter is not null that means that we reached the maxFiles above and need to finish
+      // using external sort.
+      if (sorter != null) {
+        while (iterator.hasNext) {
+          val currentRow = iterator.next()
+          sorter.insertKV(getPartitionKey(currentRow), getOutputRow(currentRow))
+        }
+
+        logInfo(s"Sorting complete. Writing out partition files one at a time.")
+
+        val sortedIterator = sorter.sortedIterator()
+        var currentKey: InternalRow = null
+        while (sortedIterator.next()) {
+          if (currentKey != sortedIterator.getKey) {
+            if (currentWriter != null) {
+              currentWriter.close()
+              currentWriter = null
+            }
+            currentKey = sortedIterator.getKey.copy()
+            logDebug(s"Writing partition: $currentKey")
+
+            // Either use an existing file from before, or open a new one.
+            currentWriter = outputWriters.remove(currentKey)
+            if (currentWriter == null) {
+              currentWriter = newOutputWriter(currentKey)
+            }
+          }
+
+          currentWriter.writeInternal(sortedIterator.getValue)
+        }
+        if (currentWriter != null) {
+          currentWriter.close()
+          currentWriter = null
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         }
         currentWriter.writeInternal(sortedIterator.getValue)
       }
@@ -452,5 +522,46 @@ private[sql] class DynamicPartitionWriterContainer(
         abortTask()
         throw new SparkException("Task failed while writing rows.", cause)
     }
+<<<<<<< HEAD
+=======
+
+    /** Open and returns a new OutputWriter given a partition key. */
+    def newOutputWriter(key: InternalRow): OutputWriter = {
+      val partitionPath = getPartitionString(key).getString(0)
+      val path = new Path(getWorkPath, partitionPath)
+      val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
+      configuration.set(
+        "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
+      val newWriter = super.newOutputWriter(path.toString)
+      newWriter.initConverter(dataSchema)
+      newWriter
+    }
+
+    def clearOutputWriters(): Unit = {
+      if (!outputWritersCleared) {
+        outputWriters.asScala.values.foreach(_.close())
+        outputWriters.clear()
+        outputWritersCleared = true
+      }
+    }
+
+    def commitTask(): Unit = {
+      try {
+        clearOutputWriters()
+        super.commitTask()
+      } catch {
+        case cause: Throwable =>
+          throw new RuntimeException("Failed to commit task", cause)
+      }
+    }
+
+    def abortTask(): Unit = {
+      try {
+        clearOutputWriters()
+      } finally {
+        super.abortTask()
+      }
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

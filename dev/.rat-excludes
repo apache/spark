@@ -94,7 +94,11 @@ gen-java.*
 org.apache.spark.sql.sources.DataSourceRegister
 org.apache.spark.scheduler.SparkHistoryListenerFactory
 .*parquet
+<<<<<<< HEAD:dev/.rat-excludes
 LZ4BlockInputStream.java
 spark-deps-.*
 .*csv
 .*tsv
+=======
+spark-deps-.*
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:.rat-excludes

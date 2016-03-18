@@ -217,7 +217,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   }
 
   /** Returns all of the expressions present in this query plan operator. */
+<<<<<<< HEAD
   final def expressions: Seq[Expression] = {
+=======
+  def expressions: Seq[Expression] = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     // Recursively find all expressions from a traversable.
     def seqToExpressions(seq: Traversable[Any]): Traversable[Expression] = seq.flatMap {
       case e: Expression => e :: Nil

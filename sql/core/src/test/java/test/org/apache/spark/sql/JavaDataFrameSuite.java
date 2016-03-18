@@ -76,6 +76,13 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(2, df.select("key").takeAsList(2).size());
   }
 
+  @Test
+  public void testCollectAndTake() {
+    DataFrame df = context.table("testData").filter("key = 1 or key = 2 or key = 3");
+    Assert.assertEquals(3, df.select("key").collectAsList().size());
+    Assert.assertEquals(2, df.select("key").takeAsList(2).size());
+  }
+
   /**
    * See SPARK-5904. Abstract vararg methods defined in Scala do not work in Java.
    */
@@ -225,6 +232,18 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(0, schema2.fieldIndex("id"));
   }
 
+  @Test
+  public void testCreateStructTypeFromList(){
+    List<StructField> fields1 = new ArrayList<>();
+    fields1.add(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema1 = StructType$.MODULE$.apply(fields1);
+    Assert.assertEquals(0, schema1.fieldIndex("id"));
+
+    List<StructField> fields2 = Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema2 = StructType$.MODULE$.apply(fields2);
+    Assert.assertEquals(0, schema2.fieldIndex("id"));
+  }
+
   private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
     @Override
     public int compare(Row row1, Row row2) {
@@ -277,6 +296,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testSampleBy() {
+<<<<<<< HEAD
     Dataset<Row> df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     Dataset<Row> sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     List<Row> actual = sampled.groupBy("key").count().orderBy("key").collectAsList();
@@ -284,10 +304,20 @@ public class JavaDataFrameSuite {
     Assert.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);
     Assert.assertEquals(1, actual.get(1).getLong(0));
     Assert.assertTrue(2 <= actual.get(1).getLong(1) && actual.get(1).getLong(1) <= 13);
+=======
+    DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
+    DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
+    Assert.assertEquals(0, actual[0].getLong(0));
+    Assert.assertTrue(0 <= actual[0].getLong(1) && actual[0].getLong(1) <= 8);
+    Assert.assertEquals(1, actual[1].getLong(0));
+    Assert.assertTrue(2 <= actual[1].getLong(1) && actual[1].getLong(1) <= 13);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   @Test
   public void pivot() {
+<<<<<<< HEAD
     Dataset<Row> df = context.table("courseSales");
     List<Row> actual = df.groupBy("year")
       .pivot("course", Arrays.<Object>asList("dotNET", "Java"))
@@ -309,6 +339,28 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(4L, df1.count());
 
     Dataset<Row> df2 = context.read().format("text").load(
+=======
+    DataFrame df = context.table("courseSales");
+    Row[] actual = df.groupBy("year")
+      .pivot("course", Arrays.<Object>asList("dotNET", "Java"))
+      .agg(sum("earnings")).orderBy("year").collect();
+
+    Assert.assertEquals(2012, actual[0].getInt(0));
+    Assert.assertEquals(15000.0, actual[0].getDouble(1), 0.01);
+    Assert.assertEquals(20000.0, actual[0].getDouble(2), 0.01);
+
+    Assert.assertEquals(2013, actual[1].getInt(0));
+    Assert.assertEquals(48000.0, actual[1].getDouble(1), 0.01);
+    Assert.assertEquals(30000.0, actual[1].getDouble(2), 0.01);
+  }
+
+  public void testGenericLoad() {
+    DataFrame df1 = context.read().format("text").load(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
+    Assert.assertEquals(4L, df1.count());
+
+    DataFrame df2 = context.read().format("text").load(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
       Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
     Assert.assertEquals(5L, df2.count());
@@ -316,6 +368,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testTextLoad() {
+<<<<<<< HEAD
     Dataset<String> ds1 = context.read().text(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
     Assert.assertEquals(4L, ds1.count());
@@ -378,5 +431,15 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < 1000; i++) {
       Assert.assertTrue(filter4.mightContain(i * 3));
     }
+=======
+    DataFrame df1 = context.read().text(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
+    Assert.assertEquals(4L, df1.count());
+
+    DataFrame df2 = context.read().text(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
+      Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
+    Assert.assertEquals(5L, df2.count());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

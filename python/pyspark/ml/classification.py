@@ -38,7 +38,11 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel',
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
+<<<<<<< HEAD
                          HasWeightCol, MLWritable, MLReadable):
+=======
+                         HasWeightCol):
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     """
     Logistic regression.
     Currently, this class only supports binary classification.
@@ -69,6 +73,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+<<<<<<< HEAD
     >>> lr_path = temp_path + "/lr"
     >>> lr.save(lr_path)
     >>> lr2 = LogisticRegression.load(lr_path)
@@ -81,6 +86,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     True
     >>> model.intercept == model2.intercept
     True
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     .. versionadded:: 1.3.0
     """
@@ -635,6 +642,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().prediction
     1.0
+<<<<<<< HEAD
     >>> nb_path = temp_path + "/nb"
     >>> nb.save(nb_path)
     >>> nb2 = NaiveBayes.load(nb_path)
@@ -647,6 +655,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     True
     >>> model.theta == model2.theta
     True
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     .. versionadded:: 1.5.0
     """

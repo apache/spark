@@ -95,8 +95,13 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
     val code = s"""
+<<<<<<< HEAD
       public java.lang.Object generate(Object[] references) {
         return new SpecificMutableProjection(references);
+=======
+      public java.lang.Object generate($exprType[] expr) {
+        return new SpecificMutableProjection(expr);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
 
       class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {

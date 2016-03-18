@@ -24,7 +24,11 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/execution/columnar/ColumnTypeSuite.scala
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeProjection}
+=======
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, GenericMutableRow}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/test/scala/org/apache/spark/sql/execution/columnar/ColumnTypeSuite.scala
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
 

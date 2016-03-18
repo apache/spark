@@ -111,6 +111,7 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.head.name == "age")
     assert(df.first().getDouble(0).isNaN)
   }
+<<<<<<< HEAD
 
   test("allowBackslashEscapingAnyCharacter off") {
     val str = """{"name": "Cazen Lee", "price": "\$10"}"""
@@ -130,4 +131,6 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     assert(df.first().getString(0) == "Cazen Lee")
     assert(df.first().getString(1) == "$10")
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

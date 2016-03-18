@@ -384,6 +384,12 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       Timestamp.valueOf("1700-02-28 12:14:50.123456")).foreach { t =>
       val us = fromJavaTimestamp(t)
       assert(toJavaTimestamp(us) === t)
+<<<<<<< HEAD
+=======
+      assert(getHours(us) === t.getHours)
+      assert(getMinutes(us) === t.getMinutes)
+      assert(getSeconds(us) === t.getSeconds)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 
