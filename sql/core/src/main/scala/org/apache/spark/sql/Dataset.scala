@@ -2163,7 +2163,7 @@ class Dataset[T] private[sql](
    * @group rdd
    * @since 1.6.0
    */
-  def javaRDD: JavaRDD[T] = rdd.toJavaRDD()
+  def javaRDD: JavaRDD[T] = toJavaRDD
 
   /**
    * Registers this [[Dataset]] as a temporary table using the given name.  The lifetime of this
