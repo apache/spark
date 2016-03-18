@@ -233,7 +233,6 @@ case class DataSource(
             "It must be specified manually")
         }
 
-
         HadoopFsRelation(
           sqlContext,
           fileCatalog,

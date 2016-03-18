@@ -64,7 +64,7 @@ class FileScanRDD(
       private def nextIterator(): Boolean = {
         if (files.hasNext) {
           val nextFile = files.next()
-          logInfo(s"Reading File $nextFile")
+          logError(s"Reading File $nextFile")
           SqlNewHadoopRDDState.setInputFileName(nextFile.filePath)
           currentIterator = readFunction(nextFile)
           hasNext

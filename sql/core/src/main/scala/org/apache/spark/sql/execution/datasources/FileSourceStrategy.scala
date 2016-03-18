@@ -57,8 +57,9 @@ import org.apache.spark.sql.types._
 private[sql] object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, l@LogicalRelation(files: HadoopFsRelation, _, _))
-      if files.fileFormat.toString == "TestFileFormat" ||
-         files.fileFormat.isInstanceOf[parquet.DefaultSource] =>
+      if (files.fileFormat.toString == "TestFileFormat" ||
+         files.fileFormat.isInstanceOf[parquet.DefaultSource]) &&
+         files.sqlContext.conf.parquetFileScan =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -95,9 +96,12 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val requiredAttributes = AttributeSet(requiredExpressions)
       val requiredAttributeNames = requiredAttributes.map(_.name).toSet
 
+      val resolver = files.sqlContext.conf.resolver
       val prunedDataSchema =
         StructType(
-          files.dataSchema.filter(f => requiredAttributeNames.contains(f.name)))
+          files.dataSchema.filter {f =>
+            requiredAttributeNames.exists(a => resolver(f.name, a))
+          })
       logInfo(s"Pruned Data Schema: ${prunedDataSchema.simpleString(5)}")
 
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
