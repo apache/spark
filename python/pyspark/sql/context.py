@@ -294,7 +294,8 @@ class SQLContext(object):
             raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
 
         # convert python objects to sql data
-        rdd = rdd.map(schema.toInternal)
+        converter = schema.generateSafeToInternal()
+        rdd = rdd.map(converter)
         return rdd, schema
 
     def _createFromLocal(self, data, schema):
@@ -435,17 +436,10 @@ class SQLContext(object):
         else:
             prepare = lambda obj: obj
 
-        # So that we can convert WrappedJStructTypes we need to get a
-        # serilizable versions of toInternal.
-        if isinstance(schema, WrappedJStructType):
-            python_schema = schema.unWrap()
-        else:
-            python_schema = schema
-
         if isinstance(data, RDD):
-            rdd, schema = self._createFromRDD(data.map(prepare), python_schema, samplingRatio)
+            rdd, schema = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
-            rdd, schema = self._createFromLocal(map(prepare, data), python_schema)
+            rdd, schema = self._createFromLocal(map(prepare, data), schema)
         if isinstance(schema, WrappedJStructType):
             java_schema = schema._jstructtype
         else:

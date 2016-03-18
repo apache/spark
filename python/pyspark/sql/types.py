@@ -538,6 +538,9 @@ class StructType(DataType):
         # We need convert Row()/namedtuple into tuple()
         return True
 
+    def generateSafeToInternal(self):
+        return lambda x: self.toInternal(x)
+
     def toInternal(self, obj):
         if obj is None:
             return
@@ -588,6 +591,12 @@ class WrappedJStructType(StructType):
         self._jstructtype = jstructtype
 
     @property
+    def _needSerializeAnyField(self):
+        if not hasattr(self, '_cachedNeedSerializeAnyField'):
+            self._cachedNeedSerializeAnyField = any(f.needConversion() for f in self.fields)
+        return self._cachedNeedSerializeAnyField
+
+    @property
     def names(self):
         return self.fieldNames
 
@@ -632,6 +641,36 @@ class WrappedJStructType(StructType):
     def needConversion(self):
         # We need convert Row()/namedtuple into tuple()
         return True
+
+    def generateSafeToInternal(self):
+        """
+        Return a serilizable toInternal function that doesn't depend on the Java object.
+        """
+        names = list(self.names)
+        fields = list(self.fields)
+        needSerializeAnyField = self._needSerializeAnyField
+        def converter(obj):
+            if _needSerializeAnyField:
+                if isinstance(obj, dict):
+                    return tuple(f.toInternal(obj.get(n)) for n, f in zip(names, fields))
+                elif isinstance(obj, (tuple, list)):
+                    return tuple(f.toInternal(v) for f, v in zip(fields, obj))
+                elif hasattr(obj, "__dict__"):
+                    d = obj.__dict__
+                    return tuple(f.toInternal(d.get(n)) for n, f in zip(names, fields))
+                else:
+                    raise ValueError("Unexpected tuple %r with StructType" % obj)
+            else:
+                if isinstance(obj, dict):
+                    return tuple(obj.get(n) for n in names)
+                elif isinstance(obj, (list, tuple)):
+                    return tuple(obj)
+                elif hasattr(obj, "__dict__"):
+                    d = obj.__dict__
+                    return tuple(d.get(n) for n in names)
+                else:
+                    raise ValueError("Unexpected tuple %r with StructType" % obj)
+        return converter
 
     def toInternal(self, obj):
         if obj is None:
