@@ -1383,6 +1383,17 @@ class EmailSmtpTest(unittest.TestCase):
         assert not mock_smtp_ssl.called
 
 
+class HiveServer2Test(unittest.TestCase):
+    def setUp(self):
+        configuration.test_mode()
+
+    def test_select_conn(self):
+        from airflow.hooks.hive_hooks import HiveServer2Hook
+        sql = "select 1"
+        hook = HiveServer2Hook()
+        hook.get_records(sql)
+
+
 if 'MySqlOperator' in dir(operators):
     class TransferTests(unittest.TestCase):
         cluster = None

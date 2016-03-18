@@ -414,16 +414,17 @@ class HiveServer2Hook(BaseHook):
     '''
     Wrapper around the impala library
 
-    Note that the default authMechanism is NOSASL, to override it you
+    Note that the default authMechanism is PLAIN, to override it you
     can specify it in the ``extra`` of your connection in the UI as in
-    ``{"authMechanism": "PLAIN"}``. Refer to impyla for more details.
+    ``{"authMechanism": "NOSASL"}``. Refer to impyla for more details.
     '''
     def __init__(self, hiveserver2_conn_id='hiveserver2_default'):
         self.hiveserver2_conn_id = hiveserver2_conn_id
 
     def get_conn(self):
         db = self.get_connection(self.hiveserver2_conn_id)
-        auth_mechanism = db.extra_dejson.get('authMechanism', 'NOSASL')
+        auth_mechanism = db.extra_dejson.get('authMechanism', 'PLAIN')
+        kerberos_service_name = None
         if configuration.get('core', 'security') == 'kerberos':
             auth_mechanism = db.extra_dejson.get('authMechanism', 'GSSAPI')
             kerberos_service_name = db.extra_dejson.get('kerberos_service_name', 'hive')
@@ -434,7 +435,8 @@ class HiveServer2Hook(BaseHook):
                             self.hiveserver2_conn_id)
             auth_mechanism = 'GSSAPI'
 
-        return impala.dbapi.connect(
+        from impala.dbapi import connect
+        return connect(
             host=db.host,
             port=db.port,
             auth_mechanism=auth_mechanism,
@@ -457,7 +459,7 @@ class HiveServer2Hook(BaseHook):
                     if records:
                         results = {
                             'data': records,
-                            'header': cur.getSchema(),
+                            'header': cur.description,
                         }
             return results
 
