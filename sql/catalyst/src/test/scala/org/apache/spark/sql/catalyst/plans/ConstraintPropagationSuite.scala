@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.LongType
 
 class ConstraintPropagationSuite extends SparkFunSuite {
 
@@ -214,6 +215,14 @@ class ConstraintPropagationSuite extends SparkFunSuite {
       ExpressionSet(Seq(resolveColumn(tr, "a") > 10,
         resolveColumn(tr, "b") > 10,
         resolveColumn(tr, "a") === resolveColumn(tr, "b"),
+        IsNotNull(resolveColumn(tr, "a")),
+        IsNotNull(resolveColumn(tr, "b")))))
+  }
+
+  test("infer constraints on cast") {
+    val tr = LocalRelation('a.int, 'b.long)
+    verifyConstraints(tr.where('a.attr === 'b.attr).analyze.constraints,
+      ExpressionSet(Seq(Cast(resolveColumn(tr, "a"), LongType) === resolveColumn(tr, "b"),
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "b")))))
   }
