@@ -123,6 +123,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       a.statistics.sizeInBytes * 3 <= b.statistics.sizeInBytes
     }
 
+    /**
+     * Returns whether we should use shuffle hash join or not.
+     *
+     * We should only use shuffle hash join when:
+     *  1) any single partition of a small table could fit in memory.
+     *  2) the smaller table is much smaller (3X) than the other one.
+     */
+    private def shouldShuffleHashJoin(left: LogicalPlan, right: LogicalPlan): Boolean = {
+      canBuildHashMap(left) && muchSmaller(left, right) ||
+        canBuildHashMap(right) && muchSmaller(right, left)
+    }
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // --- Inner joins --------------------------------------------------------------------------
@@ -136,8 +148,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           leftKeys, rightKeys, Inner, BuildLeft, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if canBuildHashMap(left) && muchSmaller(left, right) ||
-          canBuildHashMap(right) && muchSmaller(right, left) ||
+        if !conf.preferSortMergeJoin && shouldShuffleHashJoin(left, right) ||
           !RowOrdering.isOrderable(leftKeys) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
@@ -166,13 +177,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, condition, left, right)
-         if canBuildHashMap(right) && muchSmaller(right, left) ||
+         if !conf.preferSortMergeJoin && canBuildHashMap(right) && muchSmaller(right, left) ||
            !RowOrdering.isOrderable(leftKeys) =>
         Seq(joins.ShuffledHashJoin(
           leftKeys, rightKeys, LeftOuter, BuildRight, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(RightOuter, leftKeys, rightKeys, condition, left, right)
-         if canBuildHashMap(left) && muchSmaller(left, right) ||
+         if !conf.preferSortMergeJoin && canBuildHashMap(left) && muchSmaller(left, right) ||
            !RowOrdering.isOrderable(leftKeys) =>
         Seq(joins.ShuffledHashJoin(
           leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))

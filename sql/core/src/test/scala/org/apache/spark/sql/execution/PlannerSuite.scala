@@ -87,10 +87,10 @@ class PlannerSuite extends SharedSQLContext {
           """.stripMargin).queryExecution.sparkPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
-        val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+        val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
-        assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+        assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
       }
     }
 
@@ -140,10 +140,10 @@ class PlannerSuite extends SharedSQLContext {
         val planned = a.join(b, $"a.key" === $"b.key").queryExecution.sparkPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
-        val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+        val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
-        assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+        assert(sortMergeJoins.isEmpty, "Should not use shuffled hash join")
 
         sqlContext.clearCache()
       }

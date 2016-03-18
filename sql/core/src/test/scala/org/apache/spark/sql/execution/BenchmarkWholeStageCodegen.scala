@@ -251,6 +251,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     val N = 4 << 20
     sqlContext.setConf("spark.sql.shuffle.partitions", "2")
     sqlContext.setConf("spark.sql.autoBroadcastJoinThreshold", "10000000")
+    sqlContext.setConf("spark.sql.join.preferSortMergeJoin", "false")
     runBenchmark("shuffle hash join", N) {
       val df1 = sqlContext.range(N).selectExpr(s"id as k1")
       val df2 = sqlContext.range(N / 5).selectExpr(s"id * 3 as k2")
