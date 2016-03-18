@@ -141,12 +141,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT * FROM t0 UNION SELECT * FROM t0")
   }
 
-  // Parser is unable to parse the following query:
-  // SELECT  `u_1`.`id`
-  // FROM (((SELECT  `t0`.`id` FROM `default`.`t0`)
-  // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`))
-  // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
-  ignore("three-child union") {
+  test("three-child union") {
     checkHiveQl(
       """
         |SELECT id FROM parquet_t0

@@ -24,9 +24,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.CollapseProject
+import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, CombineUnions}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -384,11 +383,18 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
   object Canonicalizer extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] = Seq(
-      Batch("Collapse Project", FixedPoint(100),
+      Batch("Prepare", FixedPoint(100),
         // The `WidenSetOperationTypes` analysis rule may introduce extra `Project`s over
         // `Aggregate`s to perform type casting.  This rule merges these `Project`s into
         // `Aggregate`s.
-        CollapseProject),
+        CollapseProject,
+        // Parser is unable to parse the following query:
+        // SELECT  `u_1`.`id`
+        // FROM (((SELECT  `t0`.`id` FROM `default`.`t0`)
+        // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`))
+        // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
+        // This rule combine adjacent Unions together so we can generate flat UNION ALL SQL string.
+        CombineUnions),
       Batch("Recover Scoping Info", Once,
         // A logical plan is allowed to have same-name outputs with different qualifiers(e.g. the
         // `Join` operator). However, this kind of plan can't be put under a sub query as we will
