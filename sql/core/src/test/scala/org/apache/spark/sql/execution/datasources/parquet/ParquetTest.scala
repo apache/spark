@@ -51,10 +51,8 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (f: DataFrame => Unit) = {
     (true :: false :: Nil).foreach { vectorized =>
       if (!vectorized || testVectorized) {
-        withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> vectorized.toString) {
-          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-            f(sqlContext.read.parquet(path.toString))
-          }
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          f(sqlContext.read.parquet(path.toString))
         }
       }
     }

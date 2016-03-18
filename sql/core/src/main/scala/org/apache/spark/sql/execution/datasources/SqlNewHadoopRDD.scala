@@ -99,8 +99,6 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
 
   // If true, enable using the custom RecordReader for parquet. This only works for
   // a subset of the types (no complex types).
-  protected val enableUnsafeRowParquetReader: Boolean =
-    sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
   protected val enableVectorizedParquetReader: Boolean =
     sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
   protected val enableWholestageCodegen: Boolean =
@@ -174,7 +172,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         * fails (for example, unsupported schema), try with the normal reader.
         * TODO: plumb this through a different way?
         */
-      if (enableUnsafeRowParquetReader && enableVectorizedParquetReader &&
+      if (enableVectorizedParquetReader &&
         format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
         val parquetReader: VectorizedParquetRecordReader = new VectorizedParquetRecordReader()
         if (!parquetReader.tryInitialize(

@@ -618,39 +618,33 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
   test("read dictionary encoded decimals written as INT32") {
     ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> vectorized) {
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-          checkAnswer(
-            // Decimal column in this file is encoded using plain dictionary
-            readResourceParquetFile("dec-in-i32.parquet"),
-            sqlContext.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
-        }
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // Decimal column in this file is encoded using plain dictionary
+          readResourceParquetFile("dec-in-i32.parquet"),
+          sqlContext.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
       }
     }
   }
 
   test("read dictionary encoded decimals written as INT64") {
     ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> vectorized) {
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-          checkAnswer(
-            // Decimal column in this file is encoded using plain dictionary
-            readResourceParquetFile("dec-in-i64.parquet"),
-            sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
-        }
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // Decimal column in this file is encoded using plain dictionary
+          readResourceParquetFile("dec-in-i64.parquet"),
+          sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
       }
     }
   }
 
   test("read dictionary encoded decimals written as FIXED_LEN_BYTE_ARRAY") {
     ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> vectorized) {
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-          checkAnswer(
-            // Decimal column in this file is encoded using plain dictionary
-            readResourceParquetFile("dec-in-fixed-len.parquet"),
-            sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
-        }
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // Decimal column in this file is encoded using plain dictionary
+          readResourceParquetFile("dec-in-fixed-len.parquet"),
+          sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
       }
     }
   }
@@ -662,18 +656,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       var hash1: Int = 0
       var hash2: Int = 0
       (false :: true :: Nil).foreach { v =>
-        withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> v.toString) {
-          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> v.toString) {
-            val df = sqlContext.read.parquet(dir.getCanonicalPath)
-            val rows = df.queryExecution.toRdd.map(_.copy()).collect()
-            val unsafeRows = rows.map(_.asInstanceOf[UnsafeRow])
-            if (!v) {
-              hash1 = unsafeRows(0).hashCode()
-              hash2 = unsafeRows(1).hashCode()
-            } else {
-              assert(hash1 == unsafeRows(0).hashCode())
-              assert(hash2 == unsafeRows(1).hashCode())
-            }
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> v.toString) {
+          val df = sqlContext.read.parquet(dir.getCanonicalPath)
+          val rows = df.queryExecution.toRdd.map(_.copy()).collect()
+          val unsafeRows = rows.map(_.asInstanceOf[UnsafeRow])
+          if (!v) {
+            hash1 = unsafeRows(0).hashCode()
+            hash2 = unsafeRows(1).hashCode()
+          } else {
+            assert(hash1 == unsafeRows(0).hashCode())
+            assert(hash2 == unsafeRows(1).hashCode())
           }
         }
       }
