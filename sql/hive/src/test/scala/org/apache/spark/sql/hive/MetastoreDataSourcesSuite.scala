@@ -461,8 +461,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           // Drop table will also delete the data.
           sql("DROP TABLE savedJsonTable")
           intercept[AnalysisException] {
-            read.json(sessionState.catalog.hiveDefaultTableFilePath(
-              TableIdentifier("savedJsonTable")))
+            read.json(
+              sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier("savedJsonTable")))
           }
         }
 
@@ -728,8 +728,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           outputFormat = None,
           serde = None,
           serdeProperties = Map(
-            "path" ->
-              sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
+            "path" -> sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
         ),
         properties = Map(
           "spark.sql.sources.provider" -> "json",
