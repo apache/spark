@@ -1386,6 +1386,12 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * @return false if and only if the RDD contains no elements at all. Note that an RDD
+   *         may be empty even when it has at least 1 partition.
+   */
+  def nonEmpty(): Boolean = !isEmpty()
+
+  /**
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String): Unit = withScope {

@@ -52,6 +52,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(nums.collect({ case i if i >= 3 => i.toString }).collect().toList === List("3", "4"))
     assert(nums.keyBy(_.toString).collect().toList === List(("1", 1), ("2", 2), ("3", 3), ("4", 4)))
     assert(!nums.isEmpty())
+    assert(nums.nonEmpty())
     assert(nums.max() === 4)
     assert(nums.min() === 1)
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.sum))
@@ -536,6 +537,14 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(!sc.parallelize(Seq(1)).isEmpty())
     assert(sc.parallelize(Seq(1, 2, 3), 3).filter(_ < 0).isEmpty())
     assert(!sc.parallelize(Seq(1, 2, 3), 3).filter(_ > 1).isEmpty())
+  }
+
+  test("nonEmpty") {
+    assert(!sc.emptyRDD.nonEmpty())
+    assert(!sc.parallelize(Seq[Int]()).nonEmpty())
+    assert(sc.parallelize(Seq(1)).nonEmpty())
+    assert(!sc.parallelize(Seq(1, 2, 3), 3).filter(_ < 0).nonEmpty())
+    assert(sc.parallelize(Seq(1, 2, 3), 3).filter(_ > 1).nonEmpty())
   }
 
   test("sample preserves partitioner") {

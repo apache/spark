@@ -702,6 +702,27 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void nonEmpty() {
+    Assert.assertFalse(sc.emptyRDD().nonEmpty());
+    Assert.assertFalse(sc.parallelize(new ArrayList<Integer>()).nonEmpty());
+    Assert.assertTrue(sc.parallelize(Arrays.asList(1)).nonEmpty());
+    Assert.assertFalse(sc.parallelize(Arrays.asList(1, 2, 3), 3).filter(
+        new Function<Integer,Boolean>() {
+          @Override
+          public Boolean call(Integer i) {
+            return i < 0;
+          }
+        }).nonEmpty());
+    Assert.assertTrue(sc.parallelize(Arrays.asList(1, 2, 3)).filter(
+        new Function<Integer, Boolean>() {
+          @Override
+          public Boolean call(Integer i) {
+            return i > 1;
+          }
+        }).nonEmpty());
+  }
+
+  @Test
   public void cartesian() {
     JavaDoubleRDD doubleRDD = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
     JavaRDD<String> stringRDD = sc.parallelize(Arrays.asList("Hello", "World"));
