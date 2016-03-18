@@ -351,11 +351,8 @@ setMethod("coltypes",
             types <- sapply(dtypes(x), function(x) {x[[2]]})
 
             # Map Spark data types into R's data types using DATA_TYPES environment
-<<<<<<< HEAD
             rTypes <- sapply(types, USE.NAMES = F, FUN = function(x) {
-=======
-            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
+
               # Check for primitive types
               type <- PRIMITIVE_TYPES[[x]]
 
@@ -1403,11 +1400,7 @@ setMethod("selectExpr",
 #' @param x A DataFrame
 #' @param colName A column name.
 #' @param col A Column expression.
-<<<<<<< HEAD
-#' @return A DataFrame with the new column added or the existing column replaced.
-=======
 #' @return A DataFrame with the new column added.
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 #' @family DataFrame functions
 #' @rdname withColumn
 #' @name withColumn
@@ -2100,14 +2093,11 @@ setMethod("saveAsTable",
               }
                source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                                      "org.apache.spark.sql.parquet")
-<<<<<<< HEAD
-=======
             }
             allModes <- c("append", "overwrite", "error", "ignore")
             # nolint start
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             }
             jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
@@ -2410,7 +2400,6 @@ setMethod("str",
                 # Get the first elements for each column
 
                 firstElements <- if (types[i] == "character") {
-<<<<<<< HEAD
                   paste(paste0("\"", localDF[, i], "\""), collapse = " ")
                 } else {
                   paste(localDF[, i], collapse = " ")
@@ -2418,15 +2407,6 @@ setMethod("str",
 
                 # Add the corresponding number of spaces for alignment
                 spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse = "")
-=======
-                  paste(paste0("\"", localDF[,i], "\""), collapse = " ")
-                } else {
-                  paste(localDF[,i], collapse = " ")
-                }
-
-                # Add the corresponding number of spaces for alignment
-                spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse="")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
                 # Get the short type. For 'character', it would be 'chr';
                 # 'for numeric', it's 'num', etc.
@@ -2438,11 +2418,7 @@ setMethod("str",
                 # Concatenate the colnames, coltypes, and first
                 # elements of each column
                 line <- paste0(" $ ", names[i], spaces, ": ",
-<<<<<<< HEAD
                                dataType, " ", firstElements)
-=======
-                               dataType, " ",firstElements)
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
                 # Chop off extra characters if this is too long
                 cat(substr(line, 1, MAX_CHAR_PER_ROW))
@@ -2453,8 +2429,6 @@ setMethod("str",
                 cat(paste0("\nDisplaying first ", ncol(localDF), " columns only."))
               }
             }
-<<<<<<< HEAD
-          })
 
 #' drop
 #'
@@ -2498,6 +2472,4 @@ setMethod("drop",
           function(x) {
             base::drop(x)
           })
-=======
           })
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

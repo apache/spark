@@ -292,31 +292,6 @@ read.parquet <- function(sqlContext, path) {
 # TODO: Implement saveasParquetFile and write examples for both
 parquetFile <- function(sqlContext, ...) {
   .Deprecated("read.parquet")
-<<<<<<< HEAD
-  read.parquet(sqlContext, unlist(list(...)))
-}
-
-#' Create a DataFrame from a text file.
-#'
-#' Loads a text file and returns a DataFrame with a single string column named "value".
-#' Each line in the text file is a new row in the resulting DataFrame.
-#'
-#' @param sqlContext SQLContext to use
-#' @param path Path of file to read. A vector of multiple paths is allowed.
-#' @return DataFrame
-#' @rdname read.text
-#' @name read.text
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#' path <- "path/to/file.txt"
-#' df <- read.text(sqlContext, path)
-#' }
-read.text <- function(sqlContext, path) {
-=======
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   # Allow the user to have a more flexible definiton of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sqlContext, "read")

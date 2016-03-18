@@ -641,15 +641,3 @@ assignNewEnv <- function(data) {
 splitString <- function(input) {
   Filter(nzchar, unlist(strsplit(input, ",|\\s")))
 }
-<<<<<<< HEAD
-
-convertToJSaveMode <- function(mode) {
- allModes <- c("append", "overwrite", "error", "ignore")
- if (!(mode %in% allModes)) {
-   stop('mode should be one of "append", "overwrite", "error", "ignore"')  # nolint
- }
- jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
- jmode
-}
-=======
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

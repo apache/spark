@@ -151,15 +151,9 @@ test_that("create DataFrame from RDD", {
   expect_equal(as.list(collect(where(df2AsDF, df2AsDF$name == "Bob"))),
                list(name = "Bob", age = 16, height = 176.5))
 
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   localDF <- data.frame(name = c("John", "Smith", "Sarah"),
                         age = c(19L, 23L, 18L),
                         height = c(176.5, 181.4, 173.7))
-=======
-  localDF <- data.frame(name=c("John", "Smith", "Sarah"),
-                        age=c(19L, 23L, 18L),
-                        height=c(176.5, 181.4, 173.7))
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   df <- createDataFrame(sqlContext, localDF, schema)
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
@@ -269,11 +263,7 @@ test_that("create DataFrame from list or data.frame", {
 
   irisdf <- suppressWarnings(createDataFrame(sqlContext, iris))
   iris_collected <- collect(irisdf)
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expect_equivalent(iris_collected[, -5], iris[, -5])
-=======
-  expect_equivalent(iris_collected[,-5], iris[,-5])
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expect_equal(iris_collected$Species, as.character(iris$Species))
 
   mtcarsdf <- createDataFrame(sqlContext, mtcars)
@@ -345,10 +335,7 @@ writeLines(mockLinesMapType, mapTypeJsonPath)
 test_that("Collect DataFrame with complex types", {
   # ArrayType
   df <- read.json(sqlContext, complexTypeJsonPath)
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
-=======
 
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   ldf <- collect(df)
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
@@ -391,7 +378,6 @@ test_that("Collect DataFrame with complex types", {
 test_that("read/write json files", {
   # Test read.df
   df <- read.df(sqlContext, jsonPath, "json")
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
 
@@ -419,35 +405,7 @@ test_that("read/write json files", {
 
   # Test write.json
   jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
-=======
-  expect_is(df, "DataFrame")
-  expect_equal(count(df), 3)
 
-  # Test read.df with a user defined schema
-  schema <- structType(structField("name", type = "string"),
-                       structField("age", type = "double"))
-
-  df1 <- read.df(sqlContext, jsonPath, "json", schema)
-  expect_is(df1, "DataFrame")
-  expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
-
-  # Test loadDF
-  df2 <- loadDF(sqlContext, jsonPath, "json", schema)
-  expect_is(df2, "DataFrame")
-  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
-
-  # Test read.json
-  df <- read.json(sqlContext, jsonPath)
-  expect_is(df, "DataFrame")
-  expect_equal(count(df), 3)
-
-  # Test write.df
-  jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".json")
-  write.df(df, jsonPath2, "json", mode="overwrite")
-
-  # Test write.json
-  jsonPath3 <- tempfile(pattern="jsonPath3", fileext=".json")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   write.json(df, jsonPath3)
 
   # Test read.json()/jsonFile() works with multiple input paths
@@ -533,11 +491,8 @@ test_that("insertInto() on a registered table", {
   unlink(parquetPath2)
 })
 
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
-test_that("tableToDF() returns a new DataFrame", {
-=======
 test_that("table() returns a new DataFrame", {
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
+
   df <- read.json(sqlContext, jsonPath)
   registerTempTable(df, "table1")
   tabledf <- tableToDF(sqlContext, "table1")
@@ -601,11 +556,7 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
 })
 
 test_that("objectFile() works with row serialization", {
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   objectPath <- tempfile(pattern = "spark-test", fileext = ".tmp")
-=======
-  objectPath <- tempfile(pattern="spark-test", fileext=".tmp")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   df <- read.json(sqlContext, jsonPath)
   dfRDD <- toRDD(df)
   saveAsObjectFile(coalesce(dfRDD, 1L), objectPath)
@@ -763,11 +714,7 @@ test_that("names() colnames() set the column names", {
   # Test base::colnames base::names
   m2 <- cbind(1, 1:4)
   expect_equal(colnames(m2, do.NULL = FALSE), c("col1", "col2"))
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   colnames(m2) <- c("x", "Y")
-=======
-  colnames(m2) <- c("x","Y")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expect_equal(colnames(m2), c("x", "Y"))
 
   z <- list(a = 1, b = "c", c = 1:3)
@@ -946,11 +893,8 @@ test_that("drop column", {
 test_that("subsetting", {
   # read.json returns columns in random order
   df <- select(read.json(sqlContext, jsonPath), "name", "age")
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   filtered <- df[df$age > 20, ]
-=======
-  filtered <- df[df$age > 20,]
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
+
   expect_equal(count(filtered), 1)
   expect_equal(columns(filtered), c("name", "age"))
   expect_equal(collect(filtered)$name, "Andy")
@@ -1025,35 +969,25 @@ test_that("test HiveContext", {
   expect_is(df2, "DataFrame")
   expect_equal(count(df2), 3)
 
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-=======
-  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
+
   invisible(saveAsTable(df, "json2", "json", "append", path = jsonPath2))
   df3 <- sql(hiveCtx, "select * from json2")
   expect_is(df3, "DataFrame")
   expect_equal(count(df3), 3)
   unlink(jsonPath2)
 
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-=======
-  hivetestDataPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
+
   invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
   df4 <- sql(hiveCtx, "select * from hivetestbl")
   expect_is(df4, "DataFrame")
   expect_equal(count(df4), 3)
   unlink(hivetestDataPath)
 
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   invisible(saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath))
-=======
-  parquetDataPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
-  invisible(saveAsTable(df, "parquetest", "parquet", mode="overwrite", path=parquetDataPath))
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
+
   df5 <- sql(hiveCtx, "select * from parquetest")
   expect_is(df5, "DataFrame")
   expect_equal(count(df5), 3)
@@ -1086,11 +1020,6 @@ test_that("column functions", {
   c14 <- cume_dist() + ntile(1) + corr(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
-  c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
-  c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
-=======
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1140,21 +1069,13 @@ test_that("column functions", {
                         schema = c("a", "b", "c"))
   result <- collect(select(df, struct("a", "c")))
   expected <- data.frame(row.names = 1:2)
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expected$"struct(a, c)" <- list(listToStruct(list(a = 1L, c = 3L)),
-=======
-  expected$"struct(a,c)" <- list(listToStruct(list(a = 1L, c = 3L)),
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
                                  listToStruct(list(a = 4L, c = 6L)))
   expect_equal(result, expected)
 
   result <- collect(select(df, struct(df$a, df$b)))
   expected <- data.frame(row.names = 1:2)
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expected$"struct(a, b)" <- list(listToStruct(list(a = 1L, b = 2L)),
-=======
-  expected$"struct(a,b)" <- list(listToStruct(list(a = 1L, b = 2L)),
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
                                  listToStruct(list(a = 4L, b = 5L)))
   expect_equal(result, expected)
 
@@ -1166,20 +1087,6 @@ test_that("column functions", {
   result <- collect(select(df, encode(df$a, "utf-8"), decode(df$c, "utf-8")))
   expect_equal(result[[1]][[1]], bytes)
   expect_equal(result[[2]], markUtf8("大千世界"))
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
-
-  # Test first(), last()
-  df <- read.json(sqlContext, jsonPath)
-  expect_equal(collect(select(df, first(df$age)))[[1]], NA)
-  expect_equal(collect(select(df, first(df$age, TRUE)))[[1]], 30)
-  expect_equal(collect(select(df, first("age")))[[1]], NA)
-  expect_equal(collect(select(df, first("age", TRUE)))[[1]], 30)
-  expect_equal(collect(select(df, last(df$age)))[[1]], 19)
-  expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
-  expect_equal(collect(select(df, last("age")))[[1]], 19)
-  expect_equal(collect(select(df, last("age", TRUE)))[[1]], 19)
-=======
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
 })
 
 test_that("column binary mathfunctions", {
@@ -1337,11 +1244,7 @@ test_that("group by, agg functions", {
   df3 <- agg(gd, age = "stddev")
   expect_is(df3, "DataFrame")
   df3_local <- collect(df3)
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expect_true(is.nan(df3_local[df3_local$name == "Andy", ][1, 2]))
-=======
-  expect_true(is.nan(df3_local[df3_local$name == "Andy",][1, 2]))
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
 
   df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "DataFrame")
@@ -1354,27 +1257,18 @@ test_that("group by, agg functions", {
 
   expect_equal(3, count(mean(gd)))
   expect_equal(3, count(max(gd)))
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
-  expect_equal(30, collect(max(gd))[2, 2])
-=======
   expect_equal(30, collect(max(gd))[1, 2])
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expect_equal(1, collect(count(gd))[1, 2])
 
   mockLines2 <- c("{\"name\":\"ID1\", \"value\": \"10\"}",
                   "{\"name\":\"ID1\", \"value\": \"10\"}",
                   "{\"name\":\"ID1\", \"value\": \"22\"}",
                   "{\"name\":\"ID2\", \"value\": \"-3\"}")
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-=======
-  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   writeLines(mockLines2, jsonPath2)
   gd2 <- groupBy(read.json(sqlContext, jsonPath2), "name")
   df6 <- agg(gd2, value = "sum")
   df6_local <- collect(df6)
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expect_equal(42, df6_local[df6_local$name == "ID1", ][1, 2])
   expect_equal(-3, df6_local[df6_local$name == "ID2", ][1, 2])
 
@@ -1382,44 +1276,22 @@ test_that("group by, agg functions", {
   df7_local <- collect(df7)
   expect_true(abs(df7_local[df7_local$name == "ID1", ][1, 2] - 6.928203) < 1e-6)
   expect_true(is.nan(df7_local[df7_local$name == "ID2", ][1, 2]))
-=======
-  expect_equal(42, df6_local[df6_local$name == "ID1",][1, 2])
-  expect_equal(-3, df6_local[df6_local$name == "ID2",][1, 2])
-
-  df7 <- agg(gd2, value = "stddev")
-  df7_local <- collect(df7)
-  expect_true(abs(df7_local[df7_local$name == "ID1",][1, 2] - 6.928203) < 1e-6)
-  expect_true(is.nan(df7_local[df7_local$name == "ID2",][1, 2]))
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
 
   mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Justin\", \"age\":19}",
                   "{\"name\":\"Justin\", \"age\":1}")
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   jsonPath3 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-=======
-  jsonPath3 <- tempfile(pattern="sparkr-test", fileext=".tmp")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   writeLines(mockLines3, jsonPath3)
   df8 <- read.json(sqlContext, jsonPath3)
   gd3 <- groupBy(df8, "name")
   gd3_local <- collect(sum(gd3))
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   expect_equal(60, gd3_local[gd3_local$name == "Andy", ][1, 2])
   expect_equal(20, gd3_local[gd3_local$name == "Justin", ][1, 2])
 
   expect_true(abs(collect(agg(df, sd(df$age)))[1, 1] - 7.778175) < 1e-6)
   gd3_local <- collect(agg(gd3, var(df8$age)))
   expect_equal(162, gd3_local[gd3_local$name == "Justin", ][1, 2])
-=======
-  expect_equal(60, gd3_local[gd3_local$name == "Andy",][1, 2])
-  expect_equal(20, gd3_local[gd3_local$name == "Justin",][1, 2])
-
-  expect_true(abs(collect(agg(df, sd(df$age)))[1, 1] - 7.778175) < 1e-6)
-  gd3_local <- collect(agg(gd3, var(df8$age)))
-  expect_equal(162, gd3_local[gd3_local$name == "Justin",][1, 2])
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
 
   # Test stats::sd, stats::var are working
   expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
@@ -1686,11 +1558,7 @@ test_that("mutate(), transform(), rename() and names()", {
 test_that("read/write Parquet files", {
   df <- read.df(sqlContext, jsonPath, "json")
   # Test write.df and read.df
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   write.df(df, parquetPath, "parquet", mode = "overwrite")
-=======
-  write.df(df, parquetPath, "parquet", mode="overwrite")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
   df2 <- read.df(sqlContext, parquetPath, "parquet")
   expect_is(df2, "DataFrame")
   expect_equal(count(df2), 3)
@@ -1725,11 +1593,7 @@ test_that("read/write text files", {
   expect_equal(colnames(df), c("value"))
   expect_equal(count(df), 3)
   textPath <- tempfile(pattern = "textPath", fileext = ".txt")
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   write.df(df, textPath, "text", mode = "overwrite")
-=======
-  write.df(df, textPath, "text", mode="overwrite")
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
 
   # Test write.text and read.text
   textPath2 <- tempfile(pattern = "textPath2", fileext = ".txt")
@@ -1941,17 +1805,6 @@ test_that("sampleBy() on a DataFrame", {
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
   expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
   expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
-})
-
-test_that("approxQuantile() on a DataFrame", {
-  l <- lapply(c(0:99), function(i) { i })
-  df <- createDataFrame(sqlContext, l, "key")
-  quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
-  expect_equal(quantiles[[1]], 50)
-  expect_equal(quantiles[[2]], 80)
-=======
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
 })
 
 test_that("SQL error message is returned from JVM", {
@@ -1999,15 +1852,9 @@ test_that("with() on a DataFrame", {
 test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(coltypes(irisDF), c(rep("numeric", 4), "character"))
 
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   data <- data.frame(c1 = c(1, 2, 3),
                      c2 = c(T, F, T),
                      c3 = c("2015/01/01 10:00:00", "2015/01/02 10:00:00", "2015/01/03 10:00:00"))
-=======
-  data <- data.frame(c1=c(1,2,3),
-                     c2=c(T,F,T),
-                     c3=c("2015/01/01 10:00:00", "2015/01/02 10:00:00", "2015/01/03 10:00:00"))
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
 
   schema <- structType(structField("c1", "byte"),
                        structField("c3", "boolean"),
@@ -2019,11 +1866,8 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
 
   # Test complex types
   x <- createDataFrame(sqlContext, list(list(as.environment(
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
     list("a" = "b", "c" = "d", "e" = "f")))))
-=======
-    list("a"="b", "c"="d", "e"="f")))))
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
+
   expect_equal(coltypes(x), "map<string,string>")
 
   df <- selectExpr(read.json(sqlContext, jsonPath), "name", "(age * 1.21) as age")
@@ -2067,11 +1911,8 @@ test_that("Method str()", {
   # the number of columns. Therefore, it will suffice to check for the
   # number of returned rows
   x <- runif(200, 1, 10)
-<<<<<<< HEAD:R/pkg/inst/tests/testthat/test_sparkSQL.R
   df <- data.frame(t(as.matrix(data.frame(x, x, x, x, x, x, x, x, x))))
-=======
-  df <- data.frame(t(as.matrix(data.frame(x,x,x,x,x,x,x,x,x))))
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:R/pkg/inst/tests/testthat/test_sparkSQL.R
+
   DF <- createDataFrame(sqlContext, df)
   out <- capture.output(str(DF))
   expect_equal(length(out), 103)

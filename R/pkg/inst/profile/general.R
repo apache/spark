@@ -19,9 +19,5 @@
   packageDir <- Sys.getenv("SPARKR_PACKAGE_DIR")
   dirs <- strsplit(packageDir, ",")[[1]]
   .libPaths(c(dirs, .libPaths()))
-<<<<<<< HEAD
   Sys.setenv(NOAWT = 1)
-=======
-  Sys.setenv(NOAWT=1)
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
