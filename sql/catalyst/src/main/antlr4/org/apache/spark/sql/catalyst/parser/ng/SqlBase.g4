@@ -206,7 +206,7 @@ setQuantifier
 relation
     : left=relation
       ( CROSS JOIN right=sampledRelation
-      | joinType JOIN rightRelation=relation (ON booleanExpression)?
+      | joinType JOIN rightRelation=relation joinCriteria?
       | NATURAL joinType JOIN right=sampledRelation
       )                                           #joinRelation
     | sampledRelation                             #relationDefault
@@ -218,6 +218,11 @@ joinType
     | LEFT SEMI
     | RIGHT OUTER?
     | FULL OUTER?
+    ;
+
+joinCriteria
+    : ON booleanExpression
+    | USING '(' identifier (',' identifier)* ')'
     ;
 
 sampledRelation

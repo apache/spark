@@ -22,7 +22,6 @@ import org.antlr.v4.runtime.misc.Interval
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.ng.{AbstractSqlParser, AstBuilder}
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
@@ -158,7 +157,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         logWarning("DESCRIBE PARTITIONING option is ignored.")
       }
       datasources.DescribeCommand(
-        UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier), None),
+        visitTableIdentifier(ctx.tableIdentifier),
         ctx.EXTENDED != null)
     }
   }

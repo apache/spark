@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -517,19 +517,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case jt if jt.RIGHT != null => RightOuter
       case _ => Inner
     }
-    val joinType = if (ctx.NATURAL != null) {
-      NaturalJoin(baseJoinType)
-    } else {
-      baseJoinType
+
+    // Resolve the join type and join condition
+    val (joinType, condition) = Option(ctx.joinCriteria) match {
+      case Some(c) if c.USING != null =>
+        val columns = c.identifier.asScala.map { column =>
+          UnresolvedAttribute.quoted(column.getText)
+        }
+        (UsingJoin(baseJoinType, columns), None)
+      case Some(c) if c.booleanExpression != null =>
+        (baseJoinType, Option(expression(c.booleanExpression)))
+      case None if ctx.NATURAL != null =>
+        (NaturalJoin(baseJoinType), None)
+      case None =>
+        (baseJoinType, None)
     }
 
+    // Resolve the query sides.
     val left = plan(ctx.left)
     val right = if (ctx.right != null) {
       plan(ctx.right)
     } else {
       plan(ctx.rightRelation)
     }
-    Join(left, right, joinType, Option(ctx.booleanExpression).map(expression))
+    Join(left, right, joinType, condition)
   }
 
   /**
@@ -1087,6 +1098,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    *    ELSE [expression]
    *   END
    * }}}
+   *
    * @param ctx the parse tree
    *    */
   override def visitSearchedCase(ctx: SearchedCaseContext): Expression = withOrigin(ctx) {
