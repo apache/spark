@@ -575,7 +575,7 @@ object Limit {
       limitExpr: Expression,
       child: LogicalPlan,
       hasPushDowned: Boolean = false): UnaryNode = {
-    GlobalLimit(limitExpr, LocalLimit(limitExpr, child))
+    GlobalLimit(limitExpr, LocalLimit(limitExpr, child, hasPushDowned))
   }
 
   def unapply(p: GlobalLimit): Option[(Expression, LogicalPlan, Boolean)] = {
