@@ -76,6 +76,7 @@ private[ml] object RandomForest extends Logging {
     timer.start("findSplitsBins")
     val splits = findSplits(retaggedInput, metadata, seed)
     timer.stop("findSplitsBins")
+    println(timer)
     logDebug("numBins: feature: number of bins")
     logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
       s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
@@ -479,8 +480,8 @@ private[ml] object RandomForest extends Logging {
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
         val nodeStatsAggregators = Array.tabulate(numNodes) { nodeIndex =>
-          val featuresForNode = nodeToFeaturesBc.value.flatMap { nodeToFeatures =>
-            Some(nodeToFeatures(nodeIndex))
+          val featuresForNode = nodeToFeaturesBc.value.map { nodeToFeatures =>
+            nodeToFeatures(nodeIndex)
           }
           new DTStatsAggregator(metadata, featuresForNode)
         }
@@ -855,7 +856,7 @@ private[ml] object RandomForest extends Logging {
       metadata: DecisionTreeMetadata,
       continuousFeatures: IndexedSeq[Int]): Array[Array[Split]] = {
 
-    val continuousSplits = {
+    val continuousSplits: scala.collection.Map[Int, Array[Split]] = {
       // reduce the parallelism for split computations when there are less
       // continuous features than input partitions. this prevents tasks from
       // being spun up that will definitely do no work.
@@ -873,7 +874,7 @@ private[ml] object RandomForest extends Logging {
     }
 
     val numFeatures = metadata.numFeatures
-    val splits = Array.tabulate(numFeatures) {
+    val splits: Array[Array[Split]] = Array.tabulate(numFeatures) {
       case i if metadata.isContinuous(i) =>
         val split = continuousSplits(i)
         metadata.setNumSplits(i, split.length)
