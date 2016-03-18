@@ -27,10 +27,9 @@ import scala.util.control.NonFatal
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.compress.Lz4Codec
 
-import org.apache.spark.io.{CompressionCodec, LZ4CompressionCodec}
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.serializer.{DeserializationStream, KryoSerializer, SerializationStream}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
