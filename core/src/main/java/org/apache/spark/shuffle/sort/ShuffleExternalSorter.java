@@ -96,7 +96,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   @Nullable private MemoryBlock currentPage = null;
   private long pageCursor = -1;
 
-  public ShuffleExternalSorter(
+  ShuffleExternalSorter(
       TaskMemoryManager memoryManager,
       BlockManager blockManager,
       TaskContext taskContext,
