@@ -171,11 +171,8 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
 
   override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 
-  private val gapSampling: GapSampling = if (fraction > 0.0 && fraction < 1.0) {
+  private lazy val gapSampling: GapSampling =
     new GapSampling(fraction, rng, RandomSampler.rngEpsilon)
-  } else {
-    null
-  }
 
   override def sample(): Int = {
     if (fraction <= 0.0) {
@@ -239,11 +236,8 @@ class PoissonSampler[T: ClassTag](
     rngGap.setSeed(seed)
   }
 
-  private val gapSamplingReplacement = if (fraction > 0.0) {
+  private lazy val gapSamplingReplacement =
     new GapSamplingReplacement(fraction, rngGap, RandomSampler.rngEpsilon)
-  } else {
-    null
-  }
 
   override def sample(): Int = {
     if (fraction <= 0.0) {
