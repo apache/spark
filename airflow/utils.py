@@ -213,7 +213,7 @@ def initdb():
         models.Connection(
             conn_id='metastore_default', conn_type='hive_metastore',
             host='localhost', extra="{\"authMechanism\": \"PLAIN\"}",
-            port=10001))
+            port=9083))
     merge_conn(
         models.Connection(
             conn_id='mysql_default', conn_type='mysql',

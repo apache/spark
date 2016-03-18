@@ -22,12 +22,6 @@ import re
 import subprocess
 from tempfile import NamedTemporaryFile
 
-
-from thrift.transport import TSocket, TTransport
-from thrift.protocol import TBinaryProtocol
-from hive_service import ThriftHive
-import impala
-
 from airflow.utils import AirflowException
 from airflow.hooks.base_hook import BaseHook
 from airflow.utils import TemporaryDirectory
@@ -270,6 +264,9 @@ class HiveMetastoreHook(BaseHook):
         self.__dict__['metastore'] = self.get_metastore_client()
 
     def get_metastore_client(self):
+        from thrift.transport import TSocket, TTransport
+        from thrift.protocol import TBinaryProtocol
+        from hive_service import ThriftHive
         '''
         Returns a Hive thrift client.
         '''
@@ -277,6 +274,7 @@ class HiveMetastoreHook(BaseHook):
         transport = TSocket.TSocket(ms.host, ms.port)
         transport = TTransport.TBufferedTransport(transport)
         protocol = TBinaryProtocol.TBinaryProtocol(transport)
+
         return ThriftHive.Client(protocol)
 
     def get_conn(self):
@@ -476,17 +474,20 @@ class HiveServer2Hook(BaseHook):
             with conn.cursor() as cur:
                 logging.info("Running query: " + hql)
                 cur.execute(hql)
-                schema = cur.getSchema()
+                schema = cur.description
                 with open(csv_filepath, 'w') as f:
                     writer = csv.writer(f, delimiter=delimiter,
                         lineterminator=lineterminator)
                     if output_header:
                         writer.writerow([c['columnName']
-                            for c in cur.getSchema()])
+                            for c in cur.description])
                     i = 0
-                    while cur.hasMoreRows:
+                    while True:
                         rows = [row for row in cur.fetchmany() if row]
-                        writer.writerows(rows)
+                        if not rows:
+                            break
+
+                        writer.writerows(row)
                         i += len(rows)
                         logging.info("Written {0} rows so far.".format(i))
                     logging.info("Done. Loaded a total of {0} rows.".format(i))

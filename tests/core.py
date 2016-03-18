@@ -32,6 +32,8 @@ from airflow.utils import AirflowException
 from airflow.configuration import AirflowConfigException
 from airflow.minihivecluster import MiniHiveCluster
 
+import six
+
 NUM_EXAMPLE_DAGS = 13
 DEV_NULL = '/dev/null'
 DEFAULT_DATE = datetime(2015, 1, 1)
@@ -1392,6 +1394,12 @@ class HiveServer2Test(unittest.TestCase):
         sql = "select 1"
         hook = HiveServer2Hook()
         hook.get_records(sql)
+
+    def test_create(selfself):
+        if six.PY2:
+            from airflow.hooks.hive_hooks import HiveMetastoreHook
+            hook = HiveMetastoreHook()
+            hook.get_databases()
 
 
 if 'MySqlOperator' in dir(operators):
