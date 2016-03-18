@@ -952,14 +952,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df1.showString(5) == df1.showString(5))
   }
 
-  test("SPARK-8609: local DataFrame with random columns should return same value after sort") {
-    checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
-
-    // We will reuse the same Expression object for LocalRelation.
-    val df = (1 to 10).map(Tuple1.apply).toDF()
-    checkAnswer(df.sort(rand(33)), df.sort(rand(33)))
-  }
-
   test("SPARK-9083: sort with non-deterministic expressions") {
     import org.apache.spark.util.random.XORShiftRandom
 
