@@ -25,10 +25,15 @@ import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.mllib.evaluation.MultilabelMetrics;
+<<<<<<< HEAD
+import org.apache.spark.SparkConf;
+// $example off$
+=======
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.SparkConf;
 // $example off$
 import org.apache.spark.SparkContext;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 public class JavaMultiLabelClassificationMetricsExample {
   public static void main(String[] args) {
@@ -57,12 +62,21 @@ public class JavaMultiLabelClassificationMetricsExample {
 
     // Stats by labels
     for (int i = 0; i < metrics.labels().length - 1; i++) {
+<<<<<<< HEAD
+      System.out.format("Class %1.1f precision = %f\n", metrics.labels()[i], metrics.precision(
+        metrics.labels()[i]));
+      System.out.format("Class %1.1f recall = %f\n", metrics.labels()[i], metrics.recall(
+        metrics.labels()[i]));
+      System.out.format("Class %1.1f F1 score = %f\n", metrics.labels()[i], metrics.f1Measure(
+        metrics.labels()[i]));
+=======
       System.out.format("Class %1.1f precision = %f\n", metrics.labels()[i], metrics.precision
         (metrics.labels()[i]));
       System.out.format("Class %1.1f recall = %f\n", metrics.labels()[i], metrics.recall(metrics
         .labels()[i]));
       System.out.format("Class %1.1f F1 score = %f\n", metrics.labels()[i], metrics.f1Measure
         (metrics.labels()[i]));
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
 
     // Micro stats
@@ -76,5 +90,10 @@ public class JavaMultiLabelClassificationMetricsExample {
     // Subset accuracy
     System.out.format("Subset accuracy = %f\n", metrics.subsetAccuracy());
     // $example off$
+<<<<<<< HEAD
+
+    sc.stop();
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

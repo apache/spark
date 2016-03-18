@@ -32,6 +32,20 @@ private object PostgresDialect extends JdbcDialect {
     if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
       Some(BinaryType)
     } else if (sqlType == Types.OTHER) {
+<<<<<<< HEAD
+      Some(StringType)
+    } else if (sqlType == Types.ARRAY) {
+      val scale = md.build.getLong("scale").toInt
+      // postgres array type names start with underscore
+      toCatalystType(typeName.drop(1), size, scale).map(ArrayType(_))
+    } else None
+  }
+
+  private def toCatalystType(
+      typeName: String,
+      precision: Int,
+      scale: Int): Option[DataType] = typeName match {
+=======
       toCatalystType(typeName).filter(_ == StringType)
     } else if (sqlType == Types.ARRAY && typeName.length > 1 && typeName(0) == '_') {
       toCatalystType(typeName.drop(1)).map(ArrayType(_))
@@ -40,6 +54,7 @@ private object PostgresDialect extends JdbcDialect {
 
   // TODO: support more type names.
   private def toCatalystType(typeName: String): Option[DataType] = typeName match {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     case "bool" => Some(BooleanType)
     case "bit" => Some(BinaryType)
     case "int2" => Some(ShortType)
@@ -52,7 +67,11 @@ private object PostgresDialect extends JdbcDialect {
     case "bytea" => Some(BinaryType)
     case "timestamp" | "timestamptz" | "time" | "timetz" => Some(TimestampType)
     case "date" => Some(DateType)
+<<<<<<< HEAD
+    case "numeric" | "decimal" => Some(DecimalType.bounded(precision, scale))
+=======
     case "numeric" => Some(DecimalType.SYSTEM_DEFAULT)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     case _ => None
   }
 
@@ -62,6 +81,11 @@ private object PostgresDialect extends JdbcDialect {
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
+<<<<<<< HEAD
+    case t: DecimalType => Some(
+      JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>
       getJDBCType(et).map(_.databaseTypeDefinition)
         .orElse(JdbcUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))

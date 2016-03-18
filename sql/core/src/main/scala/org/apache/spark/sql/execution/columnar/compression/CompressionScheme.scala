@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.{ByteBuffer, ByteOrder}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.execution.columnar.{ColumnType, NativeColumnType}

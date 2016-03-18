@@ -18,11 +18,15 @@
 package org.apache.spark.ui.scope
 
 import scala.collection.mutable
-import scala.collection.mutable.{StringBuilder, ListBuffer}
+import scala.collection.mutable.{ListBuffer, StringBuilder}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+<<<<<<< HEAD
+import org.apache.spark.internal.Logging
+=======
 import org.apache.spark.Logging
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 
@@ -131,7 +135,11 @@ private[ui] object RDDOperationGraph extends Logging {
           }
         }
         // Attach the outermost cluster to the root cluster, and the RDD to the innermost cluster
-        rddClusters.headOption.foreach { cluster => rootCluster.attachChildCluster(cluster) }
+        rddClusters.headOption.foreach { cluster =>
+          if (!rootCluster.childClusters.contains(cluster)) {
+            rootCluster.attachChildCluster(cluster)
+          }
+        }
         rddClusters.lastOption.foreach { cluster => cluster.attachChildNode(node) }
       }
     }

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -91,13 +91,19 @@ private[sql] case class AggregateExpression(
     AttributeSet(childReferences)
   }
 
+<<<<<<< HEAD
+  override def toString: String = s"($aggregateFunction,mode=$mode,isDistinct=$isDistinct)"
+
+  override def sql: String = aggregateFunction.sql(isDistinct)
+=======
   override def prettyString: String = aggregateFunction.prettyString
 
   override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
- * AggregateFunction2 is the superclass of two aggregation function interfaces:
+ * AggregateFunction is the superclass of two aggregation function interfaces:
  *
  *  - [[ImperativeAggregate]] is for aggregation functions that are specified in terms of
  *    initialize(), update(), and merge() functions that operate on Row-based aggregation buffers.
@@ -143,9 +149,12 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
    */
   def defaultResult: Option[Literal] = None
 
+<<<<<<< HEAD
+=======
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   /**
    * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] because
    * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
@@ -166,6 +175,14 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
     AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
   }
+<<<<<<< HEAD
+
+  def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"$prettyName($distinct${children.map(_.sql).mkString(", ")})"
+  }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
@@ -186,7 +203,11 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
  * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
  * and `inputAggBufferAttributes`.
  */
+<<<<<<< HEAD
+abstract class ImperativeAggregate extends AggregateFunction with CodegenFallback {
+=======
 abstract class ImperativeAggregate extends AggregateFunction {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * The offset of this function's first buffer value in the underlying shared mutable aggregation
@@ -195,7 +216,7 @@ abstract class ImperativeAggregate extends AggregateFunction {
    * For example, we have two aggregate functions `avg(x)` and `avg(y)`, which share the same
    * aggregation buffer. In this shared buffer, the position of the first buffer value of `avg(x)`
    * will be 0 and the position of the first buffer value of `avg(y)` will be 2:
-   *
+   * {{{
    *          avg(x) mutableAggBufferOffset = 0
    *                  |
    *                  v
@@ -205,7 +226,7 @@ abstract class ImperativeAggregate extends AggregateFunction {
    *                                    ^
    *                                    |
    *                     avg(y) mutableAggBufferOffset = 2
-   *
+   * }}}
    */
   protected val mutableAggBufferOffset: Int
 
@@ -228,7 +249,7 @@ abstract class ImperativeAggregate extends AggregateFunction {
    * `avg(x)` and `avg(y)`. In the shared input aggregation buffer, the position of the first
    * buffer value of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)`
    * will be 3 (position 0 is used for the value of `key`):
-   *
+   * {{{
    *          avg(x) inputAggBufferOffset = 1
    *                   |
    *                   v
@@ -238,7 +259,7 @@ abstract class ImperativeAggregate extends AggregateFunction {
    *                                     ^
    *                                     |
    *                       avg(y) inputAggBufferOffset = 3
-   *
+   * }}}
    */
   protected val inputAggBufferOffset: Int
 
@@ -339,4 +360,3 @@ abstract class DeclarativeAggregate
     def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
 }
-

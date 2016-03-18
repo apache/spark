@@ -19,13 +19,17 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.Properties
 
-import org.apache.spark.{SparkException, SparkContext, SparkConf, SparkFunSuite}
+import org.mockito.Mockito.{mock, when}
+
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.sql.execution.metric.LongSQLMetricValue
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.ui.SparkUI
 
 class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
@@ -67,9 +71,11 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   )
 
   private def createTaskMetrics(accumulatorUpdates: Map[Long, Long]): TaskMetrics = {
-    val metrics = new TaskMetrics
-    metrics.setAccumulatorsUpdater(() => accumulatorUpdates.mapValues(new LongSQLMetricValue(_)))
-    metrics.updateAccumulators()
+    val metrics = mock(classOf[TaskMetrics])
+    when(metrics.accumulatorUpdates()).thenReturn(accumulatorUpdates.map { case (id, update) =>
+      new AccumulableInfo(id, Some(""), Some(new LongSQLMetricValue(update)),
+        value = None, internal = true, countFailedValues = true)
+    }.toSeq)
     metrics
   }
 
@@ -82,7 +88,8 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val executionId = 0
     val df = createTestDataFrame
     val accumulatorIds =
-      SparkPlanGraph(df.queryExecution.executedPlan).nodes.flatMap(_.metrics.map(_.accumulatorId))
+      SparkPlanGraph(SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan))
+        .allNodes.flatMap(_.metrics.map(_.accumulatorId))
     // Assume all accumulators are long
     var accumulatorValue = 0L
     val accumulatorUpdates = accumulatorIds.map { id =>
@@ -90,13 +97,13 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       (id, accumulatorValue)
     }.toMap
 
-    listener.onExecutionStart(
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
       "test",
       "test",
       df.queryExecution.toString,
-      SparkPlanGraph(df.queryExecution.executedPlan),
-      System.currentTimeMillis())
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
 
     val executionUIData = listener.executionIdToData(0)
 
@@ -113,17 +120,17 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     assert(listener.getExecutionMetrics(0).isEmpty)
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
-      // (task id, stage id, stage attempt, metrics)
-      (0L, 0, 0, createTaskMetrics(accumulatorUpdates)),
-      (1L, 0, 0, createTaskMetrics(accumulatorUpdates))
+      // (task id, stage id, stage attempt, accum updates)
+      (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates()),
+      (1L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates())
     )))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
-      // (task id, stage id, stage attempt, metrics)
-      (0L, 0, 0, createTaskMetrics(accumulatorUpdates)),
-      (1L, 0, 0, createTaskMetrics(accumulatorUpdates.mapValues(_ * 2)))
+      // (task id, stage id, stage attempt, accum updates)
+      (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates()),
+      (1L, 0, 0, createTaskMetrics(accumulatorUpdates.mapValues(_ * 2)).accumulatorUpdates())
     )))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 3))
@@ -132,9 +139,9 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 1)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
-      // (task id, stage id, stage attempt, metrics)
-      (0L, 0, 1, createTaskMetrics(accumulatorUpdates)),
-      (1L, 0, 1, createTaskMetrics(accumulatorUpdates))
+      // (task id, stage id, stage attempt, accum updates)
+      (0L, 0, 1, createTaskMetrics(accumulatorUpdates).accumulatorUpdates()),
+      (1L, 0, 1, createTaskMetrics(accumulatorUpdates).accumulatorUpdates())
     )))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
@@ -172,9 +179,9 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
-      // (task id, stage id, stage attempt, metrics)
-      (0L, 1, 0, createTaskMetrics(accumulatorUpdates)),
-      (1L, 1, 0, createTaskMetrics(accumulatorUpdates))
+      // (task id, stage id, stage attempt, accum updates)
+      (0L, 1, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates()),
+      (1L, 1, 0, createTaskMetrics(accumulatorUpdates).accumulatorUpdates())
     )))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 7))
@@ -206,7 +213,8 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       time = System.currentTimeMillis(),
       JobSucceeded
     ))
-    listener.onExecutionEnd(executionId, System.currentTimeMillis())
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
 
     assert(executionUIData.runningJobs.isEmpty)
     assert(executionUIData.succeededJobs === Seq(0))
@@ -219,19 +227,20 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val listener = new SQLListener(sqlContext.sparkContext.conf)
     val executionId = 0
     val df = createTestDataFrame
-    listener.onExecutionStart(
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
       "test",
       "test",
       df.queryExecution.toString,
-      SparkPlanGraph(df.queryExecution.executedPlan),
-      System.currentTimeMillis())
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
       stageInfos = Nil,
       createProperties(executionId)))
-    listener.onExecutionEnd(executionId, System.currentTimeMillis())
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
     listener.onJobEnd(SparkListenerJobEnd(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -248,13 +257,13 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val listener = new SQLListener(sqlContext.sparkContext.conf)
     val executionId = 0
     val df = createTestDataFrame
-    listener.onExecutionStart(
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
       "test",
       "test",
       df.queryExecution.toString,
-      SparkPlanGraph(df.queryExecution.executedPlan),
-      System.currentTimeMillis())
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -271,7 +280,8 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       time = System.currentTimeMillis(),
       stageInfos = Nil,
       createProperties(executionId)))
-    listener.onExecutionEnd(executionId, System.currentTimeMillis())
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
     listener.onJobEnd(SparkListenerJobEnd(
       jobId = 1,
       time = System.currentTimeMillis(),
@@ -288,19 +298,20 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val listener = new SQLListener(sqlContext.sparkContext.conf)
     val executionId = 0
     val df = createTestDataFrame
-    listener.onExecutionStart(
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
       "test",
       "test",
       df.queryExecution.toString,
-      SparkPlanGraph(df.queryExecution.executedPlan),
-      System.currentTimeMillis())
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
       stageInfos = Seq.empty,
       createProperties(executionId)))
-    listener.onExecutionEnd(executionId, System.currentTimeMillis())
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
     listener.onJobEnd(SparkListenerJobEnd(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -326,43 +337,81 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     assert(sqlContext.listener.stageIdToStageMetrics.size == previousStageNumber + 1)
   }
 
+  test("SPARK-13055: history listener only tracks SQL metrics") {
+    val listener = new SQLHistoryListener(sparkContext.conf, mock(classOf[SparkUI]))
+    // We need to post other events for the listener to track our accumulators.
+    // These are largely just boilerplate unrelated to what we're trying to test.
+    val df = createTestDataFrame
+    val executionStart = SparkListenerSQLExecutionStart(
+      0, "", "", "", SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan), 0)
+    val stageInfo = createStageInfo(0, 0)
+    val jobStart = SparkListenerJobStart(0, 0, Seq(stageInfo), createProperties(0))
+    val stageSubmitted = SparkListenerStageSubmitted(stageInfo)
+    // This task has both accumulators that are SQL metrics and accumulators that are not.
+    // The listener should only track the ones that are actually SQL metrics.
+    val sqlMetric = SQLMetrics.createLongMetric(sparkContext, "beach umbrella")
+    val nonSqlMetric = sparkContext.accumulator[Int](0, "baseball")
+    val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.localValue), None)
+    val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.localValue), None)
+    val taskInfo = createTaskInfo(0, 0)
+    taskInfo.accumulables ++= Seq(sqlMetricInfo, nonSqlMetricInfo)
+    val taskEnd = SparkListenerTaskEnd(0, 0, "just-a-task", null, taskInfo, null)
+    listener.onOtherEvent(executionStart)
+    listener.onJobStart(jobStart)
+    listener.onStageSubmitted(stageSubmitted)
+    // Before SPARK-13055, this throws ClassCastException because the history listener would
+    // assume that the accumulator value is of type Long, but this may not be true for
+    // accumulators that are not SQL metrics.
+    listener.onTaskEnd(taskEnd)
+    val trackedAccums = listener.stageIdToStageMetrics.values.flatMap { stageMetrics =>
+      stageMetrics.taskIdToMetricUpdates.values.flatMap(_.accumulatorUpdates)
+    }
+    // Listener tracks only SQL metrics, not other accumulators
+    assert(trackedAccums.size === 1)
+    assert(trackedAccums.head === sqlMetricInfo)
+  }
+
 }
+
 
 class SQLListenerMemoryLeakSuite extends SparkFunSuite {
 
   test("no memory leak") {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test")
-      .set("spark.task.maxFailures", "1") // Don't retry the tasks to run this test quickly
-      .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
-    val sc = new SparkContext(conf)
-    try {
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
-      // Run 100 successful executions and 100 failed executions.
-      // Each execution only has one job and one stage.
-      for (i <- 0 until 100) {
-        val df = Seq(
-          (1, 1),
-          (2, 2)
-        ).toDF()
-        df.collect()
-        try {
-          df.foreach(_ => throw new RuntimeException("Oops"))
-        } catch {
-          case e: SparkException => // This is expected for a failed job
+    quietly {
+      val conf = new SparkConf()
+        .setMaster("local")
+        .setAppName("test")
+        .set("spark.task.maxFailures", "1") // Don't retry the tasks to run this test quickly
+        .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
+      val sc = new SparkContext(conf)
+      try {
+        SQLContext.clearSqlListener()
+        val sqlContext = new SQLContext(sc)
+        import sqlContext.implicits._
+        // Run 100 successful executions and 100 failed executions.
+        // Each execution only has one job and one stage.
+        for (i <- 0 until 100) {
+          val df = Seq(
+            (1, 1),
+            (2, 2)
+          ).toDF()
+          df.collect()
+          try {
+            df.foreach(_ => throw new RuntimeException("Oops"))
+          } catch {
+            case e: SparkException => // This is expected for a failed job
+          }
         }
+        sc.listenerBus.waitUntilEmpty(10000)
+        assert(sqlContext.listener.getCompletedExecutions.size <= 50)
+        assert(sqlContext.listener.getFailedExecutions.size <= 50)
+        // 50 for successful executions and 50 for failed executions
+        assert(sqlContext.listener.executionIdToData.size <= 100)
+        assert(sqlContext.listener.jobIdToExecutionId.size <= 100)
+        assert(sqlContext.listener.stageIdToStageMetrics.size <= 100)
+      } finally {
+        sc.stop()
       }
-      sc.listenerBus.waitUntilEmpty(10000)
-      assert(sqlContext.listener.getCompletedExecutions.size <= 50)
-      assert(sqlContext.listener.getFailedExecutions.size <= 50)
-      // 50 for successful executions and 50 for failed executions
-      assert(sqlContext.listener.executionIdToData.size <= 100)
-      assert(sqlContext.listener.jobIdToExecutionId.size <= 100)
-      assert(sqlContext.listener.stageIdToStageMetrics.size <= 100)
-    } finally {
-      sc.stop()
     }
   }
 }

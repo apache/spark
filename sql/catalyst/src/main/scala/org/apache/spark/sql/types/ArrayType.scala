@@ -22,7 +22,11 @@ import scala.math.Ordering
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.DeveloperApi
+<<<<<<< HEAD
+import org.apache.spark.sql.catalyst.util.ArrayData
+=======
 import org.apache.spark.sql.catalyst.util.{ArrayData => _}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 object ArrayType extends AbstractDataType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
@@ -76,6 +80,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   override def defaultSize: Int = 100 * elementType.defaultSize
 
   override def simpleString: String = s"array<${elementType.simpleString}>"
+
+  override def sql: String = s"ARRAY<${elementType.sql}>"
 
   override private[spark] def asNullable: ArrayType =
     ArrayType(elementType.asNullable, containsNull = true)

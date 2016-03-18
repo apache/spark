@@ -18,15 +18,17 @@ package org.apache.spark.deploy.yarn
 
 import java.util.concurrent.{Executors, TimeUnit}
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
-
-import scala.util.control.NonFatal
 
 private[spark] class ExecutorDelegationTokenUpdater(
     sparkConf: SparkConf,
@@ -34,7 +36,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
 
   @volatile private var lastCredentialsFileSuffix = 0
 
-  private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
+  private val credentialsFile = sparkConf.get(CREDENTIALS_FILE_PATH)
   private val freshHadoopConf =
     SparkHadoopUtil.get.getConfBypassingFSCache(
       hadoopConf, new Path(credentialsFile).toUri.getScheme)

@@ -17,7 +17,6 @@
 
 package org.apache.spark.shuffle
 
-import java.nio.ByteBuffer
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.storage.ShuffleBlockId
 

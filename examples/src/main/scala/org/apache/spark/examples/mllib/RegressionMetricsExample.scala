@@ -18,6 +18,18 @@
 
 package org.apache.spark.examples.mllib
 
+<<<<<<< HEAD
+import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
+import org.apache.spark.mllib.evaluation.RegressionMetrics
+import org.apache.spark.mllib.regression.LinearRegressionWithSGD
+import org.apache.spark.mllib.util.MLUtils
+// $example off$
+import org.apache.spark.sql.SQLContext
+
+object RegressionMetricsExample {
+  def main(args: Array[String]): Unit = {
+=======
 // $example on$
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.evaluation.RegressionMetrics
@@ -28,6 +40,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object RegressionMetricsExample {
   def main(args: Array[String]) : Unit = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val conf = new SparkConf().setAppName("RegressionMetricsExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)

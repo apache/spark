@@ -17,13 +17,19 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.storage.BlockManagerId
+import scala.util.Random
+
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
+<<<<<<< HEAD
+import org.apache.spark.storage.BlockManagerId
+=======
 import org.roaringbitmap.RoaringBitmap
 
 import scala.util.Random
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 class MapStatusSuite extends SparkFunSuite {
 
@@ -79,7 +85,7 @@ class MapStatusSuite extends SparkFunSuite {
 
   test("HighlyCompressedMapStatus: estimated size should be the average non-empty block size") {
     val sizes = Array.tabulate[Long](3000) { i => i.toLong }
-    val avg = sizes.sum / sizes.filter(_ != 0).length
+    val avg = sizes.sum / sizes.count(_ != 0)
     val loc = BlockManagerId("a", "b", 10)
     val status = MapStatus(loc, sizes)
     val status1 = compressAndDecompressMapStatus(status)

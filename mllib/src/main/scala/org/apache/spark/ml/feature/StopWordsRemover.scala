@@ -17,14 +17,18 @@
 
 package org.apache.spark.ml.feature
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.{Experimental, Since}
+=======
 import org.apache.spark.annotation.{Since, Experimental}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
 /**
  * stop words list

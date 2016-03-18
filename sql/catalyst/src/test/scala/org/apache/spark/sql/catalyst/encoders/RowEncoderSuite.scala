@@ -21,9 +21,59 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
+<<<<<<< HEAD
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+=======
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+
+@SQLUserDefinedType(udt = classOf[ExamplePointUDT])
+class ExamplePoint(val x: Double, val y: Double) extends Serializable {
+  override def hashCode: Int = 41 * (41 + x.toInt) + y.toInt
+  override def equals(that: Any): Boolean = {
+    if (that.isInstanceOf[ExamplePoint]) {
+      val e = that.asInstanceOf[ExamplePoint]
+      (this.x == e.x || (this.x.isNaN && e.x.isNaN) || (this.x.isInfinity && e.x.isInfinity)) &&
+        (this.y == e.y || (this.y.isNaN && e.y.isNaN) || (this.y.isInfinity && e.y.isInfinity))
+    } else {
+      false
+    }
+  }
+}
+
+/**
+ * User-defined type for [[ExamplePoint]].
+ */
+class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
+
+  override def sqlType: DataType = ArrayType(DoubleType, false)
+
+  override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
+
+  override def serialize(p: ExamplePoint): GenericArrayData = {
+    val output = new Array[Any](2)
+    output(0) = p.x
+    output(1) = p.y
+    new GenericArrayData(output)
+  }
+
+  override def deserialize(datum: Any): ExamplePoint = {
+    datum match {
+      case values: ArrayData =>
+        if (values.numElements() > 1) {
+          new ExamplePoint(values.getDouble(0), values.getDouble(1))
+        } else {
+          val random = new Random()
+          new ExamplePoint(random.nextDouble(), random.nextDouble())
+        }
+    }
+  }
+
+  override def userClass: Class[ExamplePoint] = classOf[ExamplePoint]
+
+  private[spark] override def asNullable: ExamplePointUDT = this
+}
 
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
 class ExamplePoint(val x: Double, val y: Double) extends Serializable {
@@ -99,7 +149,11 @@ class RowEncoderSuite extends SparkFunSuite {
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
+<<<<<<< HEAD
+      .add("udt", new ExamplePointUDT))
+=======
       .add("udt", new ExamplePointUDT, false))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   encodeDecodeTest(
     new StructType()

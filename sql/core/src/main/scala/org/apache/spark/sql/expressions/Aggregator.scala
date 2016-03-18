@@ -17,10 +17,17 @@
 
 package org.apache.spark.sql.expressions
 
+<<<<<<< HEAD
+import org.apache.spark.sql.{DataFrame, Dataset, Encoder, TypedColumn}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+=======
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, TypedColumn}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * A base class for user-defined aggregations, which can be used in [[DataFrame]] and [[Dataset]]
@@ -46,7 +53,10 @@ import org.apache.spark.sql.{DataFrame, Dataset, Encoder, TypedColumn}
  * @tparam I The input type for the aggregation.
  * @tparam B The type of the intermediate value of the reduction.
  * @tparam O The type of the final output result.
+<<<<<<< HEAD
+=======
  *
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
  * @since 1.6.0
  */
 abstract class Aggregator[-I, B, O] extends Serializable {

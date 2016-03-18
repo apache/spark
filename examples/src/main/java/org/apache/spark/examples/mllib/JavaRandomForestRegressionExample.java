@@ -51,7 +51,11 @@ public class JavaRandomForestRegressionExample {
 
     // Set parameters.
     // Empty categoricalFeaturesInfo indicates all features are continuous.
+<<<<<<< HEAD
+    Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
+=======
     Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     Integer numTrees = 3; // Use more in practice.
     String featureSubsetStrategy = "auto"; // Let the algorithm choose.
     String impurity = "variance";
@@ -67,7 +71,11 @@ public class JavaRandomForestRegressionExample {
       testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
         @Override
         public Tuple2<Double, Double> call(LabeledPoint p) {
+<<<<<<< HEAD
+          return new Tuple2<>(model.predict(p.features()), p.label());
+=======
           return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         }
       });
     Double testMSE =
@@ -91,5 +99,10 @@ public class JavaRandomForestRegressionExample {
     RandomForestModel sameModel = RandomForestModel.load(jsc.sc(),
       "target/tmp/myRandomForestRegressionModel");
     // $example off$
+<<<<<<< HEAD
+
+    jsc.stop();
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

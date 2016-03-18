@@ -18,11 +18,19 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+<<<<<<< HEAD
+import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
+import org.apache.spark.ml.feature.{IndexToString, StringIndexer}
+// $example off$
+import org.apache.spark.sql.SQLContext
+=======
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.{StringIndexer, IndexToString}
 // $example off$
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 object IndexToStringExample {
   def main(args: Array[String]) {

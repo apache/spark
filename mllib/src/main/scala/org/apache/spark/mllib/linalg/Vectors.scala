@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.linalg
 
-import java.util
 import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
+import java.util
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
@@ -26,7 +26,11 @@ import scala.collection.JavaConverters._
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
+<<<<<<< HEAD
+import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
+=======
 import org.json4s.jackson.JsonMethods.{compact, render, parse => parseJson}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{AlphaComponent, Since}
@@ -203,7 +207,7 @@ class VectorUDT extends UserDefinedType[Vector] {
       StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
   }
 
-  override def serialize(obj: Any): InternalRow = {
+  override def serialize(obj: Vector): InternalRow = {
     obj match {
       case SparseVector(size, indices, values) =>
         val row = new GenericMutableRow(4)

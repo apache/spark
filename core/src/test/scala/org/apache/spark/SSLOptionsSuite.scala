@@ -20,8 +20,6 @@ package org.apache.spark
 import java.io.File
 import javax.net.ssl.SSLContext
 
-import com.google.common.io.Files
-import org.apache.spark.util.Utils
 import org.scalatest.BeforeAndAfterAll
 
 class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {

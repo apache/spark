@@ -18,8 +18,13 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
+<<<<<<< HEAD
+import java.util.{Iterator => JIterator}
+import java.util.concurrent.LinkedBlockingQueue
+=======
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.{Iterator => JIterator}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -27,7 +32,13 @@ import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
+<<<<<<< HEAD
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
+=======
 import org.apache.spark.{Logging, SparkConf}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.util.Utils
 
 /**
@@ -199,6 +210,12 @@ private[util] object BatchedWriteAheadLog {
    */
   case class Record(data: ByteBuffer, time: Long, promise: Promise[WriteAheadLogRecordHandle])
 
+<<<<<<< HEAD
+  /** Aggregate multiple serialized ReceivedBlockTrackerLogEvents in a single ByteBuffer. */
+  def aggregate(records: Seq[Record]): ByteBuffer = {
+    ByteBuffer.wrap(Utils.serialize[Array[Array[Byte]]](
+      records.map(record => JavaUtils.bufferToArray(record.data)).toArray))
+=======
   /** Copies the byte array of a ByteBuffer. */
   private def getByteArray(buffer: ByteBuffer): Array[Byte] = {
     val byteArray = new Array[Byte](buffer.remaining())
@@ -210,6 +227,7 @@ private[util] object BatchedWriteAheadLog {
   def aggregate(records: Seq[Record]): ByteBuffer = {
     ByteBuffer.wrap(Utils.serialize[Array[Array[Byte]]](
       records.map(record => getByteArray(record.data)).toArray))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**
@@ -218,10 +236,20 @@ private[util] object BatchedWriteAheadLog {
    * method therefore needs to be backwards compatible.
    */
   def deaggregate(buffer: ByteBuffer): Array[ByteBuffer] = {
+<<<<<<< HEAD
+    val prevPosition = buffer.position()
+    try {
+      Utils.deserialize[Array[Array[Byte]]](JavaUtils.bufferToArray(buffer)).map(ByteBuffer.wrap)
+    } catch {
+      case _: ClassCastException => // users may restart a stream with batching enabled
+        // Restore `position` so that the user can read `buffer` later
+        buffer.position(prevPosition)
+=======
     try {
       Utils.deserialize[Array[Array[Byte]]](getByteArray(buffer)).map(ByteBuffer.wrap)
     } catch {
       case _: ClassCastException => // users may restart a stream with batching enabled
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         Array(buffer)
     }
   }

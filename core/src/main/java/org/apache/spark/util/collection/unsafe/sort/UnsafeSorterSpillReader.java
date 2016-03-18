@@ -38,6 +38,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   // Variables that change with every record read:
   private int recordLength;
   private long keyPrefix;
+  private int numRecords;
   private int numRecordsRemaining;
 
   private byte[] arr = new byte[1024 * 1024];
@@ -53,11 +54,23 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     try {
       this.in = blockManager.wrapForCompression(blockId, bs);
       this.din = new DataInputStream(this.in);
+<<<<<<< HEAD
+      numRecords = numRecordsRemaining = din.readInt();
+=======
       numRecordsRemaining = din.readInt();
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     } catch (IOException e) {
       Closeables.close(bs, /* swallowIOException = */ true);
       throw e;
     }
+<<<<<<< HEAD
+  }
+
+  @Override
+  public int getNumRecords() {
+    return numRecords;
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   @Override

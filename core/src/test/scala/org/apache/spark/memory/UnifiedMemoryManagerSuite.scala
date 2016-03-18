@@ -20,7 +20,12 @@ package org.apache.spark.memory
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkConf
+<<<<<<< HEAD
+import org.apache.spark.storage.TestBlockId
+import org.apache.spark.storage.memory.MemoryStore
+=======
 import org.apache.spark.storage.{MemoryStore, TestBlockId}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
   private val dummyBlock = TestBlockId("--")
@@ -74,6 +79,21 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val maxMemory = 1000L
     val (mm, ms) = makeThings(maxMemory)
     assert(mm.storageMemoryUsed === 0L)
+<<<<<<< HEAD
+    assert(mm.acquireStorageMemory(dummyBlock, 10L))
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
+    assert(mm.storageMemoryUsed === 10L)
+
+    assert(mm.acquireStorageMemory(dummyBlock, 100L))
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
+    assert(mm.storageMemoryUsed === 110L)
+    // Acquire more than the max, not granted
+    assert(!mm.acquireStorageMemory(dummyBlock, maxMemory + 1L))
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
+    assert(mm.storageMemoryUsed === 110L)
+    // Acquire up to the max, requests after this are still granted due to LRU eviction
+    assert(mm.acquireStorageMemory(dummyBlock, maxMemory))
+=======
     assert(mm.acquireStorageMemory(dummyBlock, 10L, evictedBlocks))
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 10L)
@@ -87,11 +107,16 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.storageMemoryUsed === 110L)
     // Acquire up to the max, requests after this are still granted due to LRU eviction
     assert(mm.acquireStorageMemory(dummyBlock, maxMemory, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assertEvictBlocksToFreeSpaceCalled(ms, 110L)
     assert(mm.storageMemoryUsed === 1000L)
     assert(evictedBlocks.nonEmpty)
     evictedBlocks.clear()
+<<<<<<< HEAD
+    assert(mm.acquireStorageMemory(dummyBlock, 1L))
+=======
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assertEvictBlocksToFreeSpaceCalled(ms, 1L)
     assert(evictedBlocks.nonEmpty)
     evictedBlocks.clear()
@@ -102,12 +127,20 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     mm.releaseStorageMemory(800L)
     assert(mm.storageMemoryUsed === 200L)
     // Acquire after release
+<<<<<<< HEAD
+    assert(mm.acquireStorageMemory(dummyBlock, 1L))
+=======
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 201L)
     mm.releaseAllStorageMemory()
     assert(mm.storageMemoryUsed === 0L)
+<<<<<<< HEAD
+    assert(mm.acquireStorageMemory(dummyBlock, 1L))
+=======
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 1L)
     // Release beyond what was acquired
@@ -120,7 +153,11 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val taskAttemptId = 0L
     val (mm, ms) = makeThings(maxMemory)
     // Acquire enough storage memory to exceed the storage region
+<<<<<<< HEAD
+    assert(mm.acquireStorageMemory(dummyBlock, 750L))
+=======
     assert(mm.acquireStorageMemory(dummyBlock, 750L, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.executionMemoryUsed === 0L)
     assert(mm.storageMemoryUsed === 750L)
@@ -140,7 +177,11 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     require(mm.executionMemoryUsed === 300L)
     require(mm.storageMemoryUsed === 0, "bad test: all storage memory should have been released")
     // Acquire some storage memory again, but this time keep it within the storage region
+<<<<<<< HEAD
+    assert(mm.acquireStorageMemory(dummyBlock, 400L))
+=======
     assert(mm.acquireStorageMemory(dummyBlock, 400L, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 400L)
     assert(mm.executionMemoryUsed === 300L)
@@ -157,7 +198,11 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val taskAttemptId = 0L
     val (mm, ms) = makeThings(maxMemory)
     // Acquire enough storage memory to exceed the storage region size
+<<<<<<< HEAD
+    assert(mm.acquireStorageMemory(dummyBlock, 700L))
+=======
     assert(mm.acquireStorageMemory(dummyBlock, 700L, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.executionMemoryUsed === 0L)
     assert(mm.storageMemoryUsed === 700L)
@@ -182,11 +227,15 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.storageMemoryUsed === 0L)
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     // Storage should not be able to evict execution
-    assert(mm.acquireStorageMemory(dummyBlock, 100L, evictedBlocks))
+    assert(mm.acquireStorageMemory(dummyBlock, 100L))
     assert(mm.executionMemoryUsed === 800L)
     assert(mm.storageMemoryUsed === 100L)
     assertEvictBlocksToFreeSpaceNotCalled(ms)
+<<<<<<< HEAD
+    assert(!mm.acquireStorageMemory(dummyBlock, 250L))
+=======
     assert(!mm.acquireStorageMemory(dummyBlock, 250L, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assert(mm.executionMemoryUsed === 800L)
     assert(mm.storageMemoryUsed === 100L)
     // Do not attempt to evict blocks, since evicting will not free enough memory:
@@ -199,11 +248,15 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.storageMemoryUsed === 0L)
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     // Storage should still not be able to evict execution
-    assert(mm.acquireStorageMemory(dummyBlock, 750L, evictedBlocks))
+    assert(mm.acquireStorageMemory(dummyBlock, 750L))
     assert(mm.executionMemoryUsed === 200L)
     assert(mm.storageMemoryUsed === 750L)
     assertEvictBlocksToFreeSpaceNotCalled(ms) // since there were 800 bytes free
+<<<<<<< HEAD
+    assert(!mm.acquireStorageMemory(dummyBlock, 850L))
+=======
     assert(!mm.acquireStorageMemory(dummyBlock, 850L, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assert(mm.executionMemoryUsed === 200L)
     assert(mm.storageMemoryUsed === 750L)
     // Do not attempt to evict blocks, since evicting will not free enough memory:
@@ -227,7 +280,29 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val exception = intercept[IllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }
+<<<<<<< HEAD
+    assert(exception.getMessage.contains("increase heap size"))
+  }
+
+  test("insufficient executor memory") {
+    val systemMemory = 1024 * 1024
+    val reservedMemory = 300 * 1024
+    val memoryFraction = 0.8
+    val conf = new SparkConf()
+      .set("spark.memory.fraction", memoryFraction.toString)
+      .set("spark.testing.memory", systemMemory.toString)
+      .set("spark.testing.reservedMemory", reservedMemory.toString)
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+
+    // Try using an executor memory that's too small
+    val conf2 = conf.clone().set("spark.executor.memory", (reservedMemory / 2).toString)
+    val exception = intercept[IllegalArgumentException] {
+      UnifiedMemoryManager(conf2, numCores = 1)
+    }
+    assert(exception.getMessage.contains("increase executor memory"))
+=======
     assert(exception.getMessage.contains("larger heap size"))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   test("execution can evict cached blocks when there are multiple active tasks (SPARK-12155)") {
@@ -243,7 +318,11 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.acquireExecutionMemory(100L, 0, MemoryMode.ON_HEAP) === 100L)
     assert(mm.acquireExecutionMemory(100L, 1, MemoryMode.ON_HEAP) === 100L)
     // Fill up all of the remaining memory with storage.
+<<<<<<< HEAD
+    assert(mm.acquireStorageMemory(dummyBlock, 800L))
+=======
     assert(mm.acquireStorageMemory(dummyBlock, 800L, evictedBlocks))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 800)
     assert(mm.executionMemoryUsed === 200)

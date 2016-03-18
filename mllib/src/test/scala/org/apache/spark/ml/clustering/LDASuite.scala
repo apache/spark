@@ -52,7 +52,12 @@ object LDASuite {
     "checkpointInterval" -> 30,
     "learningOffset" -> 1023.0,
     "learningDecay" -> 0.52,
+<<<<<<< HEAD
+    "subsamplingRate" -> 0.051,
+    "docConcentration" -> Array(2.0)
+=======
     "subsamplingRate" -> 0.051
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   )
 }
 
@@ -137,6 +142,20 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       new LDA().setTopicConcentration(-1.1)
     }
 
+<<<<<<< HEAD
+    val dummyDF = sqlContext.createDataFrame(Seq(
+      (1, Vectors.dense(1.0, 2.0)))).toDF("id", "features")
+    // validate parameters
+    lda.transformSchema(dummyDF.schema)
+    lda.setDocConcentration(1.1)
+    lda.transformSchema(dummyDF.schema)
+    lda.setDocConcentration(Range(0, lda.getK).map(_ + 2.0).toArray)
+    lda.transformSchema(dummyDF.schema)
+    lda.setDocConcentration(Range(0, lda.getK - 1).map(_ + 2.0).toArray)
+    withClue("LDA docConcentration validity check failed for bad array length") {
+      intercept[IllegalArgumentException] {
+        lda.transformSchema(dummyDF.schema)
+=======
     // validateParams()
     lda.validateParams()
     lda.setDocConcentration(1.1)
@@ -147,6 +166,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     withClue("LDA docConcentration validity check failed for bad array length") {
       intercept[IllegalArgumentException] {
         lda.validateParams()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
     }
 
@@ -199,7 +219,11 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     // describeTopics
     val topics = model.describeTopics(3)
     assert(topics.count() === k)
+<<<<<<< HEAD
+    assert(topics.select("topic").rdd.map(_.getInt(0)).collect().toSet === Range(0, k).toSet)
+=======
     assert(topics.select("topic").map(_.getInt(0)).collect().toSet === Range(0, k).toSet)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     topics.select("termIndices").collect().foreach { case r: Row =>
       val termIndices = r.getAs[Seq[Int]](0)
       assert(termIndices.length === 3 && termIndices.toSet.size === 3)

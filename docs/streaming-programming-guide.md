@@ -158,15 +158,15 @@ JavaReceiverInputDStream<String> lines = jssc.socketTextStream("localhost", 9999
 {% endhighlight %}
 
 This `lines` DStream represents the stream of data that will be received from the data
-server. Each record in this stream is a line of text. Then, we want to split the the lines by
+server. Each record in this stream is a line of text. Then, we want to split the lines by
 space into words.
 
 {% highlight java %}
 // Split each line into words
 JavaDStream<String> words = lines.flatMap(
   new FlatMapFunction<String, String>() {
-    @Override public Iterable<String> call(String x) {
-      return Arrays.asList(x.split(" "));
+    @Override public Iterator<String> call(String x) {
+      return Arrays.asList(x.split(" ")).iterator();
     }
   });
 {% endhighlight %}
@@ -186,7 +186,7 @@ Next, we want to count these words.
 JavaPairDStream<String, Integer> pairs = words.mapToPair(
   new PairFunction<String, String, Integer>() {
     @Override public Tuple2<String, Integer> call(String s) {
-      return new Tuple2<String, Integer>(s, 1);
+      return new Tuple2<>(s, 1);
     }
   });
 JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
@@ -594,7 +594,7 @@ data from a source and stores it in Spark's memory for processing.
 Spark Streaming provides two categories of built-in streaming sources.
 
 - *Basic sources*: Sources directly available in the StreamingContext API.
-  Examples: file systems, socket connections, and Akka actors.
+  Examples: file systems, and socket connections.
 - *Advanced sources*: Sources like Kafka, Flume, Kinesis, Twitter, etc. are available through
   extra utility classes. These require linking against extra dependencies as discussed in the
   [linking](#linking) section.
@@ -631,7 +631,7 @@ as well as to run the receiver(s).
 We have already taken a look at the `ssc.socketTextStream(...)` in the [quick example](#a-quick-example)
 which creates a DStream from text
 data received over a TCP socket connection. Besides sockets, the StreamingContext API provides
-methods for creating DStreams from files and Akka actors as input sources.
+methods for creating DStreams from files as input sources.
 
 - **File Streams:** For reading data from files on any file system compatible with the HDFS API (that is, HDFS, S3, NFS, etc.), a DStream can be created as:
 
@@ -658,17 +658,12 @@ methods for creating DStreams from files and Akka actors as input sources.
 
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
-- **Streams based on Custom Actors:** DStreams can be created with data streams received through Akka
-  actors by using `streamingContext.actorStream(actorProps, actor-name)`. See the [Custom Receiver
-  Guide](streaming-custom-receivers.html) for more details.
-
-  <span class="badge" style="background-color: grey">Python API</span> Since actors are available only in the Java and Scala
-  libraries, `actorStream` is not available in the Python API.
+- **Streams based on Custom Receivers:** DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
+  Guide](streaming-custom-receivers.html) and [DStream Akka](https://github.com/spark-packages/dstream-akka) for more details.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
-For more details on streams from sockets, files, and actors,
-see the API documentations of the relevant functions in
+For more details on streams from sockets and files, see the API documentations of the relevant functions in
 [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) for
 Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
 for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) for Python.
@@ -798,7 +793,7 @@ Some of the common ones are as follows.
   <td> <b>reduce</b>(<i>func</i>) </td>
   <td> Return a new DStream of single-element RDDs by aggregating the elements in each RDD of the
   source DStream using a function <i>func</i> (which takes two arguments and returns one).
-  The function should be associative so that it can be computed in parallel. </td>
+  The function should be associative and commutative so that it can be computed in parallel. </td>
 </tr>
 <tr>
   <td> <b>countByValue</b>() </td>
@@ -878,7 +873,6 @@ the `(word, 1)` pairs) and the `runningCount` having the previous count.
 <div data-lang="java" markdown="1">
 
 {% highlight java %}
-import com.google.common.base.Optional;
 Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction =
   new Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
     @Override public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
@@ -1070,7 +1064,7 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
 <tr>
   <td> <b>reduceByWindow</b>(<i>func</i>, <i>windowLength</i>, <i>slideInterval</i>) </td>
   <td> Return a new single-element stream, created by aggregating elements in the stream over a
-  sliding interval using <i>func</i>. The function should be associative so that it can be computed
+  sliding interval using <i>func</i>. The function should be associative and commutative so that it can be computed
   correctly in parallel.
   </td>
 </tr>
@@ -2096,7 +2090,7 @@ unifiedStream.print()
 <div data-lang="java" markdown="1">
 {% highlight java %}
 int numStreams = 5;
-List<JavaPairDStream<String, String>> kafkaStreams = new ArrayList<JavaPairDStream<String, String>>(numStreams);
+List<JavaPairDStream<String, String>> kafkaStreams = new ArrayList<>(numStreams);
 for (int i = 0; i < numStreams; i++) {
   kafkaStreams.add(KafkaUtils.createStream(...));
 }
@@ -2161,8 +2155,11 @@ If the number of tasks launched per second is high (say, 50 or more per second),
 of sending out tasks to the slaves may be significant and will make it hard to achieve sub-second
 latencies. The overhead can be reduced by the following changes:
 
+<<<<<<< HEAD
+=======
 * **Task Serialization**: Using Kryo serialization for serializing tasks can reduce the task sizes, and therefore reduce the time taken to send them to the slaves. This is controlled by the ```spark.closure.serializer``` property. However, at this time, Kryo serialization cannot be enabled for closure serialization. This may be resolved in a future release.
 
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 * **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to
   better task launch times than the fine-grained Mesos mode. Please refer to the
   [Running on Mesos guide](running-on-mesos.html) for more details.
@@ -2442,13 +2439,8 @@ that can be called to store the data in Spark. So, to migrate your custom networ
 BlockGenerator object (does not exist any more in Spark 1.0 anyway), and use `store(...)` methods on
 received data.
 
-**Actor-based Receivers**: Data could have been received using any Akka Actors by extending the actor class with
-`org.apache.spark.streaming.receivers.Receiver` trait. This has been renamed to
-[`org.apache.spark.streaming.receiver.ActorHelper`](api/scala/index.html#org.apache.spark.streaming.receiver.ActorHelper)
-and the `pushBlock(...)` methods to store received data has been renamed to `store(...)`. Other helper classes in
-the `org.apache.spark.streaming.receivers` package were also moved
-to [`org.apache.spark.streaming.receiver`](api/scala/index.html#org.apache.spark.streaming.receiver.package)
-package and renamed for better clarity.
+**Actor-based Receivers**: The Actor-based Receiver APIs have been moved to [DStream Akka](https://github.com/spark-packages/dstream-akka).
+Please refer to the project for more details.
 
 ***************************************************************************************************
 ***************************************************************************************************

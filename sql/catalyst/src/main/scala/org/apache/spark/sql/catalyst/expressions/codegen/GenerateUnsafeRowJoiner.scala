@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
-
 
 abstract class UnsafeRowJoiner {
   def join(row1: UnsafeRow, row2: UnsafeRow): UnsafeRow
@@ -159,13 +158,17 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""
+<<<<<<< HEAD
+       |public java.lang.Object generate(Object[] references) {
+=======
        |public java.lang.Object generate($exprType[] exprs) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
        |  return new SpecificUnsafeRowJoiner();
        |}
        |
        |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
        |  private byte[] buf = new byte[64];
-       |  private UnsafeRow out = new UnsafeRow();
+       |  private UnsafeRow out = new UnsafeRow(${schema1.size + schema2.size});
        |
        |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
@@ -188,7 +191,11 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    $copyVariableLengthRow2
        |    $updateOffset
        |
+<<<<<<< HEAD
+       |    out.pointTo(buf, sizeInBytes);
+=======
        |    out.pointTo(buf, ${schema1.size + schema2.size}, sizeInBytes);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
        |
        |    return out;
        |  }
@@ -197,7 +204,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     logDebug(s"SpecificUnsafeRowJoiner($schema1, $schema2):\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
+    val c = CodeGenerator.compile(code)
     c.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
   }
 }

@@ -544,6 +544,16 @@ provides streaming hypothesis testing.
 
 {% include_example scala/org/apache/spark/examples/mllib/StreamingTestExample.scala %}
 </div>
+<<<<<<< HEAD
+
+<div data-lang="java" markdown="1">
+[`StreamingTest`](api/java/index.html#org.apache.spark.mllib.stat.test.StreamingTest)
+provides streaming hypothesis testing.
+
+{% include_example java/org/apache/spark/examples/mllib/JavaStreamingTestExample.java %}
+</div>
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 
 

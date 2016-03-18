@@ -24,8 +24,14 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
 
+<<<<<<< HEAD
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
+=======
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{Experimental, Since}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
@@ -273,7 +279,33 @@ private[ml] object DefaultParamsReader {
       sparkVersion: String,
       params: JValue,
       metadata: JValue,
+<<<<<<< HEAD
+      metadataJson: String) {
+
+    /**
+     * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
+     * This can be useful for getting a Param value before an instance of [[Params]]
+     * is available.
+     */
+    def getParamValue(paramName: String): JValue = {
+      implicit val format = DefaultFormats
+      params match {
+        case JObject(pairs) =>
+          val values = pairs.filter { case (pName, jsonValue) =>
+            pName == paramName
+          }.map(_._2)
+          assert(values.length == 1, s"Expected one instance of Param '$paramName' but found" +
+            s" ${values.length} in JSON Params: " + pairs.map(_.toString).mkString(", "))
+          values.head
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot recognize JSON metadata: $metadataJson.")
+      }
+    }
+  }
+=======
       metadataJson: String)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Load metadata from file.
@@ -302,6 +334,10 @@ private[ml] object DefaultParamsReader {
   /**
    * Extract Params from metadata, and set them in the instance.
    * This works if all Params implement [[org.apache.spark.ml.param.Param.jsonDecode()]].
+<<<<<<< HEAD
+   * TODO: Move to [[Metadata]] method
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    */
   def getAndSetParams(instance: Params, metadata: Metadata): Unit = {
     implicit val format = DefaultFormats

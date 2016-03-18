@@ -22,7 +22,11 @@ import java.io.{File, IOException}
 import org.scalatest.Suite
 
 import org.apache.spark.SparkFunSuite
+<<<<<<< HEAD
+import org.apache.spark.ml.{Estimator, Model}
+=======
 import org.apache.spark.ml.{Model, Estimator}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.DataFrame
@@ -33,6 +37,10 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    * Checks "overwrite" option and params.
    * This saves to and loads from [[tempDir]], but creates a subdirectory with a random name
    * in order to avoid conflicts from multiple calls to this method.
+<<<<<<< HEAD
+   *
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * @param instance ML instance to test saving/loading
    * @param testParams  If true, then test values of Params.  Otherwise, just test overwrite option.
    * @tparam T ML instance type
@@ -82,8 +90,15 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    *  - Explicitly set Params, and train model
    *  - Test save/load using [[testDefaultReadWrite()]] on Estimator and Model
    *  - Check Params on Estimator and Model
+<<<<<<< HEAD
+   *  - Compare model data
    *
    * This requires that the [[Estimator]] and [[Model]] share the same set of [[Param]]s.
+   *
+=======
+   *
+   * This requires that the [[Estimator]] and [[Model]] share the same set of [[Param]]s.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * @param estimator  Estimator to test
    * @param dataset  Dataset to pass to [[Estimator.fit()]]
    * @param testParams  Set of [[Param]] values to set in estimator
@@ -117,6 +132,11 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       val param = model.getParam(p)
       assert(model.get(param).get === model2.get(param).get)
     }
+<<<<<<< HEAD
+
+    checkModelData(model, model2)
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }
 

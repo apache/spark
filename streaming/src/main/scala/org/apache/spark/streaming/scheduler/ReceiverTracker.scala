@@ -20,14 +20,19 @@ package org.apache.spark.streaming.scheduler
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.HashMap
+<<<<<<< HEAD
+import scala.concurrent.{ExecutionContext, Future}
+=======
 import scala.concurrent.{Future, ExecutionContext}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import scala.language.existentials
 import scala.util.{Failure, Success}
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.{TaskLocation, ExecutorCacheTaskLocation}
+import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
@@ -131,7 +136,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   // Track the active receiver job number. When a receiver job exits ultimately, countDown will
   // be called.
-  private val receiverJobExitLatch = new CountDownLatch(receiverInputStreams.size)
+  private val receiverJobExitLatch = new CountDownLatch(receiverInputStreams.length)
 
   /**
    * Track all receivers' information. The key is the receiver id, the value is the receiver info.
@@ -435,10 +440,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** RpcEndpoint to receive messages from the receivers. */
   private class ReceiverTrackerEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
 
+<<<<<<< HEAD
+=======
     // TODO Remove this thread pool after https://github.com/apache/spark/issues/7385 is merged
     private val submitJobThreadPool = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("submit-job-thread-pool"))
 
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     private val walBatchingThreadPool = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("wal-batching-thread-pool"))
 
@@ -610,12 +618,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             logInfo(s"Restarting Receiver $receiverId")
             self.send(RestartReceiver(receiver))
           }
-      }(submitJobThreadPool)
+      }(ThreadUtils.sameThread)
       logInfo(s"Receiver ${receiver.streamId} started")
     }
 
     override def onStop(): Unit = {
+<<<<<<< HEAD
+=======
       submitJobThreadPool.shutdownNow()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       active = false
       walBatchingThreadPool.shutdown()
     }

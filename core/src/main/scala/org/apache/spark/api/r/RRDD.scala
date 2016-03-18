@@ -19,8 +19,7 @@ package org.apache.spark.api.r
 
 import java.io._
 import java.net.{InetAddress, ServerSocket}
-import java.util.Arrays
-import java.util.{Map => JMap}
+import java.util.{Arrays, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.io.Source
@@ -30,6 +29,7 @@ import scala.util.Try
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 

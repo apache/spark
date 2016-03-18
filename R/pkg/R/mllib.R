@@ -54,7 +54,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
           function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
             standardize = TRUE, solver = "auto") {
             family <- match.arg(family)
-            formula <- paste(deparse(formula), collapse="")
+            formula <- paste(deparse(formula), collapse = "")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                  "fitRModelFormula", formula, data@sdf, family, lambda,
                                  alpha, standardize, solver)
@@ -104,11 +104,12 @@ setMethod("predict", signature(object = "PipelineModel"),
 setMethod("summary", signature(object = "PipelineModel"),
           function(object, ...) {
             modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelName", object@model)
+                                     "getModelName", object@model)
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelFeatures", object@model)
+                                    "getModelFeatures", object@model)
             coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelCoefficients", object@model)
+                                        "getModelCoefficients", object@model)
+
             if (modelName == "LinearRegressionModel") {
               devianceResiduals <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                                "getModelDevianceResiduals", object@model)

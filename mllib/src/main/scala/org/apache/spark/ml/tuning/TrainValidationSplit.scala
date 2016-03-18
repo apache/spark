@@ -17,10 +17,16 @@
 
 package org.apache.spark.ml.tuning
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
+=======
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.evaluation.Evaluator
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
@@ -117,6 +123,9 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   }
 
   @Since("1.5.0")
+<<<<<<< HEAD
+  override def transformSchema(schema: StructType): StructType = transformSchemaImpl(schema)
+=======
   override def transformSchema(schema: StructType): StructType = {
     $(estimator).transformSchema(schema)
   }
@@ -129,6 +138,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
       est.copy(paramMap).validateParams()
     }
   }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): TrainValidationSplit = {
@@ -160,11 +170,14 @@ class TrainValidationSplitModel private[ml] (
   extends Model[TrainValidationSplitModel] with TrainValidationSplitParams {
 
   @Since("1.5.0")
+<<<<<<< HEAD
+=======
   override def validateParams(): Unit = {
     bestModel.validateParams()
   }
 
   @Since("1.5.0")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)

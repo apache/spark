@@ -29,7 +29,11 @@ private case object OracleDialect extends JdbcDialect {
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     // Handle NUMBER fields that have no precision/scale in special way
+<<<<<<< HEAD
+    // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
+=======
     // because JDBC ResultSetMetaData converts this to 0 procision and -127 scale
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     // For more details, please see
     // https://github.com/apache/spark/pull/8780#issuecomment-145598968
     // and

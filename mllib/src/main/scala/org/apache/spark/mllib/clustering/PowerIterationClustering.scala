@@ -17,19 +17,23 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.json4s.JsonDSL._
 import org.json4s._
+import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
+<<<<<<< HEAD
+import org.apache.spark.internal.Logging
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.{Logging, SparkContext, SparkException}
 
 /**
  * Model produced by [[PowerIterationClustering]].
@@ -93,7 +97,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
       val assignments = sqlContext.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[PowerIterationClustering.Assignment](assignments.schema)
 
-      val assignmentsRDD = assignments.map {
+      val assignmentsRDD = assignments.rdd.map {
         case Row(id: Long, cluster: Int) => PowerIterationClustering.Assignment(id, cluster)
       }
 
@@ -110,7 +114,9 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
  *
  * @param k Number of clusters.
  * @param maxIterations Maximum number of iterations of the PIC algorithm.
- * @param initMode Initialization mode.
+ * @param initMode Set the initialization mode. This can be either "random" to use a random vector
+ *                 as vertex properties, or "degree" to use normalized sum similarities.
+ *                 Default: random.
  *
  * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
  */

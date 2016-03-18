@@ -19,15 +19,20 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
+=======
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Since, Experimental}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param.{IntParam, _}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasSeed}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -94,7 +99,7 @@ final class QuantileDiscretizer(override val uid: String)
     val candidates = QuantileDiscretizer.findSplitCandidates(samples, $(numBuckets) - 1)
     val splits = QuantileDiscretizer.getSplits(candidates)
     val bucketizer = new Bucketizer(uid).setSplits(splits)
-    copyValues(bucketizer)
+    copyValues(bucketizer.setParent(this))
   }
 
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
@@ -117,7 +122,11 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
     require(totalSamples > 0,
       "QuantileDiscretizer requires non-empty input dataset but was given an empty input.")
     val requiredSamples = math.max(numBins * numBins, minSamplesRequired)
+<<<<<<< HEAD
+    val fraction = math.min(requiredSamples.toDouble / totalSamples, 1.0)
+=======
     val fraction = math.min(requiredSamples.toDouble / dataset.count(), 1.0)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     dataset.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt()).collect()
   }
 
@@ -165,7 +174,11 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
    * needed, and adding a default split value of 0 if no good candidates are found.
    */
   private[feature] def getSplits(candidates: Array[Double]): Array[Double] = {
+<<<<<<< HEAD
+    val effectiveValues = if (candidates.nonEmpty) {
+=======
     val effectiveValues = if (candidates.size != 0) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       if (candidates.head == Double.NegativeInfinity
         && candidates.last == Double.PositiveInfinity) {
         candidates.drop(1).dropRight(1)
@@ -180,7 +193,7 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
       candidates
     }
 
-    if (effectiveValues.size == 0) {
+    if (effectiveValues.isEmpty) {
       Array(Double.NegativeInfinity, 0, Double.PositiveInfinity)
     } else {
       Array(Double.NegativeInfinity) ++ effectiveValues ++ Array(Double.PositiveInfinity)

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.{lang => jl}
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckSuccess, TypeCheckFailure}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.NumberConverter
@@ -42,6 +42,7 @@ abstract class LeafMathExpression(c: Double, name: String)
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
+  override def prettyName: String = name
 
   override def eval(input: InternalRow): Any = c
 }
@@ -59,6 +60,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
   override def toString: String = s"$name($child)"
+  override def prettyName: String = name
 
   protected override def nullSafeEval(input: Any): Any = {
     f(input.asInstanceOf[Double])
@@ -67,13 +69,15 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   // name of function in java.lang.Math
   def funcName: String = name.toLowerCase
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
   }
 }
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)
     extends UnaryMathExpression(f, name) {
+
+  override def nullable: Boolean = true
 
   // values less than or equal to yAsymptote eval to null in Hive, instead of NaN or -Infinity
   protected val yAsymptote: Double = 0.0
@@ -83,7 +87,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
     if (d <= yAsymptote) null else f(d)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
         if ($c <= $yAsymptote) {
@@ -109,13 +113,15 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def toString: String = s"$name($left, $right)"
 
+  override def prettyName: String = name
+
   override def dataType: DataType = DoubleType
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${name.toLowerCase}($c1, $c2)")
   }
 }
@@ -168,7 +174,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
       case DecimalType.Fixed(precision, scale) =>
@@ -194,6 +200,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
   override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
 
   override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
     NumberConverter.convert(
@@ -202,7 +209,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
       toBase.asInstanceOf[Int])
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
@@ -235,7 +242,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
       case DecimalType.Fixed(precision, scale) =>
@@ -294,7 +301,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
         if ($eval > 20 || $eval < 0) {
@@ -312,7 +319,7 @@ case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
 
 case class Log2(child: Expression)
   extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
         if ($c <= $yAsymptote) {
@@ -364,7 +371,7 @@ case class Bin(child: Expression)
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (c) =>
       s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
   }
@@ -459,7 +466,7 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
     case StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (c) => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       s"${ev.value} = " + (child.dataType match {
@@ -484,7 +491,7 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
   protected override def nullSafeEval(num: Any): Any =
     Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (c) => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       s"""
@@ -511,14 +518,14 @@ case class Atan2(left: Expression, right: Expression)
     math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
 }
 
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
   }
 }
@@ -544,7 +551,7 @@ case class ShiftLeft(left: Expression, right: Expression)
     }
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (left, right) => s"$left << $right")
   }
 }
@@ -570,7 +577,7 @@ case class ShiftRight(left: Expression, right: Expression)
     }
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >> $right")
   }
 }
@@ -596,7 +603,7 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
     }
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >>> $right")
   }
 }
@@ -621,6 +628,8 @@ case class Logarithm(left: Expression, right: Expression)
     this(EulerNumber(), child)
   }
 
+  override def nullable: Boolean = true
+
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val dLeft = input1.asInstanceOf[Double]
     val dRight = input2.asInstanceOf[Double]
@@ -628,7 +637,7 @@ case class Logarithm(left: Expression, right: Expression)
     if (dLeft <= 0.0 || dRight <= 0.0) null else math.log(dRight) / math.log(dLeft)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     if (left.isInstanceOf[EulerNumber]) {
       nullSafeCodeGen(ctx, ev, (c1, c2) =>
         s"""
@@ -751,7 +760,7 @@ case class Round(child: Expression, scale: Expression)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val ce = child.gen(ctx)
 
     val evaluationCode = child.dataType match {
@@ -797,14 +806,14 @@ case class Round(child: Expression, scale: Expression)
       case FloatType => // if child eval to NaN or Infinity, just return it.
         if (_scale == 0) {
           s"""
-            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})){
+            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = Math.round(${ce.value});
             }"""
         } else {
           s"""
-            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})){
+            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
@@ -814,14 +823,14 @@ case class Round(child: Expression, scale: Expression)
       case DoubleType => // if child eval to NaN or Infinity, just return it.
         if (_scale == 0) {
           s"""
-            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})){
+            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = Math.round(${ce.value});
             }"""
         } else {
           s"""
-            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})){
+            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).

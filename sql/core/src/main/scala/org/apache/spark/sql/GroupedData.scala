@@ -21,16 +21,24 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
+<<<<<<< HEAD
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Pivot}
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.internal.SQLConf
+=======
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedAlias, UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Pivot, Rollup, Cube, Aggregate}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.types.NumericType
-
 
 /**
  * :: Experimental ::
- * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
+ * A set of methods for aggregations on a [[DataFrame]], created by [[Dataset.groupBy]].
  *
  * The main method is the agg function, which has multiple variants. This class also contains
  * convenience some first order statistics such as mean, sum for convenience.
@@ -54,17 +62,25 @@ class GroupedData protected[sql](
 
     groupType match {
       case GroupedData.GroupByType =>
-        DataFrame(
+        Dataset.newDataFrame(
           df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case GroupedData.RollupType =>
-        DataFrame(
-          df.sqlContext, Rollup(groupingExprs, df.logicalPlan, aliasedAgg))
+        Dataset.newDataFrame(
+          df.sqlContext, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
       case GroupedData.CubeType =>
+<<<<<<< HEAD
+        Dataset.newDataFrame(
+          df.sqlContext, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
+      case GroupedData.PivotType(pivotCol, values) =>
+        val aliasedGrps = groupingExprs.map(alias)
+        Dataset.newDataFrame(
+=======
         DataFrame(
           df.sqlContext, Cube(groupingExprs, df.logicalPlan, aliasedAgg))
       case GroupedData.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         DataFrame(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           df.sqlContext, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
     }
   }
@@ -75,7 +91,11 @@ class GroupedData protected[sql](
   private[this] def alias(expr: Expression): NamedExpression = expr match {
     case u: UnresolvedAttribute => UnresolvedAlias(u)
     case expr: NamedExpression => expr
+<<<<<<< HEAD
+    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
+=======
     case expr: Expression => Alias(expr, expr.prettyString)()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
@@ -305,6 +325,10 @@ class GroupedData protected[sql](
     val values = df.select(pivotColumn)
       .distinct()
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
+<<<<<<< HEAD
+      .rdd
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       .map(_.get(0))
       .take(maxValues + 1)
       .toSeq

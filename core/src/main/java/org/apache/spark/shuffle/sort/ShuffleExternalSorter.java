@@ -84,9 +84,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    * this might not be necessary if we maintained a pool of re-usable pages in the TaskMemoryManager
    * itself).
    */
-  private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<MemoryBlock>();
+  private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<>();
 
-  private final LinkedList<SpillInfo> spills = new LinkedList<SpillInfo>();
+  private final LinkedList<SpillInfo> spills = new LinkedList<>();
 
   /** Peak memory used by this sorter so far, in bytes. **/
   private long peakMemoryUsedBytes;
@@ -233,8 +233,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       // Note that we intentionally ignore the value of `writeMetricsToUse.shuffleWriteTime()`.
       // Consistent with ExternalSorter, we do not count this IO towards shuffle write time.
       // This means that this IO time is not accounted for anywhere; SPARK-3577 will fix this.
-      writeMetrics.incShuffleRecordsWritten(writeMetricsToUse.shuffleRecordsWritten());
-      taskContext.taskMetrics().incDiskBytesSpilled(writeMetricsToUse.shuffleBytesWritten());
+      writeMetrics.incRecordsWritten(writeMetricsToUse.recordsWritten());
+      taskContext.taskMetrics().incDiskBytesSpilled(writeMetricsToUse.bytesWritten());
     }
   }
 
@@ -320,6 +320,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       long used = inMemSorter.getMemoryUsage();
+<<<<<<< HEAD
+      LongArray array = allocateArray(used / 8 * 2);
+=======
       LongArray array;
       try {
         // could trigger spilling
@@ -332,6 +335,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
         }
         return;
       }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       // check if spilling is triggered or not
       if (inMemSorter.hasSpaceForAnotherRecord()) {
         freeArray(array);

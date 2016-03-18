@@ -20,7 +20,20 @@ package org.apache.spark.sql
 import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
+<<<<<<< HEAD
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.internal.SQLConf
+=======
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.plans._
@@ -30,6 +43,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 abstract class QueryTest extends PlanTest {
 
@@ -70,7 +84,11 @@ abstract class QueryTest extends PlanTest {
    *    for cases where reordering is done on fields.  For such tests, user `checkDecoding` instead
    *    which performs a subset of the checks done by this function.
    */
+<<<<<<< HEAD
+  protected def checkDataset[T](
+=======
   protected def checkAnswer[T](
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       ds: Dataset[T],
       expectedAnswer: T*): Unit = {
     checkAnswer(
@@ -121,21 +139,26 @@ abstract class QueryTest extends PlanTest {
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     val analyzedDF = try df catch {
       case ae: AnalysisException =>
-        val currentValue = sqlContext.conf.dataFrameEagerAnalysis
-        sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
-        val partiallyAnalzyedPlan = df.queryExecution.analyzed
-        sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, currentValue)
-        fail(
-          s"""
-             |Failed to analyze query: $ae
-             |$partiallyAnalzyedPlan
-             |
-             |${stackTraceToString(ae)}
-             |""".stripMargin)
+        if (ae.plan.isDefined) {
+          fail(
+            s"""
+               |Failed to analyze query: $ae
+               |${ae.plan.get}
+               |
+               |${stackTraceToString(ae)}
+               |""".stripMargin)
+        } else {
+          throw ae
+        }
     }
 
     checkJsonFormat(analyzedDF)
 
+<<<<<<< HEAD
+    assertEmptyMissingInput(df)
+
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
@@ -195,10 +218,17 @@ abstract class QueryTest extends PlanTest {
     val logicalPlan = df.queryExecution.analyzed
     // bypass some cases that we can't handle currently.
     logicalPlan.transform {
+<<<<<<< HEAD
+      case _: MapPartitions => return
+      case _: MapGroups => return
+      case _: AppendColumns => return
+      case _: CoGroup => return
+=======
       case _: MapPartitions[_, _] => return
       case _: MapGroups[_, _, _] => return
       case _: AppendColumns[_, _] => return
       case _: CoGroup[_, _, _, _] => return
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       case _: LogicalRelation => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
@@ -210,7 +240,11 @@ abstract class QueryTest extends PlanTest {
     val jsonString = try {
       logicalPlan.toJSON
     } catch {
+<<<<<<< HEAD
+      case NonFatal(e) =>
+=======
       case e =>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         fail(
           s"""
              |Failed to parse logical plan to JSON:
@@ -235,7 +269,11 @@ abstract class QueryTest extends PlanTest {
     val jsonBackPlan = try {
       TreeNode.fromJSON[LogicalPlan](jsonString, sqlContext.sparkContext)
     } catch {
+<<<<<<< HEAD
+      case NonFatal(e) =>
+=======
       case e =>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         fail(
           s"""
              |Failed to rebuild the logical plan from JSON:
@@ -281,6 +319,21 @@ abstract class QueryTest extends PlanTest {
           """.stripMargin)
     }
   }
+<<<<<<< HEAD
+
+  /**
+    * Asserts that a given [[Queryable]] does not have missing inputs in all the analyzed plans.
+    */
+  def assertEmptyMissingInput(query: Queryable): Unit = {
+    assert(query.queryExecution.analyzed.missingInput.isEmpty,
+      s"The analyzed logical plan has missing inputs: ${query.queryExecution.analyzed}")
+    assert(query.queryExecution.optimizedPlan.missingInput.isEmpty,
+      s"The optimized logical plan has missing inputs: ${query.queryExecution.optimizedPlan}")
+    assert(query.queryExecution.executedPlan.missingInput.isEmpty,
+      s"The physical plan has missing inputs: ${query.queryExecution.executedPlan}")
+  }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 object QueryTest {
@@ -295,27 +348,7 @@ object QueryTest {
   def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
 
-    // We need to call prepareRow recursively to handle schemas with struct types.
-    def prepareRow(row: Row): Row = {
-      Row.fromSeq(row.toSeq.map {
-        case null => null
-        case d: java.math.BigDecimal => BigDecimal(d)
-        // Convert array to Seq for easy equality check.
-        case b: Array[_] => b.toSeq
-        case r: Row => prepareRow(r)
-        case o => o
-      })
-    }
 
-    def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
-      // Converts data to types that we can do equality comparison using Scala collections.
-      // For BigDecimal type, the Scala type has a better definition of equality test (similar to
-      // Java's java.math.BigDecimal.compareTo).
-      // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
-      // equality test.
-      val converted: Seq[Row] = answer.map(prepareRow)
-      if (!isSorted) converted.sortBy(_.toString()) else converted
-    }
     val sparkAnswer = try df.collect().toSeq catch {
       case e: Exception =>
         val errorMessage =
@@ -329,22 +362,56 @@ object QueryTest {
         return Some(errorMessage)
     }
 
-    if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
-      val errorMessage =
+    sameRows(expectedAnswer, sparkAnswer, isSorted).map { results =>
         s"""
         |Results do not match for query:
         |${df.queryExecution}
         |== Results ==
-        |${sideBySide(
-          s"== Correct Answer - ${expectedAnswer.size} ==" +:
-            prepareAnswer(expectedAnswer).map(_.toString()),
-          s"== Spark Answer - ${sparkAnswer.size} ==" +:
-            prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")}
-      """.stripMargin
+        |$results
+       """.stripMargin
+    }
+  }
+
+
+  def prepareAnswer(answer: Seq[Row], isSorted: Boolean): Seq[Row] = {
+    // Converts data to types that we can do equality comparison using Scala collections.
+    // For BigDecimal type, the Scala type has a better definition of equality test (similar to
+    // Java's java.math.BigDecimal.compareTo).
+    // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
+    // equality test.
+    val converted: Seq[Row] = answer.map(prepareRow)
+    if (!isSorted) converted.sortBy(_.toString()) else converted
+  }
+
+  // We need to call prepareRow recursively to handle schemas with struct types.
+  def prepareRow(row: Row): Row = {
+    Row.fromSeq(row.toSeq.map {
+      case null => null
+      case d: java.math.BigDecimal => BigDecimal(d)
+      // Convert array to Seq for easy equality check.
+      case b: Array[_] => b.toSeq
+      case r: Row => prepareRow(r)
+      case o => o
+    })
+  }
+
+  def sameRows(
+      expectedAnswer: Seq[Row],
+      sparkAnswer: Seq[Row],
+      isSorted: Boolean = false): Option[String] = {
+    if (prepareAnswer(expectedAnswer, isSorted) != prepareAnswer(sparkAnswer, isSorted)) {
+      val errorMessage =
+        s"""
+         |== Results ==
+         |${sideBySide(
+        s"== Correct Answer - ${expectedAnswer.size} ==" +:
+         prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
+        s"== Spark Answer - ${sparkAnswer.size} ==" +:
+         prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
+        """.stripMargin
       return Some(errorMessage)
     }
-
-    return None
+    None
   }
 
   /**

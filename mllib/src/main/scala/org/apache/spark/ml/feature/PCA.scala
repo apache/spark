@@ -70,10 +70,14 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
    */
   override def fit(dataset: DataFrame): PCAModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v}
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v}
     val pca = new feature.PCA(k = $(k))
     val pcaModel = pca.fit(input)
+<<<<<<< HEAD
+    copyValues(new PCAModel(uid, pcaModel.pc, pcaModel.explainedVariance).setParent(this))
+=======
     copyValues(new PCAModel(uid, pcaModel.pc).setParent(this))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -101,11 +105,21 @@ object PCA extends DefaultParamsReadable[PCA] {
  * Model fitted by [[PCA]].
  *
  * @param pc A principal components Matrix. Each column is one principal component.
+<<<<<<< HEAD
+ * @param explainedVariance A vector of proportions of variance explained by
+ *                          each principal component.
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
  */
 @Experimental
 class PCAModel private[ml] (
     override val uid: String,
+<<<<<<< HEAD
+    val pc: DenseMatrix,
+    val explainedVariance: DenseVector)
+=======
     val pc: DenseMatrix)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   extends Model[PCAModel] with PCAParams with MLWritable {
 
   import PCAModel._
@@ -123,7 +137,11 @@ class PCAModel private[ml] (
    */
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
+<<<<<<< HEAD
+    val pcaModel = new feature.PCAModel($(k), pc, explainedVariance)
+=======
     val pcaModel = new feature.PCAModel($(k), pc)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val pcaOp = udf { pcaModel.transform _ }
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
   }
@@ -139,7 +157,11 @@ class PCAModel private[ml] (
   }
 
   override def copy(extra: ParamMap): PCAModel = {
+<<<<<<< HEAD
+    val copied = new PCAModel(uid, pc, explainedVariance)
+=======
     val copied = new PCAModel(uid, pc)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -152,11 +174,19 @@ object PCAModel extends MLReadable[PCAModel] {
 
   private[PCAModel] class PCAModelWriter(instance: PCAModel) extends MLWriter {
 
+<<<<<<< HEAD
+    private case class Data(pc: DenseMatrix, explainedVariance: DenseVector)
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.pc, instance.explainedVariance)
+=======
     private case class Data(pc: DenseMatrix)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.pc)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       val dataPath = new Path(path, "data").toString
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -166,6 +196,39 @@ object PCAModel extends MLReadable[PCAModel] {
 
     private val className = classOf[PCAModel].getName
 
+<<<<<<< HEAD
+    /**
+     * Loads a [[PCAModel]] from data located at the input path. Note that the model includes an
+     * `explainedVariance` member that is not recorded by Spark 1.6 and earlier. A model
+     * can be loaded from such older data but will have an empty vector for
+     * `explainedVariance`.
+     *
+     * @param path path to serialized model data
+     * @return a [[PCAModel]]
+     */
+    override def load(path: String): PCAModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      // explainedVariance field is not present in Spark <= 1.6
+      val versionRegex = "([0-9]+)\\.([0-9]+).*".r
+      val hasExplainedVariance = metadata.sparkVersion match {
+        case versionRegex(major, minor) =>
+          (major.toInt >= 2 || (major.toInt == 1 && minor.toInt > 6))
+        case _ => false
+      }
+
+      val dataPath = new Path(path, "data").toString
+      val model = if (hasExplainedVariance) {
+        val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
+          sqlContext.read.parquet(dataPath)
+            .select("pc", "explainedVariance")
+            .head()
+        new PCAModel(metadata.uid, pc, explainedVariance)
+      } else {
+        val Row(pc: DenseMatrix) = sqlContext.read.parquet(dataPath).select("pc").head()
+        new PCAModel(metadata.uid, pc, Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
+      }
+=======
     override def load(path: String): PCAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
@@ -173,6 +236,7 @@ object PCAModel extends MLReadable[PCAModel] {
         .select("pc")
         .head()
       val model = new PCAModel(metadata.uid, pc)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }

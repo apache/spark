@@ -22,7 +22,11 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+<<<<<<< HEAD
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+=======
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -50,7 +54,20 @@ object RowEncoder {
       inputObject: Expression,
       inputType: DataType): Expression = inputType match {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
+<<<<<<< HEAD
+         FloatType | DoubleType | BinaryType | CalendarIntervalType => inputObject
+
+    case p: PythonUserDefinedType => extractorsFor(inputObject, p.sqlType)
+
+    case udt: UserDefinedType[_] =>
+      val obj = NewInstance(
+        udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+        Nil,
+        dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+      Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
+=======
          FloatType | DoubleType | BinaryType => inputObject
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     case udt: UserDefinedType[_] =>
       val obj = NewInstance(
@@ -137,6 +154,10 @@ object RowEncoder {
 
   private def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
+<<<<<<< HEAD
+    case CalendarIntervalType => dt
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
@@ -150,19 +171,39 @@ object RowEncoder {
 
   private def constructorFor(schema: StructType): Expression = {
     val fields = schema.zipWithIndex.map { case (f, i) =>
-      val field = BoundReference(i, f.dataType, f.nullable)
+      val dt = f.dataType match {
+        case p: PythonUserDefinedType => p.sqlType
+        case other => other
+      }
+      val field = BoundReference(i, dt, f.nullable)
       If(
         IsNull(field),
+<<<<<<< HEAD
+        Literal.create(null, externalDataTypeFor(dt)),
+        constructorFor(field)
+=======
         Literal.create(null, externalDataTypeFor(f.dataType)),
         constructorFor(BoundReference(i, f.dataType, f.nullable))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       )
     }
-    CreateExternalRow(fields)
+    CreateExternalRow(fields, schema)
   }
 
   private def constructorFor(input: Expression): Expression = input.dataType match {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
+<<<<<<< HEAD
+         FloatType | DoubleType | BinaryType | CalendarIntervalType => input
+
+    case udt: UserDefinedType[_] =>
+      val obj = NewInstance(
+        udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+        Nil,
+        dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+      Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
+=======
          FloatType | DoubleType | BinaryType => input
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     case udt: UserDefinedType[_] =>
       val obj = NewInstance(
@@ -216,7 +257,7 @@ object RowEncoder {
         "toScalaMap",
         keyData :: valueData :: Nil)
 
-    case StructType(fields) =>
+    case schema @ StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         If(
           Invoke(input, "isNullAt", BooleanType, Literal(i) :: Nil),
@@ -225,6 +266,10 @@ object RowEncoder {
       }
       If(IsNull(input),
         Literal.create(null, externalDataTypeFor(input.dataType)),
+<<<<<<< HEAD
+        CreateExternalRow(convertedFields, schema))
+=======
         CreateExternalRow(convertedFields))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

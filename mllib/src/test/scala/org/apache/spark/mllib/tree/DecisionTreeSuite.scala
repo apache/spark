@@ -23,9 +23,9 @@ import scala.collection.mutable
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
-import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, Strategy}
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model._
@@ -65,7 +65,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       maxDepth = 2,
       numClasses = 2,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
+      categoricalFeaturesInfo = Map(0 -> 2, 1 -> 2))
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
@@ -179,7 +179,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       maxDepth = 2,
       numClasses = 100,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
+      categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(metadata.isUnordered(featureIndex = 0))
@@ -189,6 +189,10 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(bins.length === 2)
     assert(splits(0).length === 3)
     assert(bins(0).length === 0)
+    assert(metadata.numSplits(0) === 3)
+    assert(metadata.numBins(0) === 3)
+    assert(metadata.numSplits(1) === 3)
+    assert(metadata.numBins(1) === 3)
 
     // Expecting 2^2 - 1 = 3 bins/splits
     assert(splits(0)(0).feature === 0)
@@ -238,7 +242,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       maxDepth = 2,
       numClasses = 100,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 10, 1-> 10))
+      categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
     // 2^(10-1) - 1 > 100, so categorical features will be ordered
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
@@ -451,7 +455,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = 2,
       maxDepth = 2,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
+      categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
@@ -485,7 +489,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       Variance,
       maxDepth = 2,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
+      categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
@@ -514,7 +518,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       Variance,
       maxDepth = 2,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
+      categoricalFeaturesInfo = Map(0 -> 2, 1 -> 2))
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
@@ -818,7 +822,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini,
-      maxBins = 2, maxDepth = 2, categoricalFeaturesInfo = Map(0 -> 2, 1-> 2),
+      maxBins = 2, maxDepth = 2, categoricalFeaturesInfo = Map(0 -> 2, 1 -> 2),
       numClasses = 2, minInstancesPerNode = 2)
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
@@ -1075,7 +1079,7 @@ object DecisionTreeSuite extends SparkFunSuite {
     assert(a.isLeaf === b.isLeaf)
     assert(a.split === b.split)
     (a.stats, b.stats) match {
-      // TODO: Check other fields besides the infomation gain.
+      // TODO: Check other fields besides the information gain.
       case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
       case (None, None) =>
       case _ => throw new AssertionError(

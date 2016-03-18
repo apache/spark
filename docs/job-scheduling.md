@@ -39,7 +39,10 @@ Resource allocation can be configured as follows, based on the cluster type:
   and optionally set `spark.cores.max` to limit each application's resource share as in the standalone mode.
   You should also set `spark.executor.memory` to control the executor memory.
 * **YARN:** The `--num-executors` option to the Spark YARN client controls how many executors it will allocate
-  on the cluster, while `--executor-memory` and `--executor-cores` control the resources per executor.
+  on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
+  (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
+  property) control the resources per executor. For more information, see the
+  [YARN Spark Properties](running-on-yarn.html).
 
 A second option available on Mesos is _dynamic sharing_ of CPU cores. In this mode, each Spark application
 still has a fixed and independent memory allocation (set by `spark.executor.memory`), but when the
@@ -51,8 +54,7 @@ an application to gain back cores on one node when it has work to do. To use thi
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
-the same RDDs. In future releases, in-memory storage systems such as [Tachyon](http://tachyon-project.org) will
-provide another approach to share RDDs.
+the same RDDs.
 
 ## Dynamic Resource Allocation
 
@@ -86,7 +88,7 @@ In YARN mode, start the shuffle service on each `NodeManager` as follows:
 1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
 pre-packaged distribution.
 2. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
-`$SPARK_HOME/network/yarn/target/scala-<version>` if you are building Spark yourself, and under
+`$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under
 `lib` if you are using a distribution.
 2. Add this jar to the classpath of all `NodeManager`s in your cluster.
 3. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,

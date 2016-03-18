@@ -17,16 +17,28 @@
 
 package org.apache.spark.streaming.rdd
 
+<<<<<<< HEAD
+import java.io.{IOException, ObjectOutputStream}
+=======
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
+<<<<<<< HEAD
+import org.apache.spark._
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{State, StateImpl, Time}
+import org.apache.spark.streaming.util.{EmptyStateMap, StateMap}
+import org.apache.spark.util.Utils
+=======
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD}
 import org.apache.spark.streaming.{Time, StateImpl, State}
 import org.apache.spark.streaming.util.{EmptyStateMap, StateMap}
 import org.apache.spark.util.Utils
 import org.apache.spark._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * Record storing the keyed-state [[MapWithStateRDD]]. Each record contains a [[StateMap]] and a

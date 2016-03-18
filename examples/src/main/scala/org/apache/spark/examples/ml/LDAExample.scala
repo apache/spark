@@ -18,10 +18,17 @@
 package org.apache.spark.examples.ml
 
 // scalastyle:off println
+<<<<<<< HEAD
+import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
+import org.apache.spark.ml.clustering.LDA
+import org.apache.spark.mllib.linalg.{Vectors, VectorUDT}
+=======
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
 // $example on$
 import org.apache.spark.ml.clustering.LDA
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.types.{StructField, StructType}
 // $example off$

@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.sql.types.{StringType, StructType, StructField, DoubleType}
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
@@ -25,6 +24,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
 
 class StringIndexerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -52,7 +52,7 @@ class StringIndexerSuite
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("a", "c", "b"))
-    val output = transformed.select("id", "labelIndex").map { r =>
+    val output = transformed.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // a -> 0, b -> 2, c -> 1
@@ -83,7 +83,7 @@ class StringIndexerSuite
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("b", "a"))
-    val output = transformed.select("id", "labelIndex").map { r =>
+    val output = transformed.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // a -> 1, b -> 0
@@ -102,7 +102,7 @@ class StringIndexerSuite
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("100", "300", "200"))
-    val output = transformed.select("id", "labelIndex").map { r =>
+    val output = transformed.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // 100 -> 0, 200 -> 2, 300 -> 1
@@ -114,7 +114,7 @@ class StringIndexerSuite
     val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
       .setInputCol("label")
       .setOutputCol("labelIndex")
-    val df = sqlContext.range(0L, 10L)
+    val df = sqlContext.range(0L, 10L).toDF()
     assert(indexerModel.transform(df).eq(df))
   }
 

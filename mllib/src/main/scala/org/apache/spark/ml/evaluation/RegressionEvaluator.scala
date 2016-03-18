@@ -20,7 +20,11 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
+<<<<<<< HEAD
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
+=======
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -85,7 +89,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
     val predictionAndLabels = dataset
       .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
-      .map { case Row(prediction: Double, label: Double) =>
+      .rdd.
+      map { case Row(prediction: Double, label: Double) =>
         (prediction, label)
       }
     val metrics = new RegressionMetrics(predictionAndLabels)

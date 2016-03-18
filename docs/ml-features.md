@@ -185,7 +185,7 @@ for more details on the API.
 <div data-lang="python" markdown="1">
 
 Refer to the [Tokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Tokenizer) and
-the the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
+the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
 for more details on the API.
 
 {% include_example python/ml/tokenizer_example.py %}
@@ -459,7 +459,11 @@ column, we should get the following:
 "a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
 index `2`.
 
+<<<<<<< HEAD
+Additionally, there are two strategies regarding how `StringIndexer` will handle
+=======
 Additionaly, there are two strategies regarding how `StringIndexer` will handle
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 unseen labels when you have fit a `StringIndexer` on one dataset and then use it
 to transform another:
 
@@ -573,6 +577,7 @@ for more details on the API.
 </div>
 
 <div data-lang="java" markdown="1">
+<<<<<<< HEAD
 
 Refer to the [IndexToString Java docs](api/java/org/apache/spark/ml/feature/IndexToString.html)
 for more details on the API.
@@ -588,6 +593,23 @@ for more details on the API.
 
 {% include_example python/ml/index_to_string_example.py %}
 
+=======
+
+Refer to the [IndexToString Java docs](api/java/org/apache/spark/ml/feature/IndexToString.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaIndexToStringExample.java %}
+
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [IndexToString Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IndexToString)
+for more details on the API.
+
+{% include_example python/ml/index_to_string_example.py %}
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 </div>
 
@@ -770,6 +792,41 @@ and the [MinMaxScalerModel Java docs](api/java/org/apache/spark/ml/feature/MinMa
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaMinMaxScalerExample.java %}
+<<<<<<< HEAD
+</div>
+</div>
+
+
+## MaxAbsScaler
+
+`MaxAbsScaler` transforms a dataset of `Vector` rows, rescaling each feature to range [-1, 1] 
+by dividing through the maximum absolute value in each feature. It does not shift/center the 
+data, and thus does not destroy any sparsity.
+
+`MaxAbsScaler` computes summary statistics on a data set and produces a `MaxAbsScalerModel`. The 
+model can then transform each feature individually to range [-1, 1].
+
+The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [-1, 1].
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [MaxAbsScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScaler)
+and the [MaxAbsScalerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScalerModel)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/MaxAbsScalerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [MaxAbsScaler Java docs](api/java/org/apache/spark/ml/feature/MaxAbsScaler.html)
+and the [MaxAbsScalerModel Java docs](api/java/org/apache/spark/ml/feature/MaxAbsScalerModel.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaMaxAbsScalerExample.java %}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 </div>
 
@@ -779,7 +836,7 @@ for more details on the API.
 
 * `splits`: Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which also includes y. Splits should be strictly increasing. Values at -inf, inf must be explicitly provided to cover all Double values; Otherwise, values outside the splits specified will be treated as errors. Two examples of `splits` are `Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity)` and `Array(0.0, 1.0, 2.0)`.
 
-Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potenial out of Bucketizer bounds exception.
+Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potential out of Bucketizer bounds exception.
 
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
@@ -860,6 +917,7 @@ for more details on the API.
 {% include_example python/ml/elementwise_product_example.py %}
 </div>
 </div>
+<<<<<<< HEAD
 
 ## SQLTransformer
 
@@ -871,6 +929,19 @@ the output, it can be any select clause that Spark SQL supports. Users can also
 use Spark SQL built-in function and UDFs to operate on these selected columns.
 For example, `SQLTransformer` supports statements like:
 
+=======
+
+## SQLTransformer
+
+`SQLTransformer` implements the transformations which are defined by SQL statement.
+Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
+where `"__THIS__"` represents the underlying table of the input dataset.
+The select clause specifies the fields, constants, and expressions to display in
+the output, it can be any select clause that Spark SQL supports. Users can also
+use Spark SQL built-in function and UDFs to operate on these selected columns.
+For example, `SQLTransformer` supports statements like:
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 * `SELECT a, a + b AS a_b FROM __THIS__`
 * `SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5`
 * `SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b`
@@ -1118,10 +1189,31 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaVectorSlicerExample.java %}
 </div>
 </div>
+<<<<<<< HEAD
 
 ## RFormula
 
-`RFormula` selects columns specified by an [R model formula](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html). It produces a vector column of features and a double column of labels. Like when formulas are used in R for linear regression, string input columns will be one-hot encoded, and numeric columns will be cast to doubles. If not already present in the DataFrame, the output label column will be created from the specified response variable in the formula.
+`RFormula` selects columns specified by an [R model formula](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html). 
+Currently we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'.
+The basic operators are:
+
+* `~` separate target and terms
+* `+` concat terms, "+ 0" means removing intercept
+* `-` remove a term, "- 1" means removing intercept
+* `:` interaction (multiplication for numeric values, or binarized categorical values)
+* `.` all columns except target
+
+Suppose `a` and `b` are double columns, we use the following simple examples to illustrate the effect of `RFormula`:
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
+
+* `y ~ a + b` means model `y ~ w0 + w1 * a + w2 * b` where `w0` is the intercept and `w1, w2` are coefficients.
+* `y ~ a + b + a:b - 1` means model `y ~ w1 * a + w2 * b + w3 * a * b` where `w1, w2, w3` are coefficients.
+
+`RFormula` produces a vector column of features and a double or string column of label. 
+Like when formulas are used in R for linear regression, string input columns will be one-hot encoded, and numeric columns will be cast to doubles.
+If the label column is of type string, it will be first transformed to double with `StringIndexer`.
+If the label column does not exist in the DataFrame, the output label column will be created from the specified response variable in the formula.
 
 **Examples**
 

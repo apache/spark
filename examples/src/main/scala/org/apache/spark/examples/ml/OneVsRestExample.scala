@@ -22,10 +22,14 @@ import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
 
 import scopt.OptionParser
 
+<<<<<<< HEAD
+import org.apache.spark.{SparkConf, SparkContext}
+=======
 import org.apache.spark.{SparkContext, SparkConf}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 // $example on$
 import org.apache.spark.examples.mllib.AbstractParams
-import org.apache.spark.ml.classification.{OneVsRest, LogisticRegression}
+import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.Vector
@@ -155,7 +159,7 @@ object OneVsRestExample {
 
     // evaluate the model
     val predictionsAndLabels = predictions.select("prediction", "label")
-      .map(row => (row.getDouble(0), row.getDouble(1)))
+      .rdd.map(row => (row.getDouble(0), row.getDouble(1)))
 
     val metrics = new MulticlassMetrics(predictionsAndLabels)
 

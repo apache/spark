@@ -20,15 +20,16 @@ package org.apache.spark.util.collection
 import java.io._
 import java.util.Comparator
 
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.ByteStreams
 
 import org.apache.spark._
+import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer._
-import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
 /**
@@ -91,7 +92,7 @@ private[spark] class ExternalSorter[K, V, C](
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
-    serializer: Option[Serializer] = None)
+    serializer: Serializer = SparkEnv.get.serializer)
   extends Logging
   with Spillable[WritablePartitionedPairCollection[K, C]] {
 
@@ -107,8 +108,7 @@ private[spark] class ExternalSorter[K, V, C](
 
   private val blockManager = SparkEnv.get.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
-  private val ser = Serializer.getSerializer(serializer)
-  private val serInstance = ser.newInstance()
+  private val serInstance = serializer.newInstance()
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
   private val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
@@ -262,8 +262,8 @@ private[spark] class ExternalSorter[K, V, C](
       val w = writer
       writer = null
       w.commitAndClose()
-      _diskBytesSpilled += spillMetrics.shuffleBytesWritten
-      batchSizes.append(spillMetrics.shuffleBytesWritten)
+      _diskBytesSpilled += spillMetrics.bytesWritten
+      batchSizes.append(spillMetrics.bytesWritten)
       spillMetrics = null
       objectsWritten = 0
     }
@@ -644,6 +644,8 @@ private[spark] class ExternalSorter[K, V, C](
       blockId: BlockId,
       outputFile: File): Array[Long] = {
 
+    val writeMetrics = context.taskMetrics().registerShuffleWriteMetrics()
+
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
 
@@ -652,8 +654,8 @@ private[spark] class ExternalSorter[K, V, C](
       val collection = if (aggregator.isDefined) map else buffer
       val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
       while (it.hasNext) {
-        val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
-          context.taskMetrics.shuffleWriteMetrics.get)
+        val writer = blockManager.getDiskWriter(
+          blockId, outputFile, serInstance, fileBufferSize, writeMetrics)
         val partitionId = it.nextPartition()
         while (it.hasNext && it.nextPartition() == partitionId) {
           it.writeNext(writer)
@@ -666,8 +668,8 @@ private[spark] class ExternalSorter[K, V, C](
       // We must perform merge-sort; get an iterator by partition and write everything directly.
       for ((id, elements) <- this.partitionedIterator) {
         if (elements.hasNext) {
-          val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
-            context.taskMetrics.shuffleWriteMetrics.get)
+          val writer = blockManager.getDiskWriter(
+            blockId, outputFile, serInstance, fileBufferSize, writeMetrics)
           for (elem <- elements) {
             writer.write(elem._1, elem._2)
           }
@@ -680,8 +682,7 @@ private[spark] class ExternalSorter[K, V, C](
 
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
-    context.internalMetricsToAccumulators(
-      InternalAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemoryUsedBytes)
+    context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
 
     lengths
   }

@@ -18,7 +18,10 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.Encoder
+<<<<<<< HEAD
+=======
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 package object encoders {
   /**

@@ -19,18 +19,33 @@ package org.apache.spark.ml.tuning
 
 import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
+<<<<<<< HEAD
+import org.json4s.{DefaultFormats, JObject}
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
+=======
 import org.json4s.jackson.JsonMethods._
 import org.json4s.{DefaultFormats, JObject}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{Experimental, Since}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.OneVsRestParams
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param._
+<<<<<<< HEAD
+import org.apache.spark.ml.param.shared.HasSeed
+import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+=======
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -39,7 +54,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
-private[ml] trait CrossValidatorParams extends ValidatorParams {
+private[ml] trait CrossValidatorParams extends ValidatorParams with HasSeed {
   /**
    * Param for number of folds for cross validation.  Must be >= 2.
    * Default: 3
@@ -85,6 +100,13 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("1.2.0")
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
+<<<<<<< HEAD
+  /** @group setParam */
+  @Since("2.0.0")
+  def setSeed(value: Long): this.type = set(seed, value)
+
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   @Since("1.4.0")
   override def fit(dataset: DataFrame): CrossValidatorModel = {
     val schema = dataset.schema
@@ -95,7 +117,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
-    val splits = MLUtils.kFold(dataset.rdd, $(numFolds), 0)
+    val splits = MLUtils.kFold(dataset.rdd, $(numFolds), $(seed))
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
       val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
@@ -125,6 +147,9 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   }
 
   @Since("1.4.0")
+<<<<<<< HEAD
+  override def transformSchema(schema: StructType): StructType = transformSchemaImpl(schema)
+=======
   override def transformSchema(schema: StructType): StructType = {
     $(estimator).transformSchema(schema)
   }
@@ -137,6 +162,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       est.copy(paramMap).validateParams()
     }
   }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidator = {
@@ -214,10 +240,14 @@ object CrossValidator extends MLReadable[CrossValidator] {
           // TODO: SPARK-11892: This case may require special handling.
           throw new UnsupportedOperationException("CrossValidator write will fail because it" +
             " cannot yet handle an estimator containing type: ${ovr.getClass.getName}")
+<<<<<<< HEAD
+        case rformModel: RFormulaModel => Array(rformModel.pipelineModel)
+=======
         case rform: RFormulaModel =>
           // TODO: SPARK-11891: This case may require special handling.
           throw new UnsupportedOperationException("CrossValidator write will fail because it" +
             " cannot yet handle an estimator containing an RFormulaModel")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         case _: Params => Array()
       }
       val subStageMaps = subStages.map(getUidMapImpl).foldLeft(List.empty[(String, Params)])(_ ++ _)
@@ -326,11 +356,14 @@ class CrossValidatorModel private[ml] (
     @Since("1.2.0") val bestModel: Model[_],
     @Since("1.5.0") val avgMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams with MLWritable {
+<<<<<<< HEAD
+=======
 
   @Since("1.4.0")
   override def validateParams(): Unit = {
     bestModel.validateParams()
   }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {

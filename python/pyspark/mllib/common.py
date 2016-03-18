@@ -101,7 +101,11 @@ def _java2py(sc, r, encoding="bytes"):
             jrdd = sc._jvm.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
+<<<<<<< HEAD
+        if clsName == 'Dataset':
+=======
         if clsName == 'DataFrame':
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             return DataFrame(r, SQLContext.getOrCreate(sc))
 
         if clsName in _picklable_classes:

@@ -28,7 +28,12 @@ import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
 import org.apache.spark.ml.regression.RandomForestRegressionModel;
 import org.apache.spark.ml.regression.RandomForestRegressor;
+<<<<<<< HEAD
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+=======
 import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.SQLContext;
 // $example off$
 
@@ -40,7 +45,12 @@ public class JavaRandomForestRegressorExample {
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
+<<<<<<< HEAD
+    Dataset<Row> data =
+        sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+=======
     DataFrame data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Automatically identify categorical features, and index them.
     // Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -51,9 +61,15 @@ public class JavaRandomForestRegressorExample {
       .fit(data);
 
     // Split the data into training and test sets (30% held out for testing)
+<<<<<<< HEAD
+    Dataset<Row>[] splits = data.randomSplit(new double[] {0.7, 0.3});
+    Dataset<Row> trainingData = splits[0];
+    Dataset<Row> testData = splits[1];
+=======
     DataFrame[] splits = data.randomSplit(new double[] {0.7, 0.3});
     DataFrame trainingData = splits[0];
     DataFrame testData = splits[1];
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Train a RandomForest model.
     RandomForestRegressor rf = new RandomForestRegressor()
@@ -68,7 +84,11 @@ public class JavaRandomForestRegressorExample {
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
+<<<<<<< HEAD
+    Dataset<Row> predictions = model.transform(testData);
+=======
     DataFrame predictions = model.transform(testData);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Select example rows to display.
     predictions.select("prediction", "label", "features").show(5);

@@ -18,18 +18,29 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
+<<<<<<< HEAD
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.parser.CatalystQl
+=======
 import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
 
 /**
  * Ensures that java functions signatures for methods that now return a [[TypedColumn]] still have
@@ -285,7 +296,11 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def count(columnName: String): TypedColumn[Any, Long] =
+<<<<<<< HEAD
+    count(Column(columnName)).as(ExpressionEncoder[Long]())
+=======
     count(Column(columnName)).as(ExpressionEncoder[Long])
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -309,20 +324,41 @@ object functions extends LegacyFunctions {
     countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
-   * Aggregate function: returns the first value in a group.
+   * Aggregate function: returns the population covariance for two columns.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.0.0
    */
+<<<<<<< HEAD
+  def covar_pop(column1: Column, column2: Column): Column = withAggregateFunction {
+    CovPopulation(column1.expr, column2.expr)
+  }
+=======
   def first(e: Column): Column = withAggregateFunction { new First(e.expr) }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
-   * Aggregate function: returns the first value of a column in a group.
+   * Aggregate function: returns the population covariance for two columns.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.0.0
    */
-  def first(columnName: String): Column = first(Column(columnName))
+  def covar_pop(columnName1: String, columnName2: String): Column = {
+    covar_pop(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+   * Aggregate function: returns the sample covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
+<<<<<<< HEAD
+  def covar_samp(column1: Column, column2: Column): Column = withAggregateFunction {
+    CovSample(column1.expr, column2.expr)
+  }
+=======
+  def kurtosis(e: Column): Column = withAggregateFunction { Kurtosis(e.expr) }
 
   /**
    * Aggregate function: returns the kurtosis of the values in a group.
@@ -330,7 +366,124 @@ object functions extends LegacyFunctions {
    * @group agg_funcs
    * @since 1.6.0
    */
+  def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
+
+  /**
+   * Aggregate function: returns the sample covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
+  def covar_samp(columnName1: String, columnName2: String): Column = {
+    covar_samp(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+    * Aggregate function: returns the first value in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def first(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
+    new First(e.expr, Literal(ignoreNulls))
+  }
+
+  /**
+    * Aggregate function: returns the first value of a column in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def first(columnName: String, ignoreNulls: Boolean): Column = {
+    first(Column(columnName), ignoreNulls)
+  }
+
+  /**
+    * Aggregate function: returns the first value in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def first(e: Column): Column = first(e, ignoreNulls = false)
+
+  /**
+    * Aggregate function: returns the first value of a column in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def first(columnName: String): Column = first(Column(columnName))
+
+
+  /**
+    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping(e: Column): Column = Column(Grouping(e.expr))
+
+  /**
+    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping(columnName: String): Column = grouping(Column(columnName))
+
+  /**
+    * Aggregate function: returns the level of grouping, equals to
+    *
+    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+    *
+    * Note: the list of columns should match with grouping columns exactly, or empty (means all the
+    * grouping columns).
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping_id(cols: Column*): Column = Column(GroupingID(cols.map(_.expr)))
+
+  /**
+    * Aggregate function: returns the level of grouping, equals to
+    *
+    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+    *
+    * Note: the list of columns should match with grouping columns exactly.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping_id(colName: String, colNames: String*): Column = {
+    grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
+  }
+
+  /**
+   * Aggregate function: returns the kurtosis of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+<<<<<<< HEAD
   def kurtosis(e: Column): Column = withAggregateFunction { Kurtosis(e.expr) }
+=======
+  def last(e: Column): Column = withAggregateFunction { new Last(e.expr) }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Aggregate function: returns the kurtosis of the values in a group.
@@ -341,20 +494,52 @@ object functions extends LegacyFunctions {
   def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
 
   /**
-   * Aggregate function: returns the last value in a group.
-   *
-   * @group agg_funcs
-   * @since 1.3.0
-   */
-  def last(e: Column): Column = withAggregateFunction { new Last(e.expr) }
+    * Aggregate function: returns the last value in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def last(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
+    new Last(e.expr, Literal(ignoreNulls))
+  }
 
   /**
-   * Aggregate function: returns the last value of the column in a group.
-   *
-   * @group agg_funcs
-   * @since 1.3.0
-   */
-  def last(columnName: String): Column = last(Column(columnName))
+    * Aggregate function: returns the last value of the column in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def last(columnName: String, ignoreNulls: Boolean): Column = {
+    last(Column(columnName), ignoreNulls)
+  }
+
+  /**
+    * Aggregate function: returns the last value in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def last(e: Column): Column = last(e, ignoreNulls = false)
+
+  /**
+    * Aggregate function: returns the last value of the column in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.
@@ -421,6 +606,8 @@ object functions extends LegacyFunctions {
    * @since 1.6.0
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
+<<<<<<< HEAD
+=======
 
   /**
    * Aggregate function: alias for [[stddev_samp]].
@@ -428,6 +615,16 @@ object functions extends LegacyFunctions {
    * @group agg_funcs
    * @since 1.6.0
    */
+  def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
+
+  /**
+   * Aggregate function: alias for [[stddev_samp]].
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+<<<<<<< HEAD
   def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
@@ -439,6 +636,11 @@ object functions extends LegacyFunctions {
   def stddev(columnName: String): Column = stddev(Column(columnName))
 
   /**
+=======
+  def stddev(columnName: String): Column = stddev(Column(columnName))
+
+  /**
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * Aggregate function: returns the sample standard deviation of
    * the expression in a group.
    *
@@ -521,6 +723,8 @@ object functions extends LegacyFunctions {
    * @since 1.6.0
    */
   def variance(columnName: String): Column = variance(Column(columnName))
+<<<<<<< HEAD
+=======
 
   /**
    * Aggregate function: returns the unbiased variance of the values in a group.
@@ -529,6 +733,7 @@ object functions extends LegacyFunctions {
    * @since 1.6.0
    */
   def var_samp(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Aggregate function: returns the unbiased variance of the values in a group.
@@ -536,7 +741,26 @@ object functions extends LegacyFunctions {
    * @group agg_funcs
    * @since 1.6.0
    */
+<<<<<<< HEAD
+  def var_samp(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
+
+  /**
+   * Aggregate function: returns the unbiased variance of the values in a group.
+=======
   def var_samp(columnName: String): Column = var_samp(Column(columnName))
+
+  /**
+   * Aggregate function: returns the population variance of the values in a group.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+<<<<<<< HEAD
+  def var_samp(columnName: String): Column = var_samp(Column(columnName))
+=======
+  def var_pop(e: Column): Column = withAggregateFunction { VariancePop(e.expr) }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Aggregate function: returns the population variance of the values in a group.
@@ -544,6 +768,7 @@ object functions extends LegacyFunctions {
    * @group agg_funcs
    * @since 1.6.0
    */
+<<<<<<< HEAD
   def var_pop(e: Column): Column = withAggregateFunction { VariancePop(e.expr) }
 
   /**
@@ -552,6 +777,8 @@ object functions extends LegacyFunctions {
    * @group agg_funcs
    * @since 1.6.0
    */
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -577,6 +804,9 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.6.0
    */
+<<<<<<< HEAD
+  def cume_dist(): Column = withExpr { new CumeDist }
+=======
   def cume_dist(): Column = withExpr { UnresolvedWindowFunction("cume_dist", Nil) }
 
   /**
@@ -585,6 +815,7 @@ object functions extends LegacyFunctions {
    */
   @deprecated("Use dense_rank. This will be removed in Spark 2.0.", "1.6.0")
   def denseRank(): Column = dense_rank()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Window function: returns the rank of rows within a window partition, without any gaps.
@@ -597,7 +828,11 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.6.0
    */
+<<<<<<< HEAD
+  def dense_rank(): Column = withExpr { new DenseRank }
+=======
   def dense_rank(): Column = withExpr { UnresolvedWindowFunction("dense_rank", Nil) }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Window function: returns the value that is `offset` rows before the current row, and
@@ -648,7 +883,11 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def lag(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
+<<<<<<< HEAD
+    Lag(e.expr, Literal(offset), Literal(defaultValue))
+=======
     UnresolvedWindowFunction("lag", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**
@@ -700,7 +939,11 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def lead(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
+<<<<<<< HEAD
+    Lead(e.expr, Literal(offset), Literal(defaultValue))
+=======
     UnresolvedWindowFunction("lead", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**
@@ -713,6 +956,9 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
+<<<<<<< HEAD
+  def ntile(n: Int): Column = withExpr { new NTile(Literal(n)) }
+=======
   def ntile(n: Int): Column = withExpr { UnresolvedWindowFunction("ntile", lit(n).expr :: Nil) }
 
   /**
@@ -721,6 +967,7 @@ object functions extends LegacyFunctions {
    */
   @deprecated("Use percent_rank. This will be removed in Spark 2.0.", "1.6.0")
   def percentRank(): Column = percent_rank()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
@@ -735,7 +982,11 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.6.0
    */
+<<<<<<< HEAD
+  def percent_rank(): Column = withExpr { new PercentRank }
+=======
   def percent_rank(): Column = withExpr { UnresolvedWindowFunction("percent_rank", Nil) }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Window function: returns the rank of rows within a window partition.
@@ -750,6 +1001,9 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
+<<<<<<< HEAD
+  def rank(): Column = withExpr { new Rank }
+=======
   def rank(): Column = withExpr { UnresolvedWindowFunction("rank", Nil) }
 
   /**
@@ -758,6 +1012,7 @@ object functions extends LegacyFunctions {
    */
   @deprecated("Use row_number. This will be removed in Spark 2.0.", "1.6.0")
   def rowNumber(): Column = row_number()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Window function: returns a sequential number starting at 1 within a window partition.
@@ -765,7 +1020,11 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.6.0
    */
+<<<<<<< HEAD
+  def row_number(): Column = withExpr { RowNumber() }
+=======
   def row_number(): Column = withExpr { UnresolvedWindowFunction("row_number", Nil) }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
@@ -812,7 +1071,7 @@ object functions extends LegacyFunctions {
    * @since 1.5.0
    */
   def broadcast(df: DataFrame): DataFrame = {
-    DataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
+    Dataset.newDataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
   }
 
   /**
@@ -826,6 +1085,8 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def coalesce(e: Column*): Column = withExpr { Coalesce(e.map(_.expr)) }
+<<<<<<< HEAD
+=======
 
   /**
    * @group normal_funcs
@@ -833,12 +1094,17 @@ object functions extends LegacyFunctions {
    */
   @deprecated("Use input_file_name. This will be removed in Spark 2.0.", "1.6.0")
   def inputFileName(): Column = input_file_name()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Creates a string column for the file name of the current Spark task.
    *
    * @group normal_funcs
    * @since 1.6.0
+<<<<<<< HEAD
+   */
+  def input_file_name(): Column = withExpr { InputFileName() }
+=======
    */
   def input_file_name(): Column = withExpr { InputFileName() }
 
@@ -848,6 +1114,7 @@ object functions extends LegacyFunctions {
    */
   @deprecated("Use isnan. This will be removed in Spark 2.0.", "1.6.0")
   def isNaN(e: Column): Column = isnan(e)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Return true iff the column is NaN.
@@ -943,6 +1210,8 @@ object functions extends LegacyFunctions {
   /**
    * Generate a random column with i.i.d. samples from U[0.0, 1.0].
    *
+   * Note that this is indeterministic when data partitions are not fixed.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -958,6 +1227,8 @@ object functions extends LegacyFunctions {
 
   /**
    * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * Note that this is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1052,7 +1323,11 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def when(condition: Column, value: Any): Column = withExpr {
+<<<<<<< HEAD
+    CaseWhen(Seq((condition.expr, lit(value).expr)))
+=======
     CaseWhen(Seq(condition.expr, lit(value).expr))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**
@@ -1073,7 +1348,10 @@ object functions extends LegacyFunctions {
    *
    * @group normal_funcs
    */
-  def expr(expr: String): Column = Column(SqlParser.parseExpression(expr))
+  def expr(expr: String): Column = {
+    val parser = SQLContext.getActive().map(_.sessionState.sqlParser).getOrElse(new CatalystQl())
+    Column(parser.parseExpression(expr))
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
@@ -1674,7 +1952,7 @@ object functions extends LegacyFunctions {
   def round(e: Column, scale: Int): Column = withExpr { Round(e.expr, Literal(scale)) }
 
   /**
-   * Shift the the given value numBits left. If the given value is a long value, this function
+   * Shift the given value numBits left. If the given value is a long value, this function
    * will return a long value else it will return an integer value.
    *
    * @group math_funcs
@@ -1683,7 +1961,7 @@ object functions extends LegacyFunctions {
   def shiftLeft(e: Column, numBits: Int): Column = withExpr { ShiftLeft(e.expr, lit(numBits).expr) }
 
   /**
-   * Shift the the given value numBits right. If the given value is a long value, it will return
+   * Shift the given value numBits right. If the given value is a long value, it will return
    * a long value else it will return an integer value.
    *
    * @group math_funcs
@@ -1694,7 +1972,7 @@ object functions extends LegacyFunctions {
   }
 
   /**
-   * Unsigned shift the the given value numBits right. If the given value is a long value,
+   * Unsigned shift the given value numBits right. If the given value is a long value,
    * it will return a long value else it will return an integer value.
    *
    * @group math_funcs
@@ -1862,6 +2140,20 @@ object functions extends LegacyFunctions {
    * @since 1.5.0
    */
   def crc32(e: Column): Column = withExpr { Crc32(e.expr) }
+<<<<<<< HEAD
+
+  /**
+   * Calculates the hash code of given columns, and returns the result as an int column.
+   *
+   * @group misc_funcs
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def hash(cols: Column*): Column = withExpr {
+    new Murmur3Hash(cols.map(_.expr))
+  }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -2512,7 +2804,8 @@ object functions extends LegacyFunctions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
-  // scalastyle:off
+  // scalastyle:off line.size.limit
+  // scalastyle:off parameter.number
 
   /* Use the following code to generate:
   (0 to 10).map { x =>
@@ -2528,11 +2821,13 @@ object functions extends LegacyFunctions {
      * @since 1.3.0
      */
     def udf[$typeTags](f: Function$x[$types]): UserDefinedFunction = {
-      val inputTypes = Try($inputTypes).getOrElse(Nil)
+      val inputTypes = Try($inputTypes).toOption
       UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
     }""")
   }
 
+<<<<<<< HEAD
+=======
   (0 to 10).map { x =>
     val args = (1 to x).map(i => s"arg$i: Column").mkString(", ")
     val fTypes = Seq.fill(x + 1)("_").mkString(", ")
@@ -2551,6 +2846,7 @@ object functions extends LegacyFunctions {
       ScalaUDF(f, returnType, Seq($argsInUDF))
     }""")
   }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   */
   /**
    * Defines a user-defined function of 0 arguments as user-defined function (UDF).
@@ -2560,7 +2856,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction = {
-    val inputTypes = Try(Nil).getOrElse(Nil)
+    val inputTypes = Try(Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2572,7 +2868,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag](f: Function1[A1, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2584,7 +2880,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: Function2[A1, A2, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2596,7 +2892,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](f: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2608,7 +2904,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](f: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2620,7 +2916,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](f: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2632,7 +2928,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](f: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2644,7 +2940,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](f: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2656,7 +2952,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](f: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2668,7 +2964,7 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](f: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
@@ -2680,10 +2976,27 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](f: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
-    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: ScalaReflection.schemaFor(typeTag[A10]).dataType :: Nil).getOrElse(Nil)
+    val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: ScalaReflection.schemaFor(typeTag[A10]).dataType :: Nil).toOption
     UserDefinedFunction(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, inputTypes)
   }
 
+<<<<<<< HEAD
+  // scalastyle:on parameter.number
+  // scalastyle:on line.size.limit
+
+  /**
+   * Defines a user-defined function (UDF) using a Scala closure. For this variant, the caller must
+   * specifcy the output data type, and there is no automatic input type coercion.
+   *
+   * @param f  A closure in Scala
+   * @param dataType  The output data type of the UDF
+   *
+   * @group udf_funcs
+   * @since 2.0.0
+   */
+  def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
+    UserDefinedFunction(f, dataType, None)
+=======
   //////////////////////////////////////////////////////////////////////////////////////////////////
   /**
     * Call a Scala function of 0 arguments as user-defined function (UDF). This requires
@@ -2837,9 +3150,8 @@ object functions extends LegacyFunctions {
   @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column, arg10: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
-
-  // scalastyle:on
 
   /**
    * Call an user-defined function.
@@ -2861,6 +3173,8 @@ object functions extends LegacyFunctions {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
 
+<<<<<<< HEAD
+=======
   /**
    * Call an user-defined function.
    * Example:
@@ -2890,4 +3204,5 @@ object functions extends LegacyFunctions {
     }
     UnresolvedFunction(udfName, exprs, isDistinct = false)
   }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

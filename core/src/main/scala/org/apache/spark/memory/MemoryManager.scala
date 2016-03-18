@@ -19,10 +19,17 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
+<<<<<<< HEAD
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
+import org.apache.spark.storage.BlockId
+import org.apache.spark.storage.memory.MemoryStore
+=======
 import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
 
@@ -66,18 +73,17 @@ private[spark] abstract class MemoryManager(
   final def setMemoryStore(store: MemoryStore): Unit = synchronized {
     storageMemoryPool.setMemoryStore(store)
   }
+<<<<<<< HEAD
+=======
 
   // TODO: avoid passing evicted blocks around to simplify method signatures (SPARK-10985)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    * @return whether all N bytes were successfully granted.
    */
-  def acquireStorageMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
+  def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
@@ -85,14 +91,17 @@ private[spark] abstract class MemoryManager(
    * This extra method allows subclasses to differentiate behavior between acquiring storage
    * memory and acquiring unroll memory. For instance, the memory management model in Spark
    * 1.5 and before places a limit on the amount of space that can be freed from unrolling.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
    *
    * @return whether all N bytes were successfully granted.
    */
+<<<<<<< HEAD
+  def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean
+=======
   def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Try to acquire up to `numBytes` of execution memory for the current task and return the
@@ -125,6 +134,7 @@ private[spark] abstract class MemoryManager(
 
   /**
    * Release all memory for the given task and mark it as inactive (e.g. when a task ends).
+   *
    * @return the number of bytes freed.
    */
   private[memory] def releaseAllExecutionMemoryForTask(taskAttemptId: Long): Long = synchronized {

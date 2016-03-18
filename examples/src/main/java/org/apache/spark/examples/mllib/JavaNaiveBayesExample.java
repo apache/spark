@@ -46,7 +46,7 @@ public class JavaNaiveBayesExample {
       test.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
         @Override
         public Tuple2<Double, Double> call(LabeledPoint p) {
-          return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+          return new Tuple2<>(model.predict(p.features()), p.label());
         }
       });
     double accuracy = predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
@@ -60,5 +60,7 @@ public class JavaNaiveBayesExample {
     model.save(jsc.sc(), "target/tmp/myNaiveBayesModel");
     NaiveBayesModel sameModel = NaiveBayesModel.load(jsc.sc(), "target/tmp/myNaiveBayesModel");
     // $example off$
+
+    jsc.stop();
   }
 }

@@ -20,8 +20,11 @@ Gradient Boosted Trees Regression Example.
 """
 from __future__ import print_function
 
+<<<<<<< HEAD
+=======
 import sys
 
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel

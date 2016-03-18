@@ -28,7 +28,11 @@ import org.apache.spark.ml.clustering.LDAModel;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
+<<<<<<< HEAD
+import org.apache.spark.sql.Dataset;
+=======
 import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
@@ -75,7 +79,11 @@ public class JavaLDAExample {
     JavaRDD<Row> points = jsc.textFile(inputFile).map(new ParseVector());
     StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
     StructType schema = new StructType(fields);
+<<<<<<< HEAD
+    Dataset<Row> dataset = sqlContext.createDataFrame(points, schema);
+=======
     DataFrame dataset = sqlContext.createDataFrame(points, schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Trains a LDA model
     LDA lda = new LDA()
@@ -87,7 +95,11 @@ public class JavaLDAExample {
     System.out.println(model.logPerplexity(dataset));
 
     // Shows the result
+<<<<<<< HEAD
+    Dataset<Row> topics = model.describeTopics(3);
+=======
     DataFrame topics = model.describeTopics(3);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     topics.show(false);
     model.transform(dataset).show(false);
 

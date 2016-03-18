@@ -22,8 +22,8 @@ import java.io.File
 import org.apache.hadoop.hive.conf.HiveConf
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -154,8 +154,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     }
     val expected = List(
       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=2"::Nil,
-      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=3"::Nil ,
-      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=1"::Nil ,
+      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=3"::Nil,
+      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=1"::Nil,
       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=4"::Nil
     )
     assert(listFolders(tmpDir, List()).sortBy(_.toString()) === expected.sortBy(_.toString))

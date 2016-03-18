@@ -19,14 +19,14 @@ package org.apache.spark.rdd
 
 import java.io.File
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
-
 import scala.collection.Map
 import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
+
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
 
 import org.apache.spark._
 import org.apache.spark.util.Utils
@@ -47,6 +47,27 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       assert(c(3) === "4")
     } else {
       assert(true)
+    }
+  }
+
+  test("failure in iterating over pipe input") {
+    if (testCommandAvailable("cat")) {
+      val nums =
+        sc.makeRDD(Array(1, 2, 3, 4), 2)
+          .mapPartitionsWithIndex((index, iterator) => {
+            new Iterator[Int] {
+              def hasNext = true
+              def next() = {
+                throw new SparkException("Exception to simulate bad scenario")
+              }
+            }
+          })
+
+      val piped = nums.pipe(Seq("cat"))
+
+      intercept[SparkException] {
+        piped.collect()
+      }
     }
   }
 

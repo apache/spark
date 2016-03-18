@@ -19,9 +19,9 @@ package org.apache.spark.scheduler
 
 import org.apache.hadoop.mapred.{FileOutputCommitter, TaskAttemptContext}
 import org.scalatest.concurrent.Timeouts
-import org.scalatest.time.{Span, Seconds}
+import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.{SparkConf, SparkContext, LocalSparkContext, SparkFunSuite, TaskContext}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TaskContext}
 import org.apache.spark.util.Utils
 
 /**

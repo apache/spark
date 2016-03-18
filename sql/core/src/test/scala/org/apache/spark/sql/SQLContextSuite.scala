@@ -18,8 +18,15 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
+
+  object DummyRule extends Rule[LogicalPlan] {
+    def apply(p: LogicalPlan): LogicalPlan = p
+  }
 
   test("getOrCreate instantiates SQLContext") {
     val sqlContext = SQLContext.getOrCreate(sc)
@@ -66,6 +73,12 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
     }
   }
 
+<<<<<<< HEAD
+  test("Catalyst optimization passes are modifiable at runtime") {
+    val sqlContext = SQLContext.getOrCreate(sc)
+    sqlContext.experimental.extraOptimizations = Seq(DummyRule)
+    assert(sqlContext.sessionState.optimizer.batches.flatMap(_.rules).contains(DummyRule))
+=======
   test("SPARK-13390: createDataFrame(java.util.List[_],Class[_]) NotSerializableException") {
     val rows = new java.util.ArrayList[IntJavaBean]()
     rows.add(new IntJavaBean(1))
@@ -81,5 +94,6 @@ class IntJavaBean(private var i: Int) extends Serializable {
 
   def setInt(i: Int): Unit = {
     this.i = i
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

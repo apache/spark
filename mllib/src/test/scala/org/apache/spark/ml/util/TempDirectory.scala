@@ -39,7 +39,15 @@ trait TempDirectory extends BeforeAndAfterAll { self: Suite =>
   }
 
   override def afterAll(): Unit = {
+<<<<<<< HEAD:mllib/src/test/scala/org/apache/spark/ml/util/TempDirectory.scala
+    try {
+      Utils.deleteRecursively(_tempDir)
+    } finally {
+      super.afterAll()
+    }
+=======
     Utils.deleteRecursively(_tempDir)
     super.afterAll()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:mllib/src/test/scala/org/apache/spark/ml/util/TempDirectory.scala
   }
 }

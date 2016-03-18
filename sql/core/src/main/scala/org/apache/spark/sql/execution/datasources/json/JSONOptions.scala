@@ -17,13 +17,44 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+<<<<<<< HEAD
+import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
+
+import org.apache.spark.sql.execution.datasources.CompressionCodecs
+=======
 import com.fasterxml.jackson.core.{JsonParser, JsonFactory}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * Options for the JSON data source.
  *
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
+<<<<<<< HEAD
+private[sql] class JSONOptions(
+    @transient private val parameters: Map[String, String])
+  extends Serializable  {
+
+  val samplingRatio =
+    parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+  val primitivesAsString =
+    parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
+  val floatAsBigDecimal =
+    parameters.get("floatAsBigDecimal").map(_.toBoolean).getOrElse(false)
+  val allowComments =
+    parameters.get("allowComments").map(_.toBoolean).getOrElse(false)
+  val allowUnquotedFieldNames =
+    parameters.get("allowUnquotedFieldNames").map(_.toBoolean).getOrElse(false)
+  val allowSingleQuotes =
+    parameters.get("allowSingleQuotes").map(_.toBoolean).getOrElse(true)
+  val allowNumericLeadingZeros =
+    parameters.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false)
+  val allowNonNumericNumbers =
+    parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
+  val allowBackslashEscapingAnyCharacter =
+    parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
+  val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
+=======
 case class JSONOptions(
     samplingRatio: Double = 1.0,
     primitivesAsString: Boolean = false,
@@ -32,6 +63,7 @@ case class JSONOptions(
     allowSingleQuotes: Boolean = true,
     allowNumericLeadingZeros: Boolean = false,
     allowNonNumericNumbers: Boolean = false) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
@@ -40,6 +72,12 @@ case class JSONOptions(
     factory.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, allowSingleQuotes)
     factory.configure(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS, allowNumericLeadingZeros)
     factory.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, allowNonNumericNumbers)
+<<<<<<< HEAD
+    factory.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
+      allowBackslashEscapingAnyCharacter)
+  }
+}
+=======
   }
 }
 
@@ -62,3 +100,4 @@ object JSONOptions {
       parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
   )
 }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

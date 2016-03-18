@@ -18,7 +18,10 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+<<<<<<< HEAD
+=======
 import org.apache.spark.sql.SQLContext
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.Pipeline
@@ -26,6 +29,10 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.feature.VectorIndexer
 import org.apache.spark.ml.regression.{GBTRegressionModel, GBTRegressor}
 // $example off$
+<<<<<<< HEAD
+import org.apache.spark.sql.SQLContext
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 object GradientBoostedTreeRegressorExample {
   def main(args: Array[String]): Unit = {

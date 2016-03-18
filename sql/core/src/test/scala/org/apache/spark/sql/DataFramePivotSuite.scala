@@ -18,6 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
+<<<<<<< HEAD
+import org.apache.spark.sql.internal.SQLConf
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFramePivotSuite extends QueryTest with SharedSQLContext{

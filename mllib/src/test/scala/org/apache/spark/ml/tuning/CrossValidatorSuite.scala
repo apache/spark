@@ -18,19 +18,28 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.spark.SparkFunSuite
+<<<<<<< HEAD
+import org.apache.spark.ml.{Estimator, Model, Pipeline}
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
+import org.apache.spark.ml.feature.HashingTF
+import org.apache.spark.ml.param.{ParamMap, ParamPair}
+=======
 import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.{Pipeline, Estimator, Model}
 import org.apache.spark.ml.classification.{LogisticRegressionModel, LogisticRegression}
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
 import org.apache.spark.ml.param.{ParamPair, ParamMap}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.{StructField, StructType}
 
 class CrossValidatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -39,7 +48,6 @@ class CrossValidatorSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val sqlContext = new SQLContext(sc)
     dataset = sqlContext.createDataFrame(
       sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
   }
@@ -97,7 +105,11 @@ class CrossValidatorSuite
     assert(cvModel2.avgMetrics.length === lrParamMaps.length)
   }
 
+<<<<<<< HEAD
+  test("transformSchema should check estimatorParamMaps") {
+=======
   test("validateParams should check estimatorParamMaps") {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     import CrossValidatorSuite.{MyEstimator, MyEvaluator}
 
     val est = new MyEstimator("est")
@@ -111,12 +123,12 @@ class CrossValidatorSuite
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)
 
-    cv.validateParams() // This should pass.
+    cv.transformSchema(new StructType()) // This should pass.
 
     val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")
     cv.setEstimatorParamMaps(invalidParamMaps)
     intercept[IllegalArgumentException] {
-      cv.validateParams()
+      cv.transformSchema(new StructType())
     }
   }
 
@@ -312,14 +324,13 @@ object CrossValidatorSuite extends SparkFunSuite {
 
   class MyEstimator(override val uid: String) extends Estimator[MyModel] with HasInputCol {
 
-    override def validateParams(): Unit = require($(inputCol).nonEmpty)
-
     override def fit(dataset: DataFrame): MyModel = {
       throw new UnsupportedOperationException
     }
 
     override def transformSchema(schema: StructType): StructType = {
-      throw new UnsupportedOperationException
+      require($(inputCol).nonEmpty)
+      schema
     }
 
     override def copy(extra: ParamMap): MyEstimator = defaultCopy(extra)

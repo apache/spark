@@ -26,8 +26,13 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
+import org.apache.spark.streaming.{State, Time}
+import org.apache.spark.streaming.util.OpenHashMapBasedStateMap
+=======
 import org.apache.spark.streaming.util.OpenHashMapBasedStateMap
 import org.apache.spark.streaming.{State, Time}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.util.Utils
 
 class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with BeforeAndAfterAll {
@@ -36,6 +41,10 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
   private var checkpointDir: File = _
 
   override def beforeAll(): Unit = {
+<<<<<<< HEAD
+    super.beforeAll()
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     sc = new SparkContext(
       new SparkConf().setMaster("local").setAppName("MapWithStateRDDSuite"))
     checkpointDir = Utils.createTempDir()
@@ -43,10 +52,21 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
   }
 
   override def afterAll(): Unit = {
+<<<<<<< HEAD
+    try {
+      if (sc != null) {
+        sc.stop()
+      }
+      Utils.deleteRecursively(checkpointDir)
+    } finally {
+      super.afterAll()
+    }
+=======
     if (sc != null) {
       sc.stop()
     }
     Utils.deleteRecursively(checkpointDir)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   override def sparkContext: SparkContext = sc

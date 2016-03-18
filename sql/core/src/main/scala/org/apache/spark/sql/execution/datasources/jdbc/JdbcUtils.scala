@@ -24,10 +24,16 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
+<<<<<<< HEAD
+import org.apache.spark.internal.Logging
+=======
 import org.apache.spark.Logging
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcType, JdbcDialects}
 import org.apache.spark.sql.types._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
+import org.apache.spark.sql.types._
 
 /**
  * Util functions for JDBC tables.
@@ -70,7 +76,11 @@ object JdbcUtils extends Logging {
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
+<<<<<<< HEAD
+    // the database name. Query used to find table exists can be overridden by the dialects.
+=======
     // the database name. Query used to find table exists can be overriden by the dialects.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(table))
       try {
@@ -194,8 +204,16 @@ object JdbcUtils extends Logging {
                 case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
                 case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
                 case ArrayType(et, _) =>
+<<<<<<< HEAD
+                  // remove type length parameters from end of type name
+                  val typeName = getJdbcType(et, dialect).databaseTypeDefinition
+                    .toLowerCase.split("\\(")(0)
+                  val array = conn.createArrayOf(
+                    typeName,
+=======
                   val array = conn.createArrayOf(
                     getJdbcType(et, dialect).databaseTypeDefinition.toLowerCase,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
                     row.getSeq[AnyRef](i).toArray)
                   stmt.setArray(i + 1, array)
                 case _ => throw new IllegalArgumentException(

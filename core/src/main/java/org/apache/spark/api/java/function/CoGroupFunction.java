@@ -25,5 +25,9 @@ import java.util.Iterator;
  * Datasets.
  */
 public interface CoGroupFunction<K, V1, V2, R> extends Serializable {
+<<<<<<< HEAD
+  Iterator<R> call(K key, Iterator<V1> left, Iterator<V2> right) throws Exception;
+=======
   Iterable<R> call(K key, Iterator<V1> left, Iterator<V2> right) throws Exception;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

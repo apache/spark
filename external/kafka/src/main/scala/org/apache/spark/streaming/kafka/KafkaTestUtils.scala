@@ -20,8 +20,8 @@ package org.apache.spark.streaming.kafka
 import java.io.File
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
-import java.util.concurrent.TimeoutException
 import java.util.{Map => JMap, Properties}
+import java.util.concurrent.TimeoutException
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -37,9 +37,10 @@ import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -152,11 +153,19 @@ private[kafka] class KafkaTestUtils extends Logging {
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
+<<<<<<< HEAD
+  def createTopic(topic: String, partitions: Int): Unit = {
+    AdminUtils.createTopic(zkClient, topic, partitions, 1)
+=======
   def createTopic(topic: String): Unit = {
     AdminUtils.createTopic(zkClient, topic, 1, 1)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     // wait until metadata is propagated
-    waitUntilMetadataIsPropagated(topic, 0)
+    (0 until partitions).foreach { p => waitUntilMetadataIsPropagated(topic, p) }
   }
+
+  /** Single-argument version for backwards compatibility */
+  def createTopic(topic: String): Unit = createTopic(topic, 1)
 
   /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {

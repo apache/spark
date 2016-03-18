@@ -36,6 +36,10 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   "${SPARK_HOME}"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
   exit 1
 fi
+<<<<<<< HEAD
+
+ORIGINAL_ARGS="$@"
+=======
 
 ORIGINAL_ARGS="$@"
 
@@ -53,6 +57,7 @@ case $1 in
   esac
 shift
 done
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 . "${SPARK_HOME}/sbin/spark-config.sh"
 
@@ -73,9 +78,12 @@ fi
 "${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS 1 \
   --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
   $ORIGINAL_ARGS
+<<<<<<< HEAD
+=======
 
 if [ "$START_TACHYON" == "true" ]; then
   "${SPARK_HOME}"/tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
   "${SPARK_HOME}"/tachyon/bin/tachyon format -s
   "${SPARK_HOME}"/tachyon/bin/tachyon-start.sh master
 fi
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

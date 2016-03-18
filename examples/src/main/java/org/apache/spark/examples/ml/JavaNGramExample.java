@@ -19,6 +19,10 @@ package org.apache.spark.examples.ml;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+<<<<<<< HEAD
+import org.apache.spark.sql.Dataset;
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
@@ -26,7 +30,10 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.NGram;
+<<<<<<< HEAD
+=======
 import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -54,6 +61,15 @@ public class JavaNGramExample {
         "words", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
     });
 
+<<<<<<< HEAD
+    Dataset<Row> wordDataFrame = sqlContext.createDataFrame(jrdd, schema);
+
+    NGram ngramTransformer = new NGram().setInputCol("words").setOutputCol("ngrams");
+
+    Dataset<Row> ngramDataFrame = ngramTransformer.transform(wordDataFrame);
+
+    for (Row r : ngramDataFrame.select("ngrams", "label").takeAsList(3)) {
+=======
     DataFrame wordDataFrame = sqlContext.createDataFrame(jrdd, schema);
 
     NGram ngramTransformer = new NGram().setInputCol("words").setOutputCol("ngrams");
@@ -61,6 +77,7 @@ public class JavaNGramExample {
     DataFrame ngramDataFrame = ngramTransformer.transform(wordDataFrame);
 
     for (Row r : ngramDataFrame.select("ngrams", "label").take(3)) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       java.util.List<String> ngrams = r.getList(0);
       for (String ngram : ngrams) System.out.print(ngram + " --- ");
       System.out.println();
@@ -68,4 +85,8 @@ public class JavaNGramExample {
     // $example off$
     jsc.stop();
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

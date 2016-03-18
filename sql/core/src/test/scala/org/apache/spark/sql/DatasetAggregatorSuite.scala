@@ -17,12 +17,20 @@
 
 package org.apache.spark.sql
 
+<<<<<<< HEAD
+import scala.language.postfixOps
+
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
+=======
 
 import scala.language.postfixOps
 
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Aggregator
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /** An `Aggregator` that adds up any numeric type returned by the given function. */
 class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] {
@@ -120,16 +128,26 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: TypedAggregator") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
+<<<<<<< HEAD
+    checkDataset(
+      ds.groupByKey(_._1).agg(sum(_._2)),
+=======
     checkAnswer(
       ds.groupBy(_._1).agg(sum(_._2)),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("typed aggregation: TypedAggregator, expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
+<<<<<<< HEAD
+    checkDataset(
+      ds.groupByKey(_._1).agg(
+=======
     checkAnswer(
       ds.groupBy(_._1).agg(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         sum(_._2),
         expr("sum(_2)").as[Long],
         count("*")),
@@ -139,8 +157,13 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: complex case") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
 
+<<<<<<< HEAD
+    checkDataset(
+      ds.groupByKey(_._1).agg(
+=======
     checkAnswer(
       ds.groupBy(_._1).agg(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         expr("avg(_2)").as[Double],
         TypedAverage.toColumn),
       ("a", 2.0, 2.0), ("b", 3.0, 3.0))
@@ -149,8 +172,13 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: complex result type") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
 
+<<<<<<< HEAD
+    checkDataset(
+      ds.groupByKey(_._1).agg(
+=======
     checkAnswer(
       ds.groupBy(_._1).agg(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         expr("avg(_2)").as[Double],
         ComplexResultAgg.toColumn),
       ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
@@ -159,10 +187,17 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: in project list") {
     val ds = Seq(1, 3, 2, 5).toDS()
 
+<<<<<<< HEAD
+    checkDataset(
+      ds.select(sum((i: Int) => i)),
+      11)
+    checkDataset(
+=======
     checkAnswer(
       ds.select(sum((i: Int) => i)),
       11)
     checkAnswer(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       ds.select(sum((i: Int) => i), sum((i: Int) => i * 2)),
       11 -> 22)
   }
@@ -170,7 +205,11 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: class input") {
     val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
 
+<<<<<<< HEAD
+    checkDataset(
+=======
     checkAnswer(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       ds.select(ClassInputAgg.toColumn),
       3)
   }
@@ -178,6 +217,18 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: class input with reordering") {
     val ds = sql("SELECT 'one' AS b, 1 as a").as[AggData]
 
+<<<<<<< HEAD
+    checkDataset(
+      ds.select(ClassInputAgg.toColumn),
+      1)
+
+    checkDataset(
+      ds.select(expr("avg(a)").as[Double], ClassInputAgg.toColumn),
+      (1.0, 1))
+
+    checkDataset(
+      ds.groupByKey(_.b).agg(ClassInputAgg.toColumn),
+=======
     checkAnswer(
       ds.select(ClassInputAgg.toColumn),
       1)
@@ -188,23 +239,37 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       ds.groupBy(_.b).agg(ClassInputAgg.toColumn),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       ("one", 1))
   }
 
   test("typed aggregation: complex input") {
     val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
 
+<<<<<<< HEAD
+    checkDataset(
+=======
     checkAnswer(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       ds.select(ComplexBufferAgg.toColumn),
       2
     )
 
+<<<<<<< HEAD
+    checkDataset(
+      ds.select(expr("avg(a)").as[Double], ComplexBufferAgg.toColumn),
+      (1.5, 2))
+
+    checkDataset(
+      ds.groupByKey(_.b).agg(ComplexBufferAgg.toColumn),
+=======
     checkAnswer(
       ds.select(expr("avg(a)").as[Double], ComplexBufferAgg.toColumn),
       (1.5, 2))
 
     checkAnswer(
       ds.groupBy(_.b).agg(ComplexBufferAgg.toColumn),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       ("one", 1), ("two", 1))
   }
 }

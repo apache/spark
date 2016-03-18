@@ -21,11 +21,15 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+<<<<<<< HEAD
+import org.apache.spark.sql.types._
+=======
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.types.StructField
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -76,6 +80,7 @@ abstract class SQLImplicits {
 
   /** @since 1.6.1 */
   implicit def newDoubleSeqEncoder: Encoder[Seq[Double]] = ExpressionEncoder()
+<<<<<<< HEAD
 
   /** @since 1.6.1 */
   implicit def newFloatSeqEncoder: Encoder[Seq[Float]] = ExpressionEncoder()
@@ -84,6 +89,16 @@ abstract class SQLImplicits {
   implicit def newByteSeqEncoder: Encoder[Seq[Byte]] = ExpressionEncoder()
 
   /** @since 1.6.1 */
+=======
+
+  /** @since 1.6.1 */
+  implicit def newFloatSeqEncoder: Encoder[Seq[Float]] = ExpressionEncoder()
+
+  /** @since 1.6.1 */
+  implicit def newByteSeqEncoder: Encoder[Seq[Byte]] = ExpressionEncoder()
+
+  /** @since 1.6.1 */
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   implicit def newShortSeqEncoder: Encoder[Seq[Short]] = ExpressionEncoder()
 
   /** @since 1.6.1 */
@@ -127,6 +142,10 @@ abstract class SQLImplicits {
 
   /**
    * Creates a [[Dataset]] from an RDD.
+<<<<<<< HEAD
+   *
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * @since 1.6.0
    */
   implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {

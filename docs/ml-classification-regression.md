@@ -252,7 +252,11 @@ Nodes in the output layer use softmax function:
 \]`
 The number of nodes `$N$` in the output layer corresponds to the number of classes. 
 
+<<<<<<< HEAD
+MLPC employs backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.
+=======
 MLPC employes backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 **Example**
 
@@ -535,7 +539,13 @@ The main differences between this API and the [original MLlib Decision Tree API]
 * use of DataFrame metadata to distinguish continuous and categorical features
 
 
+<<<<<<< HEAD
+The Pipelines API for Decision Trees offers a bit more functionality than the original API.  
+In particular, for classification, users can get the predicted probability of each class (a.k.a. class conditional probabilities); 
+for regression, users can get the biased sample variance of prediction.
+=======
 The Pipelines API for Decision Trees offers a bit more functionality than the original API.  In particular, for classification, users can get the predicted probability of each class (a.k.a. class conditional probabilities).
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 Ensembles of trees (Random Forests and Gradient-Boosted Trees) are described below in the [Tree ensembles section](#tree-ensembles).
 
@@ -605,6 +615,16 @@ All output columns are optional; to exclude an output column, set its correspond
       <td>Vector of length # classes equal to rawPrediction normalized to a multinomial distribution</td>
       <td>Classification only</td>
     </tr>
+<<<<<<< HEAD
+    <tr>
+      <td>varianceCol</td>
+      <td>Double</td>
+      <td></td>
+      <td>The biased sample variance of prediction</td>
+      <td>Regression only</td>
+      </tr>
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   </tbody>
 </table>
 

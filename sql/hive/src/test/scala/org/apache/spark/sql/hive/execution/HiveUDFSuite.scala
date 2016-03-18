@@ -17,20 +17,31 @@
 
 package org.apache.spark.sql.hive.execution
 
+<<<<<<< HEAD
+import java.io.{DataInput, DataOutput, File, PrintWriter}
+=======
 import java.io.{PrintWriter, File, DataInput, DataOutput}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.Writable
+<<<<<<< HEAD
+
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
+=======
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.util.Utils
 
 
@@ -143,10 +154,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("Generic UDAF aggregates") {
-    checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999)) FROM src LIMIT 1"),
+    checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999D)) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src LIMIT 1").collect().toSeq)
 
-    checkAnswer(sql("SELECT percentile_approx(100.0, array(0.9, 0.9)) FROM src LIMIT 1"),
+    checkAnswer(sql("SELECT percentile_approx(100.0D, array(0.9D, 0.9D)) FROM src LIMIT 1"),
       sql("SELECT array(100, 100) FROM src LIMIT 1").collect().toSeq)
    }
 
@@ -361,7 +372,11 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
+<<<<<<< HEAD
+  test("SPARK-11522 select input_file_name from non-parquet table") {
+=======
   test("SPARK-11522 select input_file_name from non-parquet table"){
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     withTempDir { tempDir =>
 

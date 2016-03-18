@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
 
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/execution/columnar/ColumnTypeSuite.scala
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeProjection}
+=======
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, GenericMutableRow}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/test/scala/org/apache/spark/sql/execution/columnar/ColumnTypeSuite.scala
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
-import org.apache.spark.{Logging, SparkFunSuite}
-
 
 class ColumnTypeSuite extends SparkFunSuite with Logging {
   private val DEFAULT_BUFFER_SIZE = 512
@@ -35,7 +40,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   test("defaultSize") {
     val checks = Map(
-      NULL-> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
+      NULL -> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
       FLOAT -> 4, DOUBLE -> 8, COMPACT_DECIMAL(15, 10) -> 8, LARGE_DECIMAL(20, 10) -> 12,
       STRING -> 8, BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 16, MAP_TYPE -> 32)
 
@@ -68,7 +73,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     checkActualSize(LONG, Long.MaxValue, 8)
     checkActualSize(FLOAT, Float.MaxValue, 4)
     checkActualSize(DOUBLE, Double.MaxValue, 8)
-    checkActualSize(STRING, "hello", 4 + "hello".getBytes("utf-8").length)
+    checkActualSize(STRING, "hello", 4 + "hello".getBytes(StandardCharsets.UTF_8).length)
     checkActualSize(BINARY, Array.fill[Byte](4)(0.toByte), 4 + 4)
     checkActualSize(COMPACT_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
     checkActualSize(LARGE_DECIMAL(20, 10), Decimal(0, 20, 10), 5)

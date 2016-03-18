@@ -23,6 +23,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+<<<<<<< HEAD
+import org.apache.spark.sql.internal.SQLConf
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -291,10 +295,21 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
     3,
     Set("a", "b"),
     Set(LessThan("b", 16)))
+<<<<<<< HEAD
+=======
 
   def testPushDown(
     sqlString: String,
     expectedCount: Int,
+    requiredColumnNames: Set[String]): Unit = {
+    testPushDown(sqlString, expectedCount, requiredColumnNames, Set.empty[Filter])
+  }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
+
+  def testPushDown(
+    sqlString: String,
+    expectedCount: Int,
+<<<<<<< HEAD
     requiredColumnNames: Set[String]): Unit = {
     testPushDown(sqlString, expectedCount, requiredColumnNames, Set.empty[Filter])
   }
@@ -304,17 +319,44 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
     expectedCount: Int,
     requiredColumnNames: Set[String],
     expectedUnhandledFilters: Set[Filter]): Unit = {
-    test(s"PushDown Returns $expectedCount: $sqlString") {
-      val queryExecution = sql(sqlString).queryExecution
-      val rawPlan = queryExecution.executedPlan.collect {
-        case p: execution.PhysicalRDD => p
-      } match {
-        case Seq(p) => p
-        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
-      }
-      val rawCount = rawPlan.execute().count()
-      assert(ColumnsRequired.set === requiredColumnNames)
 
+=======
+    requiredColumnNames: Set[String],
+    expectedUnhandledFilters: Set[Filter]): Unit = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
+    test(s"PushDown Returns $expectedCount: $sqlString") {
+      // These tests check a particular plan, disable whole stage codegen.
+      caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
+      try {
+        val queryExecution = sql(sqlString).queryExecution
+        val rawPlan = queryExecution.executedPlan.collect {
+          case p: execution.DataSourceScan => p
+        } match {
+          case Seq(p) => p
+          case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+        }
+        val rawCount = rawPlan.execute().count()
+        assert(ColumnsRequired.set === requiredColumnNames)
+
+<<<<<<< HEAD
+        val table = caseInsensitiveContext.table("oneToTenFiltered")
+        val relation = table.queryExecution.logical.collectFirst {
+          case LogicalRelation(r, _, _) => r
+        }.get
+
+        assert(
+          relation.unhandledFilters(FiltersPushed.list.toArray).toSet === expectedUnhandledFilters)
+
+        if (rawCount != expectedCount) {
+          fail(
+            s"Wrong # of results for pushed filter. Got $rawCount, Expected $expectedCount\n" +
+              s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
+              queryExecution)
+        }
+      } finally {
+        caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
+=======
       val table = caseInsensitiveContext.table("oneToTenFiltered")
       val relation = table.queryExecution.logical.collectFirst {
         case LogicalRelation(r, _) => r
@@ -328,6 +370,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
           s"Wrong # of results for pushed filter. Got $rawCount, Expected $expectedCount\n" +
             s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
             queryExecution)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
     }
   }

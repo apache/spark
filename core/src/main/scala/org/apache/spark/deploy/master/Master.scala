@@ -24,15 +24,19 @@ import java.util.Date
 import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+<<<<<<< HEAD
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+=======
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.rpc._
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
   ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
@@ -41,11 +45,13 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[deploy] class Master(
     override val rpcEnv: RpcEnv,
@@ -74,7 +80,7 @@ private[deploy] class Master(
 
   val workers = new HashSet[WorkerInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
-  val waitingApps = new ArrayBuffer[ApplicationInfo]
+  private val waitingApps = new ArrayBuffer[ApplicationInfo]
   val apps = new HashSet[ApplicationInfo]
 
   private val idToWorker = new HashMap[String, WorkerInfo]
@@ -368,6 +374,30 @@ private[deploy] class Master(
       if (canCompleteRecovery) { completeRecovery() }
     }
 
+    case WorkerLatestState(workerId, executors, driverIds) =>
+      idToWorker.get(workerId) match {
+        case Some(worker) =>
+          for (exec <- executors) {
+            val executorMatches = worker.executors.exists {
+              case (_, e) => e.application.id == exec.appId && e.id == exec.execId
+            }
+            if (!executorMatches) {
+              // master doesn't recognize this executor. So just tell worker to kill it.
+              worker.endpoint.send(KillExecutor(masterUrl, exec.appId, exec.execId))
+            }
+          }
+
+          for (driverId <- driverIds) {
+            val driverMatches = worker.drivers.exists { case (id, _) => id == driverId }
+            if (!driverMatches) {
+              // master doesn't recognize this driver. So just tell worker to kill it.
+              worker.endpoint.send(KillDriver(driverId))
+            }
+          }
+        case None =>
+          logWarning("Worker state from unknown worker: " + workerId)
+      }
+
     case UnregisterApplication(applicationId) =>
       logInfo(s"Received unregister request from application $applicationId")
       idToApp.get(applicationId).foreach(finishApplication)
@@ -383,7 +413,7 @@ private[deploy] class Master(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
+        id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -392,7 +422,7 @@ private[deploy] class Master(
         context.reply(RegisterWorkerFailed("Duplicate worker ID"))
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          workerRef, workerUiPort, publicAddress)
+          workerRef, workerWebUiUrl)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
           context.reply(RegisteredWorker(self, masterWebUiUrl))
@@ -776,6 +806,7 @@ private[deploy] class Master(
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
         exec.id, ExecutorState.LOST, Some("worker lost"), None))
+      exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
     for (driver <- worker.drivers.values) {
@@ -1100,7 +1131,7 @@ private[deploy] object Master extends Logging {
   val ENDPOINT_NAME = "Master"
 
   def main(argStrings: Array[String]) {
-    SignalLogger.register(log)
+    Utils.initDaemon(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
     val (rpcEnv, _, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, conf)

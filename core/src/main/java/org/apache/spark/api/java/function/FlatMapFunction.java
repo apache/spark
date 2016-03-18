@@ -18,10 +18,15 @@
 package org.apache.spark.api.java.function;
 
 import java.io.Serializable;
+import java.util.Iterator;
 
 /**
  * A function that returns zero or more output records from each input record.
  */
 public interface FlatMapFunction<T, R> extends Serializable {
+<<<<<<< HEAD
+  Iterator<R> call(T t) throws Exception;
+=======
   Iterable<R> call(T t) throws Exception;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

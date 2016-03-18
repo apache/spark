@@ -18,13 +18,21 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
+<<<<<<< HEAD
+
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
+import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.internal.Logging
+=======
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
@@ -167,7 +175,7 @@ private[deploy] class ExecutorRunner(
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
 
       val stderr = new File(executorDir, "stderr")
-      Files.write(header, stderr, UTF_8)
+      Files.write(header, stderr, StandardCharsets.UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)

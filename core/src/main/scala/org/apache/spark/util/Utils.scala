@@ -22,10 +22,17 @@ import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+<<<<<<< HEAD
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.util.{Locale, Properties, Random, UUID}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import java.util.concurrent._
 import java.util.{Locale, Properties, Random, UUID}
 import javax.net.ssl.HttpsURLConnection
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
@@ -34,7 +41,7 @@ import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import com.google.common.io.{ByteStreams, Files}
+import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
@@ -43,11 +50,16 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
+<<<<<<< HEAD
+import org.slf4j.Logger
+=======
 import tachyon.TachyonURI
 import tachyon.client.{TachyonFS, TachyonFile}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
@@ -178,7 +190,20 @@ private[spark] object Utils extends Logging {
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
-  def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {
+  def writeByteBuffer(bb: ByteBuffer, out: DataOutput): Unit = {
+    if (bb.hasArray) {
+      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    } else {
+      val bbval = new Array[Byte](bb.remaining())
+      bb.get(bbval)
+      out.write(bbval)
+    }
+  }
+
+  /**
+   * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.OutputStream]]
+   */
+  def writeByteBuffer(bb: ByteBuffer, out: OutputStream): Unit = {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
@@ -504,7 +529,7 @@ private[spark] object Utils extends Logging {
 
     // The file does not exist in the target directory. Copy or move it there.
     if (removeSourceFile) {
-      Files.move(sourceFile, destFile)
+      Files.move(sourceFile.toPath, destFile.toPath)
     } else {
       logInfo(s"Copying ${sourceFile.getAbsolutePath} to ${destFile.getAbsolutePath}")
       copyRecursive(sourceFile, destFile)
@@ -522,7 +547,7 @@ private[spark] object Utils extends Logging {
         case (f1, f2) => filesEqualRecursive(f1, f2)
       }
     } else if (file1.isFile && file2.isFile) {
-      Files.equal(file1, file2)
+      GFiles.equal(file1, file2)
     } else {
       false
     }
@@ -536,7 +561,7 @@ private[spark] object Utils extends Logging {
       val subfiles = source.listFiles()
       subfiles.foreach(f => copyRecursive(f, new File(dest, f.getName)))
     } else {
-      Files.copy(source, dest)
+      Files.copy(source.toPath, dest.toPath)
     }
   }
 
@@ -650,9 +675,7 @@ private[spark] object Utils extends Logging {
 
   private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
     // These environment variables are set by YARN.
-    // For Hadoop 0.23.X, we check for YARN_LOCAL_DIRS (we use this below in getYarnLocalDirs())
-    // For Hadoop 2.X, we check for CONTAINER_ID.
-    conf.getenv("CONTAINER_ID") != null || conf.getenv("YARN_LOCAL_DIRS") != null
+    conf.getenv("CONTAINER_ID") != null
   }
 
   /**
@@ -728,17 +751,12 @@ private[spark] object Utils extends Logging {
           logError(s"Failed to create local root dir in $root. Ignoring this directory.")
           None
       }
-    }.toArray
+    }
   }
 
   /** Get the Yarn approved local directories. */
   private def getYarnLocalDirs(conf: SparkConf): String = {
-    // Hadoop 0.23 and 2.x have different Environment variable names for the
-    // local dirs, so lets check both. We assume one of the 2 is set.
-    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    val localDirs = Option(conf.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(conf.getenv("LOCAL_DIRS"))
-      .getOrElse(""))
+    val localDirs = Option(conf.getenv("LOCAL_DIRS")).getOrElse("")
 
     if (localDirs.isEmpty) {
       throw new Exception("Yarn Local dirs can't be empty")
@@ -929,15 +947,6 @@ private[spark] object Utils extends Logging {
           }
         }
       }
-    }
-  }
-
-  /**
-   * Delete a file or directory and its contents recursively.
-   */
-  def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
-    if (!client.delete(new TachyonURI(dir.getPath()), true)) {
-      throw new IOException("Failed to delete the tachyon dir: " + dir)
     }
   }
 
@@ -1531,7 +1540,7 @@ private[spark] object Utils extends Logging {
     rawMod + (if (rawMod < 0) mod else 0)
   }
 
-  // Handles idiosyncracies with hash (add more as required)
+  // Handles idiosyncrasies with hash (add more as required)
   // This method should be kept in sync with
   // org.apache.spark.network.util.JavaUtils#nonNegativeHash().
   def nonNegativeHash(obj: AnyRef): Int = {
@@ -1601,7 +1610,7 @@ private[spark] object Utils extends Logging {
    * @param f function to be executed. If prepare is not None, the running time of each call to f
    *          must be an order of magnitude longer than one millisecond for accurate timing.
    * @param prepare function to be executed before each call to f. Its running time doesn't count.
-   * @return the total time across all iterations (not couting preparation time)
+   * @return the total time across all iterations (not counting preparation time)
    */
   def timeIt(numIters: Int)(f: => Unit, prepare: Option[() => Unit] = None): Long = {
     if (prepare.isEmpty) {
@@ -1637,30 +1646,18 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Creates a symlink. Note jdk1.7 has Files.createSymbolicLink but not used here
-   * for jdk1.6 support.  Supports windows by doing copy, everything else uses "ln -sf".
+   * Creates a symlink.
    * @param src absolute path to the source
    * @param dst relative path for the destination
    */
-  def symlink(src: File, dst: File) {
+  def symlink(src: File, dst: File): Unit = {
     if (!src.isAbsolute()) {
       throw new IOException("Source must be absolute")
     }
     if (dst.isAbsolute()) {
       throw new IOException("Destination must be relative")
     }
-    var cmdSuffix = ""
-    val linkCmd = if (isWindows) {
-      // refer to http://technet.microsoft.com/en-us/library/cc771254.aspx
-      cmdSuffix = " /s /e /k /h /y /i"
-      "cmd /c xcopy "
-    } else {
-      cmdSuffix = ""
-      "ln -sf "
-    }
-    import scala.sys.process._
-    (linkCmd + src.getAbsolutePath() + " " + dst.getPath() + cmdSuffix) lines_!
-    ProcessLogger(line => logInfo(line))
+    Files.createSymbolicLink(dst.toPath, src.toPath)
   }
 
 
@@ -1833,15 +1830,6 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  lazy val isInInterpreter: Boolean = {
-    try {
-      val interpClass = classForName("org.apache.spark.repl.Main")
-      interpClass.getMethod("interp").invoke(null) != null
-    } catch {
-      case _: ClassNotFoundException => false
-    }
-  }
-
   /**
    * Return a well-formed URI for the file described by a user input string.
    *
@@ -1918,7 +1906,7 @@ private[spark] object Utils extends Logging {
     require(file.exists(), s"Properties file $file does not exist")
     require(file.isFile(), s"Properties file $file is not a normal file")
 
-    val inReader = new InputStreamReader(new FileInputStream(file), "UTF-8")
+    val inReader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)
     try {
       val properties = new Properties()
       properties.load(inReader)
@@ -2236,6 +2224,7 @@ private[spark] object Utils extends Logging {
   /**
    * Return whether the specified file is a parent directory of the child file.
    */
+  @tailrec
   def isInDirectory(parent: File, child: File): Boolean = {
     if (child == null || parent == null) {
       return false
@@ -2249,6 +2238,16 @@ private[spark] object Utils extends Logging {
     isInDirectory(parent, child.getParentFile)
   }
 
+
+  /**
+   *
+   * @return whether it is local mode
+   */
+  def isLocalMaster(conf: SparkConf): Boolean = {
+    val master = conf.get("spark.master", "")
+    master == "local" || master.startsWith("local[")
+  }
+
   /**
    * Return whether dynamic allocation is enabled in the given conf
    * Dynamic allocation and explicitly setting the number of executors are inherently
@@ -2256,8 +2255,13 @@ private[spark] object Utils extends Logging {
    * the latter should override the former (SPARK-9092).
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
-    conf.getBoolean("spark.dynamicAllocation.enabled", false) &&
-      conf.getInt("spark.executor.instances", 0) == 0
+    val numExecutor = conf.getInt("spark.executor.instances", 0)
+    val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
+    if (numExecutor != 0 && dynamicAllocationEnabled) {
+      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+    }
+    numExecutor == 0 && dynamicAllocationEnabled &&
+      (!isLocalMaster(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
   }
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
@@ -2271,6 +2275,26 @@ private[spark] object Utils extends Logging {
   def tempFileWith(path: File): File = {
     new File(path.getAbsolutePath + "." + UUID.randomUUID())
   }
+<<<<<<< HEAD
+
+  /**
+   * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
+   * this is formatted as PID@hostname.
+   */
+  def getProcessName(): String = {
+    ManagementFactory.getRuntimeMXBean().getName()
+  }
+
+  /**
+   * Utility function that should be called early in `main()` for daemons to set up some common
+   * diagnostic state.
+   */
+  def initDaemon(log: Logger): Unit = {
+    log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
+    SignalLogger.register(log)
+  }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
@@ -2325,7 +2349,7 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
 
       def read(): Int = if (iterator.hasNext) iterator.next() else -1
     }
-    val reader = new BufferedReader(new InputStreamReader(input))
+    val reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
     val stringBuilder = new StringBuilder
     var line = reader.readLine()
     while (line != null) {

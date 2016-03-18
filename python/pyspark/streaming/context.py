@@ -155,9 +155,13 @@ class StreamingContext(object):
             # get the GatewayServer object in JVM by ID
             jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
             # update the port of CallbackClient with real port
+<<<<<<< HEAD
+            jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)
+=======
             gw.jvm.PythonDStream.updatePythonGatewayPort(jgws, gw._python_proxy_port)
             _py4j_cleaner = Py4jCallbackConnectionCleaner(gw)
             _py4j_cleaner.start()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
@@ -338,7 +342,7 @@ class StreamingContext(object):
         """
         self._jssc.checkpoint(directory)
 
-    def socketTextStream(self, hostname, port, storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2):
+    def socketTextStream(self, hostname, port, storageLevel=StorageLevel.MEMORY_AND_DISK_2):
         """
         Create an input from TCP source hostname:port. Data is received using
         a TCP socket and receive byte is interpreted as UTF8 encoded ``\\n`` delimited

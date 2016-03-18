@@ -17,7 +17,12 @@
 
 package org.apache.spark.deploy.client
 
+<<<<<<< HEAD
+import java.util.concurrent.ConcurrentLinkedQueue
+
+=======
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import scala.concurrent.duration._
 
 import org.scalatest.BeforeAndAfterAll
@@ -28,6 +33,10 @@ import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
+<<<<<<< HEAD
+import org.apache.spark.internal.Logging
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
@@ -63,6 +72,20 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
   }
 
   override def afterAll(): Unit = {
+<<<<<<< HEAD
+    try {
+      workerRpcEnvs.foreach(_.shutdown())
+      masterRpcEnv.shutdown()
+      workers.foreach(_.stop())
+      master.stop()
+      workerRpcEnvs = null
+      masterRpcEnv = null
+      workers = null
+      master = null
+    } finally {
+      super.afterAll()
+    }
+=======
     workerRpcEnvs.foreach(_.shutdown())
     masterRpcEnv.shutdown()
     workers.foreach(_.stop())
@@ -72,6 +95,7 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     workers = null
     master = null
     super.afterAll()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   test("interface methods of AppClient using local Master") {
@@ -144,7 +168,11 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     (0 until numWorkers).map { i =>
       val rpcEnv = workerRpcEnvs(i)
       val worker = new Worker(rpcEnv, 0, cores, memory, Array(masterRpcEnv.address),
+<<<<<<< HEAD
+        Worker.ENDPOINT_NAME, null, conf, securityManager)
+=======
         Worker.SYSTEM_NAME + i, Worker.ENDPOINT_NAME, null, conf, securityManager)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       rpcEnv.setupEndpoint(Worker.ENDPOINT_NAME, worker)
       worker
     }
@@ -155,13 +183,27 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     master.self.askWithRetry[MasterStateResponse](RequestMasterState)
   }
 
+<<<<<<< HEAD
+  /** Get the applications that are active from Master */
+=======
   /** Get the applictions that are active from Master */
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   private def getApplications(): Seq[ApplicationInfo] = {
     getMasterState.activeApps
   }
 
   /** Application Listener to collect events */
   private class AppClientCollector extends AppClientListener with Logging {
+<<<<<<< HEAD
+    val connectedIdList = new ConcurrentLinkedQueue[String]()
+    @volatile var disconnectedCount: Int = 0
+    val deadReasonList = new ConcurrentLinkedQueue[String]()
+    val execAddedList = new ConcurrentLinkedQueue[String]()
+    val execRemovedList = new ConcurrentLinkedQueue[String]()
+
+    def connected(id: String): Unit = {
+      connectedIdList.add(id)
+=======
     val connectedIdList = new ArrayBuffer[String] with SynchronizedBuffer[String]
     @volatile var disconnectedCount: Int = 0
     val deadReasonList = new ArrayBuffer[String] with SynchronizedBuffer[String]
@@ -170,6 +212,7 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
 
     def connected(id: String): Unit = {
       connectedIdList += id
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
 
     def disconnected(): Unit = {
@@ -179,7 +222,11 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     }
 
     def dead(reason: String): Unit = {
+<<<<<<< HEAD
+      deadReasonList.add(reason)
+=======
       deadReasonList += reason
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
 
     def executorAdded(
@@ -188,11 +235,19 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
         hostPort: String,
         cores: Int,
         memory: Int): Unit = {
+<<<<<<< HEAD
+      execAddedList.add(id)
+    }
+
+    def executorRemoved(id: String, message: String, exitStatus: Option[Int]): Unit = {
+      execRemovedList.add(id)
+=======
       execAddedList += id
     }
 
     def executorRemoved(id: String, message: String, exitStatus: Option[Int]): Unit = {
       execRemovedList += id
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 

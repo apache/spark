@@ -30,7 +30,11 @@ import org.apache.spark.ml.attribute.AttributeGroup;
 import org.apache.spark.ml.attribute.NumericAttribute;
 import org.apache.spark.ml.feature.VectorSlicer;
 import org.apache.spark.mllib.linalg.Vectors;
+<<<<<<< HEAD
+import org.apache.spark.sql.Dataset;
+=======
 import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.*;
@@ -55,7 +59,12 @@ public class JavaVectorSlicerExample {
       RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
     ));
 
+<<<<<<< HEAD
+    Dataset<Row> dataset =
+        jsql.createDataFrame(jrdd, (new StructType()).add(group.toStructField()));
+=======
     DataFrame dataset = jsql.createDataFrame(jrdd, (new StructType()).add(group.toStructField()));
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     VectorSlicer vectorSlicer = new VectorSlicer()
       .setInputCol("userFeatures").setOutputCol("features");
@@ -63,7 +72,11 @@ public class JavaVectorSlicerExample {
     vectorSlicer.setIndices(new int[]{1}).setNames(new String[]{"f3"});
     // or slicer.setIndices(new int[]{1, 2}), or slicer.setNames(new String[]{"f2", "f3"})
 
+<<<<<<< HEAD
+    Dataset<Row> output = vectorSlicer.transform(dataset);
+=======
     DataFrame output = vectorSlicer.transform(dataset);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     System.out.println(output.select("userFeatures", "features").first());
     // $example off$

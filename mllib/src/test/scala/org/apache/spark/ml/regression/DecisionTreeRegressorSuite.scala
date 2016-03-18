@@ -18,17 +18,18 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.impl.TreeTests
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 
-
-class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
+class DecisionTreeRegressorSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import DecisionTreeRegressorSuite.compareAPIs
 
@@ -50,7 +51,11 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setMaxDepth(2)
       .setMaxBins(100)
       .setSeed(1)
+<<<<<<< HEAD
+    val categoricalFeatures = Map(0 -> 3, 1 -> 3)
+=======
     val categoricalFeatures = Map(0 -> 3, 1-> 3)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures)
   }
 
@@ -59,12 +64,12 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setImpurity("variance")
       .setMaxDepth(2)
       .setMaxBins(100)
-    val categoricalFeatures = Map(0 -> 2, 1-> 2)
+    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures)
   }
 
   test("copied model must have the same parent") {
-    val categoricalFeatures = Map(0 -> 2, 1-> 2)
+    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
     val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
     val model = new DecisionTreeRegressor()
       .setImpurity("variance")
@@ -73,11 +78,80 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     MLTestingUtils.checkCopy(model)
   }
 
+  test("predictVariance") {
+    val dt = new DecisionTreeRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(100)
+      .setPredictionCol("")
+      .setVarianceCol("variance")
+    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
+
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
+    val model = dt.fit(df)
+
+    val predictions = model.transform(df)
+      .select(model.getFeaturesCol, model.getVarianceCol)
+      .collect()
+
+    predictions.foreach { case Row(features: Vector, variance: Double) =>
+      val expectedVariance = model.rootNode.predictImpl(features).impurityStats.calculate()
+      assert(variance === expectedVariance,
+        s"Expected variance $expectedVariance but got $variance.")
+    }
+  }
+
+  test("Feature importance with toy data") {
+    val dt = new DecisionTreeRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(3)
+      .setSeed(123)
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
+
+    val model = dt.fit(df)
+
+    val importances = model.featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
+    assert(importances.toArray.sum === 1.0)
+    assert(importances.toArray.forall(_ >= 0.0))
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: test("model save/load")   SPARK-6725
+  test("read/write") {
+    def checkModelData(
+        model: DecisionTreeRegressionModel,
+        model2: DecisionTreeRegressionModel): Unit = {
+      TreeTests.checkEqual(model, model2)
+      assert(model.numFeatures === model2.numFeatures)
+    }
+
+    val dt = new DecisionTreeRegressor()
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+
+    // Categorical splits with tree depth 2
+    val categoricalData: DataFrame =
+      TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 0)
+    testEstimatorAndModelReadWrite(dt, categoricalData,
+      TreeTests.allParamSettings, checkModelData)
+
+    // Continuous splits with tree depth 2
+    val continuousData: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
+    testEstimatorAndModelReadWrite(dt, continuousData,
+      TreeTests.allParamSettings, checkModelData)
+
+    // Continuous splits with tree depth 0
+    testEstimatorAndModelReadWrite(dt, continuousData,
+      TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
+  }
 }
 
 private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {

@@ -18,14 +18,15 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -127,6 +128,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   import testImplicits._
 
   override def beforeAll(): Unit = {
+<<<<<<< HEAD
+    super.beforeAll()
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -680,6 +685,50 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
   }
 
+  test("single distinct multiple columns set") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  count(distinct value1, value2)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(null, 3) ::
+        Row(1, 3) ::
+        Row(2, 1) ::
+        Row(3, 0) :: Nil)
+  }
+
+  test("multiple distinct multiple columns sets") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  count(distinct value1),
+          |  sum(distinct value1),
+          |  count(distinct value2),
+          |  sum(distinct value2),
+          |  count(distinct value1, value2),
+          |  longProductSum(distinct value1, value2),
+          |  count(value1),
+          |  sum(value1),
+          |  count(value2),
+          |  sum(value2),
+          |  longProductSum(value1, value2),
+          |  count(*),
+          |  count(1)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(null, 3, 30, 3, 60, 3, -4700, 3, 30, 3, 60, -4700, 4, 4) ::
+        Row(1, 2, 40, 3, -10, 3, -100, 3, 70, 3, -10, -100, 3, 3) ::
+        Row(2, 2, 0, 1, 1, 1, 1, 3, 1, 3, 3, 2, 4, 4) ::
+        Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
+  }
+
   test("test count") {
     checkAnswer(
       sqlContext.sql(
@@ -805,7 +854,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """
           |SELECT corr(b, c) FROM covar_tab WHERE a = 3
         """.stripMargin),
-      Row(null) :: Nil)
+      Row(Double.NaN) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -814,13 +863,45 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """.stripMargin),
       Row(1, null) ::
       Row(2, null) ::
-      Row(3, null) ::
-      Row(4, null) ::
-      Row(5, null) ::
-      Row(6, null) :: Nil)
+      Row(3, Double.NaN) ::
+      Row(4, Double.NaN) ::
+      Row(5, Double.NaN) ::
+      Row(6, Double.NaN) :: Nil)
 
     val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
     assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
+<<<<<<< HEAD
+  }
+
+  test("covariance: covar_pop and covar_samp") {
+    // non-trivial example. To reproduce in python, use:
+    // >>> import numpy as np
+    // >>> a = np.array(range(20))
+    // >>> b = np.array([x * x - 2 * x + 3.5 for x in range(20)])
+    // >>> np.cov(a, b, bias = 0)[0][1]
+    // 595.0
+    // >>> np.cov(a, b, bias = 1)[0][1]
+    // 565.25
+    val df = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
+    val cov_samp = df.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_samp - 595.0) < 1e-12)
+
+    val cov_pop = df.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_pop - 565.25) < 1e-12)
+
+    val df2 = Seq.tabulate(20)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
+    val cov_samp2 = df2.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_samp2 - 11564.0) < 1e-12)
+
+    val cov_pop2 = df2.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_pop2 - 10985.799999999999) < 1e-12)
+
+    // one row test
+    val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
+    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(Double.NaN))
+    checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   test("no aggregation function (SPARK-11486)") {
@@ -863,7 +944,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         RandomDataGenerator.forType(
           dataType = schemaForGenerator,
           nullable = true,
-          seed = Some(System.nanoTime()))
+          new Random(System.nanoTime()))
       val dataGenerator =
         maybeDataGenerator
           .getOrElse(fail(s"Failed to create data generator for schema $schemaForGenerator"))
@@ -893,6 +974,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       )
     }
   }
+<<<<<<< HEAD
 
   test("udaf without specifying inputSchema") {
     withTempTable("noInputSchemaUDAF") {
@@ -912,6 +994,27 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         schema)
         .registerTempTable("noInputSchemaUDAF")
 
+=======
+
+  test("udaf without specifying inputSchema") {
+    withTempTable("noInputSchemaUDAF") {
+      sqlContext.udf.register("noInputSchema", new ScalaAggregateFunctionWithoutInputSchema)
+
+      val data =
+        Row(1, Seq(Row(1), Row(2), Row(3))) ::
+          Row(1, Seq(Row(4), Row(5), Row(6))) ::
+          Row(2, Seq(Row(-10))) :: Nil
+      val schema =
+        StructType(
+          StructField("key", IntegerType) ::
+            StructField("myArray",
+              ArrayType(StructType(StructField("v", IntegerType) :: Nil))) :: Nil)
+      sqlContext.createDataFrame(
+        sparkContext.parallelize(data, 2),
+        schema)
+        .registerTempTable("noInputSchemaUDAF")
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       checkAnswer(
         sqlContext.sql(
           """
@@ -932,9 +1035,15 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 }
 
+<<<<<<< HEAD
 
 class TungstenAggregationQuerySuite extends AggregationQuerySuite
 
+=======
+
+class TungstenAggregationQuerySuite extends AggregationQuerySuite
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
@@ -944,7 +1053,11 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
         // Create a new df to make sure its physical operator picks up
         // spark.sql.TungstenAggregate.testFallbackStartsAt.
         // todo: remove it?
+<<<<<<< HEAD
+        val newActual = Dataset.newDataFrame(sqlContext, actual.logicalPlan)
+=======
         val newActual = DataFrame(sqlContext, actual.logicalPlan)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
         QueryTest.checkAnswer(newActual, expectedAnswer) match {
           case Some(errorMessage) =>

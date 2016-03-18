@@ -24,5 +24,9 @@ import java.util.Iterator;
  * A function that returns zero or more output records from each grouping key and its values.
  */
 public interface FlatMapGroupsFunction<K, V, R> extends Serializable {
+<<<<<<< HEAD
+  Iterator<R> call(K key, Iterator<V> values) throws Exception;
+=======
   Iterable<R> call(K key, Iterator<V> values) throws Exception;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

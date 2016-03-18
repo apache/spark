@@ -19,9 +19,15 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
+=======
 import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{ParamMap, IntParam, ParamValidators}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
@@ -46,7 +52,7 @@ class PolynomialExpansion(override val uid: String)
    * @group param
    */
   val degree = new IntParam(this, "degree", "the polynomial degree to expand (>= 1)",
-    ParamValidators.gt(1))
+    ParamValidators.gtEq(1))
 
   setDefault(degree -> 2)
 

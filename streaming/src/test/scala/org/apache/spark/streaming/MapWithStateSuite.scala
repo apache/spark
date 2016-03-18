@@ -18,6 +18,19 @@
 package org.apache.spark.streaming
 
 import java.io.File
+<<<<<<< HEAD
+import java.util.concurrent.ConcurrentLinkedQueue
+
+import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
+
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.PrivateMethodTester._
+
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream, MapWithStateDStream, MapWithStateDStreamImpl}
+import org.apache.spark.util.{ManualClock, Utils}
+=======
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
@@ -28,6 +41,7 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream, MapWithStateDStream, MapWithStateDStreamImpl}
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 class MapWithStateSuite extends SparkFunSuite
   with DStreamCheckpointTester with BeforeAndAfterAll with BeforeAndAfter {
@@ -42,6 +56,16 @@ class MapWithStateSuite extends SparkFunSuite
   }
 
   after {
+<<<<<<< HEAD
+    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
+    if (checkpointDir != null) {
+      Utils.deleteRecursively(checkpointDir)
+    }
+  }
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+=======
     if (checkpointDir != null) {
       Utils.deleteRecursively(checkpointDir)
     }
@@ -49,14 +73,24 @@ class MapWithStateSuite extends SparkFunSuite
   }
 
   override def beforeAll(): Unit = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val conf = new SparkConf().setMaster("local").setAppName("MapWithStateSuite")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     sc = new SparkContext(conf)
   }
 
   override def afterAll(): Unit = {
+<<<<<<< HEAD
+    try {
+      if (sc != null) {
+        sc.stop()
+      }
+    } finally {
+      super.afterAll()
+=======
     if (sc != null) {
       sc.stop()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 
@@ -512,7 +546,11 @@ class MapWithStateSuite extends SparkFunSuite
 
       val mapWithStateStream = dstream.map { _ -> 1 }.mapWithState(
         StateSpec.function(runningCount))
+<<<<<<< HEAD
+      // Set interval make sure there is one RDD checkpointing
+=======
       // Set internval make sure there is one RDD checkpointing
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       mapWithStateStream.checkpoint(checkpointDuration)
       mapWithStateStream.stateSnapshots()
     }
@@ -545,9 +583,15 @@ class MapWithStateSuite extends SparkFunSuite
     val ssc = new StreamingContext(sc, Seconds(1))
     val inputStream = new TestInputStream(ssc, input, numPartitions = 2)
     val trackeStateStream = inputStream.map(x => (x, 1)).mapWithState(mapWithStateSpec)
+<<<<<<< HEAD
+    val collectedOutputs = new ConcurrentLinkedQueue[Seq[T]]
+    val outputStream = new TestOutputStream(trackeStateStream, collectedOutputs)
+    val collectedStateSnapshots = new ConcurrentLinkedQueue[Seq[(K, S)]]
+=======
     val collectedOutputs = new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
     val outputStream = new TestOutputStream(trackeStateStream, collectedOutputs)
     val collectedStateSnapshots = new ArrayBuffer[Seq[(K, S)]] with SynchronizedBuffer[Seq[(K, S)]]
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val stateSnapshotStream = new TestOutputStream(
       trackeStateStream.stateSnapshots(), collectedStateSnapshots)
     outputStream.register()
@@ -562,7 +606,11 @@ class MapWithStateSuite extends SparkFunSuite
 
     batchCounter.waitUntilBatchesCompleted(numBatches, 10000)
     ssc.stop(stopSparkContext = false)
+<<<<<<< HEAD
+    (collectedOutputs.asScala.toSeq, collectedStateSnapshots.asScala.toSeq)
+=======
     (collectedOutputs, collectedStateSnapshots)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   private def assert[U](expected: Seq[Seq[U]], collected: Seq[Seq[U]], typ: String) {
@@ -578,4 +626,7 @@ class MapWithStateSuite extends SparkFunSuite
     }
   }
 }
+<<<<<<< HEAD
+=======
 
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

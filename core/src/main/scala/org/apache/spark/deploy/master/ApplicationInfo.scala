@@ -65,7 +65,11 @@ private[spark] class ApplicationInfo(
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
+<<<<<<< HEAD
+    executorLimit = desc.initialExecutorLimit.getOrElse(Integer.MAX_VALUE)
+=======
     executorLimit = Integer.MAX_VALUE
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     appUIUrlAtHistoryServer = None
   }
 

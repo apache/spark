@@ -17,7 +17,11 @@
 
 package org.apache.spark.serializer
 
+<<<<<<< HEAD
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, FileOutputStream}
+=======
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileOutputStream, FileInputStream}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -25,7 +29,10 @@ import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
+<<<<<<< HEAD
+=======
 
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
@@ -33,6 +40,7 @@ import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.util.Utils
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.Utils
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -148,10 +156,10 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(mutable.Map("one" -> 1, "two" -> 2))
     check(mutable.HashMap(1 -> "one", 2 -> "two"))
     check(mutable.HashMap("one" -> 1, "two" -> 2))
-    check(List(Some(mutable.HashMap(1->1, 2->2)), None, Some(mutable.HashMap(3->4))))
+    check(List(Some(mutable.HashMap(1 -> 1, 2 -> 2)), None, Some(mutable.HashMap(3 -> 4))))
     check(List(
       mutable.HashMap("one" -> 1, "two" -> 2),
-      mutable.HashMap(1->"one", 2->"two", 3->"three")))
+      mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
   }
 
   test("Bug: SPARK-10251") {
@@ -178,10 +186,10 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(mutable.Map("one" -> 1, "two" -> 2))
     check(mutable.HashMap(1 -> "one", 2 -> "two"))
     check(mutable.HashMap("one" -> 1, "two" -> 2))
-    check(List(Some(mutable.HashMap(1->1, 2->2)), None, Some(mutable.HashMap(3->4))))
+    check(List(Some(mutable.HashMap(1 -> 1, 2 -> 2)), None, Some(mutable.HashMap(3 -> 4))))
     check(List(
       mutable.HashMap("one" -> 1, "two" -> 2),
-      mutable.HashMap(1->"one", 2->"two", 3->"three")))
+      mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
   }
 
   test("ranges") {
@@ -283,8 +291,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   test("kryo with fold") {
     val control = 1 :: 2 :: Nil
     // zeroValue must not be a ClassWithoutNoArgConstructor instance because it will be
-    // serialized by spark.closure.serializer but spark.closure.serializer only supports
-    // the default Java serializer.
+    // serialized by the Java serializer.
     val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_))
       .fold(null)((t1, t2) => {
       val t1x = if (t1 == null) 0 else t1.x

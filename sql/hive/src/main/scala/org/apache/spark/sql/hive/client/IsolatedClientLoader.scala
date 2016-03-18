@@ -26,9 +26,14 @@ import scala.language.reflectiveCalls
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.Logging
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
+<<<<<<< HEAD
+import org.apache.spark.internal.Logging
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -41,6 +46,11 @@ private[hive] object IsolatedClientLoader extends Logging {
   def forVersion(
       hiveMetastoreVersion: String,
       hadoopVersion: String,
+<<<<<<< HEAD
+      sparkConf: SparkConf,
+      hadoopConf: Configuration,
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       config: Map[String, String] = Map.empty,
       ivyPath: Option[String] = None,
       sharedPrefixes: Seq[String] = Seq.empty,
@@ -75,8 +85,14 @@ private[hive] object IsolatedClientLoader extends Logging {
     }
 
     new IsolatedClientLoader(
+<<<<<<< HEAD
+      hiveVersion(hiveMetastoreVersion),
+      sparkConf,
+=======
       version = hiveVersion(hiveMetastoreVersion),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       execJars = files,
+      hadoopConf = hadoopConf,
       config = config,
       sharesHadoopClasses = sharesHadoopClasses,
       sharedPrefixes = sharedPrefixes,
@@ -124,15 +140,15 @@ private[hive] object IsolatedClientLoader extends Logging {
 }
 
 /**
- * Creates a Hive `ClientInterface` using a classloader that works according to the following rules:
+ * Creates a [[HiveClient]] using a classloader that works according to the following rules:
  *  - Shared classes: Java, Scala, logging, and Spark classes are delegated to `baseClassLoader`
- *    allowing the results of calls to the `ClientInterface` to be visible externally.
+ *    allowing the results of calls to the [[HiveClient]] to be visible externally.
  *  - Hive classes: new instances are loaded from `execJars`.  These classes are not
  *    accessible externally due to their custom loading.
- *  - ClientWrapper: a new copy is created for each instance of `IsolatedClassLoader`.
+ *  - [[HiveClientImpl]]: a new copy is created for each instance of `IsolatedClassLoader`.
  *    This new instance is able to see a specific version of hive without using reflection. Since
  *    this is a unique instance, it is not visible externally other than as a generic
- *    `ClientInterface`, unless `isolationOn` is set to `false`.
+ *    [[HiveClient]], unless `isolationOn` is set to `false`.
  *
  * @param version The version of hive on the classpath.  used to pick specific function signatures
  *                that are not compatible across versions.
@@ -146,6 +162,8 @@ private[hive] object IsolatedClientLoader extends Logging {
  */
 private[hive] class IsolatedClientLoader(
     val version: HiveVersion,
+    val sparkConf: SparkConf,
+    val hadoopConf: Configuration,
     val execJars: Seq[URL] = Seq.empty,
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
@@ -179,7 +197,7 @@ private[hive] class IsolatedClientLoader(
 
   /** True if `name` refers to a spark class that must see specific version of Hive. */
   protected def isBarrierClass(name: String): Boolean =
-    name.startsWith(classOf[ClientWrapper].getName) ||
+    name.startsWith(classOf[HiveClientImpl].getName) ||
     name.startsWith(classOf[Shim].getName) ||
     barrierPrefixes.exists(name.startsWith)
 
@@ -233,9 +251,9 @@ private[hive] class IsolatedClientLoader(
   }
 
   /** The isolated client interface to Hive. */
-  private[hive] def createClient(): ClientInterface = {
+  private[hive] def createClient(): HiveClient = {
     if (!isolationOn) {
-      return new ClientWrapper(version, config, baseClassLoader, this)
+      return new HiveClientImpl(version, sparkConf, hadoopConf, config, baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
@@ -244,10 +262,10 @@ private[hive] class IsolatedClientLoader(
 
     try {
       classLoader
-        .loadClass(classOf[ClientWrapper].getName)
+        .loadClass(classOf[HiveClientImpl].getName)
         .getConstructors.head
-        .newInstance(version, config, classLoader, this)
-        .asInstanceOf[ClientInterface]
+        .newInstance(version, sparkConf, hadoopConf, config, classLoader, this)
+        .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>
         if (e.getCause().isInstanceOf[NoClassDefFoundError]) {

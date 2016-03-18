@@ -37,7 +37,11 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 			[region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2)
 
 	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisUtils$)
+<<<<<<< HEAD
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala). Refer to the [Running the Example](#running-the-example) subsection for instructions on how to run the example.
+=======
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala). Refer to the [Running the Example](#running-the-example) subsection for instructions on how to run the example.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 	</div>
 	<div data-lang="java" markdown="1">
@@ -50,7 +54,11 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 			[region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2);
 
 	See the [API docs](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
+<<<<<<< HEAD
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
+=======
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 	</div>
 	<div data-lang="python" markdown="1">
@@ -61,7 +69,11 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 			[region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2)
 
 	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kinesis.KinesisUtils)
+<<<<<<< HEAD
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
+=======
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 	</div>
 	</div>
@@ -95,7 +107,11 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 	</div>
 	</div>
 
+<<<<<<< HEAD
+	- `streamingContext`: StreamingContext containing an application name used by Kinesis to tie this Kinesis application to the Kinesis stream
+=======
 	- `streamingContext`: StreamingContext containg an application name used by Kinesis to tie this Kinesis application to the Kinesis stream
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 	- `[Kinesis app name]`: The application name that will be used to checkpoint the Kinesis
 		sequence numbers in DynamoDB table.
@@ -190,9 +206,9 @@ To run the example,
 	</div>
 	<div data-lang="python" markdown="1">
 
-        bin/spark-submit --jars extras/kinesis-asl/target/scala-*/\
+        bin/spark-submit --jars external/kinesis-asl/target/scala-*/\
             spark-streaming-kinesis-asl-assembly_*.jar \
-            extras/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
+            external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
             [Kinesis app name] [Kinesis stream name] [endpoint URL] [region name]
 
 	</div>
@@ -216,6 +232,10 @@ de-aggregate records during consumption.
 
 - Checkpointing too frequently will cause excess load on the AWS checkpoint storage layer and may lead to AWS throttling.  The provided example handles this throttling with a random-backoff-retry strategy.
 
+<<<<<<< HEAD
+- If no Kinesis checkpoint info exists when the input DStream starts, it will start either from the oldest record available (InitialPositionInStream.TRIM_HORIZON) or from the latest tip (InitialPositionInStream.LATEST).  This is configurable.
+=======
 - If no Kinesis checkpoint info exists when the input DStream starts, it will start either from the oldest record available (InitialPositionInStream.TRIM_HORIZON) or from the latest tip (InitialPostitionInStream.LATEST).  This is configurable.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 - InitialPositionInStream.LATEST could lead to missed records if data is added to the stream while no input DStreams are running (and no checkpoint info is being stored).
 - InitialPositionInStream.TRIM_HORIZON may lead to duplicate processing of records where the impact is dependent on checkpoint frequency and processing idempotency.

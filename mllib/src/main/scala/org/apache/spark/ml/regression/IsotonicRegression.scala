@@ -19,14 +19,24 @@ package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
+import org.apache.spark.ml.{Estimator, Model}
+=======
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.regression.IsotonicRegressionModel.IsotonicRegressionModelWriter
 import org.apache.spark.ml.util._
+<<<<<<< HEAD
+import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
+=======
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.regression.{IsotonicRegression => MLlibIsotonicRegression}
 import org.apache.spark.mllib.regression.{IsotonicRegressionModel => MLlibIsotonicRegressionModel}
 import org.apache.spark.rdd.RDD
@@ -90,9 +100,9 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
     } else {
       lit(1.0)
     }
-    dataset.select(col($(labelCol)), f, w)
-      .map { case Row(label: Double, feature: Double, weight: Double) =>
-      (label, feature, weight)
+    dataset.select(col($(labelCol)), f, w).rdd.map {
+      case Row(label: Double, feature: Double, weight: Double) =>
+        (label, feature, weight)
     }
   }
 

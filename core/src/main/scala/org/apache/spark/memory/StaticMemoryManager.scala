@@ -17,10 +17,12 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkConf
+<<<<<<< HEAD
+import org.apache.spark.storage.BlockId
+=======
 import org.apache.spark.storage.{BlockId, BlockStatus}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * A [[MemoryManager]] that statically partitions the heap space into disjoint regions.
@@ -53,16 +55,42 @@ private[spark] class StaticMemoryManager(
     (maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
+<<<<<<< HEAD
+  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
+=======
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     if (numBytes > maxStorageMemory) {
       // Fail fast if the block simply won't fit
       logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
         s"memory limit ($maxStorageMemory bytes)")
       false
     } else {
+<<<<<<< HEAD
+      storageMemoryPool.acquireMemory(blockId, numBytes)
+    }
+  }
+
+  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
+    val currentUnrollMemory = storageMemoryPool.memoryStore.currentUnrollMemory
+    val freeMemory = storageMemoryPool.memoryFree
+    // When unrolling, we will use all of the existing free memory, and, if necessary,
+    // some extra space freed from evicting cached blocks. We must place a cap on the
+    // amount of memory to be evicted by unrolling, however, otherwise unrolling one
+    // big block can blow away the entire cache.
+    val maxNumBytesToFree = math.max(0, maxUnrollMemory - currentUnrollMemory - freeMemory)
+    // Keep it within the range 0 <= X <= maxNumBytesToFree
+    val numBytesToFree = math.max(0, math.min(maxNumBytesToFree, numBytes - freeMemory))
+    storageMemoryPool.acquireMemory(blockId, numBytes, numBytesToFree)
+  }
+
+  private[memory]
+  override def acquireExecutionMemory(
+      numBytes: Long,
+=======
       storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
     }
   }
@@ -86,6 +114,7 @@ private[spark] class StaticMemoryManager(
   private[memory]
   override def acquireExecutionMemory(
       numBytes: Long,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       taskAttemptId: Long,
       memoryMode: MemoryMode): Long = synchronized {
     memoryMode match {

@@ -31,9 +31,15 @@ private[v1] class ExecutorListResource(ui: SparkUI) {
     listener.synchronized {
       // The follow codes should be protected by `listener` to make sure no executors will be
       // removed before we query their status. See SPARK-12784.
+<<<<<<< HEAD
+      val storageStatusList = listener.activeStorageStatusList
+      (0 until storageStatusList.size).map { statusId =>
+        ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
+=======
       val storageStatusList = listener.storageStatusList
       (0 until storageStatusList.size).map { statusId =>
         ExecutorsPage.getExecInfo(listener, statusId)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
     }
   }

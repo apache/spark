@@ -18,11 +18,15 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param.{ParamMap, ParamValidators, Param}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
+<<<<<<< HEAD
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+=======
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, SchemaUtils, Identifiable}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
 
 /**
@@ -74,9 +78,9 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
     SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
 
-    val predictionAndLabels = dataset.select($(predictionCol), $(labelCol))
-      .map { case Row(prediction: Double, label: Double) =>
-      (prediction, label)
+    val predictionAndLabels = dataset.select($(predictionCol), $(labelCol)).rdd.map {
+      case Row(prediction: Double, label: Double) =>
+        (prediction, label)
     }
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val metric = $(metricName) match {

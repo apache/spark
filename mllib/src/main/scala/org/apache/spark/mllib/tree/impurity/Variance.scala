@@ -93,7 +93,6 @@ private[tree] class VarianceAggregator()
   def getCalculator(allStats: Array[Double], offset: Int): VarianceCalculator = {
     new VarianceCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
-
 }
 
 /**
@@ -104,9 +103,9 @@ private[tree] class VarianceAggregator()
  */
 private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
 
-  require(stats.size == 3,
+  require(stats.length == 3,
     s"VarianceCalculator requires sufficient statistics array stats to be of length 3," +
-    s" but was given array of length ${stats.size}.")
+    s" but was given array of length ${stats.length}.")
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].

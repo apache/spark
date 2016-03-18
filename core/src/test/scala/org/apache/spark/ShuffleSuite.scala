@@ -17,17 +17,28 @@
 
 package org.apache.spark
 
+<<<<<<< HEAD
+import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService}
+=======
 import java.util.concurrent.{Callable, Executors, ExecutorService, CyclicBarrier}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
+<<<<<<< HEAD
+import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.shuffle.ShuffleWriter
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId}
+=======
 import org.apache.spark.scheduler.{MyRDD, MapStatus, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -450,8 +461,8 @@ object ShuffleSuite {
     val listener = new SparkListener {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
         taskEnd.taskMetrics.shuffleWriteMetrics.foreach { m =>
-          recordsWritten += m.shuffleRecordsWritten
-          bytesWritten += m.shuffleBytesWritten
+          recordsWritten += m.recordsWritten
+          bytesWritten += m.bytesWritten
         }
         taskEnd.taskMetrics.shuffleReadMetrics.foreach { m =>
           recordsRead += m.recordsRead

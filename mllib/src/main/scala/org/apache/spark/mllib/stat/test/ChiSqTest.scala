@@ -17,15 +17,16 @@
 
 package org.apache.spark.mllib.stat.test
 
+import scala.collection.mutable
+
 import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.commons.math3.distribution.ChiSquaredDistribution
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-
-import scala.collection.mutable
 
 /**
  * Conduct the chi-squared test for the input RDDs using the specified method.

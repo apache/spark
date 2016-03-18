@@ -38,6 +38,13 @@ private[python] class GaussianMixtureModelWrapper(model: GaussianMixtureModel) {
       Array[Any](gaussian.mu, gaussian.sigma)
     }
     SerDe.dumps(JavaConverters.seqAsJavaListConverter(modelGaussians).asJava)
+<<<<<<< HEAD
+  }
+
+  def predictSoft(point: Vector): Vector = {
+    Vectors.dense(model.predictSoft(point))
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)

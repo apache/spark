@@ -18,10 +18,13 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.Experimental
+<<<<<<< HEAD
+import org.apache.spark.sql.{catalyst, Column}
+=======
 import org.apache.spark.sql.{Column, catalyst}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-
 
 /**
  * :: Experimental ::
@@ -140,6 +143,10 @@ class WindowSpec private[sql](
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
+<<<<<<< HEAD
+    val spec = WindowSpecDefinition(partitionSpec, orderSpec, frame)
+    new Column(WindowExpression(aggregate.expr, spec))
+=======
     val windowExpr = aggregate.expr match {
       // First, we check if we get an aggregate function without the DISTINCT keyword.
       // Right now, we do not support using a DISTINCT aggregate function as a
@@ -192,5 +199,6 @@ class WindowSpec private[sql](
     }
 
     new Column(windowExpr)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

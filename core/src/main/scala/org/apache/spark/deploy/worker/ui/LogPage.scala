@@ -18,14 +18,13 @@
 package org.apache.spark.deploy.worker.ui
 
 import java.io.File
-import java.net.URI
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.internal.Logging
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
-import org.apache.spark.Logging
 import org.apache.spark.util.logging.RollingFileAppender
 
 private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {

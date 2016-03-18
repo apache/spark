@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.{DataFrame, Row, SQLConf}
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.{And, Expression, LessThan}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Join
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, LessThan}
-import org.apache.spark.sql.execution.{EnsureRequirements, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, DoubleType, StructType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
 class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
 
@@ -74,12 +76,16 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
       ExtractEquiJoinKeys.unapply(join)
     }
 
+<<<<<<< HEAD
     if (joinType != FullOuter) {
-      test(s"$testName using BroadcastHashOuterJoin") {
+      test(s"$testName using ShuffledHashJoin") {
         extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
           withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+            val buildSide = if (joinType == LeftOuter) BuildRight else BuildLeft
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-              BroadcastHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right),
+              EnsureRequirements(sqlContext.sessionState.conf).apply(
+                ShuffledHashJoin(
+                  leftKeys, rightKeys, joinType, buildSide, boundCondition, left, right)),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
@@ -87,15 +93,54 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
       }
     }
 
-    test(s"$testName using SortMergeOuterJoin") {
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
+    if (joinType != FullOuter) {
+      test(s"$testName using BroadcastHashJoin") {
+        val buildSide = joinType match {
+          case LeftOuter => BuildRight
+          case RightOuter => BuildLeft
+          case _ => fail(s"Unsupported join type $joinType")
+        }
+        extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              BroadcastHashJoin(
+                leftKeys, rightKeys, joinType, buildSide, boundCondition, left, right),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
+          }
+        }
+      }
+    }
+
+    test(s"$testName using SortMergeJoin") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(sqlContext).apply(
-              SortMergeOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+            EnsureRequirements(sqlContext.sessionState.conf).apply(
+              SortMergeJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
+      }
+    }
+
+    test(s"$testName using BroadcastNestedLoopJoin build left") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          BroadcastNestedLoopJoin(left, right, BuildLeft, joinType, Some(condition)),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
+    }
+
+    test(s"$testName using BroadcastNestedLoopJoin build right") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          BroadcastNestedLoopJoin(left, right, BuildRight, joinType, Some(condition)),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
       }
     }
   }

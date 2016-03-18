@@ -23,13 +23,12 @@ import java.util.Date
 import java.util.concurrent.atomic.AtomicLong
 import javax.servlet.http.HttpServletResponse
 
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest._
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
 import org.apache.spark.util.Utils
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
-
 
 /**
  * A server that responds to requests submitted by the [[RestSubmissionClient]].
@@ -94,6 +93,10 @@ private[mesos] class MesosSubmitRequestServlet(
     val driverMemory = sparkProperties.get("spark.driver.memory")
     val driverCores = sparkProperties.get("spark.driver.cores")
     val appArgs = request.appArgs
+<<<<<<< HEAD
+    val environmentVariables = request.environmentVariables
+    val name = request.sparkProperties.getOrElse("spark.app.name", mainClass)
+=======
     // We don't want to pass down SPARK_HOME when launching Spark apps with Mesos cluster mode
     // since it's populated by default on the client and it will cause spark-submit script to
     // look for files in SPARK_HOME instead. We only need the ability to specify where to find
@@ -105,6 +108,7 @@ private[mesos] class MesosSubmitRequestServlet(
       k != "SPARK_HOME"
     }
     val name = request.sparkProperties.get("spark.app.name").getOrElse(mainClass)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Construct driver description
     val conf = new SparkConf(false).setAll(sparkProperties)

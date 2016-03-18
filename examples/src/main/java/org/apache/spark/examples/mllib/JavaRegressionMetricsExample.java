@@ -43,8 +43,14 @@ public class JavaRegressionMetricsExample {
         public LabeledPoint call(String line) {
           String[] parts = line.split(" ");
           double[] v = new double[parts.length - 1];
+<<<<<<< HEAD
+          for (int i = 1; i < parts.length - 1; i++) {
+            v[i - 1] = Double.parseDouble(parts[i].split(":")[1]);
+          }
+=======
           for (int i = 1; i < parts.length - 1; i++)
             v[i - 1] = Double.parseDouble(parts[i].split(":")[1]);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
         }
       }
@@ -87,5 +93,10 @@ public class JavaRegressionMetricsExample {
     LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(),
       "target/tmp/LogisticRegressionModel");
     // $example off$
+<<<<<<< HEAD
+
+    sc.stop();
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

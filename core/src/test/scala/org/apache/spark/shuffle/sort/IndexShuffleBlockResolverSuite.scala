@@ -42,6 +42,10 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
   private val conf: SparkConf = new SparkConf(loadDefaults = false)
 
   override def beforeEach(): Unit = {
+<<<<<<< HEAD
+    super.beforeEach()
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     tempDir = Utils.createTempDir()
     MockitoAnnotations.initMocks(this)
 
@@ -55,7 +59,15 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
   }
 
   override def afterEach(): Unit = {
+<<<<<<< HEAD
+    try {
+      Utils.deleteRecursively(tempDir)
+    } finally {
+      super.afterEach()
+    }
+=======
     Utils.deleteRecursively(tempDir)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   test("commit shuffle files multiple times") {

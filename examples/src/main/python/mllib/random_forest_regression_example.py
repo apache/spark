@@ -20,8 +20,11 @@ Random Forest Regression Example.
 """
 from __future__ import print_function
 
+<<<<<<< HEAD:examples/src/main/python/mllib/random_forest_regression_example.py
+=======
 import sys
 
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:examples/src/main/python/mllib/random_forest_regression_example.py
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.tree import RandomForest, RandomForestModel

@@ -18,8 +18,13 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
+<<<<<<< HEAD
+=======
 import org.apache.spark.streaming.{Seconds, StreamingContext}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.examples.streaming.StreamingExamples
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+
 // scalastyle:off
 /** Analyses a streaming dataset of web page views. This class demonstrates several types of
   * operators available in Spark streaming.
@@ -68,7 +73,7 @@ object PageViewStream {
                                       .groupByKey()
     val errorRatePerZipCode = statusesPerZipCode.map{
       case(zip, statuses) =>
-        val normalCount = statuses.filter(_ == 200).size
+        val normalCount = statuses.count(_ == 200)
         val errorCount = statuses.size - normalCount
         val errorRatio = errorCount.toFloat / statuses.size
         if (errorRatio > 0.05) {
@@ -86,8 +91,15 @@ object PageViewStream {
                                    .map("Unique active users: " + _)
 
     // An external dataset we want to join to this stream
+<<<<<<< HEAD
+    val userList = ssc.sparkContext.parallelize(Seq(
+      1 -> "Patrick Wendell",
+      2 -> "Reynold Xin",
+      3 -> "Matei Zaharia"))
+=======
     val userList = ssc.sparkContext.parallelize(
        Map(1 -> "Patrick Wendell", 2 -> "Reynold Xin", 3 -> "Matei Zaharia").toSeq)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     metric match {
       case "pageCounts" => pageCounts.print()

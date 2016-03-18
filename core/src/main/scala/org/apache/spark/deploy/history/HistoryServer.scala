@@ -23,16 +23,19 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.util.control.NonFatal
 
+<<<<<<< HEAD
+=======
 import com.google.common.cache._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource,
-  UIRoot}
+import org.apache.spark.internal.Logging
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.{ShutdownHookManager, SignalLogger, Utils}
+import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -50,31 +53,17 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, port, conf) with Logging with UIRoot {
+  extends WebUI(securityManager, securityManager.getSSLOptions("historyServer"), port, conf)
+  with Logging with UIRoot with ApplicationCacheOperations {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
-  private val appLoader = new CacheLoader[String, SparkUI] {
-    override def load(key: String): SparkUI = {
-      val parts = key.split("/")
-      require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
-      val ui = provider
-        .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
-        .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
-      attachSparkUI(ui)
-      ui
-    }
-  }
+  // application
+  private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
 
-  private val appCache = CacheBuilder.newBuilder()
-    .maximumSize(retainedApplications)
-    .removalListener(new RemovalListener[String, SparkUI] {
-      override def onRemoval(rm: RemovalNotification[String, SparkUI]): Unit = {
-        detachSparkUI(rm.getValue())
-      }
-    })
-    .build(appLoader)
+  // and its metrics, for testing as well as monitoring
+  val cacheMetrics = appCache.metrics
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
@@ -117,6 +106,9 @@ class HistoryServer(
   }
 
   def getSparkUI(appKey: String): Option[SparkUI] = {
+<<<<<<< HEAD
+    appCache.getSparkUI(appKey)
+=======
     try {
       val ui = appCache.get(appKey)
       Some(ui)
@@ -128,6 +120,7 @@ class HistoryServer(
         case cause: Exception => throw cause
       }
     }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   initialize()
@@ -160,19 +153,34 @@ class HistoryServer(
   override def stop() {
     super.stop()
     provider.stop()
+    appCache.stop()
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
-  private def attachSparkUI(ui: SparkUI) {
+  override def attachSparkUI(
+      appId: String,
+      attemptId: Option[String],
+      ui: SparkUI,
+      completed: Boolean) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
     addFilters(ui.getHandlers, conf)
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
-  private def detachSparkUI(ui: SparkUI) {
+  override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
+  }
+
+  /**
+   * Get the application UI and whether or not it is completed
+   * @param appId application ID
+   * @param attemptId attempt ID
+   * @return If found, the Spark UI and any history information to be used in the cache
+   */
+  override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
+    provider.getAppUI(appId, attemptId)
   }
 
   /**
@@ -202,9 +210,15 @@ class HistoryServer(
    */
   def getProviderConfig(): Map[String, String] = provider.getConfig()
 
+  /**
+   * Load an application UI and attach it to the web server.
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @return true if the application was found and loaded.
+   */
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
     try {
-      appCache.get(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
+      appCache.get(appId, attemptId)
       true
     } catch {
       case NonFatal(e) => e.getCause() match {
@@ -216,6 +230,17 @@ class HistoryServer(
     }
   }
 
+  /**
+   * String value for diagnostics.
+   * @return a multi-line description of the server state.
+   */
+  override def toString: String = {
+    s"""
+      | History Server;
+      | provider = $provider
+      | cache = $appCache
+    """.stripMargin
+  }
 }
 
 /**
@@ -234,8 +259,8 @@ object HistoryServer extends Logging {
 
   val UI_PATH_PREFIX = "/history"
 
-  def main(argStrings: Array[String]) {
-    SignalLogger.register(log)
+  def main(argStrings: Array[String]): Unit = {
+    Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
     val securityManager = new SecurityManager(conf)

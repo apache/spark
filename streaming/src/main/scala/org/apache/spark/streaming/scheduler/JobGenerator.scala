@@ -19,10 +19,12 @@ package org.apache.spark.streaming.scheduler
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.{Utils, Clock, EventLoop, ManualClock}
+import org.apache.spark.util.{Clock, EventLoop, ManualClock, Utils}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -217,12 +219,16 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     // Batches that were unprocessed before failure
     val pendingTimes = ssc.initialCheckpoint.pendingTimes.sorted(Time.ordering)
-    logInfo("Batches pending processing (" + pendingTimes.size + " batches): " +
+    logInfo("Batches pending processing (" + pendingTimes.length + " batches): " +
       pendingTimes.mkString(", "))
     // Reschedule jobs for these times
     val timesToReschedule = (pendingTimes ++ downTimes).filter { _ < restartTime }
       .distinct.sorted(Time.ordering)
+<<<<<<< HEAD
+    logInfo("Batches to reschedule (" + timesToReschedule.length + " batches): " +
+=======
     logInfo("Batches to reschedule (" + timesToReschedule.size + " batches): " +
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       timesToReschedule.mkString(", "))
     timesToReschedule.foreach { time =>
       // Allocate the related blocks when recovering from failure, because some blocks that were
@@ -243,6 +249,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Example: BlockRDDs are created in this thread, and it needs to access BlockManager
     // Update: This is probably redundant after threadlocal stuff in SparkEnv has been removed.
     SparkEnv.set(ssc.env)
+
+    // Checkpoint all RDDs marked for checkpointing to ensure their lineages are
+    // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
+    ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
     Try {
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
       graph.generateJobs(time) // generate jobs using allocated block

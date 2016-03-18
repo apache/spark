@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.{InputStream, OutputStream}
 import java.rmi.server.UID
 
-import org.apache.avro.Schema
-
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -29,7 +27,11 @@ import scala.reflect.ClassTag
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.google.common.base.Objects
+<<<<<<< HEAD
+import org.apache.avro.Schema
+=======
 
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
@@ -40,7 +42,7 @@ import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeU
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
 

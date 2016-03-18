@@ -24,37 +24,44 @@ import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 /**
  * An iterator used to evaluate [[AggregateFunction]]. It assumes the input rows have been
+<<<<<<< HEAD
+ * sorted by values of [[groupingExpressions]].
+=======
  * sorted by values of [[groupingKeyAttributes]].
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
  */
 class SortBasedAggregationIterator(
-    groupingKeyProjection: InternalRow => InternalRow,
-    groupingKeyAttributes: Seq[Attribute],
+    groupingExpressions: Seq[NamedExpression],
     valueAttributes: Seq[Attribute],
     inputIterator: Iterator[InternalRow],
+<<<<<<< HEAD
+    aggregateExpressions: Seq[AggregateExpression],
+    aggregateAttributes: Seq[Attribute],
+=======
     nonCompleteAggregateExpressions: Seq[AggregateExpression],
     nonCompleteAggregateAttributes: Seq[Attribute],
     completeAggregateExpressions: Seq[AggregateExpression],
     completeAggregateAttributes: Seq[Attribute],
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    outputsUnsafeRows: Boolean,
-    numInputRows: LongSQLMetric,
     numOutputRows: LongSQLMetric)
   extends AggregationIterator(
-    groupingKeyAttributes,
+    groupingExpressions,
     valueAttributes,
-    nonCompleteAggregateExpressions,
-    nonCompleteAggregateAttributes,
-    completeAggregateExpressions,
-    completeAggregateAttributes,
+    aggregateExpressions,
+    aggregateAttributes,
     initialInputBufferOffset,
     resultExpressions,
-    newMutableProjection,
-    outputsUnsafeRows) {
+    newMutableProjection) {
 
-  override protected def newBuffer: MutableRow = {
-    val bufferSchema = allAggregateFunctions.flatMap(_.aggBufferAttributes)
+  /**
+    * Creates a new aggregation buffer and initializes buffer values
+    * for all aggregate functions.
+    */
+  private def newBuffer: MutableRow = {
+    val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
@@ -76,10 +83,10 @@ class SortBasedAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   // The partition key of the current partition.
-  private[this] var currentGroupingKey: InternalRow = _
+  private[this] var currentGroupingKey: UnsafeRow = _
 
   // The partition key of next partition.
-  private[this] var nextGroupingKey: InternalRow = _
+  private[this] var nextGroupingKey: UnsafeRow = _
 
   // The first row of next partition.
   private[this] var firstRowInNextGroup: InternalRow = _
@@ -90,13 +97,16 @@ class SortBasedAggregationIterator(
   // The aggregation buffer used by the sort-based aggregation.
   private[this] val sortBasedAggregationBuffer: MutableRow = newBuffer
 
+  // An SafeProjection to turn UnsafeRow into GenericInternalRow, because UnsafeRow can't be
+  // compared to MutableRow (aggregation buffer) directly.
+  private[this] val safeProj: Projection = FromUnsafeProjection(valueAttributes.map(_.dataType))
+
   protected def initialize(): Unit = {
     if (inputIterator.hasNext) {
       initializeBuffer(sortBasedAggregationBuffer)
       val inputRow = inputIterator.next()
-      nextGroupingKey = groupingKeyProjection(inputRow).copy()
+      nextGroupingKey = groupingProjection(inputRow).copy()
       firstRowInNextGroup = inputRow.copy()
-      numInputRows += 1
       sortedInputHasNewGroup = true
     } else {
       // This inputIter is empty.
@@ -113,19 +123,18 @@ class SortBasedAggregationIterator(
     // We create a variable to track if we see the next group.
     var findNextPartition = false
     // firstRowInNextGroup is the first row of this group. We first process it.
-    processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
+    processRow(sortBasedAggregationBuffer, safeProj(firstRowInNextGroup))
 
     // The search will stop when we see the next group or there is no
     // input row left in the iter.
     while (!findNextPartition && inputIterator.hasNext) {
       // Get the grouping key.
       val currentRow = inputIterator.next()
-      val groupingKey = groupingKeyProjection(currentRow)
-      numInputRows += 1
+      val groupingKey = groupingProjection(currentRow)
 
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
-        processRow(sortBasedAggregationBuffer, currentRow)
+        processRow(sortBasedAggregationBuffer, safeProj(currentRow))
       } else {
         // We find a new group.
         findNextPartition = true
@@ -146,7 +155,7 @@ class SortBasedAggregationIterator(
 
   override final def hasNext: Boolean = sortedInputHasNewGroup
 
-  override final def next(): InternalRow = {
+  override final def next(): UnsafeRow = {
     if (hasNext) {
       // Process the current group.
       processCurrentSortedGroup()
@@ -162,8 +171,8 @@ class SortBasedAggregationIterator(
     }
   }
 
-  def outputForEmptyGroupingKeyWithoutInput(): InternalRow = {
+  def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
     initializeBuffer(sortBasedAggregationBuffer)
-    generateOutput(new GenericInternalRow(0), sortBasedAggregationBuffer)
+    generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer)
   }
 }

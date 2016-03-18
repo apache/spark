@@ -25,7 +25,11 @@ import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.SparkConf
+<<<<<<< HEAD
+import org.apache.spark.serializer.{KryoInputObjectInputBridge, KryoOutputObjectOutputBridge}
+=======
 import org.apache.spark.serializer.{KryoOutputObjectOutputBridge, KryoInputObjectInputBridge}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.streaming.util.OpenHashMapBasedStateMap._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -177,7 +181,11 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
     new OpenHashMapBasedStateMap[K, S](this, deltaChainThreshold = deltaChainThreshold)
   }
 
+<<<<<<< HEAD
+  /** Whether the delta chain length is long enough that it should be compacted */
+=======
   /** Whether the delta chain lenght is long enough that it should be compacted */
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   def shouldCompact: Boolean = {
     deltaChainLength >= deltaChainThreshold
   }
@@ -364,7 +372,11 @@ private[streaming] object OpenHashMapBasedStateMap {
   }
 
   /**
+<<<<<<< HEAD
+   * Internal class to represent a marker the demarkate the end of all state data in the
+=======
    * Internal class to represent a marker the demarkate the the end of all state data in the
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * serialized bytes.
    */
   class LimitMarker(val num: Int) extends Serializable

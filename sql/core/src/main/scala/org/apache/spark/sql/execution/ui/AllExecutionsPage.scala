@@ -24,7 +24,7 @@ import scala.xml.Node
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with Logging {

@@ -21,21 +21,29 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+<<<<<<< HEAD
+import java.util.Iterator;
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import java.util.List;
 import java.util.regex.Pattern;
 
 import scala.Tuple2;
-import com.google.common.collect.Lists;
+
 import com.google.common.io.Files;
 
 import org.apache.spark.Accumulator;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+<<<<<<< HEAD
+import org.apache.spark.api.java.function.*;
+=======
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.Time;
@@ -43,7 +51,6 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.api.java.JavaStreamingContextFactory;
 
 /**
  * Use this singleton to get or register a Broadcast variable.
@@ -137,15 +144,15 @@ public final class JavaRecoverableNetworkWordCount {
     JavaReceiverInputDStream<String> lines = ssc.socketTextStream(ip, port);
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Lists.newArrayList(SPACE.split(x));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(SPACE.split(x)).iterator();
       }
     });
     JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
       new PairFunction<String, String, Integer>() {
         @Override
         public Tuple2<String, Integer> call(String s) {
-          return new Tuple2<String, Integer>(s, 1);
+          return new Tuple2<>(s, 1);
         }
       }).reduceByKey(new Function2<Integer, Integer, Integer>() {
         @Override
@@ -154,9 +161,13 @@ public final class JavaRecoverableNetworkWordCount {
         }
       });
 
-    wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() {
+    wordCounts.foreachRDD(new VoidFunction2<JavaPairRDD<String, Integer>, Time>() {
       @Override
+<<<<<<< HEAD
+      public void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
+=======
       public Void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         // Get or register the blacklist Broadcast
         final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
         // Get or register the droppedWordsCounter Accumulator
@@ -164,7 +175,11 @@ public final class JavaRecoverableNetworkWordCount {
         // Use blacklist to drop words and use droppedWordsCounter to count them
         String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
           @Override
+<<<<<<< HEAD
+          public Boolean call(Tuple2<String, Integer> wordCount) {
+=======
           public Boolean call(Tuple2<String, Integer> wordCount) throws Exception {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             if (blacklist.value().contains(wordCount._1())) {
               droppedWordsCounter.add(wordCount._2());
               return false;
@@ -178,7 +193,10 @@ public final class JavaRecoverableNetworkWordCount {
         System.out.println("Dropped " + droppedWordsCounter.value() + " word(s) totally");
         System.out.println("Appending to " + outputFile.getAbsolutePath());
         Files.append(output + "\n", outputFile, Charset.defaultCharset());
+<<<<<<< HEAD
+=======
         return null;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
     });
 
@@ -204,13 +222,17 @@ public final class JavaRecoverableNetworkWordCount {
     final int port = Integer.parseInt(args[1]);
     final String checkpointDirectory = args[2];
     final String outputPath = args[3];
-    JavaStreamingContextFactory factory = new JavaStreamingContextFactory() {
+
+    // Function to create JavaStreamingContext without any output operations
+    // (used to detect the new context)
+    Function0<JavaStreamingContext> createContextFunc = new Function0<JavaStreamingContext>() {
       @Override
-      public JavaStreamingContext create() {
+      public JavaStreamingContext call() {
         return createContext(ip, port, checkpointDirectory, outputPath);
       }
     };
-    JavaStreamingContext ssc = JavaStreamingContext.getOrCreate(checkpointDirectory, factory);
+
+    JavaStreamingContext ssc = JavaStreamingContext.getOrCreate(checkpointDirectory, createContextFunc);
     ssc.start();
     ssc.awaitTermination();
   }

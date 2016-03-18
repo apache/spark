@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.types._
@@ -120,6 +122,10 @@ private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
   with NullableColumnAccessor
 
 private[columnar] object ColumnAccessor {
+<<<<<<< HEAD:sql/core/src/main/scala/org/apache/spark/sql/execution/columnar/ColumnAccessor.scala
+  @tailrec
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/main/scala/org/apache/spark/sql/execution/columnar/ColumnAccessor.scala
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
     val buf = buffer.order(ByteOrder.nativeOrder)
 

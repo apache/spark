@@ -17,18 +17,23 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
-
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+<<<<<<< HEAD
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+<<<<<<< HEAD
+=======
 import org.apache.spark.util.collection.OpenHashSet
 
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
 private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
@@ -48,11 +53,8 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
   override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
-  override def serialize(obj: Any): ArrayData = {
-    obj match {
-      case features: MyDenseVector =>
-        new GenericArrayData(features.data.map(_.asInstanceOf[Any]))
-    }
+  override def serialize(features: MyDenseVector): ArrayData = {
+    new GenericArrayData(features.data.map(_.asInstanceOf[Any]))
   }
 
   override def deserialize(datum: Any): MyDenseVector = {

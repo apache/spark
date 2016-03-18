@@ -26,12 +26,28 @@ import org.apache.spark.util.Utils
 
 /**
  * StreamManager implementation for serving files from a NettyRpcEnv.
+<<<<<<< HEAD
+ *
+ * Three kinds of resources can be registered in this manager, all backed by actual files:
+ *
+ * - "/files": a flat list of files; used as the backend for [[SparkContext.addFile]].
+ * - "/jars": a flat list of files; used as the backend for [[SparkContext.addJar]].
+ * - arbitrary directories; all files under the directory become available through the manager,
+ *   respecting the directory's hierarchy.
+ *
+ * Only streaming (openStream) is supported.
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
  */
 private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   extends StreamManager with RpcEnvFileServer {
 
   private val files = new ConcurrentHashMap[String, File]()
   private val jars = new ConcurrentHashMap[String, File]()
+<<<<<<< HEAD
+  private val dirs = new ConcurrentHashMap[String, File]()
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override def getChunk(streamId: Long, chunkIndex: Int): ManagedBuffer = {
     throw new UnsupportedOperationException()
@@ -42,11 +58,25 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     val file = ftype match {
       case "files" => files.get(fname)
       case "jars" => jars.get(fname)
+<<<<<<< HEAD
+      case other =>
+        val dir = dirs.get(ftype)
+        require(dir != null, s"Invalid stream URI: $ftype not found.")
+        new File(dir, fname)
+    }
+
+    if (file != null && file.isFile()) {
+      new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
+    } else {
+      null
+    }
+=======
       case _ => throw new IllegalArgumentException(s"Invalid file type: $ftype")
     }
 
     require(file != null && file.isFile(), s"File not found: $streamId")
     new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   override def addFile(file: File): String = {
@@ -61,4 +91,14 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     s"${rpcEnv.address.toSparkURL}/jars/${Utils.encodeFileNameToURIRawPath(file.getName())}"
   }
 
+<<<<<<< HEAD
+  override def addDirectory(baseUri: String, path: File): String = {
+    val fixedBaseUri = validateDirectoryUri(baseUri)
+    require(dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path) == null,
+      s"URI '$fixedBaseUri' already registered.")
+    s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
+  }
+
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

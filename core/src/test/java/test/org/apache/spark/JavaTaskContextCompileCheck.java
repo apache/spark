@@ -31,7 +31,6 @@ public class JavaTaskContextCompileCheck {
 
     tc.isCompleted();
     tc.isInterrupted();
-    tc.isRunningLocally();
 
     tc.addTaskCompletionListener(new JavaTaskCompletionListenerImpl());
     tc.addTaskFailureListener(new JavaTaskFailureListenerImpl());
@@ -53,7 +52,10 @@ public class JavaTaskContextCompileCheck {
       context.isInterrupted();
       context.stageId();
       context.partitionId();
+<<<<<<< HEAD
+=======
       context.isRunningLocally();
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       context.addTaskCompletionListener(this);
     }
   }

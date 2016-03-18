@@ -17,11 +17,18 @@
 
 package org.apache.spark.ml.feature
 
+<<<<<<< HEAD
+import org.apache.spark.annotation.{Experimental, Since}
+=======
 import org.apache.spark.annotation.{Since, Experimental}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{IntArrayParam, ParamMap, StringArrayParam}
+<<<<<<< HEAD
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.DataFrame
@@ -89,11 +96,6 @@ final class VectorSlicer(override val uid: String)
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def validateParams(): Unit = {
-    require($(indices).length > 0 || $(names).length > 0,
-      s"VectorSlicer requires that at least one feature be selected.")
-  }
-
   override def transform(dataset: DataFrame): DataFrame = {
     // Validity checks
     transformSchema(dataset.schema)
@@ -139,6 +141,8 @@ final class VectorSlicer(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    require($(indices).length > 0 || $(names).length > 0,
+      s"VectorSlicer requires that at least one feature be selected.")
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
 
     if (schema.fieldNames.contains($(outputCol))) {

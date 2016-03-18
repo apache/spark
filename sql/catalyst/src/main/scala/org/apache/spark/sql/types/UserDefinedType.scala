@@ -37,7 +37,7 @@ import org.apache.spark.annotation.DeveloperApi
  * The conversion via `deserialize` occurs when reading from a `DataFrame`.
  */
 @DeveloperApi
-abstract class UserDefinedType[UserType] extends DataType with Serializable {
+abstract class UserDefinedType[UserType >: Null] extends DataType with Serializable {
 
   /** Underlying storage type for this UDT */
   def sqlType: DataType
@@ -50,11 +50,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
 
   /**
    * Convert the user type to a SQL datum
-   *
-   * TODO: Can we make this take obj: UserType?  The issue is in
-   *       CatalystTypeConverters.convertToCatalyst, where we need to convert Any to UserType.
    */
-  def serialize(obj: Any): Any
+  def serialize(obj: UserType): Any
 
   /** Convert a SQL datum to the user type */
   def deserialize(datum: Any): UserType
@@ -71,10 +68,7 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    */
   def userClass: java.lang.Class[UserType]
 
-  /**
-   * The default size of a value of the UserDefinedType is 4096 bytes.
-   */
-  override def defaultSize: Int = 4096
+  override def defaultSize: Int = sqlType.defaultSize
 
   /**
    * For UDT, asNullable will not change the nullability of its internal sqlType and just returns
@@ -85,6 +79,11 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   override private[sql] def acceptsType(dataType: DataType) =
     this.getClass == dataType.getClass
 
+<<<<<<< HEAD
+  override def sql: String = sqlType.sql
+
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   override def equals(other: Any): Boolean = other match {
     case that: UserDefinedType[_] => this.acceptsType(that)
     case _ => false
