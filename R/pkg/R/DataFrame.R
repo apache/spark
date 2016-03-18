@@ -321,11 +321,7 @@ setMethod("colnames<-",
             }
 
             # Check if the column names have . in it
-<<<<<<< HEAD
             if (any(regexec(".", value, fixed = TRUE)[[1]][1] != -1)) {
-=======
-            if (any(regexec(".", value, fixed=TRUE)[[1]][1] != -1)) {
->>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
               stop("Colum names cannot contain the '.' symbol.")
             }
 
