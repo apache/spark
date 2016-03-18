@@ -24,34 +24,32 @@ from pyspark import since
 from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader
-from pyspark.ml.wrapper import JavaConvertible
+from pyspark.ml.wrapper import JavaConvertible, ConvertUtils
 from pyspark.mllib.common import inherit_doc
 
 
 @inherit_doc
-class PipelineMLWriter(JavaMLWriter, JavaConvertible):
+class PipelineMLWriter(JavaMLWriter):
     """
     Private Pipeline utility class that can save ML instances through their Scala implementation.
     """
-
     def __init__(self, instance):
-        self._java_obj = self._stage_py2java(instance)
-        self._jwrite = self._java_obj.write()
+        java_obj = ConvertUtils._stage_py2java(instance)
+        self._jwrite = java_obj.write()
 
 
 @inherit_doc
-class PipelineMLReader(JavaMLReader, JavaConvertible):
+class PipelineMLReader(JavaMLReader):
     """
     Private utility class that can load Pipeline instances through their Scala implementation.
     """
-
     def load(self, path):
         """Load the Pipeline instance from the input path."""
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
 
         java_obj = self._jread.load(path)
-        instance = self._stage_java2py(java_obj)
+        instance = ConvertUtils._stage_java2py(java_obj)
         return instance
 
 
@@ -184,35 +182,27 @@ class Pipeline(Estimator, JavaConvertible):
 
 
 @inherit_doc
-class PipelineModelMLWriter(JavaMLWriter, JavaConvertible):
+class PipelineModelMLWriter(JavaMLWriter):
     """
     Private PipelineModel utility class that can save ML instances through their Scala
     implementation.
     """
     def __init__(self, instance):
-        java_obj = self._stage_py2java(instance)
+        java_obj = ConvertUtils._stage_py2java(instance)
         self._jwrite = java_obj.write()
 
 
 @inherit_doc
-class PipelineModelMLReader(JavaMLReader, JavaConvertible):
+class PipelineModelMLReader(JavaMLReader):
     """
     Private utility class that can load PipelineModel instances through their Scala implementation.
     """
-    def _create_py_stage(self, java_obj):
-        """
-        Creates a model from the input Java model reference.
-        """
-        stages = self._param_value_java2py(java_obj.stages())
-        py_stage = PipelineModel(stages)
-        return py_stage
-
     def load(self, path):
         """Load the PipelineModel instance from the input path."""
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
         java_obj = self._jread.load(path)
-        instance = self._stage_java2py(java_obj)
+        instance = ConvertUtils._stage_java2py(java_obj)
         return instance
 
 
@@ -228,14 +218,22 @@ class PipelineModel(Model, JavaConvertible):
         super(PipelineModel, self).__init__()
         self.stages = stages
 
+    @classmethod
+    def _create_py_stage(cls, java_obj):
+        """
+        Creates a model from the input Java model reference.
+        """
+        stages = ConvertUtils._param_value_java2py(java_obj.stages())
+        py_stage = cls(stages)
+        return py_stage
+
     def _create_java_stage(self):
         """
         Creates a model from the input Java model reference.
         """
-        return self._new_java_obj(
-                "org.apache.spark.ml.PipelineModel",
-                self.uid,
-                self._param_value_py2java(self.stages))
+        return self._new_java_obj("org.apache.spark.ml.PipelineModel",
+                                  self.uid,
+                                  ConvertUtils._param_value_py2java(self.stages))
 
     def _transform(self, dataset):
         for t in self.stages:

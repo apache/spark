@@ -591,8 +591,8 @@ class PersistenceTest(PySparkTestCase):
 
         self.assertIsInstance(loaded_model_scaler, MinMaxScalerModel)
         self.assertEqual(loaded_model_scaler.uid, model_scaler.uid)
-        self.assertEqual(loaded_model_scaler.originalMin(), model_scaler.originalMin())
-        self.assertEqual(loaded_model_scaler.originalMax(), model_scaler.originalMax())
+        self.assertEqual(loaded_model_scaler.originalMin, model_scaler.originalMin)
+        self.assertEqual(loaded_model_scaler.originalMax, model_scaler.originalMax)
 
     def test_nested_pipeline_persistence(self):
         sqlContext = SQLContext(self.sc)
