@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.expressions
 
+import org.apache.spark.sql.{DataFrame, Dataset, Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.{DataFrame, Dataset, Encoder, TypedColumn}
 
 /**
  * A base class for user-defined aggregations, which can be used in [[DataFrame]] and [[Dataset]]
@@ -34,7 +34,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Encoder, TypedColumn}
  *     def zero: Int = 0
  *     def reduce(b: Int, a: Data): Int = b + a.i
  *     def merge(b1: Int, b2: Int): Int = b1 + b2
- *     def present(r: Int): Int = r
+ *     def finish(r: Int): Int = r
  *   }.toColumn()
  *
  *   val ds: Dataset[Data] = ...
@@ -46,7 +46,6 @@ import org.apache.spark.sql.{DataFrame, Dataset, Encoder, TypedColumn}
  * @tparam I The input type for the aggregation.
  * @tparam B The type of the intermediate value of the reduction.
  * @tparam O The type of the final output result.
- *
  * @since 1.6.0
  */
 abstract class Aggregator[-I, B, O] extends Serializable {

@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFramePivotSuite extends QueryTest with SharedSQLContext{
@@ -84,5 +85,13 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
     )
     sqlContext.conf.setConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES,
       SQLConf.DATAFRAME_PIVOT_MAX_VALUES.defaultValue.get)
+  }
+
+  test("pivot with UnresolvedFunction") {
+    checkAnswer(
+      courseSales.groupBy("year").pivot("course", Seq("dotNET", "Java"))
+        .agg("earnings" -> "sum"),
+      Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
+    )
   }
 }

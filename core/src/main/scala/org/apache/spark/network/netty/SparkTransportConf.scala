@@ -18,7 +18,7 @@
 package org.apache.spark.network.netty
 
 import org.apache.spark.SparkConf
-import org.apache.spark.network.util.{TransportConf, ConfigProvider}
+import org.apache.spark.network.util.{ConfigProvider, TransportConf}
 
 /**
  * Provides a utility for transforming from a SparkConf inside a Spark JVM (e.g., Executor,

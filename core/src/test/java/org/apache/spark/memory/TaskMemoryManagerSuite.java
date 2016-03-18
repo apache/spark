@@ -29,7 +29,7 @@ public class TaskMemoryManagerSuite {
   public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new StaticMemoryManager(
-        new SparkConf().set("spark.unsafe.offHeap", "false"),
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
         Long.MAX_VALUE,
         Long.MAX_VALUE,
         1),
@@ -41,8 +41,10 @@ public class TaskMemoryManagerSuite {
 
   @Test
   public void encodePageNumberAndOffsetOffHeap() {
-    final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "true")), 0);
+    final SparkConf conf = new SparkConf()
+      .set("spark.memory.offHeap.enabled", "true")
+      .set("spark.memory.offHeap.size", "1000");
+    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
     // encode. This test exercises that corner-case:
@@ -55,7 +57,7 @@ public class TaskMemoryManagerSuite {
   @Test
   public void encodePageNumberAndOffsetOnHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
+      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
     Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));
@@ -71,37 +73,48 @@ public class TaskMemoryManagerSuite {
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
     c1.use(100);
-    assert(c1.getUsed() == 100);
+    Assert.assertEquals(100, c1.getUsed());
     c2.use(100);
-    assert(c2.getUsed() == 100);
-    assert(c1.getUsed() == 0);  // spilled
+    Assert.assertEquals(100, c2.getUsed());
+    Assert.assertEquals(0, c1.getUsed());  // spilled
     c1.use(100);
-    assert(c1.getUsed() == 100);
-    assert(c2.getUsed() == 0);  // spilled
+    Assert.assertEquals(100, c1.getUsed());
+    Assert.assertEquals(0, c2.getUsed());  // spilled
 
     c1.use(50);
-    assert(c1.getUsed() == 50);  // spilled
-    assert(c2.getUsed() == 0);
+    Assert.assertEquals(50, c1.getUsed());  // spilled
+    Assert.assertEquals(0, c2.getUsed());
     c2.use(50);
-    assert(c1.getUsed() == 50);
-    assert(c2.getUsed() == 50);
+    Assert.assertEquals(50, c1.getUsed());
+    Assert.assertEquals(50, c2.getUsed());
 
     c1.use(100);
-    assert(c1.getUsed() == 100);
-    assert(c2.getUsed() == 0);  // spilled
+    Assert.assertEquals(100, c1.getUsed());
+    Assert.assertEquals(0, c2.getUsed());  // spilled
 
     c1.free(20);
-    assert(c1.getUsed() == 80);
+    Assert.assertEquals(80, c1.getUsed());
     c2.use(10);
-    assert(c1.getUsed() == 80);
-    assert(c2.getUsed() == 10);
+    Assert.assertEquals(80, c1.getUsed());
+    Assert.assertEquals(10, c2.getUsed());
     c2.use(100);
-    assert(c2.getUsed() == 100);
-    assert(c1.getUsed() == 0);  // spilled
+    Assert.assertEquals(100, c2.getUsed());
+    Assert.assertEquals(0, c1.getUsed());  // spilled
 
     c1.free(0);
     c2.free(100);
-    assert(manager.cleanUpAllAllocatedMemory() == 0);
+    Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void offHeapConfigurationBackwardsCompatibility() {
+    // Tests backwards-compatibility with the old `spark.unsafe.offHeap` configuration, which
+    // was deprecated in Spark 1.6 and replaced by `spark.memory.offHeap.enabled` (see SPARK-12251).
+    final SparkConf conf = new SparkConf()
+      .set("spark.unsafe.offHeap", "true")
+      .set("spark.memory.offHeap.size", "1000");
+    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
+    Assert.assertSame(MemoryMode.OFF_HEAP, manager.tungstenMemoryMode);
   }
 
 }

@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{Row, RandomDataGenerator}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
@@ -36,9 +36,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     import scala.concurrent.duration._
 
     val futures = (1 to 20).map { _ =>
-      future {
+      Future {
         GeneratePredicate.generate(EqualTo(Literal(1), Literal(1)))
-        GenerateProjection.generate(EqualTo(Literal(1), Literal(1)) :: Nil)
         GenerateMutableProjection.generate(EqualTo(Literal(1), Literal(1)) :: Nil)
         GenerateOrdering.generate(Add(Literal(1), Literal(1)).asc :: Nil)
       }
@@ -57,6 +56,27 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     if (!checkResult(actual, expected)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
+  }
+
+  test("SPARK-13242: case-when expression with large number of branches (or cases)") {
+    val cases = 50
+    val clauses = 20
+
+    // Generate an individual case
+    def generateCase(n: Int): (Expression, Expression) = {
+      val condition = (1 to clauses)
+        .map(c => EqualTo(BoundReference(0, StringType, false), Literal(s"$c:$n")))
+        .reduceLeft[Expression]((l, r) => Or(l, r))
+      (condition, Literal(n))
+    }
+
+    val expression = CaseWhen((1 to cases).map(generateCase(_)))
+
+    val plan = GenerateMutableProjection.generate(Seq(expression))()
+    val input = new GenericMutableRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
+    val actual = plan(input).toSeq(Seq(expression.dataType))
+
+    assert(actual(0) == cases)
   }
 
   test("test generated safe and unsafe projection") {
@@ -97,5 +117,23 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     unsafeRow.getStruct(2, 2).setInt(1, 10)
     unsafeRow.getStruct(3, 1).getStruct(0, 2).setInt(1, 4)
     assert(internalRow === internalRow2)
+  }
+
+  test("*/ in the data") {
+    // When */ appears in a comment block (i.e. in /**/), code gen will break.
+    // So, in Expression and CodegenFallback, we escape */ to \*\/.
+    checkEvaluation(
+      EqualTo(BoundReference(0, StringType, false), Literal.create("*/", StringType)),
+      true,
+      InternalRow(UTF8String.fromString("*/")))
+  }
+
+  test("\\u in the data") {
+    // When \ u appears in a comment block (i.e. in /**/), code gen will break.
+    // So, in Expression and CodegenFallback, we escape \ u to \\u.
+    checkEvaluation(
+      EqualTo(BoundReference(0, StringType, false), Literal.create("\\u", StringType)),
+      true,
+      InternalRow(UTF8String.fromString("\\u")))
   }
 }

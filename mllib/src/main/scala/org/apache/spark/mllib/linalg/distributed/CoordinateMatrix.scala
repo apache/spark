@@ -20,8 +20,8 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Matrix, SparseMatrix, Vectors}
+import org.apache.spark.rdd.RDD
 
 /**
  * Represents an entry in an distributed matrix.

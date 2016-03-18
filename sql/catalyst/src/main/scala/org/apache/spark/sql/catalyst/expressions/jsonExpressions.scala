@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.{StringWriter, ByteArrayOutputStream}
+import java.io.{ByteArrayOutputStream, StringWriter}
+
+import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{StructField, StructType, StringType, DataType}
+import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-
-import scala.util.parsing.combinator.RegexParsers
 
 private[this] sealed trait PathInstruction
 private[this] object PathInstruction {
@@ -108,15 +109,17 @@ private[this] object SharedFactory {
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
-  import SharedFactory._
-  import PathInstruction._
-  import WriteStyle._
   import com.fasterxml.jackson.core.JsonToken._
+
+  import PathInstruction._
+  import SharedFactory._
+  import WriteStyle._
 
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
   @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
@@ -298,8 +301,11 @@ case class GetJsonObject(json: Expression, path: Expression)
 
       case (FIELD_NAME, Named(name) :: xs) if p.getCurrentName == name =>
         // exact field match
-        p.nextToken()
-        evaluatePath(p, g, style, xs)
+        if (p.nextToken() != JsonToken.VALUE_NULL) {
+          evaluatePath(p, g, style, xs)
+        } else {
+          false
+        }
 
       case (FIELD_NAME, Wildcard :: xs) =>
         // wildcard field match

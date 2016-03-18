@@ -17,9 +17,9 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
@@ -32,8 +32,8 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.6.0")
 @Experimental
-class BisectingKMeansModel @Since("1.6.0") (
-    @Since("1.6.0") val root: ClusteringTreeNode
+class BisectingKMeansModel private[clustering] (
+    private[clustering] val root: ClusteringTreeNode
   ) extends Serializable with Logging {
 
   /**
@@ -64,7 +64,7 @@ class BisectingKMeansModel @Since("1.6.0") (
   }
 
   /**
-   * Java-friendly version of [[predict(RDD[Vector])*]]
+   * Java-friendly version of [[predict()]].
    */
   @Since("1.6.0")
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
@@ -88,7 +88,7 @@ class BisectingKMeansModel @Since("1.6.0") (
   }
 
   /**
-   * Java-friendly version of [[computeCost(RDD[Vector])*]].
+   * Java-friendly version of [[computeCost()]].
    */
   @Since("1.6.0")
   def computeCost(data: JavaRDD[Vector]): Double = this.computeCost(data.rdd)

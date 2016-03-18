@@ -30,7 +30,9 @@ final class ShuffleInMemorySorter {
   private static final class SortComparator implements Comparator<PackedRecordPointer> {
     @Override
     public int compare(PackedRecordPointer left, PackedRecordPointer right) {
-      return left.getPartitionId() - right.getPartitionId();
+      int leftId = left.getPartitionId();
+      int rightId = right.getPartitionId();
+      return leftId < rightId ? -1 : (leftId > rightId ? 1 : 0);
     }
   }
   private static final SortComparator SORT_COMPARATOR = new SortComparator();
@@ -104,7 +106,7 @@ final class ShuffleInMemorySorter {
    */
   public void insertRecord(long recordPointer, int partitionId) {
     if (!hasSpaceForAnotherRecord()) {
-      expandPointerArray(consumer.allocateArray(array.size() * 2));
+      throw new IllegalStateException("There is no space for new record");
     }
     array.set(pos, PackedRecordPointer.packPointer(recordPointer, partitionId));
     pos++;

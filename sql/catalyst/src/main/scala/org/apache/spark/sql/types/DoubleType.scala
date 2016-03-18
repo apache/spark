@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Ordering, Fractional, Numeric}
+import scala.math.{Fractional, Numeric, Ordering}
 import scala.math.Numeric.DoubleAsIfIntegral
 import scala.reflect.runtime.universe.typeTag
 

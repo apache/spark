@@ -35,6 +35,8 @@ class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
     val startTime: Date,
     val endTime: Date,
+    val lastUpdated: Date,
+    val duration: Long,
     val sparkUser: String,
     val completed: Boolean = false)
 
@@ -52,14 +54,18 @@ class ExecutorStageSummary private[spark](
 class ExecutorSummary private[spark](
     val id: String,
     val hostPort: String,
+    val isActive: Boolean,
     val rddBlocks: Int,
     val memoryUsed: Long,
     val diskUsed: Long,
+    val totalCores: Int,
+    val maxTasks: Int,
     val activeTasks: Int,
     val failedTasks: Int,
     val completedTasks: Int,
     val totalTasks: Int,
     val totalDuration: Long,
+    val totalGCTime: Long,
     val totalInputBytes: Long,
     val totalShuffleRead: Long,
     val totalShuffleWrite: Long,
@@ -85,8 +91,6 @@ class JobData private[spark](
     val numSkippedStages: Int,
     val numFailedStages: Int)
 
-// Q: should Tachyon size go in here as well?  currently the UI only shows it on the overall storage
-// page ... does anybody pay attention to it?
 class RDDStorageInfo private[spark](
     val id: Int,
     val name: String,
@@ -115,11 +119,14 @@ class StageData private[spark](
     val status: StageStatus,
     val stageId: Int,
     val attemptId: Int,
-    val numActiveTasks: Int ,
+    val numActiveTasks: Int,
     val numCompleteTasks: Int,
     val numFailedTasks: Int,
 
     val executorRunTime: Long,
+    val submissionTime: Option[Date],
+    val firstTaskLaunchedTime: Option[Date],
+    val completionTime: Option[Date],
 
     val inputBytes: Long,
     val inputRecords: Long,

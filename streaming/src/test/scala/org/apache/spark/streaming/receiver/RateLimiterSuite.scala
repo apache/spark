@@ -25,21 +25,21 @@ class RateLimiterSuite extends SparkFunSuite {
 
   test("rate limiter initializes even without a maxRate set") {
     val conf = new SparkConf()
-    val rateLimiter = new RateLimiter(conf){}
+    val rateLimiter = new RateLimiter(conf) {}
     rateLimiter.updateRate(105)
     assert(rateLimiter.getCurrentLimit == 105)
   }
 
   test("rate limiter updates when below maxRate") {
     val conf = new SparkConf().set("spark.streaming.receiver.maxRate", "110")
-    val rateLimiter = new RateLimiter(conf){}
+    val rateLimiter = new RateLimiter(conf) {}
     rateLimiter.updateRate(105)
     assert(rateLimiter.getCurrentLimit == 105)
   }
 
   test("rate limiter stays below maxRate despite large updates") {
     val conf = new SparkConf().set("spark.streaming.receiver.maxRate", "100")
-    val rateLimiter = new RateLimiter(conf){}
+    val rateLimiter = new RateLimiter(conf) {}
     rateLimiter.updateRate(105)
     assert(rateLimiter.getCurrentLimit === 100)
   }

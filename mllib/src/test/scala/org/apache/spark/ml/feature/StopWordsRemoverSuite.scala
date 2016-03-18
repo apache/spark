@@ -89,4 +89,19 @@ class StopWordsRemoverSuite
       .setCaseSensitive(true)
     testDefaultReadWrite(t)
   }
+
+  test("StopWordsRemover output column already exists") {
+    val outputCol = "expected"
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol(outputCol)
+    val dataSet = sqlContext.createDataFrame(Seq(
+      (Seq("The", "the", "swift"), Seq("swift"))
+    )).toDF("raw", outputCol)
+
+    val thrown = intercept[IllegalArgumentException] {
+      testStopWordsRemover(remover, dataSet)
+    }
+    assert(thrown.getMessage == s"requirement failed: Column $outputCol already exists.")
+  }
 }

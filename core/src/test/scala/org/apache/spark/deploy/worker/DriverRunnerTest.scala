@@ -19,8 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
-import org.mockito.Mockito._
 import org.mockito.Matchers._
+import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
@@ -34,7 +34,7 @@ class DriverRunnerTest extends SparkFunSuite {
     val driverDescription = new DriverDescription("jarUrl", 512, 1, true, command)
     val conf = new SparkConf()
     new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
-      driverDescription, null, "akka://1.2.3.4/worker/", new SecurityManager(conf))
+      driverDescription, null, "spark://1.2.3.4/worker/", new SecurityManager(conf))
   }
 
   private def createProcessBuilderAndProcess(): (ProcessBuilderLike, Process) = {

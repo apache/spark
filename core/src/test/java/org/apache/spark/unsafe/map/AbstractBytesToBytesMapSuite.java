@@ -39,13 +39,13 @@ import org.mockito.stubbing.Answer;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.executor.ShuffleWriteMetrics;
-import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.memory.TestMemoryManager;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.util.Utils;
 
 import static org.hamcrest.Matchers.greaterThan;
@@ -64,9 +64,9 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private TestMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;
-  private final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
+  private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
-  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
+  final LinkedList<File> spillFilesCreated = new LinkedList<>();
   File tempDir;
 
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
@@ -84,8 +84,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     memoryManager =
       new TestMemoryManager(
         new SparkConf()
-          .set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator())
-          .set("spark.memory.offHeapSize", "256mb"));
+          .set("spark.memory.offHeap.enabled", "" + useOffHeapMemoryAllocator())
+          .set("spark.memory.offHeap.size", "256mb"));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
 
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
@@ -131,8 +131,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     Utils.deleteRecursively(tempDir);
     tempDir = null;
 
-    Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
     if (taskMemoryManager != null) {
+      Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
       long leakedMemory = taskMemoryManager.getMemoryConsumptionForThisTask();
       taskMemoryManager = null;
       Assert.assertEquals(0L, leakedMemory);
@@ -141,10 +141,9 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   protected abstract boolean useOffHeapMemoryAllocator();
 
-  private static byte[] getByteArray(MemoryLocation loc, int size) {
+  private static byte[] getByteArray(Object base, long offset, int size) {
     final byte[] arr = new byte[size];
-    Platform.copyMemory(
-      loc.getBaseObject(), loc.getBaseOffset(), arr, Platform.BYTE_ARRAY_OFFSET, size);
+    Platform.copyMemory(base, offset, arr, Platform.BYTE_ARRAY_OFFSET, size);
     return arr;
   }
 
@@ -162,13 +161,14 @@ public abstract class AbstractBytesToBytesMapSuite {
    */
   private static boolean arrayEquals(
       byte[] expected,
-      MemoryLocation actualAddr,
+      Object base,
+      long offset,
       long actualLengthBytes) {
     return (actualLengthBytes == expected.length) && ByteArrayMethods.arrayEquals(
       expected,
       Platform.BYTE_ARRAY_OFFSET,
-      actualAddr.getBaseObject(),
-      actualAddr.getBaseOffset(),
+      base,
+      offset,
       expected.length
     );
   }
@@ -211,16 +211,20 @@ public abstract class AbstractBytesToBytesMapSuite {
       // reflect the result of this store without us having to call lookup() again on the same key.
       Assert.assertEquals(recordLengthBytes, loc.getKeyLength());
       Assert.assertEquals(recordLengthBytes, loc.getValueLength());
-      Assert.assertArrayEquals(keyData, getByteArray(loc.getKeyAddress(), recordLengthBytes));
-      Assert.assertArrayEquals(valueData, getByteArray(loc.getValueAddress(), recordLengthBytes));
+      Assert.assertArrayEquals(keyData,
+        getByteArray(loc.getKeyBase(), loc.getKeyOffset(), recordLengthBytes));
+      Assert.assertArrayEquals(valueData,
+        getByteArray(loc.getValueBase(), loc.getValueOffset(), recordLengthBytes));
 
       // After calling lookup() the location should still point to the correct data.
       Assert.assertTrue(
         map.lookup(keyData, Platform.BYTE_ARRAY_OFFSET, recordLengthBytes).isDefined());
       Assert.assertEquals(recordLengthBytes, loc.getKeyLength());
       Assert.assertEquals(recordLengthBytes, loc.getValueLength());
-      Assert.assertArrayEquals(keyData, getByteArray(loc.getKeyAddress(), recordLengthBytes));
-      Assert.assertArrayEquals(valueData, getByteArray(loc.getValueAddress(), recordLengthBytes));
+      Assert.assertArrayEquals(keyData,
+        getByteArray(loc.getKeyBase(), loc.getKeyOffset(), recordLengthBytes));
+      Assert.assertArrayEquals(valueData,
+        getByteArray(loc.getValueBase(), loc.getValueOffset(), recordLengthBytes));
 
       try {
         Assert.assertTrue(loc.putNewKey(
@@ -282,15 +286,12 @@ public abstract class AbstractBytesToBytesMapSuite {
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
         Assert.assertTrue(loc.isDefined());
-        final MemoryLocation keyAddress = loc.getKeyAddress();
-        final MemoryLocation valueAddress = loc.getValueAddress();
-        final long value = Platform.getLong(
-          valueAddress.getBaseObject(), valueAddress.getBaseOffset());
+        final long value = Platform.getLong(loc.getValueBase(), loc.getValueOffset());
         final long keyLength = loc.getKeyLength();
         if (keyLength == 0) {
           Assert.assertTrue("value " + value + " was not divisible by 5", value % 5 == 0);
         } else {
-          final long key = Platform.getLong(keyAddress.getBaseObject(), keyAddress.getBaseOffset());
+          final long key = Platform.getLong(loc.getKeyBase(), loc.getKeyOffset());
           Assert.assertEquals(value, key);
         }
         valuesSeen.set((int) value);
@@ -356,23 +357,23 @@ public abstract class AbstractBytesToBytesMapSuite {
 
       final java.util.BitSet valuesSeen = new java.util.BitSet(NUM_ENTRIES);
       final Iterator<BytesToBytesMap.Location> iter = map.iterator();
-      final long key[] = new long[KEY_LENGTH / 8];
-      final long value[] = new long[VALUE_LENGTH / 8];
+      final long[] key = new long[KEY_LENGTH / 8];
+      final long[] value = new long[VALUE_LENGTH / 8];
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
         Assert.assertTrue(loc.isDefined());
         Assert.assertEquals(KEY_LENGTH, loc.getKeyLength());
         Assert.assertEquals(VALUE_LENGTH, loc.getValueLength());
         Platform.copyMemory(
-          loc.getKeyAddress().getBaseObject(),
-          loc.getKeyAddress().getBaseOffset(),
+          loc.getKeyBase(),
+          loc.getKeyOffset(),
           key,
           Platform.LONG_ARRAY_OFFSET,
           KEY_LENGTH
         );
         Platform.copyMemory(
-          loc.getValueAddress().getBaseObject(),
-          loc.getValueAddress().getBaseOffset(),
+          loc.getValueBase(),
+          loc.getValueOffset(),
           value,
           Platform.LONG_ARRAY_OFFSET,
           VALUE_LENGTH
@@ -396,7 +397,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     final int size = 65536;
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
-    final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
+    final Map<ByteBuffer, byte[]> expected = new HashMap<>();
     final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, size, PAGE_SIZE_BYTES);
     try {
       // Fill the map to 90% full so that we can trigger probing
@@ -424,19 +425,22 @@ public abstract class AbstractBytesToBytesMapSuite {
           Assert.assertTrue(loc.isDefined());
           Assert.assertEquals(key.length, loc.getKeyLength());
           Assert.assertEquals(value.length, loc.getValueLength());
-          Assert.assertTrue(arrayEquals(key, loc.getKeyAddress(), key.length));
-          Assert.assertTrue(arrayEquals(value, loc.getValueAddress(), value.length));
+          Assert.assertTrue(arrayEquals(key, loc.getKeyBase(), loc.getKeyOffset(), key.length));
+          Assert.assertTrue(
+            arrayEquals(value, loc.getValueBase(), loc.getValueOffset(), value.length));
         }
       }
 
       for (Map.Entry<ByteBuffer, byte[]> entry : expected.entrySet()) {
-        final byte[] key = entry.getKey().array();
+        final byte[] key = JavaUtils.bufferToArray(entry.getKey());
         final byte[] value = entry.getValue();
         final BytesToBytesMap.Location loc =
           map.lookup(key, Platform.BYTE_ARRAY_OFFSET, key.length);
         Assert.assertTrue(loc.isDefined());
-        Assert.assertTrue(arrayEquals(key, loc.getKeyAddress(), loc.getKeyLength()));
-        Assert.assertTrue(arrayEquals(value, loc.getValueAddress(), loc.getValueLength()));
+        Assert.assertTrue(
+          arrayEquals(key, loc.getKeyBase(), loc.getKeyOffset(), loc.getKeyLength()));
+        Assert.assertTrue(
+          arrayEquals(value, loc.getValueBase(), loc.getValueOffset(), loc.getValueLength()));
       }
     } finally {
       map.free();
@@ -449,7 +453,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 64, pageSizeBytes);
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
-    final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
+    final Map<ByteBuffer, byte[]> expected = new HashMap<>();
     try {
       for (int i = 0; i < 1000; i++) {
         final byte[] key = getRandomByteArray(rand.nextInt(128));
@@ -475,18 +479,21 @@ public abstract class AbstractBytesToBytesMapSuite {
           Assert.assertTrue(loc.isDefined());
           Assert.assertEquals(key.length, loc.getKeyLength());
           Assert.assertEquals(value.length, loc.getValueLength());
-          Assert.assertTrue(arrayEquals(key, loc.getKeyAddress(), key.length));
-          Assert.assertTrue(arrayEquals(value, loc.getValueAddress(), value.length));
+          Assert.assertTrue(arrayEquals(key, loc.getKeyBase(), loc.getKeyOffset(), key.length));
+          Assert.assertTrue(
+            arrayEquals(value, loc.getValueBase(), loc.getValueOffset(), value.length));
         }
       }
       for (Map.Entry<ByteBuffer, byte[]> entry : expected.entrySet()) {
-        final byte[] key = entry.getKey().array();
+        final byte[] key = JavaUtils.bufferToArray(entry.getKey());
         final byte[] value = entry.getValue();
         final BytesToBytesMap.Location loc =
           map.lookup(key, Platform.BYTE_ARRAY_OFFSET, key.length);
         Assert.assertTrue(loc.isDefined());
-        Assert.assertTrue(arrayEquals(key, loc.getKeyAddress(), loc.getKeyLength()));
-        Assert.assertTrue(arrayEquals(value, loc.getValueAddress(), loc.getValueLength()));
+        Assert.assertTrue(
+          arrayEquals(key, loc.getKeyBase(), loc.getKeyOffset(), loc.getKeyLength()));
+        Assert.assertTrue(
+          arrayEquals(value, loc.getValueBase(), loc.getValueOffset(), loc.getValueLength()));
       }
     } finally {
       map.free();

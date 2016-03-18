@@ -17,21 +17,38 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import com.fasterxml.jackson.core.{JsonParser, JsonFactory}
+import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
+
+import org.apache.spark.sql.execution.datasources.CompressionCodecs
 
 /**
  * Options for the JSON data source.
  *
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
-case class JSONOptions(
-    samplingRatio: Double = 1.0,
-    primitivesAsString: Boolean = false,
-    allowComments: Boolean = false,
-    allowUnquotedFieldNames: Boolean = false,
-    allowSingleQuotes: Boolean = true,
-    allowNumericLeadingZeros: Boolean = false,
-    allowNonNumericNumbers: Boolean = false) {
+private[sql] class JSONOptions(
+    @transient private val parameters: Map[String, String])
+  extends Serializable  {
+
+  val samplingRatio =
+    parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+  val primitivesAsString =
+    parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
+  val floatAsBigDecimal =
+    parameters.get("floatAsBigDecimal").map(_.toBoolean).getOrElse(false)
+  val allowComments =
+    parameters.get("allowComments").map(_.toBoolean).getOrElse(false)
+  val allowUnquotedFieldNames =
+    parameters.get("allowUnquotedFieldNames").map(_.toBoolean).getOrElse(false)
+  val allowSingleQuotes =
+    parameters.get("allowSingleQuotes").map(_.toBoolean).getOrElse(true)
+  val allowNumericLeadingZeros =
+    parameters.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false)
+  val allowNonNumericNumbers =
+    parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
+  val allowBackslashEscapingAnyCharacter =
+    parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
+  val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
@@ -40,25 +57,7 @@ case class JSONOptions(
     factory.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, allowSingleQuotes)
     factory.configure(JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS, allowNumericLeadingZeros)
     factory.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, allowNonNumericNumbers)
+    factory.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
+      allowBackslashEscapingAnyCharacter)
   }
-}
-
-
-object JSONOptions {
-  def createFromConfigMap(parameters: Map[String, String]): JSONOptions = JSONOptions(
-    samplingRatio =
-      parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0),
-    primitivesAsString =
-      parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false),
-    allowComments =
-      parameters.get("allowComments").map(_.toBoolean).getOrElse(false),
-    allowUnquotedFieldNames =
-      parameters.get("allowUnquotedFieldNames").map(_.toBoolean).getOrElse(false),
-    allowSingleQuotes =
-      parameters.get("allowSingleQuotes").map(_.toBoolean).getOrElse(true),
-    allowNumericLeadingZeros =
-      parameters.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false),
-    allowNonNumericNumbers =
-      parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
-  )
 }

@@ -17,7 +17,6 @@
 package org.apache.spark.rpc.netty
 
 import java.io._
-import java.lang.{Boolean => JBoolean}
 import java.net.{InetSocketAddress, URI}
 import java.nio.ByteBuffer
 import java.nio.channels.{Pipe, ReadableByteChannel, WritableByteChannel}
@@ -30,7 +29,8 @@ import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
 import org.apache.spark.network.netty.SparkTransportConf
@@ -150,7 +150,7 @@ private[netty] class NettyRpcEnv(
 
   private def postToOutbox(receiver: NettyRpcEndpointRef, message: OutboxMessage): Unit = {
     if (receiver.client != null) {
-      receiver.client.sendRpc(message.content, message.createCallback(receiver.client));
+      message.sendWith(receiver.client)
     } else {
       require(receiver.address != null,
         "Cannot send message to client endpoint with no listen address.")
@@ -182,25 +182,14 @@ private[netty] class NettyRpcEnv(
     val remoteAddr = message.receiver.address
     if (remoteAddr == address) {
       // Message to a local RPC endpoint.
-      val promise = Promise[Any]()
-      dispatcher.postLocalMessage(message, promise)
-      promise.future.onComplete {
-        case Success(response) =>
-          val ack = response.asInstanceOf[Ack]
-          logTrace(s"Received ack from ${ack.sender}")
-        case Failure(e) =>
-          logWarning(s"Exception when sending $message", e)
-      }(ThreadUtils.sameThread)
+      try {
+        dispatcher.postOneWayMessage(message)
+      } catch {
+        case e: RpcEnvStoppedException => logWarning(e.getMessage)
+      }
     } else {
       // Message to a remote RPC endpoint.
-      postToOutbox(message.receiver, OutboxMessage(serialize(message),
-        (e) => {
-          logWarning(s"Exception when sending $message", e)
-        },
-        (client, response) => {
-          val ack = deserialize[Ack](client, response)
-          logDebug(s"Receive ack from ${ack.sender}")
-        }))
+      postToOutbox(message.receiver, OneWayOutboxMessage(serialize(message)))
     }
   }
 
@@ -208,58 +197,66 @@ private[netty] class NettyRpcEnv(
     clientFactory.createClient(address.host, address.port)
   }
 
-  private[netty] def ask(message: RequestMessage): Future[Any] = {
+  private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): Future[T] = {
     val promise = Promise[Any]()
     val remoteAddr = message.receiver.address
-    if (remoteAddr == address) {
-      val p = Promise[Any]()
-      dispatcher.postLocalMessage(message, p)
-      p.future.onComplete {
-        case Success(response) =>
-          val reply = response.asInstanceOf[AskResponse]
-          if (reply.reply.isInstanceOf[RpcFailure]) {
-            if (!promise.tryFailure(reply.reply.asInstanceOf[RpcFailure].e)) {
-              logWarning(s"Ignore failure: ${reply.reply}")
-            }
-          } else if (!promise.trySuccess(reply.reply)) {
-            logWarning(s"Ignore message: ${reply}")
-          }
-        case Failure(e) =>
-          if (!promise.tryFailure(e)) {
-            logWarning("Ignore Exception", e)
-          }
-      }(ThreadUtils.sameThread)
-    } else {
-      postToOutbox(message.receiver, OutboxMessage(serialize(message),
-        (e) => {
-          if (!promise.tryFailure(e)) {
-            logWarning("Ignore Exception", e)
-          }
-        },
-        (client, response) => {
-          val reply = deserialize[AskResponse](client, response)
-          if (reply.reply.isInstanceOf[RpcFailure]) {
-            if (!promise.tryFailure(reply.reply.asInstanceOf[RpcFailure].e)) {
-              logWarning(s"Ignore failure: ${reply.reply}")
-            }
-          } else if (!promise.trySuccess(reply.reply)) {
-            logWarning(s"Ignore message: ${reply}")
-          }
-        }))
+
+    def onFailure(e: Throwable): Unit = {
+      if (!promise.tryFailure(e)) {
+        logWarning(s"Ignored failure: $e")
+      }
     }
-    promise.future
+
+    def onSuccess(reply: Any): Unit = reply match {
+      case RpcFailure(e) => onFailure(e)
+      case rpcReply =>
+        if (!promise.trySuccess(rpcReply)) {
+          logWarning(s"Ignored message: $reply")
+        }
+    }
+
+    try {
+      if (remoteAddr == address) {
+        val p = Promise[Any]()
+        p.future.onComplete {
+          case Success(response) => onSuccess(response)
+          case Failure(e) => onFailure(e)
+        }(ThreadUtils.sameThread)
+        dispatcher.postLocalMessage(message, p)
+      } else {
+        val rpcMessage = RpcOutboxMessage(serialize(message),
+          onFailure,
+          (client, response) => onSuccess(deserialize[Any](client, response)))
+        postToOutbox(message.receiver, rpcMessage)
+        promise.future.onFailure {
+          case _: TimeoutException => rpcMessage.onTimeout()
+          case _ =>
+        }(ThreadUtils.sameThread)
+      }
+
+      val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
+        override def run(): Unit = {
+          onFailure(new TimeoutException(s"Cannot receive any reply in ${timeout.duration}"))
+        }
+      }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
+      promise.future.onComplete { v =>
+        timeoutCancelable.cancel(true)
+      }(ThreadUtils.sameThread)
+    } catch {
+      case NonFatal(e) =>
+        onFailure(e)
+    }
+    promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
-  private[netty] def serialize(content: Any): Array[Byte] = {
-    val buffer = javaSerializerInstance.serialize(content)
-    java.util.Arrays.copyOfRange(
-      buffer.array(), buffer.arrayOffset + buffer.position, buffer.arrayOffset + buffer.limit)
+  private[netty] def serialize(content: Any): ByteBuffer = {
+    javaSerializerInstance.serialize(content)
   }
 
-  private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: Array[Byte]): T = {
+  private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
     NettyRpcEnv.currentClient.withValue(client) {
       deserialize { () =>
-        javaSerializerInstance.deserialize[T](ByteBuffer.wrap(bytes))
+        javaSerializerInstance.deserialize[T](bytes)
       }
     }
   }
@@ -267,9 +264,6 @@ private[netty] class NettyRpcEnv(
   override def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = {
     dispatcher.getRpcEndpointRef(endpoint)
   }
-
-  override def uriOf(systemName: String, address: RpcAddress, endpointName: String): String =
-    new RpcEndpointAddress(address, endpointName).toString
 
   override def shutdown(): Unit = {
     cleanup()
@@ -374,15 +368,14 @@ private[netty] class NettyRpcEnv(
     }
 
     override def read(dst: ByteBuffer): Int = {
-      val result = if (error == null) {
-        Try(source.read(dst))
-      } else {
-        Failure(error)
-      }
-
-      result match {
+      Try(source.read(dst)) match {
         case Success(bytesRead) => bytesRead
-        case Failure(error) => throw error
+        case Failure(readErr) =>
+          if (error != null) {
+            throw error
+          } else {
+            throw readErr
+          }
       }
     }
 
@@ -408,7 +401,7 @@ private[netty] class NettyRpcEnv(
     }
 
     override def onFailure(streamId: String, cause: Throwable): Unit = {
-      logError(s"Error downloading stream $streamId.", cause)
+      logDebug(s"Error downloading stream $streamId.", cause)
       source.setError(cause)
       sink.close()
     }
@@ -439,7 +432,7 @@ private[netty] object NettyRpcEnv extends Logging {
 
 }
 
-private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
+private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
 
   def create(config: RpcEnvConfig): RpcEnv = {
     val sparkConf = config.conf
@@ -512,25 +505,12 @@ private[netty] class NettyRpcEndpointRef(
   override def name: String = _name
 
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
-    val promise = Promise[Any]()
-    val timeoutCancelable = nettyEnv.timeoutScheduler.schedule(new Runnable {
-      override def run(): Unit = {
-        promise.tryFailure(new TimeoutException("Cannot receive any reply in " + timeout.duration))
-      }
-    }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
-    val f = nettyEnv.ask(RequestMessage(nettyEnv.address, this, message, true))
-    f.onComplete { v =>
-      timeoutCancelable.cancel(true)
-      if (!promise.tryComplete(v)) {
-        logWarning(s"Ignore message $v")
-      }
-    }(ThreadUtils.sameThread)
-    promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
+    nettyEnv.ask(RequestMessage(nettyEnv.address, this, message), timeout)
   }
 
   override def send(message: Any): Unit = {
     require(message != null, "Message is null")
-    nettyEnv.send(RequestMessage(nettyEnv.address, this, message, false))
+    nettyEnv.send(RequestMessage(nettyEnv.address, this, message))
   }
 
   override def toString: String = s"NettyRpcEndpointRef(${_address})"
@@ -549,24 +529,7 @@ private[netty] class NettyRpcEndpointRef(
  * The message that is sent from the sender to the receiver.
  */
 private[netty] case class RequestMessage(
-    senderAddress: RpcAddress, receiver: NettyRpcEndpointRef, content: Any, needReply: Boolean)
-
-/**
- * The base trait for all messages that are sent back from the receiver to the sender.
- */
-private[netty] trait ResponseMessage
-
-/**
- * The reply for `ask` from the receiver side.
- */
-private[netty] case class AskResponse(sender: NettyRpcEndpointRef, reply: Any)
-  extends ResponseMessage
-
-/**
- * A message to send back to the receiver side. It's necessary because [[TransportClient]] only
- * clean the resources when it receives a reply.
- */
-private[netty] case class Ack(sender: NettyRpcEndpointRef) extends ResponseMessage
+    senderAddress: RpcAddress, receiver: NettyRpcEndpointRef, content: Any)
 
 /**
  * A response that indicates some failure happens in the receiver side.
@@ -590,29 +553,41 @@ private[netty] class NettyRpcHandler(
     nettyEnv: NettyRpcEnv,
     streamManager: StreamManager) extends RpcHandler with Logging {
 
-  // TODO: Can we add connection callback (channel registered) to the underlying framework?
-  // A variable to track whether we should dispatch the RemoteProcessConnected message.
-  private val clients = new ConcurrentHashMap[TransportClient, JBoolean]()
+  // A variable to track the remote RpcEnv addresses of all clients
+  private val remoteAddresses = new ConcurrentHashMap[RpcAddress, RpcAddress]()
 
   override def receive(
       client: TransportClient,
-      message: Array[Byte],
+      message: ByteBuffer,
       callback: RpcResponseCallback): Unit = {
+    val messageToDispatch = internalReceive(client, message)
+    dispatcher.postRemoteMessage(messageToDispatch, callback)
+  }
+
+  override def receive(
+      client: TransportClient,
+      message: ByteBuffer): Unit = {
+    val messageToDispatch = internalReceive(client, message)
+    dispatcher.postOneWayMessage(messageToDispatch)
+  }
+
+  private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
-    if (clients.putIfAbsent(client, JBoolean.TRUE) == null) {
-      dispatcher.postToAll(RemoteProcessConnected(clientAddr))
-    }
     val requestMessage = nettyEnv.deserialize[RequestMessage](client, message)
-    val messageToDispatch = if (requestMessage.senderAddress == null) {
-        // Create a new message with the socket address of the client as the sender.
-        RequestMessage(clientAddr, requestMessage.receiver, requestMessage.content,
-          requestMessage.needReply)
-      } else {
-        requestMessage
+    if (requestMessage.senderAddress == null) {
+      // Create a new message with the socket address of the client as the sender.
+      RequestMessage(clientAddr, requestMessage.receiver, requestMessage.content)
+    } else {
+      // The remote RpcEnv listens to some port, we should also fire a RemoteProcessConnected for
+      // the listening address
+      val remoteEnvAddress = requestMessage.senderAddress
+      if (remoteAddresses.putIfAbsent(clientAddr, remoteEnvAddress) == null) {
+        dispatcher.postToAll(RemoteProcessConnected(remoteEnvAddress))
       }
-    dispatcher.postRemoteMessage(messageToDispatch, callback)
+      requestMessage
+    }
   }
 
   override def getStreamManager: StreamManager = streamManager
@@ -622,6 +597,12 @@ private[netty] class NettyRpcHandler(
     if (addr != null) {
       val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
       dispatcher.postToAll(RemoteProcessConnectionError(cause, clientAddr))
+      // If the remove RpcEnv listens to some address, we should also fire a
+      // RemoteProcessConnectionError for the remote RpcEnv listening address
+      val remoteEnvAddress = remoteAddresses.get(clientAddr)
+      if (remoteEnvAddress != null) {
+        dispatcher.postToAll(RemoteProcessConnectionError(cause, remoteEnvAddress))
+      }
     } else {
       // If the channel is closed before connecting, its remoteAddress will be null.
       // See java.net.Socket.getRemoteSocketAddress
@@ -630,13 +611,25 @@ private[netty] class NettyRpcHandler(
     }
   }
 
-  override def connectionTerminated(client: TransportClient): Unit = {
+  override def channelActive(client: TransportClient): Unit = {
+    val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
+    assert(addr != null)
+    val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
+    dispatcher.postToAll(RemoteProcessConnected(clientAddr))
+  }
+
+  override def channelInactive(client: TransportClient): Unit = {
     val addr = client.getChannel.remoteAddress().asInstanceOf[InetSocketAddress]
     if (addr != null) {
-      clients.remove(client)
       val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
       nettyEnv.removeOutbox(clientAddr)
       dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))
+      val remoteEnvAddress = remoteAddresses.remove(clientAddr)
+      // If the remove RpcEnv listens to some address, we should also  fire a
+      // RemoteProcessDisconnected for the remote RpcEnv listening address
+      if (remoteEnvAddress != null) {
+        dispatcher.postToAll(RemoteProcessDisconnected(remoteEnvAddress))
+      }
     } else {
       // If the channel is closed before connecting, its remoteAddress will be null. In this case,
       // we can ignore it since we don't fire "Associated".

@@ -17,6 +17,7 @@
 
 # Utility functions to deserialize objects from Java.
 
+# nolint start
 # Type mapping from Java to R
 #
 # void -> NULL
@@ -32,6 +33,8 @@
 #
 # Array[T] -> list()
 # Object -> jobj
+#
+# nolint end
 
 readObject <- function(con) {
   # Read type first
@@ -183,7 +186,7 @@ readMultipleObjects <- function(inputCon) {
   # of the objects, so the number of objects varies, we try to read
   # all objects in a loop until the end of the stream.
   data <- list()
-  while(TRUE) {
+  while (TRUE) {
     # If reaching the end of the stream, type returned should be "".
     type <- readType(inputCon)
     if (type == "") {

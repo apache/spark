@@ -21,15 +21,15 @@ import java.io._
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkException, SparkConf, Logging}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.{MetadataCleaner, Utils}
 import org.apache.spark.streaming.scheduler.JobGenerator
-
+import org.apache.spark.util.Utils
 
 private[streaming]
 class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
@@ -41,7 +41,6 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDir = ssc.checkpointDir
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.getPendingTimes().toArray
-  val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
   val sparkConfPairs = ssc.conf.getAll
 
   def createSparkConf(): SparkConf = {
@@ -185,7 +184,7 @@ class CheckpointWriter(
   val executor = Executors.newFixedThreadPool(1)
   val compressionCodec = CompressionCodec.createCodec(conf)
   private var stopped = false
-  private var fs_ : FileSystem = _
+  private var _fs: FileSystem = _
 
   @volatile private var latestCheckpointTime: Time = null
 
@@ -207,7 +206,7 @@ class CheckpointWriter(
       // also use the latest checkpoint time as the file name, so that we can recovery from the
       // latest checkpoint file.
       //
-      // Note: there is only one thread writting the checkpoint files, so we don't need to worry
+      // Note: there is only one thread writing the checkpoint files, so we don't need to worry
       // about thread-safety.
       val checkpointFile = Checkpoint.checkpointFile(checkpointDir, latestCheckpointTime)
       val backupFile = Checkpoint.checkpointBackupFile(checkpointDir, latestCheckpointTime)
@@ -232,7 +231,7 @@ class CheckpointWriter(
           // If the checkpoint file exists, back it up
           // If the backup exists as well, just delete it, otherwise rename will fail
           if (fs.exists(checkpointFile)) {
-            if (fs.exists(backupFile)){
+            if (fs.exists(backupFile)) {
               fs.delete(backupFile, true) // just in case it exists
             }
             if (!fs.rename(checkpointFile, backupFile)) {
@@ -277,7 +276,7 @@ class CheckpointWriter(
       val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(
         checkpoint.checkpointTime, bytes, clearCheckpointDataLater))
-      logDebug("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
+      logInfo("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
     } catch {
       case rej: RejectedExecutionException =>
         logError("Could not submit checkpoint task to the thread pool executor", rej)
@@ -300,12 +299,12 @@ class CheckpointWriter(
   }
 
   private def fs = synchronized {
-    if (fs_ == null) fs_ = new Path(checkpointDir).getFileSystem(hadoopConf)
-    fs_
+    if (_fs == null) _fs = new Path(checkpointDir).getFileSystem(hadoopConf)
+    _fs
   }
 
   private def reset() = synchronized {
-    fs_ = null
+    _fs = null
   }
 }
 
@@ -372,8 +371,8 @@ object CheckpointReader extends Logging {
 }
 
 private[streaming]
-class ObjectInputStreamWithLoader(inputStream_ : InputStream, loader: ClassLoader)
-  extends ObjectInputStream(inputStream_) {
+class ObjectInputStreamWithLoader(_inputStream: InputStream, loader: ClassLoader)
+  extends ObjectInputStream(_inputStream) {
 
   override def resolveClass(desc: ObjectStreamClass): Class[_] = {
     try {

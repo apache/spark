@@ -19,11 +19,12 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -214,7 +215,7 @@ class BisectingKMeans private (
   }
 
   /**
-   * Java-friendly version of [[run(RDD[Vector])*]]
+   * Java-friendly version of [[run()]].
    */
   def run(data: JavaRDD[Vector]): BisectingKMeansModel = run(data.rdd)
 }
@@ -407,7 +408,7 @@ private object BisectingKMeans extends Serializable {
  */
 @Since("1.6.0")
 @Experimental
-class ClusteringTreeNode private[clustering] (
+private[clustering] class ClusteringTreeNode private[clustering] (
     val index: Int,
     val size: Long,
     private val centerWithNorm: VectorWithNorm,
@@ -467,6 +468,7 @@ class ClusteringTreeNode private[clustering] (
    * @param cost the cost to the current center
    * @return (predicted leaf cluster index, cost)
    */
+  @tailrec
   private def predict(pointWithNorm: VectorWithNorm, cost: Double): (Int, Double) = {
     if (isLeaf) {
       (index, cost)

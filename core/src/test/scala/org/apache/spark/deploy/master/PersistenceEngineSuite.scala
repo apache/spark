@@ -25,7 +25,7 @@ import org.apache.curator.test.TestingServer
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
-import org.apache.spark.serializer.{Serializer, JavaSerializer}
+import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.Utils
 
 class PersistenceEngineSuite extends SparkFunSuite {
@@ -88,9 +88,7 @@ class PersistenceEngineSuite extends SparkFunSuite {
           cores = 0,
           memory = 0,
           endpoint = workerEndpoint,
-          webUiPort = 0,
-          publicAddress = ""
-        )
+          webUiAddress = "http://localhost:80")
 
         persistenceEngine.addWorker(workerToPersist)
 
@@ -109,8 +107,7 @@ class PersistenceEngineSuite extends SparkFunSuite {
         assert(workerToPersist.cores === recoveryWorkerInfo.cores)
         assert(workerToPersist.memory === recoveryWorkerInfo.memory)
         assert(workerToPersist.endpoint === recoveryWorkerInfo.endpoint)
-        assert(workerToPersist.webUiPort === recoveryWorkerInfo.webUiPort)
-        assert(workerToPersist.publicAddress === recoveryWorkerInfo.publicAddress)
+        assert(workerToPersist.webUiAddress === recoveryWorkerInfo.webUiAddress)
       } finally {
         testRpcEnv.shutdown()
         testRpcEnv.awaitTermination()

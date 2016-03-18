@@ -18,7 +18,7 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
+import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 
 
 /**

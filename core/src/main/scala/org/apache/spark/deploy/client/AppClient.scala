@@ -18,17 +18,18 @@
 package org.apache.spark.deploy.client
 
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
-import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -68,12 +69,10 @@ private[spark] class AppClient(
     // A thread pool for registering with masters. Because registering with a master is a blocking
     // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
     // time so that we can register with all masters.
-    private val registerMasterThreadPool = new ThreadPoolExecutor(
-      0,
-      masterRpcAddresses.length, // Make sure we can register with all masters at the same time
-      60L, TimeUnit.SECONDS,
-      new SynchronousQueue[Runnable](),
-      ThreadUtils.namedThreadFactory("appclient-register-master-threadpool"))
+    private val registerMasterThreadPool = ThreadUtils.newDaemonCachedThreadPool(
+      "appclient-register-master-threadpool",
+      masterRpcAddresses.length // Make sure we can register with all masters at the same time
+    )
 
     // A scheduled executor for scheduling the registration actions
     private val registrationRetryThread =
@@ -106,8 +105,7 @@ private[spark] class AppClient(
               return
             }
             logInfo("Connecting to master " + masterAddress.toSparkURL + "...")
-            val masterRef =
-              rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
+            val masterRef = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
             masterRef.send(RegisterApplication(appDescription, self))
           } catch {
             case ie: InterruptedException => // Cancelled
@@ -126,21 +124,19 @@ private[spark] class AppClient(
      */
     private def registerWithMaster(nthRetry: Int) {
       registerMasterFutures.set(tryRegisterAllMasters())
-      registrationRetryTimer.set(registrationRetryThread.scheduleAtFixedRate(new Runnable {
+      registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
-          Utils.tryOrExit {
-            if (registered.get) {
-              registerMasterFutures.get.foreach(_.cancel(true))
-              registerMasterThreadPool.shutdownNow()
-            } else if (nthRetry >= REGISTRATION_RETRIES) {
-              markDead("All masters are unresponsive! Giving up.")
-            } else {
-              registerMasterFutures.get.foreach(_.cancel(true))
-              registerWithMaster(nthRetry + 1)
-            }
+          if (registered.get) {
+            registerMasterFutures.get.foreach(_.cancel(true))
+            registerMasterThreadPool.shutdownNow()
+          } else if (nthRetry >= REGISTRATION_RETRIES) {
+            markDead("All masters are unresponsive! Giving up.")
+          } else {
+            registerMasterFutures.get.foreach(_.cancel(true))
+            registerWithMaster(nthRetry + 1)
           }
         }
-      }, REGISTRATION_TIMEOUT_SECONDS, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+      }, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
     }
 
     /**
@@ -178,9 +174,6 @@ private[spark] class AppClient(
         val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort,
           cores))
-        // FIXME if changing master and `ExecutorAdded` happen at the same time (the order is not
-        // guaranteed), `ExecutorStateChanged` may be sent to a dead master.
-        sendToMaster(ExecutorStateChanged(appId.get, id, ExecutorState.RUNNING, None, None))
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
       case ExecutorUpdated(id, state, message, exitStatus) =>

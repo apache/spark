@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -31,26 +31,30 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  */
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
-  def assertAnalyzed(): Unit = sqlContext.analyzer.checkAnalysis(analyzed)
+  def assertAnalyzed(): Unit = try sqlContext.sessionState.analyzer.checkAnalysis(analyzed) catch {
+    case e: AnalysisException =>
+      val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+      ae.setStackTrace(e.getStackTrace)
+      throw ae
+  }
 
-  lazy val analyzed: LogicalPlan = sqlContext.analyzer.execute(logical)
+  lazy val analyzed: LogicalPlan = sqlContext.sessionState.analyzer.execute(logical)
 
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
     sqlContext.cacheManager.useCachedData(analyzed)
   }
 
-  lazy val optimizedPlan: LogicalPlan = sqlContext.optimizer.execute(withCachedData)
+  lazy val optimizedPlan: LogicalPlan = sqlContext.sessionState.optimizer.execute(withCachedData)
 
-  // TODO: Don't just pick the first one...
   lazy val sparkPlan: SparkPlan = {
-    SparkPlan.currentContext.set(sqlContext)
-    sqlContext.planner.plan(optimizedPlan).next()
+    SQLContext.setActive(sqlContext)
+    sqlContext.sessionState.planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = sqlContext.prepareForExecution.execute(sparkPlan)
+  lazy val executedPlan: SparkPlan = sqlContext.sessionState.prepareForExecution.execute(sparkPlan)
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()

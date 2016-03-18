@@ -21,11 +21,10 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, OuterScopes}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateStruct, Attribute}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.expressions.Aggregator
 
 /**
  * :: Experimental ::
@@ -65,7 +64,7 @@ class GroupedDataset[K, V] private[sql](
 
   private def groupedData =
     new GroupedData(
-      new DataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
+      Dataset.newDataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
 
   /**
    * Returns a new [[GroupedDataset]] where the type of the key has been mapped to the specified
@@ -87,7 +86,7 @@ class GroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def keys: Dataset[K] = {
-    new Dataset[K](
+    Dataset[K](
       sqlContext,
       Distinct(
         Project(groupingAttributes, logicalPlan)))
@@ -101,7 +100,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an [[Aggregator]].
+   * key, it is best to use the reduce function or an
+   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -111,13 +111,12 @@ class GroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
-    new Dataset[U](
+    Dataset[U](
       sqlContext,
       MapGroups(
         f,
-        resolvedKEncoder,
-        resolvedVEncoder,
         groupingAttributes,
+        dataAttributes,
         logicalPlan))
   }
 
@@ -129,7 +128,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an [[Aggregator]].
+   * key, it is best to use the reduce function or an
+   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -149,7 +149,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an [[Aggregator]].
+   * key, it is best to use the reduce function or an
+   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -170,7 +171,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an [[Aggregator]].
+   * key, it is best to use the reduce function or an
+   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -221,17 +223,18 @@ class GroupedDataset[K, V] private[sql](
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
    * and code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
-   * TODO: does not handle aggrecations that return nonflat results,
+   * TODO: does not handle aggregations that return nonflat results,
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(
         _.withInputType(resolvedVEncoder, dataAttributes).named)
-    val keyColumn = if (groupingAttributes.length > 1) {
-      Alias(CreateStruct(groupingAttributes), "key")()
-    } else {
+    val keyColumn = if (resolvedKEncoder.flat) {
+      assert(groupingAttributes.length == 1)
       groupingAttributes.head
+    } else {
+      Alias(CreateStruct(groupingAttributes), "key")()
     }
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sqlContext, aggregate)
@@ -304,15 +307,15 @@ class GroupedDataset[K, V] private[sql](
   def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
-    new Dataset[R](
+    implicit val uEncoder = other.unresolvedVEncoder
+    Dataset[R](
       sqlContext,
       CoGroup(
         f,
-        this.resolvedKEncoder,
-        this.resolvedVEncoder,
-        other.resolvedVEncoder,
         this.groupingAttributes,
         other.groupingAttributes,
+        this.dataAttributes,
+        other.dataAttributes,
         this.logicalPlan,
         other.logicalPlan))
   }
