@@ -895,7 +895,7 @@ private[ml] object RandomForest extends Logging {
         //   beforehand.  Splits are constructed as needed during training.
         Array.empty[Split]
     }
-    splits.toArray
+    splits
   }
 
   /**
