@@ -273,14 +273,14 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       if (originalTypes[i] != null && originalTypes[i] != OriginalType.DECIMAL &&
           originalTypes[i] != OriginalType.UTF8 && originalTypes[i] != OriginalType.DATE &&
           originalTypes[i] != OriginalType.INT_8 && originalTypes[i] != OriginalType.INT_16) {
-        throw new IOException("Unsupported type: " + t);
+        //throw new IOException("Unsupported type: " + t);
       }
       if (originalTypes[i] == OriginalType.DECIMAL &&
           primitiveType.getDecimalMetadata().getPrecision() > Decimal.MAX_LONG_DIGITS()) {
-        throw new IOException("Decimal with high precision is not supported.");
+        //throw new IOException("Decimal with high precision is not supported.");
       }
       if (primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT96) {
-        throw new IOException("Int96 not supported.");
+        //throw new IOException("Int96 not supported.");
       }
       ColumnDescriptor fd = fileSchema.getColumnDescription(requestedSchema.getPaths().get(i));
       if (!fd.equals(requestedSchema.getColumns().get(i))) {
