@@ -1268,6 +1268,61 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * (Scala-specific) Aggregates on the entire [[Dataset]] without groups.
+   * {{{
+   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
+   *   ds.agg("age" -> "max", "salary" -> "avg")
+   *   ds.groupBy().agg("age" -> "max", "salary" -> "avg")
+   * }}}
+   *
+   * @group untypedrel
+   * @since 2.0.0
+   */
+  def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
+    groupBy().agg(aggExpr, aggExprs : _*)
+  }
+
+  /**
+   * (Scala-specific) Aggregates on the entire [[Dataset]] without groups.
+   * {{{
+   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
+   *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
+   *   ds.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 2.0.0
+   */
+  def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
+
+  /**
+   * (Java-specific) Aggregates on the entire [[Dataset]] without groups.
+   * {{{
+   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
+   *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
+   *   ds.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 2.0.0
+   */
+  def agg(exprs: java.util.Map[String, String]): DataFrame = groupBy().agg(exprs)
+
+  /**
+   * Aggregates on the entire [[Dataset]] without groups.
+   * {{{
+   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
+   *   ds.agg(max($"age"), avg($"salary"))
+   *   ds.groupBy().agg(max($"age"), avg($"salary"))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
+
+  /**
    * Returns a new [[Dataset]] by taking the first `n` rows. The difference between this function
    * and `head` is that `head` is an action and returns an array (by triggering query execution)
    * while `limit` returns a new [[Dataset]].
