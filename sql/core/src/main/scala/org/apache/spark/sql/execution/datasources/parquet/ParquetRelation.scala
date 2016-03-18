@@ -334,13 +334,8 @@ private[sql] class DefaultSource
       sqlContext.sparkContext.broadcast(new SerializableConfiguration(parquetConf))
 
     // TODO: if you move this into the closure it reverts to the default values.
-    val useUnsafeReader: Boolean =
-      sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED)
-
     // If true, enable using the custom RecordReader for parquet. This only works for
     // a subset of the types (no complex types).
-    val enableUnsafeRowParquetReader: Boolean =
-      sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
     val enableVectorizedParquetReader: Boolean =
       sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
     val enableWholestageCodegen: Boolean =
@@ -363,21 +358,18 @@ private[sql] class DefaultSource
       val hadoopAttemptContext = new TaskAttemptContextImpl(broadcastedConf.value.value, attemptId)
 
       val parquetReader = try {
-        if (!useUnsafeReader) sys.error("Unsafe reader turned off.")
-        val unsafeReader = new UnsafeRowParquetRecordReader()
-        unsafeReader.initialize(split, hadoopAttemptContext)
-
-        if (enableVectorizedParquetReader) {
-          logDebug(s"Appending $partitionSchema ${file.partitionValues}")
-          unsafeReader.initBatch(partitionSchema, file.partitionValues)
-          // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
-          // TODO: fix column appending
-          if (enableWholestageCodegen) {
-            logDebug(s"Enabling batch returning")
-            unsafeReader.enableReturningBatches()
-          }
+        if (!enableVectorizedParquetReader) sys.error("Vectorized reader turned off.")
+        val vectorizedReader = new VectorizedParquetRecordReader()
+        vectorizedReader.initialize(split, hadoopAttemptContext)
+        logDebug(s"Appending $partitionSchema ${file.partitionValues}")
+        vectorizedReader.initBatch(partitionSchema, file.partitionValues)
+        // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
+        // TODO: fix column appending
+        if (enableWholestageCodegen) {
+          logDebug(s"Enabling batch returning")
+          vectorizedReader.enableReturningBatches()
         }
-        unsafeReader
+        vectorizedReader
       } catch {
         case NonFatal(e) =>
           logDebug(s"Falling back to parquet-mr: $e", e)
@@ -396,7 +388,7 @@ private[sql] class DefaultSource
       val iter = new RecordReaderIterator(parquetReader)
 
       // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
-      if (parquetReader.isInstanceOf[UnsafeRowParquetRecordReader] &&
+      if (parquetReader.isInstanceOf[VectorizedParquetRecordReader] &&
           enableVectorizedParquetReader) {
         iter.asInstanceOf[Iterator[InternalRow]]
       } else {
