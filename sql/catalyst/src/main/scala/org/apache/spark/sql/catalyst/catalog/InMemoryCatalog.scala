@@ -64,20 +64,22 @@ class InMemoryCatalog extends ExternalCatalog {
 
   private def requireFunctionExists(db: String, funcName: String): Unit = {
     if (!functionExists(db, funcName)) {
-      throw new AnalysisException(s"Function '$funcName' does not exist in database '$db'")
+      throw new AnalysisException(
+        s"Function not found: '$funcName' does not exist in database '$db'")
     }
   }
 
   private def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
-      throw new AnalysisException(s"Table '$table' does not exist in database '$db'")
+      throw new AnalysisException(
+        s"Table not found: '$table' does not exist in database '$db'")
     }
   }
 
   private def requirePartitionExists(db: String, table: String, spec: TablePartitionSpec): Unit = {
     if (!partitionExists(db, table, spec)) {
       throw new AnalysisException(
-        s"Partition does not exist in database '$db' table '$table': '$spec'")
+        s"Partition not found: database '$db' table '$table' does not contain: '$spec'")
     }
   }
 

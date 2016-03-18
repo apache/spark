@@ -40,16 +40,14 @@ import org.apache.spark.sql.types._
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
-object SimpleAnalyzer
-  extends Analyzer(
-    new SessionCatalog(new InMemoryCatalog),
-    EmptyFunctionRegistry,
-    new SimpleCatalystConf(true))
+object SimpleAnalyzer extends SimpleAnalyzer(new SimpleCatalystConf(true))
+class SimpleAnalyzer(conf: CatalystConf)
+  extends Analyzer(new SessionCatalog(new InMemoryCatalog, conf), EmptyFunctionRegistry, conf)
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
- * [[UnresolvedRelation]]s into fully typed objects using information in a schema [[Catalog]] and
- * a [[FunctionRegistry]].
+ * [[UnresolvedRelation]]s into fully typed objects using information in a
+ * [[SessionCatalog]] and a [[FunctionRegistry]].
  */
 class Analyzer(
     catalog: SessionCatalog,

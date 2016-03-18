@@ -38,8 +38,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    * Internal catalog for managing table and database states.
    */
   override lazy val sessionCatalog = {
-    new HiveSessionCatalog(
-      ctx.hiveCatalog, ctx.metadataHive, ctx, caseSensitiveAnalysis = false)
+    new HiveSessionCatalog(ctx.hiveCatalog, ctx.metadataHive, ctx, conf)
   }
 
   /**

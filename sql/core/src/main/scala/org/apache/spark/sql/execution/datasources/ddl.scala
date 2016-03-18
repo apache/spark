@@ -93,6 +93,11 @@ case class CreateTempTableUsing(
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
+  if (tableIdent.database.isDefined) {
+    throw new AnalysisException(
+      s"Temporary table '$tableIdent' should not have specified a database")
+  }
+
   def run(sqlContext: SQLContext): Seq[Row] = {
     val dataSource = DataSource(
       sqlContext,
@@ -115,6 +120,11 @@ case class CreateTempTableUsingAsSelect(
     mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
+
+  if (tableIdent.database.isDefined) {
+    throw new AnalysisException(
+      s"Temporary table '$tableIdent' should not have specified a database")
+  }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = Dataset.newDataFrame(sqlContext, query)

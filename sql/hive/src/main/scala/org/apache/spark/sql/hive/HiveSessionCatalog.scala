@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
@@ -30,8 +31,8 @@ class HiveSessionCatalog(
     externalCatalog: HiveCatalog,
     client: HiveClient,
     context: HiveContext,
-    caseSensitiveAnalysis: Boolean)
-  extends SessionCatalog(externalCatalog, caseSensitiveAnalysis) {
+    conf: SQLConf)
+  extends SessionCatalog(externalCatalog, conf) {
 
   override def setCurrentDatabase(db: String): Unit = {
     super.setCurrentDatabase(db)

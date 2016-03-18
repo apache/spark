@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 
@@ -31,8 +32,12 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
  * proxy to the underlying metastore (e.g. Hive Metastore) and it also manages temporary
  * tables and functions of the Spark Session that it belongs to.
  */
-class SessionCatalog(externalCatalog: ExternalCatalog, caseSensitiveAnalysis: Boolean = true) {
+class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
   import ExternalCatalog._
+
+  def this(externalCatalog: ExternalCatalog) {
+    this(externalCatalog, new SimpleCatalystConf(true))
+  }
 
   protected[this] val tempTables = new ConcurrentHashMap[String, LogicalPlan]
   protected[this] val tempFunctions = new ConcurrentHashMap[String, CatalogFunction]
@@ -53,7 +58,7 @@ class SessionCatalog(externalCatalog: ExternalCatalog, caseSensitiveAnalysis: Bo
    * Format table name, taking into account case sensitivity.
    */
   protected[this] def formatTableName(name: String): String = {
-    if (caseSensitiveAnalysis) name else name.toLowerCase
+    if (conf.caseSensitiveAnalysis) name else name.toLowerCase
   }
 
   // ----------------------------------------------------------------------------

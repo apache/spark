@@ -46,7 +46,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Internal catalog for managing table and database states.
    */
-  lazy val sessionCatalog = new SessionCatalog(ctx.externalCatalog)
+  lazy val sessionCatalog = new SessionCatalog(ctx.externalCatalog, conf)
 
   /**
    * Internal catalog for managing functions registered by the user.

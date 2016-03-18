@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 
 class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
   private val conf = new SimpleCatalystConf(true)
-  private val catalog = new SessionCatalog(new InMemoryCatalog, caseSensitiveAnalysis = true)
+  private val catalog = new SessionCatalog(new InMemoryCatalog, conf)
   private val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
 
   private val relation = LocalRelation(
