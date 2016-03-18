@@ -79,7 +79,7 @@ class HashingTF(override val uid: String)
 
   override def transform(dataset: DataFrame): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashingTF = new feature.HashingTF($(numFeatures), $(binary))
+    val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
     val t = udf { terms: Seq[_] => hashingTF.transform(terms) }
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))

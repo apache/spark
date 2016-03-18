@@ -25,7 +25,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("hashing tf on a single doc") {
-    val hashingTF = new HashingTF(1000, false)
+    val hashingTF = new HashingTF(1000)
     val doc = "a a b b c d".split(" ")
     val n = hashingTF.numFeatures
     val termFreqs = Seq(
@@ -51,7 +51,7 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("applying binary term freqs") {
-    val hashingTF = new HashingTF(100, true)
+    val hashingTF = new HashingTF(100).setBinary(true)
     val doc = "a a b c c c".split(" ")
     val n = hashingTF.numFeatures
     val expected = Vectors.sparse(n, Seq(

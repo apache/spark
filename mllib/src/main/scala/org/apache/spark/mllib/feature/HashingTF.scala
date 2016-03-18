@@ -32,16 +32,26 @@ import org.apache.spark.util.Utils
  * Maps a sequence of terms to their term frequencies using the hashing trick.
  *
  * @param numFeatures number of features (default: 2^20^)
- * @param binary If true, term frequency vector will be binary such that non-zero term counts
- *               will be set to 1 (default: false)
  */
 @Since("1.1.0")
-class HashingTF(val numFeatures: Int, val binary: Boolean) extends Serializable {
+class HashingTF(val numFeatures: Int) extends Serializable {
+
+  private var binary = false
 
   /**
    */
   @Since("1.1.0")
-  def this() = this(1 << 20, false)
+  def this() = this(1 << 20)
+
+  /**
+   * Sets the binary toggle param. If true, term frequency vector will be binary such that non-zero
+   * term counts will be set to 1 (default: false)
+   */
+  @Since("2.0.0")
+  def setBinary(value: Boolean): this.type = {
+    binary = value
+    this
+  }
 
   /**
    * Returns the index of the input term.
