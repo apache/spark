@@ -42,20 +42,25 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.ReturnAnswer(rootPlan) => rootPlan match {
-        case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
+        case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child), _) =>
           execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
         case logical.Limit(
             IntegerLiteral(limit),
-            logical.Project(projectList, logical.Sort(order, true, child))) =>
+            logical.Project(projectList, logical.Sort(order, true, child)), _) =>
           execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
-        case logical.Limit(IntegerLiteral(limit), child) =>
-          execution.CollectLimit(limit, execution.LocalLimit(limit, planLater(child))) :: Nil
+        case logical.Limit(IntegerLiteral(limit), child, hasPushDowned) =>
+            if (hasPushDowned) {
+              execution.CollectLimit(limit, planLater(child)) :: Nil
+            } else {
+              execution.CollectLimit(limit, execution.LocalLimit(limit, planLater(child))) :: Nil
+            }
         case other => planLater(other) :: Nil
       }
-      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
+      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child), _) =>
         execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
       case logical.Limit(
-          IntegerLiteral(limit), logical.Project(projectList, logical.Sort(order, true, child))) =>
+          IntegerLiteral(limit),
+          logical.Project(projectList, logical.Sort(order, true, child)), _) =>
         execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
       case _ => Nil
     }
@@ -350,7 +355,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
-      case logical.LocalLimit(IntegerLiteral(limit), child) =>
+      case logical.LocalLimit(IntegerLiteral(limit), child, _) =>
         execution.LocalLimit(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimit(limit, planLater(child)) :: Nil

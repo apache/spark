@@ -175,8 +175,8 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Note: right now Union means UNION ALL, which does not de-duplicate rows, so it is safe to
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
-    case LocalLimit(exp, Union(children)) =>
-      LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))))
+    case LocalLimit(exp, Union(children), _) =>
+      LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))), hasPushDowned = true)
     // Add extra limits below OUTER JOIN. For LEFT OUTER and FULL OUTER JOIN we push limits to the
     // left and right sides, respectively. For FULL OUTER JOIN, we can only push limits to one side
     // because we need to ensure that rows from the limited side still have an opportunity to match
@@ -186,7 +186,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
     //   - If neither side is limited, limit the side that is estimated to be bigger.
-    case LocalLimit(exp, join @ Join(left, right, joinType, condition)) =>
+    case LocalLimit(exp, join @ Join(left, right, joinType, condition), _) =>
       val newJoin = joinType match {
         case RightOuter => join.copy(right = maybePushLimit(exp, right))
         case LeftOuter => join.copy(left = maybePushLimit(exp, left))
@@ -205,7 +205,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
           }
         case _ => join
       }
-      LocalLimit(exp, newJoin)
+      LocalLimit(exp, newJoin, hasPushDowned = true)
   }
 }
 
@@ -1201,10 +1201,10 @@ object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ll @ GlobalLimit(le, nl @ GlobalLimit(ne, grandChild)) =>
       GlobalLimit(Least(Seq(ne, le)), grandChild)
-    case ll @ LocalLimit(le, nl @ LocalLimit(ne, grandChild)) =>
-      LocalLimit(Least(Seq(ne, le)), grandChild)
-    case ll @ Limit(le, nl @ Limit(ne, grandChild)) =>
-      Limit(Least(Seq(ne, le)), grandChild)
+    case ll @ LocalLimit(le, nl @ LocalLimit(ne, grandChild, push1), push2) =>
+      LocalLimit(Least(Seq(ne, le)), grandChild, push1 || push2)
+    case ll @ Limit(le, nl @ Limit(ne, grandChild, push1), push2) =>
+      Limit(Least(Seq(ne, le)), grandChild, push1 || push2)
   }
 }
 

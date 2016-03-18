@@ -571,13 +571,17 @@ case class Pivot(
 }
 
 object Limit {
-  def apply(limitExpr: Expression, child: LogicalPlan): UnaryNode = {
+  def apply(
+      limitExpr: Expression,
+      child: LogicalPlan,
+      hasPushDowned: Boolean = false): UnaryNode = {
     GlobalLimit(limitExpr, LocalLimit(limitExpr, child))
   }
 
-  def unapply(p: GlobalLimit): Option[(Expression, LogicalPlan)] = {
+  def unapply(p: GlobalLimit): Option[(Expression, LogicalPlan, Boolean)] = {
     p match {
-      case GlobalLimit(le1, LocalLimit(le2, child)) if le1 == le2 => Some((le1, child))
+      case GlobalLimit(le1, LocalLimit(le2, child, hasPushDowned)) if le1 == le2 =>
+        Some((le1, child, hasPushDowned))
       case _ => None
     }
   }
@@ -598,7 +602,10 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
   }
 }
 
-case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+case class LocalLimit(
+    limitExpr: Expression,
+    child: LogicalPlan,
+    hasPushDowned: Boolean = false) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
