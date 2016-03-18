@@ -84,7 +84,7 @@ setGeneric("filterRDD", function(x, f) { standardGeneric("filterRDD") })
 
 # @rdname first
 # @export
-setGeneric("first", function(x) { standardGeneric("first") })
+setGeneric("first", function(x, ...) { standardGeneric("first") })
 
 # @rdname flatMap
 # @export
@@ -607,7 +607,7 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 
 #' @rdname showDF
 #' @export
-setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
+setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
 
 # @rdname subset
 # @export
@@ -615,7 +615,7 @@ setGeneric("subset", function(x, ...) { standardGeneric("subset") })
 
 #' @rdname agg
 #' @export
-setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
+setGeneric("summarize", function(x, ...) { standardGeneric("summarize") })
 
 #' @rdname summary
 #' @export
@@ -889,7 +889,7 @@ setGeneric("lag", function(x, ...) { standardGeneric("lag") })
 
 #' @rdname last
 #' @export
-setGeneric("last", function(x) { standardGeneric("last") })
+setGeneric("last", function(x, ...) { standardGeneric("last") })
 
 #' @rdname last_day
 #' @export

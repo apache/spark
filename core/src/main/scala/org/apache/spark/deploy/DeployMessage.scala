@@ -64,6 +64,16 @@ private[deploy] object DeployMessages {
   case class WorkerSchedulerStateResponse(id: String, executors: List[ExecutorDescription],
      driverIds: Seq[String])
 
+  /**
+   * A worker will send this message to the master when it registers with the master. Then the
+   * master will compare them with the executors and drivers in the master and tell the worker to
+   * kill the unknown executors and drivers.
+   */
+  case class WorkerLatestState(
+      id: String,
+      executors: Seq[ExecutorDescription],
+      driverIds: Seq[String]) extends DeployMessage
+
   case class Heartbeat(workerId: String, worker: RpcEndpointRef) extends DeployMessage
 
   // Master to Worker

@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.execution.SparkSqlSerializer
-import org.apache.spark.sql.execution.local.LocalNode
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator, Utils}
@@ -157,10 +156,11 @@ private[joins] class UniqueKeyHashedRelation(
 
 private[execution] object HashedRelation {
 
-  def apply(localNode: LocalNode, keyGenerator: Projection): HashedRelation = {
-    apply(localNode.asIterator, keyGenerator)
-  }
-
+  /**
+   * Create a HashedRelation from an Iterator of InternalRow.
+   *
+   * Note: The caller should make sure that these InternalRow are different objects.
+   */
   def apply(
       input: Iterator[InternalRow],
       keyGenerator: Projection,
@@ -193,7 +193,7 @@ private[execution] object HashedRelation {
           keyIsUnique = false
           existingMatchList
         }
-        matchList += currentRow.copy()
+        matchList += currentRow
       }
     }
 
@@ -443,7 +443,7 @@ private[joins] object UnsafeHashedRelation {
         } else {
           existingMatchList
         }
-        matchList += unsafeRow.copy()
+        matchList += unsafeRow
       }
     }
 
@@ -627,7 +627,7 @@ private[joins] object LongHashedRelation {
           keyIsUnique = false
           existingMatchList
         }
-        matchList += unsafeRow.copy()
+        matchList += unsafeRow
       }
     }
 
@@ -681,13 +681,26 @@ private[execution] case class HashedRelationBroadcastMode(
     keys: Seq[Expression],
     attributes: Seq[Attribute]) extends BroadcastMode {
 
-  def transform(rows: Array[InternalRow]): HashedRelation = {
+  override def transform(rows: Array[InternalRow]): HashedRelation = {
     val generator = UnsafeProjection.create(keys, attributes)
     if (canJoinKeyFitWithinLong) {
       LongHashedRelation(rows.iterator, generator, rows.length)
     } else {
       HashedRelation(rows.iterator, generator, rows.length)
     }
+  }
+
+  private lazy val canonicalizedKeys: Seq[Expression] = {
+    keys.map { e =>
+      BindReferences.bindReference(e.canonicalized, attributes)
+    }
+  }
+
+  override def compatibleWith(other: BroadcastMode): Boolean = other match {
+    case m: HashedRelationBroadcastMode =>
+      canJoinKeyFitWithinLong == m.canJoinKeyFitWithinLong &&
+        canonicalizedKeys == m.canonicalizedKeys
+    case _ => false
   }
 }
 

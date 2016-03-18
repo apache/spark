@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -45,7 +46,6 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.base.Throwables;
-import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -1058,7 +1058,7 @@ public class JavaAPISuite implements Serializable {
     rdd.saveAsTextFile(outputDir);
     // Read the plain text file and check it's OK
     File outputFile = new File(outputDir, "part-00000");
-    String content = Files.toString(outputFile, Charsets.UTF_8);
+    String content = Files.toString(outputFile, StandardCharsets.UTF_8);
     Assert.assertEquals("1\n2\n3\n4\n", content);
     // Also try reading it in as a text file RDD
     List<String> expected = Arrays.asList("1", "2", "3", "4");
@@ -1068,8 +1068,8 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void wholeTextFiles() throws Exception {
-    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
-    byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
+    byte[] content2 = "spark is also easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
     Files.write(content1, new File(tempDirName + "/part-00000"));
@@ -1131,7 +1131,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void binaryFiles() throws Exception {
     // Reusing the wholeText files example
-    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
     File file1 = new File(tempDirName + "/part-00000");
@@ -1152,7 +1152,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void binaryFilesCaching() throws Exception {
     // Reusing the wholeText files example
-    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
     File file1 = new File(tempDirName + "/part-00000");
@@ -1181,7 +1181,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void binaryRecords() throws Exception {
     // Reusing the wholeText files example
-    byte[] content1 = "spark isn't always easy to use.\n".getBytes("utf-8");
+    byte[] content1 = "spark isn't always easy to use.\n".getBytes(StandardCharsets.UTF_8);
     int numOfCopies = 10;
     String tempDirName = tempDir.getAbsolutePath();
     File file1 = new File(tempDirName + "/part-00000");

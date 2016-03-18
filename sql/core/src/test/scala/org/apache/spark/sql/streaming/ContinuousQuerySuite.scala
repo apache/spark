@@ -27,7 +27,7 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
   import AwaitTerminationTester._
   import testImplicits._
 
-  test("lifecycle states and awaitTermination") {
+  testQuietly("lifecycle states and awaitTermination") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map { 6 / _}
 
@@ -59,7 +59,7 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
     )
   }
 
-  test("source and sink statuses") {
+  testQuietly("source and sink statuses") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(6 / _)
 

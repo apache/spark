@@ -203,9 +203,41 @@ class CatalystQlSuite extends PlanTest {
       "from windowData")
   }
 
+  test("very long AND/OR expression") {
+    val equals = (1 to 1000).map(x => s"$x == $x")
+    val expr = parser.parseExpression(equals.mkString(" AND "))
+    assert(expr.isInstanceOf[And])
+    assert(expr.collect( { case EqualTo(_, _) => true } ).size == 1000)
+
+    val expr2 = parser.parseExpression(equals.mkString(" OR "))
+    assert(expr2.isInstanceOf[Or])
+    assert(expr2.collect( { case EqualTo(_, _) => true } ).size == 1000)
+  }
+
   test("subquery") {
     parser.parsePlan("select (select max(b) from s) ss from t")
     parser.parsePlan("select * from t where a = (select b from s)")
     parser.parsePlan("select * from t group by g having a > (select b from s)")
+  }
+
+  test("using clause in JOIN") {
+    // Tests parsing of using clause for different join types.
+    parser.parsePlan("select * from t1 join t2 using (c1)")
+    parser.parsePlan("select * from t1 join t2 using (c1, c2)")
+    parser.parsePlan("select * from t1 left join t2 using (c1, c2)")
+    parser.parsePlan("select * from t1 right join t2 using (c1, c2)")
+    parser.parsePlan("select * from t1 full outer join t2 using (c1, c2)")
+    parser.parsePlan("select * from t1 join t2 using (c1) join t3 using (c2)")
+    // Tests errors
+    // (1) Empty using clause
+    // (2) Qualified columns in using
+    // (3) Both on and using clause
+    var error = intercept[AnalysisException](parser.parsePlan("select * from t1 join t2 using ()"))
+    assert(error.message.contains("cannot recognize input near ')'"))
+    error = intercept[AnalysisException](parser.parsePlan("select * from t1 join t2 using (t1.c1)"))
+    assert(error.message.contains("mismatched input '.'"))
+    error = intercept[AnalysisException](parser.parsePlan("select * from t1" +
+      " join t2 using (c1) on t1.c1 = t2.c1"))
+    assert(error.message.contains("missing EOF at 'on' near ')'"))
   }
 }

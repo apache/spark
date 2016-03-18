@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.command
 
 import java.util.NoSuchElementException
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.{Dataset, Row, SQLContext}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -252,7 +252,7 @@ case class CacheTableCommand(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      sqlContext.registerDataFrameAsTable(DataFrame(sqlContext, logicalPlan), tableName)
+      sqlContext.registerDataFrameAsTable(Dataset.newDataFrame(sqlContext, logicalPlan), tableName)
     }
     sqlContext.cacheTable(tableName)
 
@@ -293,13 +293,14 @@ case object ClearCacheCommand extends RunnableCommand {
 
 
 case class DescribeCommand(
-    child: SparkPlan,
+    table: TableIdentifier,
     override val output: Seq[Attribute],
     isExtended: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    child.schema.fields.map { field =>
+    val relation = sqlContext.sessionState.catalog.lookupRelation(table)
+    relation.schema.fields.map { field =>
       val cmtKey = "comment"
       val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
       Row(field.name, field.dataType.simpleString, comment)
@@ -329,7 +330,7 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
   override def run(sqlContext: SQLContext): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sqlContext.
-    val rows = sqlContext.catalog.getTables(databaseName).map {
+    val rows = sqlContext.sessionState.catalog.getTables(databaseName).map {
       case (tableName, isTemporary) => Row(tableName, isTemporary)
     }
 
@@ -357,13 +358,14 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     case Some(p) =>
       try {
         val regex = java.util.regex.Pattern.compile(p)
-        sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
+        sqlContext.sessionState.functionRegistry.listFunction()
+          .filter(regex.matcher(_).matches()).map(Row(_))
       } catch {
         // probably will failed in the regex that user provided, then returns empty row.
         case _: Throwable => Seq.empty[Row]
       }
     case None =>
-      sqlContext.functionRegistry.listFunction().map(Row(_))
+      sqlContext.sessionState.functionRegistry.listFunction().map(Row(_))
   }
 }
 
@@ -394,7 +396,7 @@ case class DescribeFunction(
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.functionRegistry.lookupFunction(functionName) match {
+    sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
       case Some(info) =>
         val result =
           Row(s"Function: ${info.getName}") ::
@@ -415,7 +417,7 @@ case class DescribeFunction(
 case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.setCurrentDatabase(databaseName)
+    sqlContext.sessionState.catalog.setCurrentDatabase(databaseName)
     Seq.empty[Row]
   }
 

@@ -17,17 +17,23 @@
 
 package org.apache.spark.ml.classification
 
+import org.apache.hadoop.fs.Path
+import org.json4s.{DefaultFormats, JObject}
+import org.json4s.JsonDSL._
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
+import org.apache.spark.ml.tree._
+import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
-import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+
 
 /**
  * :: Experimental ::
@@ -41,7 +47,7 @@ import org.apache.spark.sql.DataFrame
 final class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
-  with DecisionTreeParams with TreeClassifierParams {
+  with DecisionTreeClassifierParams with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtc"))
@@ -93,6 +99,14 @@ final class DecisionTreeClassifier @Since("1.4.0") (
     trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
 
+  /** (private[ml]) Train a decision tree on an RDD */
+  private[ml] def train(data: RDD[LabeledPoint],
+      oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
+    val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
+      seed = 0L, parentUID = Some(uid))
+    trees.head.asInstanceOf[DecisionTreeClassificationModel]
+  }
+
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
@@ -107,10 +121,13 @@ final class DecisionTreeClassifier @Since("1.4.0") (
 
 @Since("1.4.0")
 @Experimental
-object DecisionTreeClassifier {
+object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifier] {
   /** Accessor for supported impurities: entropy, gini */
   @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
+
+  @Since("2.0.0")
+  override def load(path: String): DecisionTreeClassifier = super.load(path)
 }
 
 /**
@@ -127,7 +144,7 @@ final class DecisionTreeClassificationModel private[ml] (
     @Since("1.6.0")override val numFeatures: Int,
     @Since("1.5.0")override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, DecisionTreeClassificationModel]
-  with DecisionTreeModel with Serializable {
+  with DecisionTreeModel with DecisionTreeClassifierParams with MLWritable with Serializable {
 
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
@@ -169,16 +186,80 @@ final class DecisionTreeClassificationModel private[ml] (
     s"DecisionTreeClassificationModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
 
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * This generalizes the idea of "Gini" importance to other losses,
+   * following the explanation of Gini importance from "Random Forests" documentation
+   * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+   *
+   * This feature importance is calculated as follows:
+   *   - importance(feature j) = sum (over nodes which split on feature j) of the gain,
+   *     where gain is scaled by the number of instances passing through node
+   *   - Normalize importances for tree to sum to 1.
+   *
+   * Note: Feature importance for single decision trees can have high variance due to
+   *       correlated predictor variables. Consider using a [[RandomForestClassifier]]
+   *       to determine feature importance instead.
+   */
+  @Since("2.0.0")
+  lazy val featureImportances: Vector = RandomForest.featureImportances(this, numFeatures)
+
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldDecisionTreeModel = {
     new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.Classification)
   }
+
+  @Since("2.0.0")
+  override def write: MLWriter =
+    new DecisionTreeClassificationModel.DecisionTreeClassificationModelWriter(this)
 }
 
-private[ml] object DecisionTreeClassificationModel {
+@Since("2.0.0")
+object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassificationModel] {
 
-  /** (private[ml]) Convert a model from the old API */
-  def fromOld(
+  @Since("2.0.0")
+  override def read: MLReader[DecisionTreeClassificationModel] =
+    new DecisionTreeClassificationModelReader
+
+  @Since("2.0.0")
+  override def load(path: String): DecisionTreeClassificationModel = super.load(path)
+
+  private[DecisionTreeClassificationModel]
+  class DecisionTreeClassificationModelWriter(instance: DecisionTreeClassificationModel)
+    extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      val extraMetadata: JObject = Map(
+        "numFeatures" -> instance.numFeatures,
+        "numClasses" -> instance.numClasses)
+      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+      val (nodeData, _) = NodeData.build(instance.rootNode, 0)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(nodeData).write.parquet(dataPath)
+    }
+  }
+
+  private class DecisionTreeClassificationModelReader
+    extends MLReader[DecisionTreeClassificationModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[DecisionTreeClassificationModel].getName
+
+    override def load(path: String): DecisionTreeClassificationModel = {
+      implicit val format = DefaultFormats
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
+      val numClasses = (metadata.metadata \ "numClasses").extract[Int]
+      val root = loadTreeNodes(path, metadata, sqlContext)
+      val model = new DecisionTreeClassificationModel(metadata.uid, root, numFeatures, numClasses)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  /** Convert a model from the old API */
+  private[ml] def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeClassifier,
       categoricalFeatures: Map[Int, Int],
