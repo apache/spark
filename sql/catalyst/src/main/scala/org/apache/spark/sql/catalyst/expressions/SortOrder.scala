@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.BinaryPrefixComparator
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePrefixComparator
@@ -48,12 +47,10 @@ case class SortOrder(child: Expression, direction: SortDirection)
   override def foldable: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!RowOrdering.isOrderable(dataType)) {
-      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.simpleString}")
-    } else if (child.references.isEmpty && IntegerIndex.unapply(child).isEmpty) {
-      TypeCheckResult.TypeCheckFailure(s"sort position must be integer literals")
-    } else {
+    if (RowOrdering.isOrderable(dataType)) {
       TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.simpleString}")
     }
   }
 

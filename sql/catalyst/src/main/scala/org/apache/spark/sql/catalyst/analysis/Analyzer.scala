@@ -623,27 +623,26 @@ class Analyzer(
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
    *
-   * This rule also resolves the position number in Sort references. This support is introduced
+   * This rule also resolves the position number in sort references. This support is introduced
    * in Spark 2.0. Before Spark 2.0, the integers in Order By has no effect on output sorting.
+   * - When the sort references are not integer but foldable expressions, ignore them.
+   * - When spark.sql.orderByOrdinal is set to false, ignore the position numbers too.
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       // Replace the index with the related attribute for ORDER BY
       // which is a 1-base position of the projection list.
       case s @ Sort(orders, global, child)
-          if child.resolved && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+          if conf.orderByOrdinal && child.resolved &&
+            orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
         val newOrders = orders map {
           case s @ SortOrder(IntegerIndex(index), direction) =>
-            if (index > 0 && index <= child.output.size && conf.orderByOrdinal) {
+            if (index > 0 && index <= child.output.size) {
               SortOrder(child.output(index - 1), direction)
-            } else if (!conf.orderByOrdinal) {
-              failAnalysis(
-                "Integer in the Order/Sort By clause is not allowed " +
-                "when spark.sql.orderByOrdinal is set to false")
             } else {
               throw new UnresolvedException(s,
-                s"""Order/Sort By position: $index does not exist \n
-                  |The Select List is indexed from 1 to ${child.output.size}""".stripMargin)
+                "Order/sort By position: $index does not exist " +
+                "The Select List is indexed from 1 to ${child.output.size}")
             }
           case o => o
         }

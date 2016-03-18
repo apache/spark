@@ -210,6 +210,7 @@ object Unions {
 object IntegerIndex {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
+    // When resolving ordinal in Sort, negative values are extracted for issuing error messages.
     case UnaryMinus(IntegerLiteral(v)) => Some(-v)
     case _ => None
   }

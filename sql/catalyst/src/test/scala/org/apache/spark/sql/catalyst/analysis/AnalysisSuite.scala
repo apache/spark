@@ -201,6 +201,16 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, expected)
   }
 
+  test("pull out nondeterministic expressions from Sort") {
+    val plan = Sort(Seq(SortOrder(Rand(33), Ascending)), false, testRelation)
+    val projected = Alias(Rand(33), "_nondeterministic")()
+    val expected =
+      Project(testRelation.output,
+        Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
+          Project(testRelation.output :+ projected, testRelation)))
+    checkAnalysis(plan, expected)
+  }
+
   test("SPARK-9634: cleanup unnecessary Aliases in LogicalPlan") {
     val a = testRelation.output.head
     var plan = testRelation.select(((a + 1).as("a+1") + 2).as("col"))
