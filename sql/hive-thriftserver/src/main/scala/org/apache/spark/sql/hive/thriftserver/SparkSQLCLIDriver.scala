@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, CommandProces
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.thrift.transport.TSocket
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.ShutdownHookManager

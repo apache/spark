@@ -20,10 +20,10 @@ package org.apache.spark.util
 import java.io.InputStream
 import java.nio.ByteBuffer
 
-import org.apache.spark.storage.BlockManager
+import org.apache.spark.storage.StorageUtils
 
 /**
- * Reads data from a ByteBuffer, and optionally cleans it up using BlockManager.dispose()
+ * Reads data from a ByteBuffer, and optionally cleans it up using StorageUtils.dispose()
  * at the end of the stream (e.g. to close a memory-mapped file).
  */
 private[spark]
@@ -68,12 +68,12 @@ class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = f
   }
 
   /**
-   * Clean up the buffer, and potentially dispose of it using BlockManager.dispose().
+   * Clean up the buffer, and potentially dispose of it using StorageUtils.dispose().
    */
   private def cleanUp() {
     if (buffer != null) {
       if (dispose) {
-        BlockManager.dispose(buffer)
+        StorageUtils.dispose(buffer)
       }
       buffer = null
     }

@@ -17,8 +17,8 @@
 
 package org.apache.spark.deploy.master.ui
 
-import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
+import org.apache.spark.internal.Logging
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource,
   UIRoot}
 import org.apache.spark.ui.{SparkUI, WebUI}

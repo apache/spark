@@ -50,8 +50,31 @@ object JacksonParser extends Logging {
 
   /**
    * Parse the current token (and related children) according to a desired schema
+   * This is an wrapper for the method `convertField()` to handle a row wrapped
+   * with an array.
    */
-  def convertField(
+  def convertRootField(
+        factory: JsonFactory,
+        parser: JsonParser,
+        schema: DataType): Any = {
+    import com.fasterxml.jackson.core.JsonToken._
+    (parser.getCurrentToken, schema) match {
+      case (START_ARRAY, st: StructType) =>
+        // SPARK-3308: support reading top level JSON arrays and take every element
+        // in such an array as a row
+        convertArray(factory, parser, st)
+
+      case (START_OBJECT, ArrayType(st, _)) =>
+        // the business end of SPARK-3308:
+        // when an object is found but an array is requested just wrap it in a list
+        convertField(factory, parser, st) :: Nil
+
+      case _ =>
+        convertField(factory, parser, schema)
+    }
+  }
+
+  private def convertField(
       factory: JsonFactory,
       parser: JsonParser,
       schema: DataType): Any = {
@@ -158,18 +181,8 @@ object JacksonParser extends Logging {
       case (START_OBJECT, st: StructType) =>
         convertObject(factory, parser, st)
 
-      case (START_ARRAY, st: StructType) =>
-        // SPARK-3308: support reading top level JSON arrays and take every element
-        // in such an array as a row
-        convertArray(factory, parser, st)
-
       case (START_ARRAY, ArrayType(st, _)) =>
         convertArray(factory, parser, st)
-
-      case (START_OBJECT, ArrayType(st, _)) =>
-        // the business end of SPARK-3308:
-        // when an object is found but an array is requested just wrap it in a list
-        convertField(factory, parser, st) :: Nil
 
       case (START_OBJECT, MapType(StringType, kt, _)) =>
         convertMap(factory, parser, kt)
@@ -272,7 +285,7 @@ object JacksonParser extends Logging {
           Utils.tryWithResource(factory.createParser(record)) { parser =>
             parser.nextToken()
 
-            convertField(factory, parser, schema) match {
+            convertRootField(factory, parser, schema) match {
               case null => failedRecord(record)
               case row: InternalRow => row :: Nil
               case array: ArrayData =>
