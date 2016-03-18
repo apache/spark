@@ -475,6 +475,7 @@ class BigQueryCursor(BigQueryBaseCursor):
         self.page_token = None
         self.job_id = None
         self.buffer = []
+        self.all_pages_loaded = False
 
     @property
     def description(self):
@@ -529,23 +530,30 @@ class BigQueryCursor(BigQueryBaseCursor):
             return None
 
         if len(self.buffer) == 0:
+            if self.all_pages_loaded:
+                return None
+
             query_results = self.service.jobs().getQueryResults(projectId=self.project_id, jobId=self.job_id, pageToken=self.page_token).execute()
 
-            if len(query_results['rows']) == 0:
-                # Reset all state since we've exhausted the results.
-                self.page_token = None
-                self.job_id = None
-                self.page_token = None
-                return None
-            else:
+            if 'rows' in query_results and query_results['rows']:
                 self.page_token = query_results.get('pageToken')
                 fields = query_results['schema']['fields']
                 col_types = [field['type'] for field in fields]
                 rows = query_results['rows']
 
-                for idx, dict_row in enumerate(rows):
-                    typed_row = [_bq_cast(vs['v'], col_types[idx]) for vs in dict_row['f']]
+                for dict_row in rows:
+                    typed_row = [_bq_cast(vs['v'], col_types[idx]) for idx, vs in enumerate(dict_row['f'])]
                     self.buffer.append(typed_row)
+
+                if not self.page_token:
+                    self.all_pages_loaded = True
+
+            else:
+                # Reset all state since we've exhausted the results.
+                self.page_token = None
+                self.job_id = None
+                self.page_token = None
+                return None
 
         return self.buffer.pop(0)
 
