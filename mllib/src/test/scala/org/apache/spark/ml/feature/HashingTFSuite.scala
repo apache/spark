@@ -52,6 +52,27 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(features ~== expected absTol 1e-14)
   }
 
+  test("applying binary term freqs") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, "a a b c c c".split(" ").toSeq)
+    )).toDF("id", "words")
+    val n = 100
+    val hashingTF = new HashingTF()
+        .setInputCol("words")
+        .setOutputCol("features")
+        .setNumFeatures(n)
+        .setBinary(true)
+    val output = hashingTF.transform(df)
+    val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
+    require(attrGroup.numAttributes === Some(n))
+    val features = output.select("features").first().getAs[Vector](0)
+    // Assume perfect hash on "a", "b", "c".
+    def idx(any: Any): Int = Utils.nonNegativeMod(any.##, n)
+    val expected = Vectors.sparse(n,
+      Seq((idx("a"), 1.0), (idx("b"), 1.0), (idx("c"), 1.0)))
+    assert(features ~== expected absTol 1e-14)
+  }
+
   test("read/write") {
     val t = new HashingTF()
       .setInputCol("myInputCol")
