@@ -323,16 +323,18 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val res = sc.runJob(childRDD,
         (it: Iterator[Array[Byte]]) => if (it.hasNext) it.next() else Array.empty, p)
 
-      val results = ArrayBuffer[InternalRow]()
       res.foreach { r =>
-        decodeUnsafeRows(r.asInstanceOf[Array[Byte]], results)
+        decodeUnsafeRows(r.asInstanceOf[Array[Byte]], buf)
       }
 
-      buf ++= results.take(n - buf.size)
       partsScanned += p.size
     }
 
-    buf.toArray
+    if (buf.size > n) {
+      buf.take(n).toArray
+    } else {
+      buf.toArray
+    }
   }
 
   private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
