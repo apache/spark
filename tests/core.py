@@ -1395,12 +1395,17 @@ class HiveServer2Test(unittest.TestCase):
         hook = HiveServer2Hook()
         hook.get_records(sql)
 
-    def test_create(selfself):
+    def test_get_metastore_databases(self):
         if six.PY2:
             from airflow.hooks.hive_hooks import HiveMetastoreHook
             hook = HiveMetastoreHook()
             hook.get_databases()
 
+    def test_to_csv(self):
+        from airflow.hooks.hive_hooks import HiveServer2Hook
+        sql = "select 1"
+        hook = HiveServer2Hook()
+        hook.to_csv(hql=sql, csv_filepath="/tmp/test_to_csv")
 
 if 'MySqlOperator' in dir(operators):
     class TransferTests(unittest.TestCase):

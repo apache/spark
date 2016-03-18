@@ -479,7 +479,7 @@ class HiveServer2Hook(BaseHook):
                     writer = csv.writer(f, delimiter=delimiter,
                         lineterminator=lineterminator)
                     if output_header:
-                        writer.writerow([c['columnName']
+                        writer.writerow([c[0]
                             for c in cur.description])
                     i = 0
                     while True:
@@ -487,7 +487,7 @@ class HiveServer2Hook(BaseHook):
                         if not rows:
                             break
 
-                        writer.writerows(row)
+                        writer.writerows(rows)
                         i += len(rows)
                         logging.info("Written {0} rows so far.".format(i))
                     logging.info("Done. Loaded a total of {0} rows.".format(i))
@@ -516,5 +516,5 @@ class HiveServer2Hook(BaseHook):
         import pandas as pd
         res = self.get_results(hql, schema=schema)
         df = pd.DataFrame(res['data'])
-        df.columns = [c['columnName'] for c in res['header']]
+        df.columns = [c[0] for c in res['header']]
         return df
