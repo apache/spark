@@ -90,7 +90,7 @@ class HiveContext private[hive](
   extends SQLContext(sc, cacheManager, listener, isRootContext, hiveCatalog) with Logging {
   self =>
 
-  private[hive] def this(sc: SparkContext, execHive: HiveClientImpl, metaHive: HiveClient) {
+  private def this(sc: SparkContext, execHive: HiveClientImpl, metaHive: HiveClient) {
     this(
       sc,
       new CacheManager,
@@ -514,7 +514,7 @@ private[hive] object HiveContext extends Logging {
   /**
    * Configurations needed to create a [[HiveClient]].
    */
-  def hiveClientConfigurations(hiveconf: HiveConf): Map[String, String] = {
+  private[hive] def hiveClientConfigurations(hiveconf: HiveConf): Map[String, String] = {
     // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
     // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
     // compatibility when users are trying to connecting to a Hive metastore of lower version,

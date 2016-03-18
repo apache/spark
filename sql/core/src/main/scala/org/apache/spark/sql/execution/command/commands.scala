@@ -341,7 +341,7 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
     // instead of calling tables in sqlContext.
     val catalog = sqlContext.sessionState.sessionCatalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
-    val rows = sqlContext.sessionState.sessionCatalog.listTables(db).map { t =>
+    val rows = catalog.listTables(db).map { t =>
       val isTemp = t.database.isEmpty
       Row(t.table, isTemp)
     }
