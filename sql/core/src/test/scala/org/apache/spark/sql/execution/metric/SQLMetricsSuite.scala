@@ -263,30 +263,18 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
-  test("LeftSemiJoinHash metrics") {
+  test("ShuffledHashJoin metrics") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
       // Assume the execution plan is
-      // ... -> LeftSemiJoinHash(nodeId = 0)
+      // ... -> ShuffledHashJoin(nodeId = 0)
       val df = df1.join(df2, $"key" === $"key2", "leftsemi")
       testSparkPlanMetrics(df, 1, Map(
-        0L -> ("LeftSemiJoinHash", Map(
+        0L -> ("ShuffledHashJoin", Map(
           "number of output rows" -> 2L)))
       )
     }
-  }
-
-  test("LeftSemiJoinBNL metrics") {
-    val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
-    // Assume the execution plan is
-    // ... -> LeftSemiJoinBNL(nodeId = 0)
-    val df = df1.join(df2, $"key" < $"key2", "leftsemi")
-    testSparkPlanMetrics(df, 2, Map(
-      0L -> ("LeftSemiJoinBNL", Map(
-        "number of output rows" -> 2L)))
-    )
   }
 
   test("CartesianProduct metrics") {

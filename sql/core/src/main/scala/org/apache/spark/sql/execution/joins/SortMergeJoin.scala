@@ -665,11 +665,11 @@ private[joins] class SortMergeJoinScanner(
  * An iterator for outputting rows in left outer join.
  */
 private class LeftOuterIterator(
-  smjScanner: SortMergeJoinScanner,
-  rightNullRow: InternalRow,
-  boundCondition: InternalRow => Boolean,
-  resultProj: InternalRow => InternalRow,
-  numOutputRows: LongSQLMetric)
+    smjScanner: SortMergeJoinScanner,
+    rightNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric)
   extends OneSideOuterIterator(
     smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows) {
 
@@ -681,13 +681,12 @@ private class LeftOuterIterator(
  * An iterator for outputting rows in right outer join.
  */
 private class RightOuterIterator(
-  smjScanner: SortMergeJoinScanner,
-  leftNullRow: InternalRow,
-  boundCondition: InternalRow => Boolean,
-  resultProj: InternalRow => InternalRow,
-  numOutputRows: LongSQLMetric)
-  extends OneSideOuterIterator(
-    smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
+    smjScanner: SortMergeJoinScanner,
+    leftNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric)
+  extends OneSideOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
 
   protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
   protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)
@@ -710,11 +709,11 @@ private class RightOuterIterator(
  * @param numOutputRows an accumulator metric for the number of rows output
  */
 private abstract class OneSideOuterIterator(
-  smjScanner: SortMergeJoinScanner,
-  bufferedSideNullRow: InternalRow,
-  boundCondition: InternalRow => Boolean,
-  resultProj: InternalRow => InternalRow,
-  numOutputRows: LongSQLMetric) extends RowIterator {
+    smjScanner: SortMergeJoinScanner,
+    bufferedSideNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric) extends RowIterator {
 
   // A row to store the joined result, reused many times
   protected[this] val joinedRow: JoinedRow = new JoinedRow()
@@ -777,14 +776,14 @@ private abstract class OneSideOuterIterator(
 }
 
 private class SortMergeFullOuterJoinScanner(
-  leftKeyGenerator: Projection,
-  rightKeyGenerator: Projection,
-  keyOrdering: Ordering[InternalRow],
-  leftIter: RowIterator,
-  rightIter: RowIterator,
-  boundCondition: InternalRow => Boolean,
-  leftNullRow: InternalRow,
-  rightNullRow: InternalRow)  {
+    leftKeyGenerator: Projection,
+    rightKeyGenerator: Projection,
+    keyOrdering: Ordering[InternalRow],
+    leftIter: RowIterator,
+    rightIter: RowIterator,
+    boundCondition: InternalRow => Boolean,
+    leftNullRow: InternalRow,
+    rightNullRow: InternalRow)  {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
   private[this] var leftRow: InternalRow = _
   private[this] var leftRowKey: InternalRow = _
@@ -950,10 +949,9 @@ private class SortMergeFullOuterJoinScanner(
 }
 
 private class FullOuterIterator(
-  smjScanner: SortMergeFullOuterJoinScanner,
-  resultProj: InternalRow => InternalRow,
-  numRows: LongSQLMetric
-) extends RowIterator {
+    smjScanner: SortMergeFullOuterJoinScanner,
+    resultProj: InternalRow => InternalRow,
+    numRows: LongSQLMetric) extends RowIterator {
   private[this] val joinedRow: JoinedRow = smjScanner.getJoinedRow()
 
   override def advanceNext(): Boolean = {

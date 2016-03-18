@@ -236,6 +236,11 @@ object SQLConf {
       doc = "When true, enable partition pruning for in-memory columnar tables.",
       isPublic = false)
 
+  val PREFER_SORTMERGEJOIN = booleanConf("spark.sql.join.preferSortMergeJoin",
+      defaultValue = Some(true),
+      doc = "When true, prefer sort merge join over shuffle hash join",
+      isPublic = false)
+
   val AUTO_BROADCASTJOIN_THRESHOLD = intConf("spark.sql.autoBroadcastJoinThreshold",
     defaultValue = Some(10 * 1024 * 1024),
     doc = "Configures the maximum size in bytes for a table that will be broadcast to all worker " +
@@ -585,6 +590,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
   def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchange, ReuseExchange, ShuffleExchange}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin, SortMergeJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -143,7 +143,7 @@ class PlannerSuite extends SharedSQLContext {
         val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
-        assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
+        assert(sortMergeJoins.isEmpty, "Should not use shuffled hash join")
 
         sqlContext.clearCache()
       }
