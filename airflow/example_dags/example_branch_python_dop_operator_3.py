@@ -15,7 +15,6 @@
 
 from airflow.operators import BranchPythonOperator, DummyOperator
 from airflow.models import DAG
-import airflow.utils
 from datetime import datetime, timedelta
 
 two_days_ago = datetime.combine(datetime.today() - timedelta(2),
@@ -35,7 +34,7 @@ def should_run(ds, **kwargs):
 
     print("------------- exec dttm = {} and minute = {}".format(kwargs['execution_date'], kwargs['execution_date'].minute))
     if kwargs['execution_date'].minute % 2 == 0:
-	return "oper_1"
+        return "oper_1"
     else:
         return "oper_2"
 
