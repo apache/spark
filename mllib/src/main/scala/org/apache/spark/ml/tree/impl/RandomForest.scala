@@ -76,7 +76,6 @@ private[ml] object RandomForest extends Logging {
     timer.start("findSplitsBins")
     val splits = findSplits(retaggedInput, metadata, seed)
     timer.stop("findSplitsBins")
-    println(timer)
     logDebug("numBins: feature: number of bins")
     logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
       s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
