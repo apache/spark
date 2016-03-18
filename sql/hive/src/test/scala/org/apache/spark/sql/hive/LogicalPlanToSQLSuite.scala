@@ -737,4 +737,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |LIMIT 5
       """.stripMargin)
   }
+
+  test("filter after subquery") {
+    checkHiveQl("SELECT a FROM (SELECT key + 1 AS a FROM parquet_t1) t WHERE a > 5")
+  }
 }

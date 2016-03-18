@@ -390,8 +390,6 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         // `Aggregate`s.
         CollapseProject),
       Batch("Recover Scoping Info", Once,
-        // Remove all sub queries, as we will insert new ones when it's necessary.
-        EliminateSubqueryAliases,
         // A logical plan is allowed to have same-name outputs with different qualifiers(e.g. the
         // `Join` operator). However, this kind of plan can't be put under a sub query as we will
         // erase and assign a new qualifier to all outputs and make it impossible to distinguish
@@ -400,6 +398,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         // qualifiers, as attributes have unique names now and we don't need qualifiers to resolve
         // ambiguity.
         NormalizedAttribute,
+        // Our analyzer will add one or more sub-queries above table relation, this rule removes
+        // these sub-queries so that next rule can combine adjacent table relation and sample to
+        // SQLTable.
+        RemoveSubqueriesAboveSQLTable,
         // Finds the table relations and wrap them with `SQLTable`s.  If there are any `Sample`
         // operators on top of a table relation, merge the sample information into `SQLTable` of
         // that table relation, as we can only convert table sample to standard SQL string.
@@ -415,6 +417,12 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           AttributeReference(normalizedName(a), a.dataType)(exprId = a.exprId, qualifiers = Nil)
         case a: Alias =>
           Alias(a.child, normalizedName(a))(exprId = a.exprId, qualifiers = Nil)
+      }
+    }
+
+    object RemoveSubqueriesAboveSQLTable extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+        case SubqueryAlias(_, t @ ExtractSQLTable(_)) => t
       }
     }
 
