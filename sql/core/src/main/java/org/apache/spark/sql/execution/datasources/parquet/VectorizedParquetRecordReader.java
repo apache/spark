@@ -553,7 +553,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       // This is where we implement support for the valid type conversions.
       // TODO: implement remaining type conversions
       if (column.dataType() == DataTypes.IntegerType || column.dataType() == DataTypes.DateType ||
-          DecimalType.is32BitDecimalType(column.dataType())) {
+        DecimalType.is32BitDecimalType(column.dataType())) {
         defColumn.readIntegers(
             num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else if (column.dataType() == DataTypes.ByteType) {
@@ -620,7 +620,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         for (int i = 0; i < num; i++) {
           if (defColumn.readInteger() == maxDefLevel) {
             column.putInt(rowId + i,
-                (int) CatalystRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
+              (int) CatalystRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
           } else {
             column.putNull(rowId + i);
           }
