@@ -105,31 +105,24 @@ object BindReferences extends Logging {
   }
 }
 
-case class InputReference(
-  columnOrdinal: Int, dataType: DataType, nullable: Boolean, rowOrdinal: String = "")
+/**
+ * A column vector reference points to a specific column for ColumnVector.
+ * columnVar is a variable that keeps ColumnVector, and ordinal is row index in ColumnVector
+ */
+case class ColumnVectorReference(
+  columnVar: String, ordinal: String, dataType: DataType, nullable: Boolean)
   extends LeafExpression {
 
-  private val isColumnarStorage: Boolean = rowOrdinal != ""
+  override def toString: String = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
 
-  private val ordinalString = if (isColumnarStorage) { rowOrdinal } else { columnOrdinal.toString }
-
-  override def toString: String = s"input[$columnOrdinal, ${dataType.simpleString}]"
-
-  override def eval(input: InternalRow): Any = {
-    null
-  }
+  override def eval(input: InternalRow): Any = null
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinalString)
-    if (ctx.currentVars != null && ctx.currentVars(columnOrdinal) != null) {
-      val oev = ctx.currentVars(columnOrdinal)
-      ev.isNull = oev.isNull
-      ev.value = oev.value
-      oev.code
-    } else if (nullable) {
+    val value = ctx.getValue(columnVar, dataType, ordinal)
+    if (nullable) {
       s"""
-        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinalString);
+        boolean ${ev.isNull} = ${columnVar}.isNullAt($ordinal);
         $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
       """
     } else {
