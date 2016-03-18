@@ -21,14 +21,18 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
+import org.apache.spark.sql.internal.SQLConf
 
-class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
-  val sparkContext: SparkContext = sqlContext.sparkContext
+class SparkPlanner(
+    val sparkContext: SparkContext,
+    val conf: SQLConf,
+    val experimentalMethods: ExperimentalMethods)
+  extends SparkStrategies {
 
-  def numPartitions: Int = sqlContext.conf.numShufflePartitions
+  def numPartitions: Int = conf.numShufflePartitions
 
   def strategies: Seq[Strategy] =
-    sqlContext.experimental.extraStrategies ++ (
+    experimentalMethods.extraStrategies ++ (
       FileSourceStrategy ::
       DataSourceStrategy ::
       DDLStrategy ::

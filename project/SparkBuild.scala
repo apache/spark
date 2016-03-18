@@ -26,6 +26,7 @@ import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import com.typesafe.tools.mima.plugin.MimaKeys
 
 import spray.revolver.RevolverPlugin._
 
@@ -55,9 +56,11 @@ object BuildCommons {
     Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
-    Seq("assembly", "examples", "network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
+  val assemblyProjects@Seq(assembly, networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
+    Seq("assembly", "network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
+
+  val copyJarsProjects@Seq(examples) = Seq("examples").map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
   // Root project.
@@ -142,6 +145,8 @@ object SparkBuild extends PomBuild {
     scalacOptions <+= target.map(t => "-P:genjavadoc:out=" + (t / "java")))
 
   lazy val sharedSettings = sparkGenjavadocSettings ++ Seq (
+    exportJars in Compile := true,
+    exportJars in Test := false,
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
@@ -236,24 +241,29 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
       ExcludedDependencies.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  allProjects.filterNot { x =>
+  val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, testTags, sketch
     ).contains(x)
-  }.foreach { x =>
+  }
+
+  mimaProjects.foreach { x =>
     enable(MimaBuild.mimaSettings(sparkHome, x))(x)
   }
 
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
+
+  /* Set up tasks to copy dependencies during packaging. */
+  copyJarsProjects.foreach(enable(CopyDependencies.settings))
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -364,22 +374,23 @@ object ExcludedDependencies {
 }
 
 /**
- * Following project only exists to pull previous artifacts of Spark for generating
- * Mima ignores. For more information see: SPARK 2071
+ * Project to pull previous artifacts of Spark for generating Mima excludes.
  */
 object OldDeps {
 
   lazy val project = Project("oldDeps", file("dev"), settings = oldDepsSettings)
 
+  lazy val allPreviousArtifactKeys = Def.settingDyn[Seq[Option[ModuleID]]] {
+    SparkBuild.mimaProjects
+      .map { project => MimaKeys.previousArtifact in project }
+      .map(k => Def.setting(k.value))
+      .join
+  }
+
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.5",
-    libraryDependencies := Seq(
-      "spark-streaming",
-      "spark-mllib",
-      "spark-graphx",
-      "spark-core"
-    ).map(id => "org.apache.spark" % (id + "_2.11") % "1.2.0")
+    libraryDependencies := allPreviousArtifactKeys.value.flatten
   )
 }
 
@@ -684,6 +695,34 @@ object Unidoc {
       }
     )
   )
+}
+
+object CopyDependencies {
+
+  val copyDeps = TaskKey[Unit]("copyDeps", "Copies needed dependencies to the build directory.")
+  val destPath = (crossTarget in Compile) / "jars"
+
+  lazy val settings = Seq(
+    copyDeps := {
+      val dest = destPath.value
+      if (!dest.isDirectory() && !dest.mkdirs()) {
+        throw new IOException("Failed to create jars directory.")
+      }
+
+      (dependencyClasspath in Compile).value.map(_.data)
+        .filter { jar => jar.isFile() }
+        .foreach { jar =>
+          val destJar = new File(dest, jar.getName())
+          if (destJar.isFile()) {
+            destJar.delete()
+          }
+          Files.copy(jar.toPath(), destJar.toPath())
+        }
+    },
+    crossTarget in (Compile, packageBin) := destPath.value,
+    packageBin in Compile <<= (packageBin in Compile).dependsOn(copyDeps)
+  )
+
 }
 
 object Java8TestSettings {

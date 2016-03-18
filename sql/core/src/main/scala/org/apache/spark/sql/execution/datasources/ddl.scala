@@ -33,8 +33,9 @@ import org.apache.spark.sql.types._
  *                   It is effective only when the table is a Hive table.
  */
 case class DescribeCommand(
-    table: LogicalPlan,
-    isExtended: Boolean) extends LogicalPlan with logical.Command {
+    table: TableIdentifier,
+    isExtended: Boolean)
+  extends LogicalPlan with logical.Command {
 
   override def children: Seq[LogicalPlan] = Seq.empty
 
@@ -98,7 +99,7 @@ case class CreateTempTableUsing(
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       options = options)
-    sqlContext.catalog.registerTable(
+    sqlContext.sessionState.catalog.registerTable(
       tableIdent,
       Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan)
 
@@ -123,7 +124,7 @@ case class CreateTempTableUsingAsSelect(
       bucketSpec = None,
       options = options)
     val result = dataSource.write(mode, df)
-    sqlContext.catalog.registerTable(
+    sqlContext.sessionState.catalog.registerTable(
       tableIdent,
       Dataset.newDataFrame(sqlContext, LogicalRelation(result)).logicalPlan)
 
@@ -136,11 +137,11 @@ case class RefreshTable(tableIdent: TableIdentifier)
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     // Refresh the given table's metadata first.
-    sqlContext.catalog.refreshTable(tableIdent)
+    sqlContext.sessionState.catalog.refreshTable(tableIdent)
 
     // If this table is cached as a InMemoryColumnarRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sqlContext.catalog.lookupRelation(tableIdent)
+    val logicalPlan = sqlContext.sessionState.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
     val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {

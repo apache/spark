@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -45,12 +46,28 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       .select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
       .write
       .saveAsTable("parquet_t2")
+
+    def createArray(id: Column): Column = {
+      when(id % 3 === 0, lit(null)).otherwise(array('id, 'id + 1))
+    }
+
+    sqlContext
+      .range(10)
+      .select(
+        createArray('id).as("arr"),
+        array(array('id), createArray('id)).as("arr2"),
+        lit("""{"f1": "1", "f2": "2", "f3": 3}""").as("json"),
+        'id
+      )
+      .write
+      .saveAsTable("parquet_t3")
   }
 
   override protected def afterAll(): Unit = {
     sql("DROP TABLE IF EXISTS parquet_t0")
     sql("DROP TABLE IF EXISTS parquet_t1")
     sql("DROP TABLE IF EXISTS parquet_t2")
+    sql("DROP TABLE IF EXISTS parquet_t3")
     sql("DROP TABLE IF EXISTS t0")
   }
 
@@ -124,12 +141,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT * FROM t0 UNION SELECT * FROM t0")
   }
 
-  // Parser is unable to parse the following query:
-  // SELECT  `u_1`.`id`
-  // FROM (((SELECT  `t0`.`id` FROM `default`.`t0`)
-  // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`))
-  // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
-  ignore("three-child union") {
+  test("three-child union") {
     checkHiveQl(
       """
         |SELECT id FROM parquet_t0
@@ -383,6 +395,63 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
   }
 
+  test("script transformation - schemaless") {
+    checkHiveQl("SELECT TRANSFORM (a, b, c, d) USING 'cat' FROM parquet_t2")
+    checkHiveQl("SELECT TRANSFORM (*) USING 'cat' FROM parquet_t2")
+  }
+
+  test("script transformation - alias list") {
+    checkHiveQl("SELECT TRANSFORM (a, b, c, d) USING 'cat' AS (d1, d2, d3, d4) FROM parquet_t2")
+  }
+
+  test("script transformation - alias list with type") {
+    checkHiveQl(
+      """FROM
+        |(FROM parquet_t1 SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
+        |SELECT thing1 + 1
+      """.stripMargin)
+  }
+
+  test("script transformation - row format delimited clause with only one format property") {
+    checkHiveQl(
+      """SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+        |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("script transformation - row format delimited clause with multiple format properties") {
+    checkHiveQl(
+      """SELECT TRANSFORM (key)
+        |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\t'
+        |USING 'cat' AS (tKey)
+        |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\t'
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("script transformation - row format serde clauses with SERDEPROPERTIES") {
+    checkHiveQl(
+      """SELECT TRANSFORM (key, value)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |WITH SERDEPROPERTIES('field.delim' = '|')
+        |USING 'cat' AS (tKey, tValue)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |WITH SERDEPROPERTIES('field.delim' = '|')
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("script transformation - row format serde clauses without SERDEPROPERTIES") {
+    checkHiveQl(
+      """SELECT TRANSFORM (key, value)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |USING 'cat' AS (tKey, tValue)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
   test("plans with non-SQL expressions") {
     sqlContext.udf.register("foo", (_: Int) * 2)
     intercept[UnsupportedOperationException](new SQLBuilder(sql("SELECT foo(id) FROM t0")).toSQL)
@@ -549,5 +618,122 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM parquet_t1
         |WINDOW w AS (PARTITION BY key % 5 ORDER BY key)
       """.stripMargin)
+  }
+
+  test("window with join") {
+    checkHiveQl(
+      """
+        |SELECT x.key, MAX(y.key) OVER (PARTITION BY x.key % 5 ORDER BY x.key)
+        |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key
+      """.stripMargin)
+  }
+
+  test("join 2 tables and aggregate function in having clause") {
+    checkHiveQl(
+      """
+        |SELECT COUNT(a.value), b.KEY, a.KEY
+        |FROM parquet_t1 a, parquet_t1 b
+        |GROUP BY a.KEY, b.KEY
+        |HAVING MAX(a.KEY) > 0
+      """.stripMargin)
+  }
+
+  test("generator in project list without FROM clause") {
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3))")
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) AS val")
+  }
+
+  test("generator in project list with non-referenced table") {
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) FROM t0")
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) AS val FROM t0")
+  }
+
+  test("generator in project list with referenced table") {
+    checkHiveQl("SELECT EXPLODE(arr) FROM parquet_t3")
+    checkHiveQl("SELECT EXPLODE(arr) AS val FROM parquet_t3")
+  }
+
+  test("generator in project list with non-UDTF expressions") {
+    checkHiveQl("SELECT EXPLODE(arr), id FROM parquet_t3")
+    checkHiveQl("SELECT EXPLODE(arr) AS val, id as a FROM parquet_t3")
+  }
+
+  test("generator in lateral view") {
+    checkHiveQl("SELECT val, id FROM parquet_t3 LATERAL VIEW EXPLODE(arr) exp AS val")
+    checkHiveQl("SELECT val, id FROM parquet_t3 LATERAL VIEW OUTER EXPLODE(arr) exp AS val")
+  }
+
+  test("generator in lateral view with ambiguous names") {
+    checkHiveQl(
+      """
+        |SELECT exp.id, parquet_t3.id
+        |FROM parquet_t3
+        |LATERAL VIEW EXPLODE(arr) exp AS id
+      """.stripMargin)
+    checkHiveQl(
+      """
+        |SELECT exp.id, parquet_t3.id
+        |FROM parquet_t3
+        |LATERAL VIEW OUTER EXPLODE(arr) exp AS id
+      """.stripMargin)
+  }
+
+  test("use JSON_TUPLE as generator") {
+    checkHiveQl(
+      """
+        |SELECT c0, c1, c2
+        |FROM parquet_t3
+        |LATERAL VIEW JSON_TUPLE(json, 'f1', 'f2', 'f3') jt
+      """.stripMargin)
+    checkHiveQl(
+      """
+        |SELECT a, b, c
+        |FROM parquet_t3
+        |LATERAL VIEW JSON_TUPLE(json, 'f1', 'f2', 'f3') jt AS a, b, c
+      """.stripMargin)
+  }
+
+  test("nested generator in lateral view") {
+    checkHiveQl(
+      """
+        |SELECT val, id
+        |FROM parquet_t3
+        |LATERAL VIEW EXPLODE(arr2) exp1 AS nested_array
+        |LATERAL VIEW EXPLODE(nested_array) exp1 AS val
+      """.stripMargin)
+
+    checkHiveQl(
+      """
+        |SELECT val, id
+        |FROM parquet_t3
+        |LATERAL VIEW EXPLODE(arr2) exp1 AS nested_array
+        |LATERAL VIEW OUTER EXPLODE(nested_array) exp1 AS val
+      """.stripMargin)
+  }
+
+  test("generate with other operators") {
+    checkHiveQl(
+      """
+        |SELECT EXPLODE(arr) AS val, id
+        |FROM parquet_t3
+        |WHERE id > 2
+        |ORDER BY val, id
+        |LIMIT 5
+      """.stripMargin)
+
+    checkHiveQl(
+      """
+        |SELECT val, id
+        |FROM parquet_t3
+        |LATERAL VIEW EXPLODE(arr2) exp1 AS nested_array
+        |LATERAL VIEW EXPLODE(nested_array) exp1 AS val
+        |WHERE val > 2
+        |ORDER BY val, id
+        |LIMIT 5
+      """.stripMargin)
+  }
+
+  test("filter after subquery") {
+    checkHiveQl("SELECT a FROM (SELECT key + 1 AS a FROM parquet_t1) t WHERE a > 5")
   }
 }

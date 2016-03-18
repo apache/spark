@@ -22,7 +22,8 @@ import java.util.{NoSuchElementException, Properties}
 
 import scala.xml.XML
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

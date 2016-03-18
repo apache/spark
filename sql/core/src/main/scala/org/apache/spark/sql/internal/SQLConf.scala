@@ -24,7 +24,7 @@ import scala.collection.immutable
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
@@ -234,6 +234,11 @@ object SQLConf {
     booleanConf("spark.sql.inMemoryColumnarStorage.partitionPruning",
       defaultValue = Some(true),
       doc = "When true, enable partition pruning for in-memory columnar tables.",
+      isPublic = false)
+
+  val PREFER_SORTMERGEJOIN = booleanConf("spark.sql.join.preferSortMergeJoin",
+      defaultValue = Some(true),
+      doc = "When true, prefer sort merge join over shuffle hash join",
       isPublic = false)
 
   val AUTO_BROADCASTJOIN_THRESHOLD = intConf("spark.sql.autoBroadcastJoinThreshold",
@@ -592,6 +597,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
   def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)
