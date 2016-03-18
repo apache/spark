@@ -33,6 +33,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
@@ -73,7 +74,10 @@ private[spark] class ApplicationMaster(
       } else {
         sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)
       }
-    val defaultMaxNumExecutorFailures = math.max(3, 2 * effectiveNumExecutors)
+    // By default, effectiveNumExecutors is Int.MaxValue if dynamic allocation is enabled. We need
+    // avoid the integer overflow here.
+    val defaultMaxNumExecutorFailures = math.max(3,
+      if (effectiveNumExecutors > Int.MaxValue / 2) Int.MaxValue else (2 * effectiveNumExecutors))
 
     sparkConf.get(MAX_EXECUTOR_FAILURES).getOrElse(defaultMaxNumExecutorFailures)
   }
@@ -152,13 +156,13 @@ private[spark] class ApplicationMaster(
         val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
         if (!finished) {
-          // This happens when the user application calls System.exit(). We have the choice
-          // of either failing or succeeding at this point. We report success to avoid
-          // retrying applications that have succeeded (System.exit(0)), which means that
-          // applications that explicitly exit with a non-zero status will also show up as
-          // succeeded in the RM UI.
+          // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
+          // This behavior is different compared to 1.x version.
+          // If user application is exited ahead of time by calling System.exit(N), here mark
+          // this application as failed with EXIT_EARLY. For a good shutdown, user shouldn't call
+          // System.exit(0) to terminate the application.
           finish(finalStatus,
-            ApplicationMaster.EXIT_SUCCESS,
+            ApplicationMaster.EXIT_EARLY,
             "Shutdown hook called before final status was reported.")
         }
 
@@ -209,7 +213,7 @@ private[spark] class ApplicationMaster(
    */
   final def getDefaultFinalStatus(): FinalApplicationStatus = {
     if (isClusterMode) {
-      FinalApplicationStatus.SUCCEEDED
+      FinalApplicationStatus.FAILED
     } else {
       FinalApplicationStatus.UNDEFINED
     }
@@ -653,6 +657,7 @@ object ApplicationMaster extends Logging {
   private val EXIT_SC_NOT_INITED = 13
   private val EXIT_SECURITY = 14
   private val EXIT_EXCEPTION_USER_CLASS = 15
+  private val EXIT_EARLY = 16
 
   private var master: ApplicationMaster = _
 

@@ -30,7 +30,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
@@ -60,7 +60,7 @@ private[hive] case class CreateTableAsSelect(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean =
-    tableDesc.specifiedDatabase.isDefined &&
+    tableDesc.name.database.isDefined &&
     tableDesc.schema.nonEmpty &&
     tableDesc.storage.serde.isDefined &&
     tableDesc.storage.inputFormat.isDefined &&
@@ -88,29 +88,14 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
-    "TOK_ALTERTABLE",
-    "TOK_ALTERTABLE_ADDCOLS",
-    "TOK_ALTERTABLE_ADDPARTS",
     "TOK_ALTERTABLE_ALTERPARTS",
-    "TOK_ALTERTABLE_ARCHIVE",
-    "TOK_ALTERTABLE_CLUSTER_SORT",
-    "TOK_ALTERTABLE_DROPPARTS",
     "TOK_ALTERTABLE_PARTITION",
-    "TOK_ALTERTABLE_PROPERTIES",
-    "TOK_ALTERTABLE_RENAME",
-    "TOK_ALTERTABLE_RENAMECOL",
-    "TOK_ALTERTABLE_REPLACECOLS",
-    "TOK_ALTERTABLE_SKEWED",
-    "TOK_ALTERTABLE_TOUCH",
-    "TOK_ALTERTABLE_UNARCHIVE",
     "TOK_ALTERVIEW_ADDPARTS",
     "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
 
-    "TOK_CREATEDATABASE",
-    "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
     "TOK_CREATEMACRO",
     "TOK_CREATEROLE",
@@ -164,7 +149,8 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
   protected val noExplainCommands = Seq(
     "TOK_DESCTABLE",
     "TOK_SHOWTABLES",
-    "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
+    "TOK_TRUNCATETABLE", // truncate table" is a NativeCommand, does not need to explain.
+    "TOK_ALTERTABLE"
   ) ++ nativeCommands
 
   /**
@@ -199,13 +185,10 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
       properties: Map[String, String],
       allowExist: Boolean,
       replace: Boolean): CreateViewAsSelect = {
-    val TableIdentifier(viewName, dbName) = extractTableIdent(viewNameParts)
-
+    val tableIdentifier = extractTableIdent(viewNameParts)
     val originalText = query.source
-
     val tableDesc = CatalogTable(
-      specifiedDatabase = dbName,
-      name = viewName,
+      name = tableIdentifier,
       tableType = CatalogTableType.VIRTUAL_VIEW,
       schema = schema,
       storage = CatalogStorageFormat(
@@ -259,7 +242,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
         val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
         DropTable(tableName, ifExists.nonEmpty)
 
-      // Support "ANALYZE TABLE tableNmae COMPUTE STATISTICS noscan"
+      // Support "ANALYZE TABLE tableName COMPUTE STATISTICS noscan"
       case Token("TOK_ANALYZE",
         Token("TOK_TAB", Token("TOK_TABNAME", tableNameParts) :: partitionSpec) :: isNoscan) =>
         // Reference:
@@ -370,12 +353,11 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
               "TOK_TABLELOCATION",
               "TOK_TABLEPROPERTIES"),
             children)
-        val TableIdentifier(tblName, dbName) = extractTableIdent(tableNameParts)
+        val tableIdentifier = extractTableIdent(tableNameParts)
 
         // TODO add bucket support
         var tableDesc: CatalogTable = CatalogTable(
-          specifiedDatabase = dbName,
-          name = tblName,
+          name = tableIdentifier,
           tableType =
             if (externalTable.isDefined) {
               CatalogTableType.EXTERNAL_TABLE
@@ -549,7 +531,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
           case Token("TOK_STORAGEHANDLER", _) =>
             throw new AnalysisException(
               "CREATE TABLE AS SELECT cannot be used for a non-native table")
-          case _ => // Unsupport features
+          case _ => // Unsupported features
         }
 
         CreateTableAsSelect(tableDesc, nodeToPlan(query), allowExisting.isDefined)

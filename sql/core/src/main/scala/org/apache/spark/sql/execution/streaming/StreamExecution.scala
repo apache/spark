@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -211,7 +211,7 @@ class StreamExecution(
 
         // Construct the batch and send it to the sink.
         val batchOffset = streamProgress.toCompositeOffset(sources)
-        val nextBatch = new Batch(batchOffset, new DataFrame(sqlContext, newPlan))
+        val nextBatch = new Batch(batchOffset, Dataset.newDataFrame(sqlContext, newPlan))
         sink.addBatch(nextBatch)
       }
 

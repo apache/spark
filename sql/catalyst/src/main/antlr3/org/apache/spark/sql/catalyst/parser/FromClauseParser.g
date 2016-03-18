@@ -91,8 +91,15 @@ fromClause
 joinSource
 @init { gParent.pushMsg("join source", state); }
 @after { gParent.popMsg(state); }
-    : fromSource ( joinToken^ fromSource ( KW_ON! expression {$joinToken.start.getType() != COMMA}? )? )*
+    : fromSource ( joinToken^ fromSource ( joinCond {$joinToken.start.getType() != COMMA}? )? )*
     | uniqueJoinToken^ uniqueJoinSource (COMMA! uniqueJoinSource)+
+    ;
+
+joinCond
+@init { gParent.pushMsg("join expression list", state); }
+@after { gParent.popMsg(state); }
+    : KW_ON! expression
+    | KW_USING LPAREN columnNameList RPAREN -> ^(TOK_USING columnNameList)
     ;
 
 uniqueJoinSource

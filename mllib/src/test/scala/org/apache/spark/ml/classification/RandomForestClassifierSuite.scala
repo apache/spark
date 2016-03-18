@@ -18,9 +18,9 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -105,7 +105,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     compareAPIs(rdd, rf, categoricalFeatures, numClasses)
   }
 
-  test("subsampling rate in RandomForest"){
+  test("subsampling rate in RandomForest") {
     val rdd = orderedLabeledPoints5_20
     val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2

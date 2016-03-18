@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}

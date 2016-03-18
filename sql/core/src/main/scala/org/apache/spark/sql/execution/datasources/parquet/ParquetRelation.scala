@@ -39,8 +39,9 @@ import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
 import org.slf4j.bridge.SLF4JBridgeHandler
 
-import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
+import org.apache.spark.{Partition => SparkPartition, SparkException}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -274,7 +275,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      allFiles: Array[FileStatus],
+      allFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
@@ -379,6 +380,9 @@ private[sql] class ParquetOutputWriter(
           val taskAttemptId = context.getTaskAttemptID
           val split = taskAttemptId.getTaskID.getId
           val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
+          // It has the `.parquet` extension at the end because (de)compression tools
+          // such as gunzip would not be able to decompress this as the compression
+          // is not applied on this whole file but on each "page" in Parquet format.
           new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
         }
       }

@@ -19,8 +19,8 @@ package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -105,7 +105,6 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   protected[ml] def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean): StructType = {
-    validateParams()
     if (fitting) {
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
       if (hasWeightCol) {

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.CharArrayWriter
 
 import com.fasterxml.jackson.core.JsonFactory
-import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
@@ -28,8 +27,8 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
-import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -95,7 +94,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      inputFiles: Array[FileStatus],
+      inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
     // TODO: Filter files for all formats before calling buildInternalScan.
@@ -115,7 +114,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  private def createBaseRdd(sqlContext: SQLContext, inputPaths: Array[FileStatus]): RDD[String] = {
+  private def createBaseRdd(sqlContext: SQLContext, inputPaths: Seq[FileStatus]): RDD[String] = {
     val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
     val conf = job.getConfiguration
 
@@ -167,7 +166,7 @@ private[json] class JsonOutputWriter(
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
         val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
+        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString.json$extension")
       }
     }.getRecordWriter(context)
   }

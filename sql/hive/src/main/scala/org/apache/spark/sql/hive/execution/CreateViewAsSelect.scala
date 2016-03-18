@@ -44,19 +44,19 @@ private[hive] case class CreateViewAsSelect(
   assert(tableDesc.schema == Nil || tableDesc.schema.length == childSchema.length)
   assert(tableDesc.viewText.isDefined)
 
-  val tableIdentifier = TableIdentifier(tableDesc.name, Some(tableDesc.database))
+  private val tableIdentifier = tableDesc.name
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
-    hiveContext.catalog.tableExists(tableIdentifier) match {
+    hiveContext.sessionState.catalog.tableExists(tableIdentifier) match {
       case true if allowExisting =>
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
 
       case true if orReplace =>
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        hiveContext.catalog.client.alertView(prepareTable(sqlContext))
+        hiveContext.sessionState.catalog.client.alertView(prepareTable(sqlContext))
 
       case true =>
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
@@ -66,7 +66,7 @@ private[hive] case class CreateViewAsSelect(
           "CREATE OR REPLACE VIEW AS")
 
       case false =>
-        hiveContext.catalog.client.createView(prepareTable(sqlContext))
+        hiveContext.sessionState.catalog.client.createView(prepareTable(sqlContext))
     }
 
     Seq.empty[Row]
@@ -116,7 +116,7 @@ private[hive] case class CreateViewAsSelect(
     }
 
     val viewText = tableDesc.viewText.get
-    val viewName = quote(tableDesc.name)
+    val viewName = quote(tableDesc.name.table)
     s"SELECT $viewOutput FROM ($viewText) $viewName"
   }
 

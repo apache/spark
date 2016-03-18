@@ -22,7 +22,7 @@ import java.io.IOException
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
@@ -244,8 +244,7 @@ private[ml] object RandomForest extends Logging {
       if (unorderedFeatures.contains(featureIndex)) {
         // Unordered feature
         val featureValue = treePoint.binnedFeatures(featureIndex)
-        val (leftNodeFeatureOffset, rightNodeFeatureOffset) =
-          agg.getLeftRightFeatureOffsets(featureIndexIdx)
+        val leftNodeFeatureOffset = agg.getFeatureOffset(featureIndexIdx)
         // Update the left or right bin for each split.
         val numSplits = agg.metadata.numSplits(featureIndex)
         val featureSplits = splits(featureIndex)
@@ -253,8 +252,6 @@ private[ml] object RandomForest extends Logging {
         while (splitIndex < numSplits) {
           if (featureSplits(splitIndex).shouldGoLeft(featureValue, featureSplits)) {
             agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
-          } else {
-            agg.featureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
           }
           splitIndex += 1
         }
@@ -394,6 +391,7 @@ private[ml] object RandomForest extends Logging {
           mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, splits,
             metadata.unorderedFeatures, instanceWeight, featuresForNode)
         }
+        agg(aggNodeIndex).updateParent(baggedPoint.datum.label, instanceWeight)
       }
     }
 
@@ -658,7 +656,7 @@ private[ml] object RandomForest extends Logging {
 
     // Calculate InformationGain and ImpurityStats if current node is top node
     val level = LearningNode.indexToLevel(node.id)
-    var gainAndImpurityStats: ImpurityStats = if (level ==0) {
+    var gainAndImpurityStats: ImpurityStats = if (level == 0) {
       null
     } else {
       node.stats
@@ -697,13 +695,12 @@ private[ml] object RandomForest extends Logging {
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
-          val (leftChildOffset, rightChildOffset) =
-            binAggregates.getLeftRightFeatureOffsets(featureIndexIdx)
+          val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
             Range(0, numSplits).map { splitIndex =>
               val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
-              val rightChildStats =
-                binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
+              val rightChildStats = binAggregates.getParentImpurityCalculator()
+                .subtract(leftChildStats)
               gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
                 leftChildStats, rightChildStats, binAggregates.metadata)
               (splitIndex, gainAndImpurityStats)

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.nio.charset.StandardCharsets
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
@@ -190,7 +192,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
 
   test("filter pushdown - binary") {
     implicit class IntToBinary(int: Int) {
-      def b: Array[Byte] = int.toString.getBytes("UTF-8")
+      def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
 
     withOrcDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
@@ -212,8 +214,9 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       )
       checkFilterPredicate(
         '_1 =!= 1,
-        """leaf-0 = (EQUALS _1 1)
-          |expr = (not leaf-0)""".stripMargin.trim
+        """leaf-0 = (IS_NULL _1)
+          |leaf-1 = (EQUALS _1 1)
+          |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicate(
         !('_1 < 4),

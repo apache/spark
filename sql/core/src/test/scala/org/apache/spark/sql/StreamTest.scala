@@ -65,9 +65,9 @@ import org.apache.spark.sql.execution.streaming._
 trait StreamTest extends QueryTest with Timeouts {
 
   implicit class RichSource(s: Source) {
-    def toDF(): DataFrame = new DataFrame(sqlContext, StreamingRelation(s))
+    def toDF(): DataFrame = Dataset.newDataFrame(sqlContext, StreamingRelation(s))
 
-    def toDS[A: Encoder](): Dataset[A] = new Dataset(sqlContext, StreamingRelation(s))
+    def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingRelation(s))
   }
 
   /** How long to wait for an active stream to catch up when checking a result. */
@@ -80,7 +80,7 @@ trait StreamTest extends QueryTest with Timeouts {
   trait StreamMustBeRunning
 
   /**
-   * Adds the given data to the stream.  Subsuquent check answers will block until this data has
+   * Adds the given data to the stream. Subsequent check answers will block until this data has
    * been processed.
    */
   object AddData {
@@ -109,7 +109,7 @@ trait StreamTest extends QueryTest with Timeouts {
 
   /**
    * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
-   * This operation automatically blocks untill all added data has been processed.
+   * This operation automatically blocks until all added data has been processed.
    */
   object CheckAnswer {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
@@ -168,10 +168,6 @@ trait StreamTest extends QueryTest with Timeouts {
     }
   }
 
-  /** A helper for running actions on a Streaming Dataset. See `checkAnswer(DataFrame)`. */
-  def testStream(stream: Dataset[_])(actions: StreamAction*): Unit =
-    testStream(stream.toDF())(actions: _*)
-
   /**
    * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
@@ -179,7 +175,8 @@ trait StreamTest extends QueryTest with Timeouts {
    * Note that if the stream is not explicitly started before an action that requires it to be
    * running then it will be automatically started before performing any other actions.
    */
-  def testStream(stream: DataFrame)(actions: StreamAction*): Unit = {
+  def testStream(_stream: Dataset[_])(actions: StreamAction*): Unit = {
+    val stream = _stream.toDF()
     var pos = 0
     var currentPlan: LogicalPlan = stream.logicalPlan
     var currentStream: StreamExecution = null

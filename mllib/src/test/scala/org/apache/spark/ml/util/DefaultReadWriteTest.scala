@@ -33,6 +33,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    * Checks "overwrite" option and params.
    * This saves to and loads from [[tempDir]], but creates a subdirectory with a random name
    * in order to avoid conflicts from multiple calls to this method.
+   *
    * @param instance ML instance to test saving/loading
    * @param testParams  If true, then test values of Params.  Otherwise, just test overwrite option.
    * @tparam T ML instance type
@@ -85,6 +86,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    *  - Compare model data
    *
    * This requires that the [[Estimator]] and [[Model]] share the same set of [[Param]]s.
+   *
    * @param estimator  Estimator to test
    * @param dataset  Dataset to pass to [[Estimator.fit()]]
    * @param testParams  Set of [[Param]] values to set in estimator

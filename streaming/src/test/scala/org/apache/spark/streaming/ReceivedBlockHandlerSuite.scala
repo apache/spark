@@ -29,6 +29,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.StaticMemoryManager
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
@@ -106,7 +107,10 @@ class ReceivedBlockHandlerSuite
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map(_.data.map(_.toString).toList).getOrElse(List.empty)
+          blockManager
+            .getLocalValues(blockId)
+            .map(_.data.map(_.toString).toList)
+            .getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -130,7 +134,10 @@ class ReceivedBlockHandlerSuite
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map(_.data.map(_.toString).toList).getOrElse(List.empty)
+          blockManager
+            .getLocalValues(blockId)
+            .map(_.data.map(_.toString).toList)
+            .getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -196,13 +203,13 @@ class ReceivedBlockHandlerSuite
     blockManager = createBlockManager(12000, sparkConf)
 
     // there is not enough space to store this block in MEMORY,
-    // But BlockManager will be able to sereliaze this block to WAL
+    // But BlockManager will be able to serialize this block to WAL
     // and hence count returns correct value.
      testRecordcount(false, StorageLevel.MEMORY_ONLY,
       IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
 
     // there is not enough space to store this block in MEMORY,
-    // But BlockManager will be able to sereliaze this block to DISK
+    // But BlockManager will be able to serialize this block to DISK
     // and hence count returns correct value.
     testRecordcount(true, StorageLevel.MEMORY_AND_DISK,
       IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
@@ -266,7 +273,7 @@ class ReceivedBlockHandlerSuite
   }
 
   /**
-   * Test storing of data using different types of Handler, StorageLevle and ReceivedBlocks
+   * Test storing of data using different types of Handler, StorageLevel and ReceivedBlocks
    * and verify the correct record count
    */
   private def testRecordcount(isBlockManagedBasedBlockHandler: Boolean,
@@ -332,7 +339,7 @@ class ReceivedBlockHandlerSuite
 
     storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
-    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b)) })
+    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).toByteBuffer) })
   }
 
   /** Test error handling when blocks that cannot be stored */

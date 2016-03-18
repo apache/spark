@@ -22,8 +22,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
-import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveMetastoreTypes
 import org.apache.spark.sql.types.StructType
@@ -89,7 +89,7 @@ private[orc] object OrcFileOperator extends Logging {
   }
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
-    // TODO: Check if the paths comming in are already qualified and simplify.
+    // TODO: Check if the paths coming in are already qualified and simplify.
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
     val path = origPath.makeQualified(fs.getUri, fs.getWorkingDirectory)

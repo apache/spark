@@ -23,8 +23,8 @@ sc <- sparkR.init()
 mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
 test_that("saveAsObjectFile()/objectFile() following textFile() works", {
-  fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")
-  fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
+  fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
 
   rdd <- textFile(sc, fileName1, 1)
@@ -37,7 +37,7 @@ test_that("saveAsObjectFile()/objectFile() following textFile() works", {
 })
 
 test_that("saveAsObjectFile()/objectFile() works on a parallelized list", {
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
 
   l <- list(1, 2, 3)
   rdd <- parallelize(sc, l, 1)
@@ -49,8 +49,8 @@ test_that("saveAsObjectFile()/objectFile() works on a parallelized list", {
 })
 
 test_that("saveAsObjectFile()/objectFile() following RDD transformations works", {
-  fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")
-  fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
+  fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
 
   rdd <- textFile(sc, fileName1)
@@ -73,8 +73,8 @@ test_that("saveAsObjectFile()/objectFile() following RDD transformations works",
 })
 
 test_that("saveAsObjectFile()/objectFile() works with multiple paths", {
-  fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")
-  fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
+  fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
 
   rdd1 <- parallelize(sc, "Spark is pretty.")
   saveAsObjectFile(rdd1, fileName1)
