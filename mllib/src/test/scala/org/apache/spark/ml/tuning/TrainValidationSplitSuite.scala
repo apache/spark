@@ -99,9 +99,7 @@ class TrainValidationSplitSuite extends SparkFunSuite with MLlibTestSparkContext
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setStratifiedCol("label")
-
     cv.transformSchema(new StructType()) // This should pass.
-
 
     val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")
     cv.setEstimatorParamMaps(invalidParamMaps)
