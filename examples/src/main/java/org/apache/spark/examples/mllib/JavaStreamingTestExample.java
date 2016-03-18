@@ -79,7 +79,7 @@ public class JavaStreamingTestExample {
     JavaDStream<BinarySample> data = ssc.textFileStream(dataDir).map(
       new Function<String, BinarySample>() {
         @Override
-        public BinarySample call(String line) throws Exception {
+        public BinarySample call(String line) {
           String[] ts = line.split(",");
           boolean label = Boolean.valueOf(ts[0]);
           double value = Double.valueOf(ts[1]);
@@ -101,12 +101,12 @@ public class JavaStreamingTestExample {
 
     out.foreachRDD(new VoidFunction<JavaRDD<StreamingTestResult>>() {
       @Override
-      public void call(JavaRDD<StreamingTestResult> rdd) throws Exception {
+      public void call(JavaRDD<StreamingTestResult> rdd) {
         timeoutCounter -= 1;
 
         boolean anySignificant = ! rdd.filter(new Function<StreamingTestResult, Boolean>() {
           @Override
-          public Boolean call(StreamingTestResult v) throws Exception {
+          public Boolean call(StreamingTestResult v) {
             return v.pValue() < 0.05;
           }
         }).isEmpty();
