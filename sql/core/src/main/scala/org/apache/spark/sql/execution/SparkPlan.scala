@@ -246,11 +246,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Collect the byte arrays back to driver, then decode them as UnsafeRows.
+   * Decode the byte arrays back to UnsafeRows and put them into buffer.
    */
-  private def collectRowFromBytes(bytes: Array[Byte]): Array[InternalRow] = {
+  private def decodeUnsafeRows(bytes: Array[Byte], buffer: ArrayBuffer[InternalRow]): Unit = {
     val nFields = schema.length
-    val results = ArrayBuffer[InternalRow]()
 
     val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
     val bis = new ByteArrayInputStream(bytes)
@@ -261,10 +260,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       ins.readFully(bs)
       val row = new UnsafeRow(nFields)
       row.pointTo(bs, sizeOfNextRow)
-      results += row
+      buffer += row
       sizeOfNextRow = ins.readInt()
     }
-    results.toArray
   }
 
   /**
@@ -275,7 +273,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
     val results = ArrayBuffer[InternalRow]()
     byteArrayRdd.collect().foreach { bytes =>
-      results ++= collectRowFromBytes(bytes)
+      decodeUnsafeRows(bytes, results)
     }
     results.toArray
   }
@@ -327,7 +325,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
       val results = ArrayBuffer[InternalRow]()
       res.foreach { r =>
-        results ++= collectRowFromBytes(r.asInstanceOf[Array[Byte]])
+        decodeUnsafeRows(r.asInstanceOf[Array[Byte]], results)
       }
 
       buf ++= results.take(n - buf.size)
