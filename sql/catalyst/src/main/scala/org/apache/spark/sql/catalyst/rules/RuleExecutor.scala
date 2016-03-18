@@ -98,7 +98,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         if (iteration > batch.strategy.maxIterations) {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
-            logInfo(s"Max iterations (${iteration - 1}) reached for batch ${batch.name}")
+            logWarning(s"Max iterations (${iteration - 1}) reached for batch ${batch.name}")
           }
           continue = false
         }

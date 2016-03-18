@@ -71,7 +71,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughAggregate,
       LimitPushDown,
       ColumnPruning,
-      InferFiltersFromConstraints,
+      // TODO: enable this once it's fixed
+      // InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -305,21 +306,14 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Attempts to eliminate the reading of unneeded columns from the query plan using the following
- * transformations:
- *
- *  - Inserting Projections beneath the following operators:
- *   - Aggregate
- *   - Generate
- *   - Project <- Join
- *   - LeftSemiJoin
+ * Attempts to eliminate the reading of unneeded columns from the query plan.
  */
 object ColumnPruning extends Rule[LogicalPlan] {
   private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
     output1.size == output2.size &&
       output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
@@ -398,7 +392,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       } else {
         p
       }
-  }
+  })
 
   /** Applies a projection only when the child is producing unnecessary attributes */
   private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
@@ -407,6 +401,16 @@ object ColumnPruning extends Rule[LogicalPlan] {
     } else {
       c
     }
+
+  /**
+   * The Project before Filter is not necessary but conflict with PushPredicatesThroughProject,
+   * so remove it.
+   */
+  private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
+      if p2.outputSet.subsetOf(child.outputSet) =>
+      p1.copy(child = f.copy(child = child))
+  }
 }
 
 /**
