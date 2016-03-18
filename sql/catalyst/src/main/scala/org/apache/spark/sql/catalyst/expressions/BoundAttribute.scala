@@ -106,12 +106,14 @@ object BindReferences extends Logging {
 }
 
 case class InputReference(
-  ordinal: Int, dataType: DataType, nullable: Boolean, columnOrdinal: String = "")
+  columnOrdinal: Int, dataType: DataType, nullable: Boolean, rowOrdinal: String = "")
   extends LeafExpression {
 
-  private val isColumn: Boolean = columnOrdinal != ""
+  private val isColumnarStorage: Boolean = rowOrdinal != ""
 
-  override def toString: String = s"input[$ordinal, ${dataType.simpleString}]"
+  private val ordinalString = if (isColumnarStorage) { rowOrdinal } else { columnOrdinal.toString }
+
+  override def toString: String = s"input[$columnOrdinal, ${dataType.simpleString}]"
 
   override def eval(input: InternalRow): Any = {
     null
@@ -119,28 +121,17 @@ case class InputReference(
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val javaType = ctx.javaType(dataType)
-    val value = if (!isColumn) {
-      ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
-    } else {
-      ctx.getValue(ctx.INPUT_ROW, dataType, columnOrdinal)
-    }
-    if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
-      val oev = ctx.currentVars(ordinal)
+    val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinalString)
+    if (ctx.currentVars != null && ctx.currentVars(columnOrdinal) != null) {
+      val oev = ctx.currentVars(columnOrdinal)
       ev.isNull = oev.isNull
       ev.value = oev.value
       oev.code
     } else if (nullable) {
-      if (!isColumn) {
-        s"""
-          boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
-          $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-        """
-      } else {
-        s"""
-          boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($columnOrdinal);
-          $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-        """
-      }
+      s"""
+        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinalString);
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
     } else {
       ev.isNull = "false"
       s"""
