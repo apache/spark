@@ -113,7 +113,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
   case class QualifiedTableName(database: String, name: String)
 
   private def getCurrentDatabase: String = {
-    hive.sessionState.sessionCatalog.getCurrentDatabase
+    hive.sessionState.catalog.getCurrentDatabase
   }
 
   def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {

@@ -84,7 +84,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
             .saveAsTable("t")
         }
 
-        val hiveTable = sessionState.sessionCatalog.getTable(TableIdentifier("t", Some("default")))
+        val hiveTable = sessionState.catalog.getTable(TableIdentifier("t", Some("default")))
         assert(hiveTable.storage.inputFormat === Some(inputFormat))
         assert(hiveTable.storage.outputFormat === Some(outputFormat))
         assert(hiveTable.storage.serde === Some(serde))
@@ -116,7 +116,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           }
 
           val hiveTable =
-            sessionState.sessionCatalog.getTable(TableIdentifier("t", Some("default")))
+            sessionState.catalog.getTable(TableIdentifier("t", Some("default")))
           assert(hiveTable.storage.inputFormat === Some(inputFormat))
           assert(hiveTable.storage.outputFormat === Some(outputFormat))
           assert(hiveTable.storage.serde === Some(serde))
@@ -147,7 +147,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
              """.stripMargin)
 
           val hiveTable =
-            sessionState.sessionCatalog.getTable(TableIdentifier("t", Some("default")))
+            sessionState.catalog.getTable(TableIdentifier("t", Some("default")))
           assert(hiveTable.storage.inputFormat === Some(inputFormat))
           assert(hiveTable.storage.outputFormat === Some(outputFormat))
           assert(hiveTable.storage.serde === Some(serde))

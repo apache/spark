@@ -480,7 +480,7 @@ class TestHiveContext private[hive](
 
       cacheManager.clearCache()
       loadedTables.clear()
-      sessionState.sessionCatalog.invalidateCache()
+      sessionState.catalog.invalidateCache()
       metadataHive.reset()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).

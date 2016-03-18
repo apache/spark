@@ -69,7 +69,7 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def eval(input: InternalRow): Any = {
-    UTF8String.fromString(ctx.sessionState.sessionCatalog.getCurrentDatabase)
+    UTF8String.fromString(ctx.sessionState.catalog.getCurrentDatabase)
   }
 }
 
@@ -210,12 +210,12 @@ class HiveContext private[hive](
    */
   def refreshTable(tableName: String): Unit = {
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    sessionState.sessionCatalog.refreshTable(tableIdent)
+    sessionState.catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    sessionState.sessionCatalog.invalidateTable(tableIdent)
+    sessionState.catalog.invalidateTable(tableIdent)
   }
 
   /**
@@ -229,7 +229,7 @@ class HiveContext private[hive](
    */
   def analyze(tableName: String) {
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(sessionState.sessionCatalog.lookupRelation(tableIdent))
+    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -290,7 +290,7 @@ class HiveContext private[hive](
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          sessionState.sessionCatalog.alterTable(
+          sessionState.catalog.alterTable(
             relation.table.copy(
               properties = relation.table.properties +
                 (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))

@@ -104,7 +104,7 @@ case class CreateTempTableUsing(
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       options = options)
-    sqlContext.sessionState.sessionCatalog.createTempTable(
+    sqlContext.sessionState.catalog.createTempTable(
       tableIdent.table,
       Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
       ignoreIfExists = true)
@@ -135,7 +135,7 @@ case class CreateTempTableUsingAsSelect(
       bucketSpec = None,
       options = options)
     val result = dataSource.write(mode, df)
-    sqlContext.sessionState.sessionCatalog.createTempTable(
+    sqlContext.sessionState.catalog.createTempTable(
       tableIdent.table,
       Dataset.newDataFrame(sqlContext, LogicalRelation(result)).logicalPlan,
       ignoreIfExists = true)
@@ -149,11 +149,11 @@ case class RefreshTable(tableIdent: TableIdentifier)
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     // Refresh the given table's metadata first.
-    sqlContext.sessionState.sessionCatalog.refreshTable(tableIdent)
+    sqlContext.sessionState.catalog.refreshTable(tableIdent)
 
     // If this table is cached as a InMemoryColumnarRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sqlContext.sessionState.sessionCatalog.lookupRelation(tableIdent)
+    val logicalPlan = sqlContext.sessionState.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
     val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {

@@ -46,7 +46,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Internal catalog for managing table and database states.
    */
-  lazy val sessionCatalog = new SessionCatalog(ctx.externalCatalog, conf)
+  lazy val catalog = new SessionCatalog(ctx.externalCatalog, conf)
 
   /**
    * Internal catalog for managing functions registered by the user.
@@ -62,14 +62,14 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    */
   lazy val analyzer: Analyzer = {
-    new Analyzer(sessionCatalog, functionRegistry, conf) {
+    new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, sessionCatalog))
+      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
     }
   }
 

@@ -49,7 +49,7 @@ private[hive] case class CreateViewAsSelect(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
-    hiveContext.sessionState.sessionCatalog.tableExists(tableIdentifier) match {
+    hiveContext.sessionState.catalog.tableExists(tableIdentifier) match {
       case true if allowExisting =>
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.

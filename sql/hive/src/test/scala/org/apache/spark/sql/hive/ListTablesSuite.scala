@@ -32,7 +32,7 @@ class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAft
 
   override def beforeAll(): Unit = {
     // The catalog in HiveContext is a case insensitive one.
-    sessionState.sessionCatalog.createTempTable(
+    sessionState.catalog.createTempTable(
       "ListTablesSuiteTable", df.logicalPlan, ignoreIfExists = true)
     sql("CREATE TABLE HiveListTablesSuiteTable (key int, value string)")
     sql("CREATE DATABASE IF NOT EXISTS ListTablesSuiteDB")
@@ -40,7 +40,7 @@ class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAft
   }
 
   override def afterAll(): Unit = {
-    sessionState.sessionCatalog.dropTable(
+    sessionState.catalog.dropTable(
       TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
     sql("DROP TABLE IF EXISTS HiveListTablesSuiteTable")
     sql("DROP TABLE IF EXISTS ListTablesSuiteDB.HiveInDBListTablesSuiteTable")
