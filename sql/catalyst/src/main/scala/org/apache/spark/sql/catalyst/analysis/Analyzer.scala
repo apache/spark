@@ -1808,6 +1808,15 @@ class Analyzer(
   object ResolveWindowFrame extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformExpressions {
+
+        case WindowExpression(wf: WindowFunction,
+        WindowSpecDefinition(_, _, _, es: ExcludeClause))
+          if (wf.isInstanceOf[RowNumberLike]
+            || wf.isInstanceOf[RankLike]
+            || wf.isInstanceOf[OffsetWindowFunction])
+            && es.excludeType != ExcludeNoOthers =>
+          failAnalysis(s"Window function ${wf.getClass} does not support exclude clause")
+
         case WindowExpression(wf: WindowFunction,
         WindowSpecDefinition(_, _, f: SpecifiedWindowFrame, _))
           if wf.frame != UnspecifiedFrame && wf.frame != f =>

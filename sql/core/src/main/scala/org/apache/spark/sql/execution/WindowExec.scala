@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution
 
 import java.util
 
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.unsafe.types.{UTF8String, CalendarInterval}
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -28,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DataType, Decimal, IntegerType}
 import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, UnsafeSorterIterator}
 
 /**
@@ -153,6 +156,10 @@ case class WindowExec(
     }
   }
 
+  /**
+   * Create an Ordering operation that compares the order by column values
+   * between two rows.
+   */
   private[this] def orderbyColumnValueOrdering(): Ordering[InternalRow]= {
     val sortExprs = orderSpec.zipWithIndex.map { case (e, i) =>
       SortOrder(BoundReference(i, e.dataType, e.nullable), e.direction)
@@ -735,39 +742,38 @@ private[execution] final class SlidingWindowFunctionFrame(
       bufferUpdated = true
     }
 
-    // Only recalculate and update when the buffer changes.
-
-    if (bufferUpdated) {
-      processor.initialize(input.size)
-      val iter = buffer.iterator()
-      var shouldUpdate = true
-      var progress = 0
-      while (iter.hasNext) {
-        val next = iter.next()
-        excludeSpec.excludeType match{
-          case ExcludeCurrentRow if (inputLowIndex + progress == index) =>
-            shouldUpdate = false
-          case ExcludeGroup if excludeSpec.valueOrdering.compare(
-            excludeSpec.toBeCompare(next).copy(),
-            excludeSpec.toBeCompare(current).copy()) == 0 =>
-            shouldUpdate = false
-          case ExcludeTies if excludeSpec.valueOrdering.compare(
-            excludeSpec.toBeCompare(next).copy(),
-            excludeSpec.toBeCompare(current).copy()) == 0 =>
-            if (inputLowIndex + progress == index) {
-              shouldUpdate = true
-            } else{
-              shouldUpdate = false
-            }
-          case _ =>
+    processor.initialize(input.size)
+    val iter = buffer.iterator()
+    var shouldUpdate = true
+    var progress = 0
+    while (iter.hasNext) {
+      val next = iter.next()
+      excludeSpec.excludeType match{
+        case ExcludeCurrentRow if (inputLowIndex + progress == index) =>
+          shouldUpdate = false
+        case ExcludeGroup if excludeSpec.valueOrdering.compare(
+          excludeSpec.toBeCompare(next).copy(),
+          excludeSpec.toBeCompare(current).copy()) == 0 =>
+          shouldUpdate = false
+        case ExcludeTies if excludeSpec.valueOrdering.compare(
+          excludeSpec.toBeCompare(next).copy(),
+          excludeSpec.toBeCompare(current).copy()) == 0 =>
+          if (inputLowIndex + progress == index) {
             shouldUpdate = true
-        }
-        progress += 1
-        if(shouldUpdate)
-          processor.update(next)
+           } else{
+            shouldUpdate = false
+          }
+        case _ =>
+          // in non exclude case, only recalculate and updat ewhen the buffer changes
+          // if (bufferUpdated)
+            shouldUpdate = true
+      }
+      progress += 1
+      if(shouldUpdate)
+        processor.update(next)
       }
       processor.evaluate(target)
-    }
+
   }
 }
 
@@ -892,8 +898,6 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
   /** The rows within current group */
   private[this] val buffer = new util.ArrayDeque[InternalRow]()
 
-  /** The rows within current group */
-  private[this] val buffer2 = new util.ArrayDeque[InternalRow]()
 
   /** Prepare the frame for calculating a new partition. */
   override def prepare(rows: RowBuffer): Unit = {
@@ -902,7 +906,6 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
     inputIndex = 0
     processor.initialize(input.size)
     buffer.clear()
-    buffer2.clear()
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -911,11 +914,30 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
 
     excludeSpec.excludeType match {
       case ExcludeCurrentRow =>
-        while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) < 0) {
-          processor.update(nextRow)
-          nextRow = input.next()
-          inputIndex += 1
-          bufferUpdated = true
+        ubound match {
+          case b @ RowBoundOrdering(_) =>
+            while (nextRow != null && b.compare(nextRow, inputIndex, current, index) < 0) {
+              processor.update(nextRow)
+              bufferUpdated = true
+              nextRow = input.next()
+              inputIndex += 1
+            }
+          case b @ RangeBoundOrdering(_, _, _) =>
+            // there maybe performance penalty
+            processor.initialize(input.size())
+            input.reset()
+            inputIndex = 0
+            nextRow = input.next()
+
+            while (nextRow != null && b.compare(nextRow, inputIndex, current, index) <= 0) {
+              if(inputIndex != index)
+                processor.update(nextRow)
+              nextRow = input.next()
+              inputIndex += 1
+            }
+            // every current row will have different calculation
+            bufferUpdated = true
+
         }
 
       case ExcludeGroup =>
@@ -1027,7 +1049,7 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
     }
 
     // Only recalculate and update when the buffer changes.
-    if (bufferUpdated) {
+    //if (bufferUpdated) {
       processor.initialize(input.size)
       var progress = 0
       while (nextRow != null) {
@@ -1048,7 +1070,7 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
         progress +=1
       }
       processor.evaluate(target)
-    }
+    //}
   }
 }
 
