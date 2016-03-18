@@ -196,8 +196,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString)
-      val deserialized = blockManager.dataDeserialize(blockId, bytes.nioByteBuffer())
-        .asInstanceOf[Iterator[Int]].toList
+      val deserialized = blockManager.dataDeserialize[Int](blockId, bytes.nioByteBuffer()).toList
       assert(deserialized === (1 to 100).toList)
     }
   }
@@ -222,7 +221,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val numPartitions = 10
     val conf = new SparkConf()
       .set("spark.storage.unrollMemoryThreshold", "1024")
-      .set("spark.testing.memory", (size * numPartitions).toString)
+      .set("spark.testing.memory", size.toString)
     sc = new SparkContext(clusterUrl, "test", conf)
     val data = sc.parallelize(1 to size, numPartitions).persist(StorageLevel.MEMORY_ONLY)
     assert(data.count() === size)
