@@ -22,7 +22,8 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -95,11 +96,12 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * Get the attempt ID for this run, if the cluster manager supports multiple
    * attempts. Applications run in client mode will not have attempt IDs.
+   * This attempt ID only includes attempt counter, like "1", "2".
    *
    * @return The application attempt id, if available.
    */
   override def applicationAttemptId(): Option[String] = {
-    attemptId.map(_.toString)
+    attemptId.map(_.getAttemptId.toString)
   }
 
   /**

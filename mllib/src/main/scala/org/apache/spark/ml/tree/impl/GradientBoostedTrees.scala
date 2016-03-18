@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tree.impl
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.regression.LabeledPoint

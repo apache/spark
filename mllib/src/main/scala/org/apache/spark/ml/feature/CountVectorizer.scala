@@ -206,6 +206,27 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   /** @group setParam */
   def setMinTF(value: Double): this.type = set(minTF, value)
 
+  /**
+    * Binary toggle to control the output vector values.
+    * If True, all non zero counts are set to 1. This is useful for discrete probabilistic
+    * models that model binary events rather than integer counts
+    *
+    * Default: false
+    * @group param
+    */
+  val binary: BooleanParam =
+    new BooleanParam(this, "binary", "If True, all non zero counts are set to 1. " +
+      "This is useful for discrete probabilistic models that model binary events rather " +
+      "than integer counts")
+
+  /** @group getParam */
+  def getBinary: Boolean = $(binary)
+
+  /** @group setParam */
+  def setBinary(value: Boolean): this.type = set(binary, value)
+
+  setDefault(binary -> false)
+
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
 
@@ -232,7 +253,13 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
       } else {
         tokenCount * minTf
       }
-      Vectors.sparse(dictBr.value.size, termCounts.filter(_._2 >= effectiveMinTF).toSeq)
+      val effectiveCounts = if ($(binary)) {
+        termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
+      }
+      else {
+        termCounts.filter(_._2 >= effectiveMinTF).toSeq
+      }
+      Vectors.sparse(dictBr.value.size, effectiveCounts)
     }
     dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
   }

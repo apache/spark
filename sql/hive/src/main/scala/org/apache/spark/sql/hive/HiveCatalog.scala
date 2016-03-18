@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchItemException

@@ -20,8 +20,9 @@ package org.apache.spark.ml.regression
 import breeze.stats.{distributions => dist}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim._
@@ -680,8 +681,7 @@ class GeneralizedLinearRegressionModel private[ml] (
   @Since("2.0.0")
   def summary: GeneralizedLinearRegressionSummary = trainingSummary.getOrElse {
     throw new SparkException(
-      "No training summary available for this GeneralizedLinearRegressionModel",
-      new RuntimeException())
+      "No training summary available for this GeneralizedLinearRegressionModel")
   }
 
   private[regression] def setSummary(summary: GeneralizedLinearRegressionSummary): this.type = {

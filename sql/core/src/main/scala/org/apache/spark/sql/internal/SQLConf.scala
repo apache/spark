@@ -24,7 +24,7 @@ import scala.collection.immutable
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
@@ -236,6 +236,11 @@ object SQLConf {
       doc = "When true, enable partition pruning for in-memory columnar tables.",
       isPublic = false)
 
+  val PREFER_SORTMERGEJOIN = booleanConf("spark.sql.join.preferSortMergeJoin",
+      defaultValue = Some(true),
+      doc = "When true, prefer sort merge join over shuffle hash join",
+      isPublic = false)
+
   val AUTO_BROADCASTJOIN_THRESHOLD = intConf("spark.sql.autoBroadcastJoinThreshold",
     defaultValue = Some(10 * 1024 * 1024),
     doc = "Configures the maximum size in bytes for a table that will be broadcast to all worker " +
@@ -339,11 +344,6 @@ object SQLConf {
       "of org.apache.parquet.hadoop.ParquetOutputCommitter.  NOTE: 1. Instead of SQLConf, this " +
       "option must be set in Hadoop Configuration.  2. This option overrides " +
       "\"spark.sql.sources.outputCommitterClass\".")
-
-  val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = booleanConf(
-    key = "spark.sql.parquet.enableUnsafeRowRecordReader",
-    defaultValue = Some(true),
-    doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
 
   val PARQUET_VECTORIZED_READER_ENABLED = booleanConf(
     key = "spark.sql.parquet.enableVectorizedReader",
@@ -522,6 +522,7 @@ object SQLConf {
     val CODEGEN_ENABLED = "spark.sql.codegen"
     val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
     val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
+    val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = "spark.sql.parquet.enableUnsafeRowRecordReader"
   }
 }
 
@@ -585,6 +586,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
   def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)
