@@ -18,12 +18,15 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
 
 /**
+ * :: DeveloperApi ::
  * A cluster manager interface to plugin external scheduler.
  *
  */
-trait ExternalClusterManager {
+@DeveloperApi
+private[spark] trait ExternalClusterManager {
 
   /**
    * Check if this cluster manager instance can create scheduler components
