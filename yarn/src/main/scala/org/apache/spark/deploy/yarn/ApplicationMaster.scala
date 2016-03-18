@@ -66,14 +66,16 @@ private[spark] class ApplicationMaster(
   // allocation is enabled), with a minimum of 3.
 
   private val maxNumExecutorFailures = {
-    val defaultKey =
+    val effectiveNumExecutors =
       if (Utils.isDynamicAllocationEnabled(sparkConf)) {
-        "spark.dynamicAllocation.maxExecutors"
+        sparkConf.getInt("spark.dynamicAllocation.maxExecutors", Int.MaxValue)
       } else {
-        "spark.executor.instances"
+        sparkConf.getInt("spark.executor.instances", 0)
       }
-    val effectiveNumExecutors = sparkConf.getInt(defaultKey, 0)
-    val defaultMaxNumExecutorFailures = math.max(3, 2 * effectiveNumExecutors)
+    // By default, effectiveNumExecutors is Int.MaxValue if dynamic allocation is enabled. We need
+    // avoid the integer overflow here.
+    val defaultMaxNumExecutorFailures = math.max(3,
+      if (effectiveNumExecutors > Int.MaxValue / 2) Int.MaxValue else (2 * effectiveNumExecutors))
 
     sparkConf.getInt("spark.yarn.max.executor.failures", defaultMaxNumExecutorFailures)
   }
