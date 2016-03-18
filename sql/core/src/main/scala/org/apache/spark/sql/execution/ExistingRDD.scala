@@ -208,11 +208,11 @@ private[sql] case class DataSourceScan(
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
     ctx.addMutableState("int", idx, s"$idx = 0;")
+    val colVars = output.zipWithIndex.map(x => ctx.freshName("colInstance" + x._2))
+    val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
+      ctx.addMutableState(columnVectorClz, name, s"$name = null;")
+      s"$name = ${batch}.column($i);" }
 
-    val exprCols = output.zipWithIndex.map(
-      x => new InputReference(x._2, x._1.dataType, x._1.nullable, rowidx))
-    val exprRows = output.zipWithIndex.map(
-      x => new InputReference(x._2, x._1.dataType, x._1.nullable))
     val row = ctx.freshName("row")
     val numOutputRows = metricTerm(ctx, "numOutputRows")
 
@@ -222,14 +222,16 @@ private[sql] case class DataSourceScan(
     // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
     // here which path to use. Fix this.
 
+    // These assignments avoids accesses to instance variables in a while-loop
+    // Since they are loop invariant variables (LIVs), host them outside the while-loop
+    val colLocalVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2))
+    val columnLIVAssigns = (colLocalVars zip colVars).map { case (localName, name) =>
+      s"$columnVectorClz $localName = $name;" }
+
     ctx.currentVars = null
-    val colVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2))
-    val colDeclarations = colVars.zipWithIndex.map(x => {
-      (columnVectorClz + " " + x._1 + " = " + batch + ".column(" + x._2 + ");\n").trim} )
-    val columns1 = (exprCols zip colVars).map(x => {
-      ctx.INPUT_ROW = x._2
-      x._1.gen(ctx)
-    })
+    val exprCols = (output zip colLocalVars).map { case (attr, colVar) =>
+      new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable) }
+    val columns1 = exprCols.map(e => e.gen(ctx))
     val scanBatches = ctx.freshName("processBatches")
     ctx.addNewFunction(scanBatches,
       s"""
@@ -238,7 +240,7 @@ private[sql] case class DataSourceScan(
       |     int numRows = $batch.numRows();
       |     if ($idx == 0) $numOutputRows.add(numRows);
       |
-      |     ${colDeclarations.mkString("", "\n", "\n")}
+      |     ${columnLIVAssigns.mkString("", "\n", "\n")}
       |     while (!shouldStop() && $idx < numRows) {
       |       int $rowidx = $idx++;
       |       ${consume(ctx, columns1).trim}
@@ -250,10 +252,12 @@ private[sql] case class DataSourceScan(
       |       break;
       |     }
       |     $batch = ($columnarBatchClz)$input.next();
+      |     ${columnAssigns.mkString("", "\n", "\n")}
       |     $idx = 0;
       |   }
       | }""".stripMargin)
 
+    val exprRows = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns2 = exprRows.map(_.gen(ctx))
@@ -282,6 +286,7 @@ private[sql] case class DataSourceScan(
        |   Object $value = $input.next();
        |   if ($value instanceof $columnarBatchClz) {
        |     $batch = ($columnarBatchClz)$value;
+       |     ${columnAssigns.mkString("", "\n", "\n")}
        |     $scanBatches();
        |   } else {
        |     $scanRows((InternalRow) $value);
