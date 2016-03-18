@@ -1351,6 +1351,15 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new [[Dataset]] containing union of rows in this frame and another frame.
+   * This is equivalent to `UNION ALL` in SQL.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def union(other: Dataset[T]): Dataset[T] = unionAll(other)
+
+  /**
    * Returns a new [[Dataset]] containing rows only in both this frame and another frame.
    * This is equivalent to `INTERSECT` in SQL.
    *
@@ -1377,6 +1386,15 @@ class Dataset[T] private[sql](
   def except(other: Dataset[T]): Dataset[T] = withTypedPlan {
     Except(logicalPlan, other.logicalPlan)
   }
+
+  /**
+   * Returns a new [[Dataset]] containing rows in this frame but not in another frame.
+   * This is equivalent to `EXCEPT` in SQL.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def subtract(other: Dataset[T]): Dataset[T] = except(other)
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows.
