@@ -28,6 +28,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.ml.PipelineStage
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
@@ -505,6 +506,26 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
     implicit val formats = DefaultFormats
     parse(json).extract[Seq[Int]].toArray
   }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Specialized version of [[Param[Array[PipelineStage]]]] for Java.
+ */
+@DeveloperApi
+class StageArrayParam(
+    parent: Params,
+    name: String,
+    doc: String,
+    isValid: Array[PipelineStage] => Boolean)
+  extends Param[Array[PipelineStage]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[PipelineStage]): ParamPair[Array[PipelineStage]] =
+    w(value.asScala.toArray)
 }
 
 /**

@@ -25,7 +25,7 @@ from pyspark import since
 from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader
-from pyspark.ml.wrapper import JavaWrapper
+from pyspark.ml.wrapper import JavaWrapper, _stage_java2py, _stage_py2java
 from pyspark.mllib.common import inherit_doc
 
 
@@ -36,7 +36,7 @@ def _stages_java2py(java_stages):
     :return: An array of Python stages.
     """
 
-    return [JavaWrapper._transfer_stage_from_java(stage) for stage in java_stages]
+    return [_stage_java2py(stage) for stage in java_stages]
 
 
 def _stages_py2java(py_stages, cls):
@@ -49,7 +49,7 @@ def _stages_py2java(py_stages, cls):
     gateway = SparkContext._gateway
     java_stages = gateway.new_array(cls, len(py_stages))
     for idx, stage in enumerate(py_stages):
-        java_stages[idx] = JavaWrapper._transfer_stage_to_java(stage)
+        java_stages[idx] = _stage_py2java(stage)
     return java_stages
 
 

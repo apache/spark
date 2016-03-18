@@ -28,7 +28,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
-import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -98,7 +98,7 @@ class Pipeline @Since("1.4.0") (
    * @group param
    */
   @Since("1.2.0")
-  val stages: Param[Array[PipelineStage]] = new Param(this, "stages", "stages of the pipeline")
+  val stages: StageArrayParam = new StageArrayParam(this, "stages", "stages of the pipeline")
 
   /** @group setParam */
   @Since("1.2.0")

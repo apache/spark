@@ -517,50 +517,10 @@ class PersistenceTest(PySparkTestCase):
         except OSError:
             pass
 
-    def test_pipeline_persistence(self):
-        sqlContext = SQLContext(self.sc)
-        temp_path = tempfile.mkdtemp()
-
-        try:
-            df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
-            tf = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
-            pca = PCA(k=2, inputCol="features", outputCol="pca_features")
-            pl = Pipeline(stages=[tf, pca])
-            model = pl.fit(df)
-            pipeline_path = temp_path + "/pipeline"
-            pl.save(pipeline_path)
-            loaded_pipeline = Pipeline.load(pipeline_path)
-            self.assertEqual(loaded_pipeline.uid, pl.uid)
-            self.assertEqual(len(loaded_pipeline.getStages()), 2)
-
-            [loaded_tf, loaded_pca] = loaded_pipeline.getStages()
-            self.assertIsInstance(loaded_tf, HashingTF)
-            self.assertEqual(loaded_tf.uid, tf.uid)
-            param = loaded_tf.getParam("numFeatures")
-            self.assertEqual(loaded_tf.getOrDefault(param), tf.getOrDefault(param))
-
-            self.assertIsInstance(loaded_pca, PCA)
-            self.assertEqual(loaded_pca.uid, pca.uid)
-            self.assertEqual(loaded_pca.getK(), pca.getK())
-
-            model_path = temp_path + "/pipeline-model"
-            model.save(model_path)
-            loaded_model = PipelineModel.load(model_path)
-            [model_tf, model_pca] = model.stages
-            [loaded_model_tf, loaded_model_pca] = loaded_model.stages
-            self.assertEqual(model_tf.uid, loaded_model_tf.uid)
-            self.assertEqual(model_tf.getOrDefault(param), loaded_model_tf.getOrDefault(param))
-
-            self.assertEqual(model_pca.uid, loaded_model_pca.uid)
-            self.assertEqual(model_pca.pc, loaded_model_pca.pc)
-            self.assertEqual(model_pca.explainedVariance, loaded_model_pca.explainedVariance)
-        finally:
-            try:
-                rmtree(temp_path)
-            except OSError:
-                pass
-
     def __test_loaded_pipeline(self, pl, loaded_pipeline):
+        """
+        Test Pipeline persistence.
+        """
         self.assertEqual(loaded_pipeline.uid, pl.uid)
         self.assertEqual(len(loaded_pipeline.getStages()), 2)
 
@@ -577,6 +537,9 @@ class PersistenceTest(PySparkTestCase):
         self.assertEqual(loaded_pca.getK(), pca.getK())
 
     def __test_loaded_meta_pipeline(self, meta_pl, loaded_meta_pipeline):
+        """
+        Test nested Pipeline persistence.
+        """
         self.assertEqual(loaded_meta_pipeline.uid, meta_pl.uid)
         self.assertEqual(len(loaded_meta_pipeline.getStages()), 3)
 
@@ -593,38 +556,43 @@ class PersistenceTest(PySparkTestCase):
         self.assertEqual(loaded_scaler.getMin(), scaler.getMin())
         self.assertEqual(loaded_scaler.getMax(), scaler.getMax())
 
-    def __test_loaded_pipeline_model(self, pl, loaded_pipeline):
-        self.assertEqual(loaded_pipeline.uid, pl.uid)
-        self.assertEqual(len(loaded_pipeline.getStages()), 2)
+    def __test_loaded_pipeline_model(self, model, loaded_model):
+        """
+        Test PipelineModel persistence.
+        """
+        self.assertEqual(model.uid, loaded_model.uid)
+        self.assertEqual(len(loaded_model.stages), 2)
 
-        [tf, pca] = pl.getStages()
-        [loaded_tf, loaded_pca] = loaded_pipeline.getStages()
+        [model_tf, model_pca] = model.stages
+        [loaded_model_tf, loaded_model_pca] = loaded_model.stages
 
-        self.assertIsInstance(loaded_tf, HashingTF)
-        self.assertEqual(loaded_tf.uid, tf.uid)
-        param = loaded_tf.getParam("numFeatures")
-        self.assertEqual(loaded_tf.getOrDefault(param), tf.getOrDefault(param))
+        self.assertEqual(model_tf.uid, loaded_model_tf.uid)
+        param = model_tf.getParam("numFeatures")
+        self.assertEqual(model_tf.getOrDefault(param), loaded_model_tf.getOrDefault(param))
 
-        self.assertIsInstance(loaded_pca, PCA)
-        self.assertEqual(loaded_pca.uid, pca.uid)
-        self.assertEqual(loaded_pca.getK(), pca.getK())
+        self.assertEqual(model_pca.uid, loaded_model_pca.uid)
+        self.assertEqual(model_pca.pc, loaded_model_pca.pc)
+        self.assertEqual(model_pca.explainedVariance, loaded_model_pca.explainedVariance)
 
-    def __test_loaded_meta_pipeline_model(self, meta_pl, loaded_meta_pipeline):
-        self.assertEqual(loaded_meta_pipeline.uid, meta_pl.uid)
-        self.assertEqual(len(loaded_meta_pipeline.getStages()), 3)
+    def __test_loaded_meta_pipeline_model(self, meta_model, loaded_meta_model):
+        """
+        Test nested PipelineModel persistence.
+        """
+        self.assertEqual(meta_model.uid, loaded_meta_model.uid)
+        self.assertEqual(len(loaded_meta_model.stages), 3)
 
-        [pl, expansion, scaler] = meta_pl.getStages()
-        [loaded_pipeline, loaded_expansion, loaded_scaler] = loaded_meta_pipeline.getStages()
-        self.__test_loaded_pipeline_model(pl, loaded_pipeline)
+        [model_pl, expansion, model_scaler] = meta_model.stages
+        [loaded_model_pl, loaded_expansion, loaded_model_scaler] = loaded_meta_model.stages
+        self.__test_loaded_pipeline_model(model_pl, loaded_model_pl)
 
         self.assertIsInstance(loaded_expansion, PolynomialExpansion)
         self.assertEqual(loaded_expansion.uid, expansion.uid)
         self.assertEqual(loaded_expansion.getDegree(), expansion.getDegree())
 
-        self.assertIsInstance(loaded_scaler, MinMaxScaler)
-        self.assertEqual(loaded_scaler.uid, scaler.uid)
-        self.assertEqual(loaded_scaler.getMin(), scaler.getMin())
-        self.assertEqual(loaded_scaler.getMax(), scaler.getMax())
+        self.assertIsInstance(loaded_model_scaler, MinMaxScalerModel)
+        self.assertEqual(loaded_model_scaler.uid, model_scaler.uid)
+        self.assertEqual(loaded_model_scaler.originalMin(), model_scaler.originalMin())
+        self.assertEqual(loaded_model_scaler.originalMax(), model_scaler.originalMax())
 
     def test_nested_pipeline_persistence(self):
         sqlContext = SQLContext(self.sc)
@@ -656,15 +624,6 @@ class PersistenceTest(PySparkTestCase):
             model.save(model_path)
             loaded_model = PipelineModel.load(model_path)
             self.__test_loaded_meta_pipeline_model(model, loaded_model)
-
-            [model_tf, model_pca] = model.stages
-            [loaded_model_tf, loaded_model_pca] = loaded_model.stages
-            self.assertEqual(model_tf.uid, loaded_model_tf.uid)
-            self.assertEqual(model_tf.getOrDefault(param), loaded_model_tf.getOrDefault(param))
-
-            self.assertEqual(model_pca.uid, loaded_model_pca.uid)
-            self.assertEqual(model_pca.pc, loaded_model_pca.pc)
-            self.assertEqual(model_pca.explainedVariance, loaded_model_pca.explainedVariance)
         finally:
             try:
                 rmtree(temp_path)
