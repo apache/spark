@@ -192,7 +192,6 @@ object SparkBuild extends PomBuild {
 
     scalacOptions in Compile ++= Seq(
       s"-target:jvm-${scalacJVMVersion.value}",
-      "-Dscalac.patmat.analysisBudget=512",
       "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
