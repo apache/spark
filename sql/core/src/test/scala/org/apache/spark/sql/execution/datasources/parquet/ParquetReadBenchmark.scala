@@ -82,38 +82,17 @@ object ParquetReadBenchmark {
         }
 
         sqlBenchmark.addCase("SQL Parquet MR") { iter =>
-          withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
-            sqlContext.sql("select sum(id) from tempTable").collect()
-          }
-        }
-
-        sqlBenchmark.addCase("SQL Parquet Non-Vectorized") { iter =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
             sqlContext.sql("select sum(id) from tempTable").collect()
           }
         }
 
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
-        // Driving the parquet reader directly without Spark.
-        parquetReaderBenchmark.addCase("ParquetReader Non-Vectorized") { num =>
-          var sum = 0L
-          files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
-            reader.initialize(p, ("id" :: Nil).asJava)
-
-            while (reader.nextKeyValue()) {
-              val record = reader.getCurrentValue.asInstanceOf[InternalRow]
-              if (!record.isNullAt(0)) sum += record.getInt(0)
-            }
-            reader.close()
-          }
-        }
-
         // Driving the parquet reader in batch mode directly.
         parquetReaderBenchmark.addCase("ParquetReader Vectorized") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -136,7 +115,7 @@ object ParquetReadBenchmark {
         parquetReaderBenchmark.addCase("ParquetReader Vectorized -> Row") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -159,7 +138,6 @@ object ParquetReadBenchmark {
         -------------------------------------------------------------------------------------------
         SQL Parquet Vectorized                    215 /  262         73.0          13.7       1.0X
         SQL Parquet MR                           1946 / 2083          8.1         123.7       0.1X
-        SQL Parquet Non-Vectorized               1079 / 1213         14.6          68.6       0.2X
         */
         sqlBenchmark.run()
 
@@ -167,9 +145,8 @@ object ParquetReadBenchmark {
         Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
         Parquet Reader Single Int Column    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         -------------------------------------------------------------------------------------------
-        ParquetReader Non-Vectorized              610 /  737         25.8          38.8       1.0X
-        ParquetReader Vectorized                  123 /  152        127.8           7.8       5.0X
-        ParquetReader Vectorized -> Row           165 /  180         95.2          10.5       3.7X
+        ParquetReader Vectorized                  123 /  152        127.8           7.8       1.0X
+        ParquetReader Vectorized -> Row           165 /  180         95.2          10.5       0.7X
         */
         parquetReaderBenchmark.run()
       }
@@ -191,32 +168,12 @@ object ParquetReadBenchmark {
         }
 
         benchmark.addCase("SQL Parquet MR") { iter =>
-          withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
-            sqlContext.sql("select sum(c1), sum(length(c2)) from tempTable").collect
-          }
-        }
-
-        benchmark.addCase("SQL Parquet Non-vectorized") { iter =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
             sqlContext.sql("select sum(c1), sum(length(c2)) from tempTable").collect
           }
         }
 
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
-        benchmark.addCase("ParquetReader Non-vectorized") { num =>
-          var sum1 = 0L
-          var sum2 = 0L
-          files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
-            reader.initialize(p, null)
-            while (reader.nextKeyValue()) {
-              val record = reader.getCurrentValue.asInstanceOf[InternalRow]
-              if (!record.isNullAt(0)) sum1 += record.getInt(0)
-              if (!record.isNullAt(1)) sum2 += record.getUTF8String(1).numBytes()
-            }
-            reader.close()
-          }
-        }
 
         /*
         Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
@@ -224,8 +181,6 @@ object ParquetReadBenchmark {
         -------------------------------------------------------------------------------------------
         SQL Parquet Vectorized                    628 /  720         16.7          59.9       1.0X
         SQL Parquet MR                           1905 / 2239          5.5         181.7       0.3X
-        SQL Parquet Non-vectorized               1429 / 1732          7.3         136.3       0.4X
-        ParquetReader Non-vectorized              989 / 1357         10.6          94.3       0.6X
         */
         benchmark.run()
       }
@@ -247,7 +202,7 @@ object ParquetReadBenchmark {
         }
 
         benchmark.addCase("SQL Parquet MR") { iter =>
-          withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
             sqlContext.sql("select sum(length(c1)) from tempTable").collect
           }
         }
@@ -293,7 +248,7 @@ object ParquetReadBenchmark {
         Read data column                          191 /  250         82.1          12.2       1.0X
         Read partition column                      82 /   86        192.4           5.2       2.3X
         Read both columns                         220 /  248         71.5          14.0       0.9X
-         */
+        */
         benchmark.run()
       }
     }
@@ -319,7 +274,7 @@ object ParquetReadBenchmark {
         benchmark.addCase("PR Vectorized") { num =>
           var sum = 0
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             try {
               reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -340,7 +295,7 @@ object ParquetReadBenchmark {
         benchmark.addCase("PR Vectorized (Null Filtering)") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
-            val reader = new UnsafeRowParquetRecordReader
+            val reader = new VectorizedParquetRecordReader
             try {
               reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
               val batch = reader.resultBatch()

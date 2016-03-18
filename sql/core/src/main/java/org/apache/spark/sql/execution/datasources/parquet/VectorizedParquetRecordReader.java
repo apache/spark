@@ -18,13 +18,11 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.List;
 
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
@@ -37,22 +35,17 @@ import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
-import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.parquet.column.ValuesType.*;
+import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
 
 /**
- * A specialized RecordReader that reads into UnsafeRows directly using the Parquet column APIs.
- *
- * This is somewhat based on parquet-mr's ColumnReader.
+ * A specialized RecordReader that reads into InternalRows or ColumnarBatches directly using the
+ * Parquet column APIs. This is somewhat based on parquet-mr's ColumnReader.
  *
  * TODO: handle complex types, decimal requiring more than 8 bytes, INT96. Schema mismatch.
  * All of these can be handled efficiently and easily with codegen.
@@ -61,29 +54,18 @@ import static org.apache.parquet.column.ValuesType.*;
  * enabled, this class returns ColumnarBatches which offers significant performance gains.
  * TODO: make this always return ColumnarBatches.
  */
-public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBase<Object> {
+public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBase<Object> {
   /**
-   * Batch of unsafe rows that we assemble and the current index we've returned. Every time this
+   * Batch of rows that we assemble and the current index we've returned. Every time this
    * batch is used up (batchIdx == numBatched), we populated the batch.
    */
-  private UnsafeRow[] rows = new UnsafeRow[64];
   private int batchIdx = 0;
   private int numBatched = 0;
 
   /**
-   * Used to write variable length columns. Same length as `rows`.
-   */
-  private UnsafeRowWriter[] rowWriters = null;
-  /**
-   * True if the row contains variable length fields.
-   */
-  private boolean containsVarLenFields;
-
-  /**
    * For each request column, the reader to read this column.
-   * columnsReaders[i] populated the UnsafeRow's attribute at i.
    */
-  private ColumnReader[] columnReaders;
+  private VectorizedColumnReader[] columnReaders;
 
   /**
    * The number of rows that have been returned.
@@ -94,17 +76,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
    * The number of rows that have been reading, including the current in flight row group.
    */
   private long totalCountLoadedSoFar = 0;
-
-  /**
-   * For each column, the annotated original type.
-   */
-  private OriginalType[] originalTypes;
-
-  /**
-   * The default size for varlen columns. The row grows as necessary to accommodate the
-   * largest column.
-   */
-  private static final int DEFAULT_VAR_LEN_SIZE = 32;
 
   /**
    * columnBatch object that is used for batch decoding. This is created on first use and triggers
@@ -176,14 +147,12 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
+    resultBatch();
+
     if (returnColumnarBatch) return nextBatch();
 
     if (batchIdx >= numBatched) {
-      if (vectorizedDecode()) {
-        if (!nextBatch()) return false;
-      } else {
-        if (!loadBatch()) return false;
-      }
+      if (!nextBatch()) return false;
     }
     ++batchIdx;
     return true;
@@ -192,12 +161,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   @Override
   public Object getCurrentValue() throws IOException, InterruptedException {
     if (returnColumnarBatch) return columnarBatch;
-
-    if (vectorizedDecode()) {
-      return columnarBatch.getRow(batchIdx - 1);
-    } else {
-      return rows[batchIdx - 1];
-    }
+    return columnarBatch.getRow(batchIdx - 1);
   }
 
   @Override
@@ -225,7 +189,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
    * Can be called before any rows are returned to enable returning columnar batches directly.
    */
   public void enableReturningBatches() {
-    assert(vectorizedDecode());
     returnColumnarBatch = true;
   }
 
@@ -233,12 +196,11 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
    * Advances to the next batch of rows. Returns false if there are no more.
    */
   public boolean nextBatch() throws IOException {
-    assert(vectorizedDecode());
     columnarBatch.reset();
     if (rowsReturned >= totalRowCount) return false;
     checkEndOfRowGroup();
 
-    int num = (int)Math.min((long) columnarBatch.capacity(), totalCountLoadedSoFar - rowsReturned);
+    int num = (int) Math.min((long) columnarBatch.capacity(), totalCountLoadedSoFar - rowsReturned);
     for (int i = 0; i < columnReaders.length; ++i) {
       columnReaders[i].readBatch(num, columnarBatch.column(i));
     }
@@ -249,17 +211,11 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     return true;
   }
 
-  /**
-   * Returns true if we are doing a vectorized decode.
-   */
-  private boolean vectorizedDecode() { return columnarBatch != null; }
-
   private void initializeInternal() throws IOException {
     /**
      * Check that the requested schema is supported.
      */
-    int numVarLenFields = 0;
-    originalTypes = new OriginalType[requestedSchema.getFieldCount()];
+    OriginalType[] originalTypes = new OriginalType[requestedSchema.getFieldCount()];
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
       Type t = requestedSchema.getFields().get(i);
       if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
@@ -286,197 +242,13 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       if (!fd.equals(requestedSchema.getColumns().get(i))) {
         throw new IOException("Schema evolution not supported.");
       }
-
-      if (primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.BINARY) {
-        ++numVarLenFields;
-      }
-    }
-
-    /**
-     * Initialize rows and rowWriters. These objects are reused across all rows in the relation.
-     */
-    containsVarLenFields = numVarLenFields > 0;
-    rowWriters = new UnsafeRowWriter[rows.length];
-
-    for (int i = 0; i < rows.length; ++i) {
-      rows[i] = new UnsafeRow(requestedSchema.getFieldCount());
-      BufferHolder holder = new BufferHolder(rows[i], numVarLenFields * DEFAULT_VAR_LEN_SIZE);
-      rowWriters[i] = new UnsafeRowWriter(holder, requestedSchema.getFieldCount());
     }
   }
 
   /**
-   * Decodes a batch of values into `rows`. This function is the hot path.
-   */
-  private boolean loadBatch() throws IOException {
-    // no more records left
-    if (rowsReturned >= totalRowCount) { return false; }
-    checkEndOfRowGroup();
-
-    int num = (int)Math.min(rows.length, totalCountLoadedSoFar - rowsReturned);
-    rowsReturned += num;
-
-    if (containsVarLenFields) {
-      for (int i = 0; i < rowWriters.length; ++i) {
-        rowWriters[i].holder().reset();
-      }
-    }
-
-    for (int i = 0; i < columnReaders.length; ++i) {
-      switch (columnReaders[i].descriptor.getType()) {
-        case BOOLEAN:
-          decodeBooleanBatch(i, num);
-          break;
-        case INT32:
-          if (originalTypes[i] == OriginalType.DECIMAL) {
-            decodeIntAsDecimalBatch(i, num);
-          } else {
-            decodeIntBatch(i, num);
-          }
-          break;
-        case INT64:
-          Preconditions.checkState(originalTypes[i] == null
-              || originalTypes[i] == OriginalType.DECIMAL,
-              "Unexpected original type: " + originalTypes[i]);
-          decodeLongBatch(i, num);
-          break;
-        case FLOAT:
-          decodeFloatBatch(i, num);
-          break;
-        case DOUBLE:
-          decodeDoubleBatch(i, num);
-          break;
-        case BINARY:
-          decodeBinaryBatch(i, num);
-          break;
-        case FIXED_LEN_BYTE_ARRAY:
-          Preconditions.checkState(originalTypes[i] == OriginalType.DECIMAL,
-              "Unexpected original type: " + originalTypes[i]);
-          decodeFixedLenArrayAsDecimalBatch(i, num);
-          break;
-        case INT96:
-          throw new IOException("Unsupported " + columnReaders[i].descriptor.getType());
-      }
-    }
-
-    numBatched = num;
-    batchIdx = 0;
-
-    // Update the total row lengths if the schema contained variable length. We did not maintain
-    // this as we populated the columns.
-    if (containsVarLenFields) {
-      for (int i = 0; i < numBatched; ++i) {
-        rows[i].setTotalSize(rowWriters[i].holder().totalSize());
-      }
-    }
-
-    return true;
-  }
-
-  private void decodeBooleanBatch(int col, int num) throws IOException {
-    for (int n = 0; n < num; ++n) {
-      if (columnReaders[col].next()) {
-        rows[n].setBoolean(col, columnReaders[col].nextBoolean());
-      } else {
-        rows[n].setNullAt(col);
-      }
-    }
-  }
-
-  private void decodeIntBatch(int col, int num) throws IOException {
-    for (int n = 0; n < num; ++n) {
-      if (columnReaders[col].next()) {
-        rows[n].setInt(col, columnReaders[col].nextInt());
-      } else {
-        rows[n].setNullAt(col);
-      }
-    }
-  }
-
-  private void decodeIntAsDecimalBatch(int col, int num) throws IOException {
-    for (int n = 0; n < num; ++n) {
-      if (columnReaders[col].next()) {
-        // Since this is stored as an INT, it is always a compact decimal. Just set it as a long.
-        rows[n].setLong(col, columnReaders[col].nextInt());
-      } else {
-        rows[n].setNullAt(col);
-      }
-    }
-  }
-
-  private void decodeLongBatch(int col, int num) throws IOException {
-    for (int n = 0; n < num; ++n) {
-      if (columnReaders[col].next()) {
-        rows[n].setLong(col, columnReaders[col].nextLong());
-      } else {
-        rows[n].setNullAt(col);
-      }
-    }
-  }
-
-  private void decodeFloatBatch(int col, int num) throws IOException {
-    for (int n = 0; n < num; ++n) {
-      if (columnReaders[col].next()) {
-        rows[n].setFloat(col, columnReaders[col].nextFloat());
-      } else {
-        rows[n].setNullAt(col);
-      }
-    }
-  }
-
-  private void decodeDoubleBatch(int col, int num) throws IOException {
-    for (int n = 0; n < num; ++n) {
-      if (columnReaders[col].next()) {
-        rows[n].setDouble(col, columnReaders[col].nextDouble());
-      } else {
-        rows[n].setNullAt(col);
-      }
-    }
-  }
-
-  private void decodeBinaryBatch(int col, int num) throws IOException {
-    for (int n = 0; n < num; ++n) {
-      if (columnReaders[col].next()) {
-        ByteBuffer bytes = columnReaders[col].nextBinary().toByteBuffer();
-        int len = bytes.remaining();
-        if (originalTypes[col] == OriginalType.UTF8) {
-          UTF8String str =
-              UTF8String.fromBytes(bytes.array(), bytes.arrayOffset() + bytes.position(), len);
-          rowWriters[n].write(col, str);
-        } else {
-          rowWriters[n].write(col, bytes.array(), bytes.arrayOffset() + bytes.position(), len);
-        }
-        rows[n].setNotNullAt(col);
-      } else {
-        rows[n].setNullAt(col);
-      }
-    }
-  }
-
-  private void decodeFixedLenArrayAsDecimalBatch(int col, int num) throws IOException {
-    PrimitiveType type = requestedSchema.getFields().get(col).asPrimitiveType();
-    int precision = type.getDecimalMetadata().getPrecision();
-    int scale = type.getDecimalMetadata().getScale();
-    Preconditions.checkState(precision <= Decimal.MAX_LONG_DIGITS(),
-        "Unsupported precision.");
-
-    for (int n = 0; n < num; ++n) {
-      if (columnReaders[col].next()) {
-        Binary v = columnReaders[col].nextBinary();
-        // Constructs a `Decimal` with an unscaled `Long` value if possible.
-        long unscaled = CatalystRowConverter.binaryToUnscaledLong(v);
-        rows[n].setDecimal(col, Decimal.apply(unscaled, precision, scale), precision);
-      } else {
-        rows[n].setNullAt(col);
-      }
-    }
-  }
-
-  /**
-   *
    * Decoder to return values from a single column.
    */
-  private final class ColumnReader {
+  private class VectorizedColumnReader {
     /**
      * Total number of values read.
      */
@@ -527,7 +299,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     private final PageReader pageReader;
     private final ColumnDescriptor descriptor;
 
-    public ColumnReader(ColumnDescriptor descriptor, PageReader pageReader)
+    public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader)
         throws IOException {
       this.descriptor = descriptor;
       this.pageReader = pageReader;
@@ -634,7 +406,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
         int num = Math.min(total, leftInPage);
         if (useDictionary) {
           // Read and decode dictionary ids.
-          ColumnVector dictionaryIds = column.reserveDictionaryIds(total);;
+          ColumnVector dictionaryIds = column.reserveDictionaryIds(total);
           defColumn.readIntegers(
               num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
@@ -836,7 +608,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       });
     }
 
-    private void initDataReader(Encoding dataEncoding, byte[] bytes, int offset)throws IOException {
+    private void initDataReader(Encoding dataEncoding, byte[] bytes, int offset) throws IOException {
       this.endOfPageValueCount = valuesRead + pageValueCount;
       if (dataEncoding.usesDictionary()) {
         this.dataColumn = null;
@@ -845,27 +617,18 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
               "could not read page in col " + descriptor +
                   " as the dictionary was missing for encoding " + dataEncoding);
         }
-        if (vectorizedDecode()) {
-          @SuppressWarnings("deprecation")
-          Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
-          if (dataEncoding != plainDict && dataEncoding != Encoding.RLE_DICTIONARY) {
-            throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
-          }
-          this.dataColumn = new VectorizedRleValuesReader();
-        } else {
-          this.dataColumn = dataEncoding.getDictionaryBasedValuesReader(
-              descriptor, VALUES, dictionary);
+        @SuppressWarnings("deprecation")
+        Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
+        if (dataEncoding != plainDict && dataEncoding != Encoding.RLE_DICTIONARY) {
+          throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
         }
+        this.dataColumn = new VectorizedRleValuesReader();
         this.useDictionary = true;
       } else {
-        if (vectorizedDecode()) {
-          if (dataEncoding != Encoding.PLAIN) {
-            throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
-          }
-          this.dataColumn = new VectorizedPlainValuesReader();
-        } else {
-          this.dataColumn = dataEncoding.getValuesReader(descriptor, VALUES);
+        if (dataEncoding != Encoding.PLAIN) {
+          throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
         }
+        this.dataColumn = new VectorizedPlainValuesReader();
         this.useDictionary = false;
       }
 
@@ -882,16 +645,12 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       ValuesReader dlReader;
 
       // Initialize the decoders.
-      if (vectorizedDecode()) {
-        if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
-          throw new NotImplementedException("Unsupported encoding: " + page.getDlEncoding());
-        }
-        int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
-        this.defColumn = new VectorizedRleValuesReader(bitWidth);
-        dlReader = this.defColumn;
-      } else {
-        dlReader = page.getDlEncoding().getValuesReader(descriptor, DEFINITION_LEVEL);
+      if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
+        throw new NotImplementedException("Unsupported encoding: " + page.getDlEncoding());
       }
+      int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
+      this.defColumn = new VectorizedRleValuesReader(bitWidth);
+      dlReader = this.defColumn;
       this.repetitionLevelColumn = new ValuesReaderIntIterator(rlReader);
       this.definitionLevelColumn = new ValuesReaderIntIterator(dlReader);
       try {
@@ -911,16 +670,11 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       this.repetitionLevelColumn = createRLEIterator(descriptor.getMaxRepetitionLevel(),
           page.getRepetitionLevels(), descriptor);
 
-      if (vectorizedDecode()) {
-        int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
-        this.defColumn = new VectorizedRleValuesReader(bitWidth);
-        this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumn);
-        this.defColumn.initFromBuffer(
-            this.pageValueCount, page.getDefinitionLevels().toByteArray());
-      } else {
-        this.definitionLevelColumn = createRLEIterator(descriptor.getMaxDefinitionLevel(),
-            page.getDefinitionLevels(), descriptor);
-      }
+      int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
+      this.defColumn = new VectorizedRleValuesReader(bitWidth);
+      this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumn);
+      this.defColumn.initFromBuffer(
+          this.pageValueCount, page.getDefinitionLevels().toByteArray());
       try {
         initDataReader(page.getDataEncoding(), page.getData().toByteArray(), 0);
       } catch (IOException e) {
@@ -937,9 +691,10 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
           + rowsReturned + " out of " + totalRowCount);
     }
     List<ColumnDescriptor> columns = requestedSchema.getColumns();
-    columnReaders = new ColumnReader[columns.size()];
+    columnReaders = new VectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
-      columnReaders[i] = new ColumnReader(columns.get(i), pages.getPageReader(columns.get(i)));
+      columnReaders[i] = new VectorizedColumnReader(columns.get(i),
+          pages.getPageReader(columns.get(i)));
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }
