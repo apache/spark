@@ -2166,7 +2166,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
       sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"))
     checkAnswer(
-      sql("SELECT * FROM testData2 SORT BY 1 DESC, 2 ASC"),
+      sql("SELECT * FROM testData2 SORT BY 1 DESC, 2"),
       sql("SELECT * FROM testData2 SORT BY a DESC, b ASC"))
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY 1 ASC, b ASC"),
