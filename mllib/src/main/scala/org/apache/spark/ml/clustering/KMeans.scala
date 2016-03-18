@@ -150,8 +150,7 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   def summary: KMeansSummary = trainingSummary.getOrElse {
     throw new SparkException(
-      s"No training summary available for the ${this.getClass.getSimpleName}",
-      new RuntimeException())
+      s"No training summary available for the ${this.getClass.getSimpleName}")
   }
 }
 

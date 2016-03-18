@@ -398,9 +398,7 @@ class LinearRegressionModel private[ml] (
    */
   @Since("1.5.0")
   def summary: LinearRegressionTrainingSummary = trainingSummary.getOrElse {
-    throw new SparkException(
-      "No training summary available for this LinearRegressionModel",
-      new RuntimeException())
+    throw new SparkException("No training summary available for this LinearRegressionModel")
   }
 
   private[regression] def setSummary(summary: LinearRegressionTrainingSummary): this.type = {

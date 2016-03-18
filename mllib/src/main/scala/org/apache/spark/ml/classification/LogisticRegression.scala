@@ -509,9 +509,7 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("1.5.0")
   def summary: LogisticRegressionTrainingSummary = trainingSummary.getOrElse {
-    throw new SparkException(
-      "No training summary available for this LogisticRegressionModel",
-      new RuntimeException())
+    throw new SparkException("No training summary available for this LogisticRegressionModel")
   }
 
   /**
