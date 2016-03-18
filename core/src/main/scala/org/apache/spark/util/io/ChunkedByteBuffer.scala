@@ -162,7 +162,6 @@ private class ChunkedByteBufferInputStream(
 
   override def read(): Int = {
     if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
-      StorageUtils.dispose(currentChunk)
       currentChunk = chunks.next()
     }
     if (currentChunk != null && currentChunk.hasRemaining) {
@@ -175,7 +174,6 @@ private class ChunkedByteBufferInputStream(
 
   override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
     if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
-      StorageUtils.dispose(currentChunk)
       currentChunk = chunks.next()
     }
     if (currentChunk != null && currentChunk.hasRemaining) {
@@ -206,10 +204,8 @@ private class ChunkedByteBufferInputStream(
   }
 
   override def close(): Unit = {
-    if (currentChunk != null) {
-      if (dispose) {
-        chunkedByteBuffer.dispose()
-      }
+    if (chunkedByteBuffer != null && dispose) {
+      chunkedByteBuffer.dispose()
     }
     chunkedByteBuffer = null
     chunks = null

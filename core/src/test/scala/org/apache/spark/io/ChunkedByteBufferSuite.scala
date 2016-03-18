@@ -90,6 +90,4 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     assert(bytesFromStream === bytes1.array() ++ bytes2.array())
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
   }
-
-  // TODO(josh): figure out how to test the dispose=true case.
 }
