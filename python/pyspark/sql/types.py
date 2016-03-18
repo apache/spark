@@ -593,7 +593,7 @@ class WrappedJStructType(StructType):
     @property
     def _needSerializeAnyField(self):
         if not hasattr(self, '_cachedNeedSerializeAnyField'):
-            self._cachedNeedSerializeAnyField = any(f.needConversion() for f in self.fields)
+            self._cachedNeedSerializeAnyField = any(t.needConversion() for t in self.types)
         return self._cachedNeedSerializeAnyField
 
     @property
@@ -609,6 +609,12 @@ class WrappedJStructType(StructType):
         java_fields = list(self._jstructtype.fields())
         return map(lambda f: (str(f.name()),
                               _parse_datatype_json_string(f.dataType().json()).simpleString()),
+                   java_fields)
+
+    @property
+    def types(self):
+        java_fields = list(self._jstructtype.fields())
+        return map(lambda f: _parse_datatype_json_string(f.dataType().json()),
                    java_fields)
 
     @property
@@ -647,21 +653,23 @@ class WrappedJStructType(StructType):
         Return a serilizable toInternal function that doesn't depend on the Java object.
         """
         names = list(self.names)
-        fields = list(self.fields)
+        java_fields = list(self._jstructtype.fields())
+        types = list(self.types)
         needSerializeAnyField = self._needSerializeAnyField
 
-        def converter(obj):
-            if needSerializeAnyField:
+        if needSerializeAnyField:
+            def converter(obj):
                 if isinstance(obj, dict):
-                    return tuple(f.toInternal(obj.get(n)) for n, f in zip(names, fields))
+                    return tuple(t.toInternal(obj.get(n)) for n, t in zip(names, types))
                 elif isinstance(obj, (tuple, list)):
-                    return tuple(f.toInternal(v) for f, v in zip(fields, obj))
+                    return tuple(d.toInternal(v) for t, v in zip(types, obj))
                 elif hasattr(obj, "__dict__"):
                     d = obj.__dict__
-                    return tuple(f.toInternal(d.get(n)) for n, f in zip(names, fields))
+                    return tuple(t.toInternal(d.get(n)) for n, t in zip(names, types))
                 else:
                     raise ValueError("Unexpected tuple %r with StructType" % obj)
-            else:
+        else:
+            def converter(obj):
                 if isinstance(obj, dict):
                     return tuple(obj.get(n) for n in names)
                 elif isinstance(obj, (list, tuple)):
@@ -671,6 +679,7 @@ class WrappedJStructType(StructType):
                     return tuple(d.get(n) for n in names)
                 else:
                     raise ValueError("Unexpected tuple %r with StructType" % obj)
+
         return converter
 
     def toInternal(self, obj):
@@ -709,13 +718,6 @@ class WrappedJStructType(StructType):
         else:
             values = obj
         return _create_row(self.names, values)
-
-    def unWrap(self):
-        """Convert the wrapped JStructType into a regular StructType.
-        Note: this serializes the data to JSON and may fail for large
-        schemas.
-        """
-        return _parse_datatype_json_string(self.json())
 
 
 class UserDefinedType(DataType):
