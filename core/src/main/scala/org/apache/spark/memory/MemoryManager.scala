@@ -19,10 +19,17 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
+<<<<<<< HEAD
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.memory.MemoryStore
+=======
+import scala.collection.mutable
+
+import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
 
@@ -66,6 +73,11 @@ private[spark] abstract class MemoryManager(
   final def setMemoryStore(store: MemoryStore): Unit = synchronized {
     storageMemoryPool.setMemoryStore(store)
   }
+<<<<<<< HEAD
+=======
+
+  // TODO: avoid passing evicted blocks around to simplify method signatures (SPARK-10985)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
@@ -82,7 +94,14 @@ private[spark] abstract class MemoryManager(
    *
    * @return whether all N bytes were successfully granted.
    */
+<<<<<<< HEAD
   def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean
+=======
+  def acquireUnrollMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Try to acquire up to `numBytes` of execution memory for the current task and return the

@@ -31,7 +31,11 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
+<<<<<<< HEAD
 import org.apache.spark.annotation.{DeveloperApi, Since}
+=======
+import org.apache.spark.annotation.{Since, DeveloperApi}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
@@ -759,6 +763,26 @@ abstract class RDD[T: ClassTag](
    * [performance] Spark's internal mapPartitions method which skips closure cleaning. It is a
    * performance API to be used carefully only if we are sure that the RDD elements are
    * serializable and don't require closure cleaning.
+<<<<<<< HEAD
+=======
+   *
+   * @param preservesPartitioning indicates whether the input function preserves the partitioner,
+   * which should be `false` unless this is a pair RDD and the input function doesn't modify
+   * the keys.
+   */
+  private[spark] def mapPartitionsInternal[U: ClassTag](
+      f: Iterator[T] => Iterator[U],
+      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+    new MapPartitionsRDD(
+      this,
+      (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter),
+      preservesPartitioning)
+  }
+
+  /**
+   * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
+   * of the original partition.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    *
    * @param preservesPartitioning indicates whether the input function preserves the partitioner,
    * which should be `false` unless this is a pair RDD and the input function doesn't modify

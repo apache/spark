@@ -21,13 +21,24 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+<<<<<<< HEAD
 import org.apache.spark.Partition
+=======
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.StringUtils
+
+import org.apache.spark.{Logging, Partition}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
+=======
+import org.apache.spark.sql.catalyst.SqlParser
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
@@ -122,6 +133,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * @since 1.4.0
    */
+<<<<<<< HEAD
   def load(): DataFrame = {
     val dataSource =
       DataSource(
@@ -130,6 +142,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         className = source,
         options = extraOptions.toMap)
     Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
+=======
+  // TODO: Remove this one in Spark 2.0.
+  def load(path: String): DataFrame = {
+    option("path", path).load()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**
@@ -150,6 +167,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
+<<<<<<< HEAD
     if (paths.isEmpty) {
       sqlContext.emptyDataFrame
     } else {
@@ -186,6 +204,9 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def stream(path: String): DataFrame = {
     option("path", path).stream()
+=======
+    option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**
@@ -303,16 +324,22 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
+<<<<<<< HEAD
    * <li>`floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal
    * type</li>
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
    * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
    * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
    * </li>
    * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
    * (e.g. 00012)</li>
+<<<<<<< HEAD
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    *
    * @since 1.6.0
    */
@@ -341,6 +368,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
+<<<<<<< HEAD
     val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
     val schema = userSpecifiedSchema.getOrElse {
       InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)
@@ -355,6 +383,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
           schema,
           sqlContext.conf.columnNameOfCorruptRecord,
           parsedOptions))(sqlContext))
+=======
+    sqlContext.baseRelationToDataFrame(
+      new JSONRelation(
+        Some(jsonRDD),
+        maybeDataSchema = userSpecifiedSchema,
+        maybePartitionSpec = None,
+        userDefinedPartitionColumns = None,
+        parameters = extraOptions.toMap)(sqlContext)
+    )
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**
@@ -394,6 +432,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
+<<<<<<< HEAD
     Dataset.newDataFrame(sqlContext,
       sqlContext.sessionState.catalog.lookupRelation(
         sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName)))
@@ -404,6 +443,15 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * contains a single string column named "value".
    *
    * Each line in the text file is a new row in the resulting Dataset. For example:
+=======
+    DataFrame(sqlContext,
+      sqlContext.catalog.lookupRelation(SqlParser.parseTableIdentifier(tableName)))
+  }
+
+  /**
+   * Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+   * Each line in the text file is a new row in the resulting DataFrame. For example:
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * {{{
    *   // Scala:
    *   sqlContext.read.text("/path/to/spark/README.md")
@@ -413,12 +461,19 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * }}}
    *
    * @param paths input path
+<<<<<<< HEAD
    * @since 2.0.0
    */
   @scala.annotation.varargs
   def text(paths: String*): Dataset[String] = {
     format("text").load(paths : _*).as[String](sqlContext.implicits.newStringEncoder)
   }
+=======
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

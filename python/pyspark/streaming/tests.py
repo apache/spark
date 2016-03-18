@@ -403,6 +403,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
         expected = [[('k', v)] for v in expected]
         self._test_func(input, func, expected)
 
+<<<<<<< HEAD
     def test_update_state_by_key_initial_rdd(self):
 
         def updater(vs, s):
@@ -423,6 +424,8 @@ class BasicOperationTests(PySparkStreamingTestCase):
         expected = [[('k', v)] for v in expected]
         self._test_func(input, func, expected)
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     def test_failed_func(self):
         # Test failure in
         # TransformFunction.apply(rdd: Option[RDD[_]], time: Time)
@@ -1182,6 +1185,86 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         sendData = {"a": 1, "b": 2, "c": 3}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
                        "auto.offset.reset": "smallest"}
+<<<<<<< HEAD
+=======
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        offsetRanges = []
+
+        def transformWithOffsetRanges(rdd):
+            for o in rdd.offsetRanges():
+                offsetRanges.append(o)
+            return rdd
+
+        self.ssc.stop(False)
+        self.ssc = None
+        tmpdir = "checkpoint-test-%d" % random.randint(0, 10000)
+
+        def setup():
+            ssc = StreamingContext(self.sc, 0.5)
+            ssc.checkpoint(tmpdir)
+            stream = KafkaUtils.createDirectStream(ssc, [topic], kafkaParams)
+            stream.transform(transformWithOffsetRanges).count().pprint()
+            return ssc
+
+        try:
+            ssc1 = StreamingContext.getOrCreate(tmpdir, setup)
+            ssc1.start()
+            self.wait_for(offsetRanges, 1)
+            self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+            # To make sure some checkpoint is written
+            time.sleep(3)
+            ssc1.stop(False)
+            ssc1 = None
+
+            # Restart again to make sure the checkpoint is recovered correctly
+            ssc2 = StreamingContext.getOrCreate(tmpdir, setup)
+            ssc2.start()
+            ssc2.awaitTermination(3)
+            ssc2.stop(stopSparkContext=False, stopGraceFully=True)
+            ssc2 = None
+        finally:
+            shutil.rmtree(tmpdir)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_rdd_message_handler(self):
+        """Test Python direct Kafka RDD MessageHandler."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 1, "c": 2}
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        def getKeyAndDoubleMessage(m):
+            return m and (m.key, m.message * 2)
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges,
+                                   messageHandler=getKeyAndDoubleMessage)
+        self._validateRddResult({"aa": 1, "bb": 1, "cc": 2}, rdd)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_message_handler(self):
+        """Test the Python direct Kafka stream MessageHandler."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        def getKeyAndDoubleMessage(m):
+            return m and (m.key, m.message * 2)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams,
+                                               messageHandler=getKeyAndDoubleMessage)
+        self._validateStreamResult({"aa": 1, "bb": 2, "cc": 3}, stream)
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
@@ -1379,7 +1462,12 @@ if __name__ == "__main__":
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
+<<<<<<< HEAD
                  KafkaStreamTests, StreamingListenerTests]
+=======
+                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests, MQTTStreamTests,
+                 StreamingListenerTests]
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)

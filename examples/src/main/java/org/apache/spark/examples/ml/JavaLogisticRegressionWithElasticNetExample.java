@@ -22,8 +22,12 @@ import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.SQLContext;
 // $example off$
 
@@ -35,7 +39,11 @@ public class JavaLogisticRegressionWithElasticNetExample {
 
     // $example on$
     // Load training data
+<<<<<<< HEAD
     Dataset<Row> training = sqlContext.read().format("libsvm")
+=======
+    DataFrame training = sqlContext.read().format("libsvm")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       .load("data/mllib/sample_libsvm_data.txt");
 
     LogisticRegression lr = new LogisticRegression()

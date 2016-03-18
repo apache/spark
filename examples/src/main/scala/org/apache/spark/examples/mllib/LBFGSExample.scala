@@ -18,7 +18,10 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+<<<<<<< HEAD
 import org.apache.spark.{SparkConf, SparkContext}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 // $example on$
 import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
@@ -27,6 +30,11 @@ import org.apache.spark.mllib.optimization.{LBFGS, LogisticGradient, SquaredL2Up
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
 
+<<<<<<< HEAD
+=======
+import org.apache.spark.{SparkConf, SparkContext}
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 object LBFGSExample {
 
   def main(args: Array[String]): Unit = {

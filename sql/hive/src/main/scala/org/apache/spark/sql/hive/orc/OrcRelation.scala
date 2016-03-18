@@ -217,6 +217,88 @@ private[orc] class OrcOutputWriter(
   }
 }
 
+<<<<<<< HEAD
+=======
+private[sql] class OrcRelation(
+    override val paths: Array[String],
+    maybeDataSchema: Option[StructType],
+    maybePartitionSpec: Option[PartitionSpec],
+    override val userDefinedPartitionColumns: Option[StructType],
+    parameters: Map[String, String])(
+    @transient val sqlContext: SQLContext)
+  extends HadoopFsRelation(maybePartitionSpec, parameters)
+  with Logging {
+
+  private[sql] def this(
+      paths: Array[String],
+      maybeDataSchema: Option[StructType],
+      maybePartitionSpec: Option[PartitionSpec],
+      parameters: Map[String, String])(
+      sqlContext: SQLContext) = {
+    this(
+      paths,
+      maybeDataSchema,
+      maybePartitionSpec,
+      maybePartitionSpec.map(_.partitionColumns),
+      parameters)(sqlContext)
+  }
+
+  override val dataSchema: StructType = maybeDataSchema.getOrElse {
+    OrcFileOperator.readSchema(
+      paths.head, Some(sqlContext.sparkContext.hadoopConfiguration))
+  }
+
+  override def needConversion: Boolean = false
+
+  override def equals(other: Any): Boolean = other match {
+    case that: OrcRelation =>
+      paths.toSet == that.paths.toSet &&
+        dataSchema == that.dataSchema &&
+        schema == that.schema &&
+        partitionColumns == that.partitionColumns
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Objects.hashCode(
+      paths.toSet,
+      dataSchema,
+      schema,
+      partitionColumns)
+  }
+
+  override private[sql] def buildInternalScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputPaths: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+    val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
+    OrcTableScan(output, this, filters, inputPaths).execute()
+  }
+
+  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+    SparkHadoopUtil.get.getConfigurationFromJobContext(job) match {
+      case conf: JobConf =>
+        conf.setOutputFormat(classOf[OrcOutputFormat])
+      case conf =>
+        conf.setClass(
+          "mapred.output.format.class",
+          classOf[OrcOutputFormat],
+          classOf[MapRedOutputFormat[_, _]])
+    }
+
+    new OutputWriterFactory {
+      override def newInstance(
+          path: String,
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new OrcOutputWriter(path, dataSchema, context)
+      }
+    }
+  }
+}
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 private[orc] case class OrcTableScan(
     @transient sqlContext: SQLContext,
     attributes: Seq[Attribute],

@@ -79,7 +79,11 @@ object DataFrameExample {
     labelSummary.show()
 
     // Convert features column to an RDD of vectors.
+<<<<<<< HEAD
     val features = df.select("features").rdd.map { case Row(v: Vector) => v }
+=======
+    val features = df.select("features").map { case Row(v: Vector) => v }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val featureSummary = features.aggregate(new MultivariateOnlineSummarizer())(
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))

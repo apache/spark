@@ -19,7 +19,11 @@ package org.apache.spark.mllib.linalg
 
 import scala.util.Random
 
+<<<<<<< HEAD
 import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
+=======
+import breeze.linalg.{DenseMatrix => BDM, squaredDistance => breezeSquaredDistance}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
 import org.apache.spark.{SparkException, SparkFunSuite}

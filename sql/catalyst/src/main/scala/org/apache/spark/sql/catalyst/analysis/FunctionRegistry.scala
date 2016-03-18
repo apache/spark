@@ -247,6 +247,7 @@ object FunctionRegistry {
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[CurrentTimestamp]("now"),
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
@@ -287,6 +288,7 @@ object FunctionRegistry {
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
+<<<<<<< HEAD
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
 
     // grouping sets
@@ -304,6 +306,9 @@ object FunctionRegistry {
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
     expression[PercentRank]("percent_rank")
+=======
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   )
 
   val builtin: SimpleFunctionRegistry = {

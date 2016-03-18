@@ -31,7 +31,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
+import org.apache.spark.streaming.util.{BatchedWriteAheadLog, WriteAheadLog, WriteAheadLogUtils}
 import org.apache.spark.util.{Clock, Utils}
 
 /** Trait representing any event in the ReceivedBlockTracker that updates its state. */
@@ -167,7 +167,11 @@ private[streaming] class ReceivedBlockTracker(
   def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = synchronized {
     require(cleanupThreshTime.milliseconds < clock.getTimeMillis())
     val timesToCleanup = timeToAllocatedBlocks.keys.filter { _ < cleanupThreshTime }.toSeq
+<<<<<<< HEAD
     logInfo(s"Deleting batches: ${timesToCleanup.mkString(" ")}")
+=======
+    logInfo("Deleting batches " + timesToCleanup)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     if (writeToLog(BatchCleanupEvent(timesToCleanup))) {
       timeToAllocatedBlocks --= timesToCleanup
       writeAheadLogOption.foreach(_.clean(cleanupThreshTime.milliseconds, waitForCompletion))

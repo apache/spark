@@ -33,10 +33,15 @@ import com.google.common.io.Files
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+<<<<<<< HEAD
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
+=======
+import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -743,6 +748,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.encodeFileNameToURIRawPath("abc:xyz") === "abc:xyz")
   }
 
+<<<<<<< HEAD
+=======
+  test("encodeFileNameToURIRawPath") {
+    assert(Utils.encodeFileNameToURIRawPath("abc") === "abc")
+    assert(Utils.encodeFileNameToURIRawPath("abc xyz") === "abc%20xyz")
+    assert(Utils.encodeFileNameToURIRawPath("abc:xyz") === "abc:xyz")
+  }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("decodeFileNameInURI") {
     assert(Utils.decodeFileNameInURI(new URI("files:///abc/xyz")) === "xyz")
     assert(Utils.decodeFileNameInURI(new URI("files:///abc")) === "abc")
@@ -788,10 +802,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         signal(pid, "SIGKILL")
       }
 
+<<<<<<< HEAD
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
       var majorVersion = versionParts(0).toInt
       if (majorVersion == 1) majorVersion = versionParts(1).toInt
       if (majorVersion >= 8) {
+=======
+      val v: String = System.getProperty("java.version")
+      if (v >= "1.8.0") {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         // Java8 added a way to forcibly terminate a process. We'll make sure that works by
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
@@ -802,7 +821,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
              |trap "" SIGTERM
              |sleep 10
            """.stripMargin
+<<<<<<< HEAD
         Files.write(cmd.getBytes(StandardCharsets.UTF_8), file)
+=======
+        Files.write(cmd.getBytes(), file)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         file.getAbsoluteFile.setExecutable(true)
 
         val process = new ProcessBuilder(file.getAbsolutePath).start()

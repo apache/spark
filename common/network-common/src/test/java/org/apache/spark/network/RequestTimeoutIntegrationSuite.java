@@ -94,7 +94,11 @@ public class RequestTimeoutIntegrationSuite {
           ByteBuffer message,
           RpcResponseCallback callback) {
         try {
+<<<<<<< HEAD:common/network-common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
           semaphore.acquire();
+=======
+          semaphore.tryAcquire(FOREVER, TimeUnit.MILLISECONDS);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
           callback.onSuccess(ByteBuffer.allocate(responseSize));
         } catch (InterruptedException e) {
           // do nothing
@@ -114,6 +118,7 @@ public class RequestTimeoutIntegrationSuite {
 
     // First completes quickly (semaphore starts at 1).
     TestCallback callback0 = new TestCallback();
+<<<<<<< HEAD:common/network-common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
     client.sendRpc(ByteBuffer.allocate(0), callback0);
     callback0.latch.await();
     assertEquals(responseSize, callback0.successLength);
@@ -125,6 +130,22 @@ public class RequestTimeoutIntegrationSuite {
     assertNotNull(callback1.failure);
     assertTrue(callback1.failure instanceof IOException);
 
+=======
+    synchronized (callback0) {
+      client.sendRpc(ByteBuffer.allocate(0), callback0);
+      callback0.wait(FOREVER);
+      assertEquals(responseSize, callback0.successLength);
+    }
+
+    // Second times out after 2 seconds, with slack. Must be IOException.
+    TestCallback callback1 = new TestCallback();
+    synchronized (callback1) {
+      client.sendRpc(ByteBuffer.allocate(0), callback1);
+      callback1.wait(4 * 1000);
+      assert (callback1.failure != null);
+      assert (callback1.failure instanceof IOException);
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
     semaphore.release();
   }
 
@@ -141,7 +162,11 @@ public class RequestTimeoutIntegrationSuite {
           ByteBuffer message,
           RpcResponseCallback callback) {
         try {
+<<<<<<< HEAD:common/network-common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
           semaphore.acquire();
+=======
+          semaphore.tryAcquire(FOREVER, TimeUnit.MILLISECONDS);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
           callback.onSuccess(ByteBuffer.allocate(responseSize));
         } catch (InterruptedException e) {
           // do nothing
@@ -162,20 +187,38 @@ public class RequestTimeoutIntegrationSuite {
     TransportClient client0 =
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     TestCallback callback0 = new TestCallback();
+<<<<<<< HEAD:common/network-common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
     client0.sendRpc(ByteBuffer.allocate(0), callback0);
     callback0.latch.await();
     assertTrue(callback0.failure instanceof IOException);
     assertFalse(client0.isActive());
+=======
+    synchronized (callback0) {
+      client0.sendRpc(ByteBuffer.allocate(0), callback0);
+      callback0.wait(FOREVER);
+      assert (callback0.failure instanceof IOException);
+      assert (!client0.isActive());
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
 
     // Increment the semaphore and the second request should succeed quickly.
     semaphore.release(2);
     TransportClient client1 =
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     TestCallback callback1 = new TestCallback();
+<<<<<<< HEAD:common/network-common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
     client1.sendRpc(ByteBuffer.allocate(0), callback1);
     callback1.latch.await();
     assertEquals(responseSize, callback1.successLength);
     assertNull(callback1.failure);
+=======
+    synchronized (callback1) {
+      client1.sendRpc(ByteBuffer.allocate(0), callback1);
+      callback1.wait(FOREVER);
+      assertEquals(responseSize, callback1.successLength);
+      assertNull(callback1.failure);
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
   }
 
   // The timeout is relative to the LAST request sent, which is kinda weird, but still.
@@ -220,11 +263,21 @@ public class RequestTimeoutIntegrationSuite {
     client.fetchChunk(0, 1, callback1);
     Uninterruptibles.sleepUninterruptibly(1200, TimeUnit.MILLISECONDS);
 
+<<<<<<< HEAD:common/network-common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
     // not complete yet, but should complete soon
     assertEquals(-1, callback0.successLength);
     assertNull(callback0.failure);
     callback0.latch.await(2, TimeUnit.SECONDS);
     assertTrue(callback0.failure instanceof IOException);
+=======
+    synchronized (callback0) {
+      // not complete yet, but should complete soon
+      assertEquals(-1, callback0.successLength);
+      assertNull(callback0.failure);
+      callback0.wait(2 * 1000);
+      assertTrue(callback0.failure instanceof IOException);
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
 
     // failed at same time as previous
     assertTrue(callback1.failure instanceof IOException);
@@ -242,8 +295,15 @@ public class RequestTimeoutIntegrationSuite {
 
     @Override
     public void onSuccess(ByteBuffer response) {
+<<<<<<< HEAD:common/network-common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
       successLength = response.remaining();
       latch.countDown();
+=======
+      synchronized(this) {
+        successLength = response.remaining();
+        this.notifyAll();
+      }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
     }
 
     @Override
@@ -254,12 +314,22 @@ public class RequestTimeoutIntegrationSuite {
 
     @Override
     public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
+<<<<<<< HEAD:common/network-common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
       try {
         successLength = buffer.nioByteBuffer().remaining();
       } catch (IOException e) {
         // weird
       } finally {
         latch.countDown();
+=======
+      synchronized(this) {
+        try {
+          successLength = buffer.nioByteBuffer().remaining();
+          this.notifyAll();
+        } catch (IOException e) {
+          // weird
+        }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/test/java/org/apache/spark/network/RequestTimeoutIntegrationSuite.java
       }
     }
 

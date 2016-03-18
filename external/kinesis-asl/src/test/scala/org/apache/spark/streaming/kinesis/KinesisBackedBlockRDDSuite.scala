@@ -23,7 +23,11 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkExcept
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 
 abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
+<<<<<<< HEAD:external/kinesis-asl/src/test/scala/org/apache/spark/streaming/kinesis/KinesisBackedBlockRDDSuite.scala
   extends KinesisFunSuite with BeforeAndAfterEach with LocalSparkContext {
+=======
+  extends KinesisFunSuite with BeforeAndAfterAll {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:extras/kinesis-asl/src/test/scala/org/apache/spark/streaming/kinesis/KinesisBackedBlockRDDSuite.scala
 
   private val testData = 1 to 8
 

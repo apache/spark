@@ -112,6 +112,7 @@ class OneHotEncoderSuite
       .setDropLast(false)
     testDefaultReadWrite(t)
   }
+<<<<<<< HEAD
 
   test("OneHotEncoder with varying types") {
     val df = stringIndexed()
@@ -140,4 +141,6 @@ class OneHotEncoderSuite
       assert(output === expected)
     }
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

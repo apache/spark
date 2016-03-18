@@ -22,7 +22,11 @@ import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
 
 import scopt.OptionParser
 
+<<<<<<< HEAD
 import org.apache.spark.{SparkConf, SparkContext}
+=======
+import org.apache.spark.{SparkContext, SparkConf}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 // $example on$
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}

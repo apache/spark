@@ -20,7 +20,10 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
+<<<<<<< HEAD
 import org.apache.spark.mllib.linalg.Vectors
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class BinaryClassificationEvaluatorSuite
@@ -37,6 +40,7 @@ class BinaryClassificationEvaluatorSuite
       .setMetricName("areaUnderPR")
     testDefaultReadWrite(evaluator)
   }
+<<<<<<< HEAD
 
   test("should accept both vector and double raw prediction col") {
     val evaluator = new BinaryClassificationEvaluator()
@@ -68,4 +72,6 @@ class BinaryClassificationEvaluatorSuite
       "equal to one of the following types: [DoubleType, ")
     assert(thrown.getMessage.replace("\n", "") contains "but was actually of type StringType.")
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

@@ -17,6 +17,7 @@
 
 // scalastyle:off println
 package org.apache.spark.examples.ml
+<<<<<<< HEAD
 
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
@@ -28,6 +29,17 @@ import org.apache.spark.ml.regression.DecisionTreeRegressor
 // $example off$
 import org.apache.spark.sql.SQLContext
 
+=======
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.regression.DecisionTreeRegressor
+import org.apache.spark.ml.regression.DecisionTreeRegressionModel
+import org.apache.spark.ml.feature.VectorIndexer
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+// $example off$
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 object DecisionTreeRegressionExample {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("DecisionTreeRegressionExample")

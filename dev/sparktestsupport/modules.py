@@ -376,6 +376,19 @@ docs = Module(
 
 build = Module(
     name="build",
+<<<<<<< HEAD
+=======
+    dependencies=[],
+    source_file_regexes=[
+        ".*pom.xml",
+        "dev/test-dependencies.sh",
+    ],
+    should_run_build_tests=True
+)
+
+ec2 = Module(
+    name="ec2",
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     dependencies=[],
     source_file_regexes=[
         ".*pom.xml",

@@ -29,7 +29,12 @@ import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
+<<<<<<< HEAD
 import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator, Utils}
+=======
+import org.apache.spark.unsafe.memory.MemoryLocation
+import org.apache.spark.util.{SizeEstimator, KnownSizeEstimation, Utils}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.util.collection.CompactBuffer
 
 /**

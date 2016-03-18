@@ -67,7 +67,11 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   private <T1, T2> Tuple2<T1, T2> tuple2(T1 t1, T2 t2) {
+<<<<<<< HEAD
     return new Tuple2<>(t1, t2);
+=======
+    return new Tuple2<T1, T2>(t1, t2);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   @Test
@@ -111,24 +115,42 @@ public class JavaDatasetSuite implements Serializable {
 
     Dataset<String> parMapped = ds.mapPartitions(new MapPartitionsFunction<String, String>() {
       @Override
+<<<<<<< HEAD
       public Iterator<String> call(Iterator<String> it) {
         List<String> ls = new LinkedList<>();
         while (it.hasNext()) {
           ls.add(it.next().toUpperCase(Locale.ENGLISH));
         }
         return ls.iterator();
+=======
+      public Iterable<String> call(Iterator<String> it) throws Exception {
+        List<String> ls = new LinkedList<String>();
+        while (it.hasNext()) {
+          ls.add(it.next().toUpperCase());
+        }
+        return ls;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
     }, Encoders.STRING());
     Assert.assertEquals(Arrays.asList("HELLO", "WORLD"), parMapped.collectAsList());
 
     Dataset<String> flatMapped = ds.flatMap(new FlatMapFunction<String, String>() {
       @Override
+<<<<<<< HEAD
       public Iterator<String> call(String s) {
         List<String> ls = new LinkedList<>();
         for (char c : s.toCharArray()) {
           ls.add(String.valueOf(c));
         }
         return ls.iterator();
+=======
+      public Iterable<String> call(String s) throws Exception {
+        List<String> ls = new LinkedList<String>();
+        for (char c : s.toCharArray()) {
+          ls.add(String.valueOf(c));
+        }
+        return ls;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
     }, Encoders.STRING());
     Assert.assertEquals(
@@ -169,7 +191,11 @@ public class JavaDatasetSuite implements Serializable {
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+<<<<<<< HEAD
     GroupedDataset<Integer, String> grouped = ds.groupByKey(new MapFunction<String, Integer>() {
+=======
+    GroupedDataset<Integer, String> grouped = ds.groupBy(new MapFunction<String, Integer>() {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       @Override
       public Integer call(String v) throws Exception {
         return v.length();
@@ -187,22 +213,38 @@ public class JavaDatasetSuite implements Serializable {
       }
     }, Encoders.STRING());
 
+<<<<<<< HEAD
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
+=======
+    Assert.assertEquals(Arrays.asList("1a", "3foobar"), mapped.collectAsList());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     Dataset<String> flatMapped = grouped.flatMapGroups(
       new FlatMapGroupsFunction<Integer, String, String>() {
         @Override
+<<<<<<< HEAD
         public Iterator<String> call(Integer key, Iterator<String> values) {
+=======
+        public Iterable<String> call(Integer key, Iterator<String> values) throws Exception {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           StringBuilder sb = new StringBuilder(key.toString());
           while (values.hasNext()) {
             sb.append(values.next());
           }
+<<<<<<< HEAD
           return Collections.singletonList(sb.toString()).iterator();
+=======
+          return Collections.singletonList(sb.toString());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         }
       },
       Encoders.STRING());
 
+<<<<<<< HEAD
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped.collectAsList()));
+=======
+    Assert.assertEquals(Arrays.asList("1a", "3foobar"), flatMapped.collectAsList());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     Dataset<Tuple2<Integer, String>> reduced = grouped.reduce(new ReduceFunction<String>() {
       @Override
@@ -212,12 +254,21 @@ public class JavaDatasetSuite implements Serializable {
     });
 
     Assert.assertEquals(
+<<<<<<< HEAD
       asSet(tuple2(1, "a"), tuple2(3, "foobar")),
       toSet(reduced.collectAsList()));
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT());
     GroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(new MapFunction<Integer, Integer>() {
+=======
+      Arrays.asList(tuple2(1, "a"), tuple2(3, "foobar")),
+      reduced.collectAsList());
+
+    List<Integer> data2 = Arrays.asList(2, 6, 10);
+    Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT());
+    GroupedDataset<Integer, Integer> grouped2 = ds2.groupBy(new MapFunction<Integer, Integer>() {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       @Override
       public Integer call(Integer v) throws Exception {
         return v / 2;
@@ -228,7 +279,14 @@ public class JavaDatasetSuite implements Serializable {
       grouped2,
       new CoGroupFunction<Integer, String, Integer, String>() {
         @Override
+<<<<<<< HEAD
         public Iterator<String> call(Integer key, Iterator<String> left, Iterator<Integer> right) {
+=======
+        public Iterable<String> call(
+          Integer key,
+          Iterator<String> left,
+          Iterator<Integer> right) throws Exception {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           StringBuilder sb = new StringBuilder(key.toString());
           while (left.hasNext()) {
             sb.append(left.next());
@@ -237,12 +295,20 @@ public class JavaDatasetSuite implements Serializable {
           while (right.hasNext()) {
             sb.append(right.next());
           }
+<<<<<<< HEAD
           return Collections.singletonList(sb.toString()).iterator();
+=======
+          return Collections.singletonList(sb.toString());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         }
       },
       Encoders.STRING());
 
+<<<<<<< HEAD
     Assert.assertEquals(asSet("1a#2", "3foobar#6", "5#10"), toSet(cogrouped.collectAsList()));
+=======
+    Assert.assertEquals(Arrays.asList("1a#2", "3foobar#6", "5#10"), cogrouped.collectAsList());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   @Test
@@ -250,7 +316,11 @@ public class JavaDatasetSuite implements Serializable {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
     GroupedDataset<Integer, String> grouped =
+<<<<<<< HEAD
       ds.groupByKey(length(col("value"))).keyAs(Encoders.INT());
+=======
+      ds.groupBy(length(col("value"))).keyAs(Encoders.INT());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     Dataset<String> mapped = grouped.mapGroups(
       new MapGroupsFunction<Integer, String, String>() {
@@ -265,7 +335,11 @@ public class JavaDatasetSuite implements Serializable {
       },
       Encoders.STRING());
 
+<<<<<<< HEAD
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
+=======
+    Assert.assertEquals(Arrays.asList("1a", "3foobar"), mapped.collectAsList());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   @Test
@@ -287,7 +361,13 @@ public class JavaDatasetSuite implements Serializable {
     List<String> data = Arrays.asList("abc", "abc", "xyz");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
 
+<<<<<<< HEAD
     Assert.assertEquals(asSet("abc", "xyz"), toSet(ds.distinct().collectAsList()));
+=======
+    Assert.assertEquals(
+      Arrays.asList("abc", "xyz"),
+      sort(ds.distinct().collectAsList().toArray(new String[0])));
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     List<String> data2 = Arrays.asList("xyz", "foo", "foo");
     Dataset<String> ds2 = context.createDataset(data2, Encoders.STRING());
@@ -295,15 +375,23 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> intersected = ds.intersect(ds2);
     Assert.assertEquals(Arrays.asList("xyz"), intersected.collectAsList());
 
+<<<<<<< HEAD
     Dataset<String> unioned = ds.union(ds2).union(ds);
     Assert.assertEquals(
       Arrays.asList("abc", "abc", "xyz", "xyz", "foo", "foo", "abc", "abc", "xyz"),
       unioned.collectAsList());
+=======
+    Dataset<String> unioned = ds.union(ds2);
+    Assert.assertEquals(
+      Arrays.asList("abc", "abc", "foo", "foo", "xyz", "xyz"),
+      sort(unioned.collectAsList().toArray(new String[0])));
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     Dataset<String> subtracted = ds.subtract(ds2);
     Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
   }
 
+<<<<<<< HEAD
   private static <T> Set<T> toSet(List<T> records) {
     return new HashSet<>(records);
   }
@@ -311,6 +399,11 @@ public class JavaDatasetSuite implements Serializable {
   @SafeVarargs
   private static <T> Set<T> asSet(T... records) {
     return toSet(Arrays.asList(records));
+=======
+  private <T extends Comparable<T>> List<T> sort(T[] data) {
+    Arrays.sort(data);
+    return Arrays.asList(data);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   @Test
@@ -410,7 +503,11 @@ public class JavaDatasetSuite implements Serializable {
       Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
     Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
 
+<<<<<<< HEAD
     GroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupByKey(
+=======
+    GroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupBy(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       new MapFunction<Tuple2<String, Integer>, String>() {
         @Override
         public String call(Tuple2<String, Integer> value) throws Exception {
@@ -465,9 +562,12 @@ public class JavaDatasetSuite implements Serializable {
 
     @Override
     public boolean equals(Object other) {
+<<<<<<< HEAD
       if (this == other) return true;
       if (other == null || getClass() != other.getClass()) return false;
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       return this.value.equals(((KryoSerializable) other).value);
     }
 
@@ -486,9 +586,12 @@ public class JavaDatasetSuite implements Serializable {
 
     @Override
     public boolean equals(Object other) {
+<<<<<<< HEAD
       if (this == other) return true;
       if (other == null || getClass() != other.getClass()) return false;
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       return this.value.equals(((JavaSerializable) other).value);
     }
 
@@ -532,7 +635,11 @@ public class JavaDatasetSuite implements Serializable {
     Encoders.kryo(PrivateClassTest.class);
   }
 
+<<<<<<< HEAD
   public static class SimpleJavaBean implements Serializable {
+=======
+  public class SimpleJavaBean implements Serializable {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     private boolean a;
     private int b;
     private byte[] c;
@@ -615,7 +722,11 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
+<<<<<<< HEAD
   public static class SimpleJavaBean2 implements Serializable {
+=======
+  public class SimpleJavaBean2 implements Serializable {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     private Timestamp a;
     private Date b;
     private java.math.BigDecimal c;
@@ -637,7 +748,11 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
 
+<<<<<<< HEAD
       SimpleJavaBean2 that = (SimpleJavaBean2) o;
+=======
+      SimpleJavaBean that = (SimpleJavaBean) o;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
       if (!a.equals(that.a)) return false;
       if (!b.equals(that.b)) return false;
@@ -653,7 +768,11 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
+<<<<<<< HEAD
   public static class NestedJavaBean implements Serializable {
+=======
+  public class NestedJavaBean implements Serializable {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     private SimpleJavaBean a;
 
     public SimpleJavaBean getA() {
@@ -748,7 +867,11 @@ public class JavaDatasetSuite implements Serializable {
     ds.collect();
   }
 
+<<<<<<< HEAD
   public static class SmallBean implements Serializable {
+=======
+  public class SmallBean implements Serializable {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     private String a;
 
     private int b;
@@ -783,7 +906,11 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
+<<<<<<< HEAD
   public static class NestedSmallBean implements Serializable {
+=======
+  public class NestedSmallBean implements Serializable {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     private SmallBean f;
 
     public SmallBean getF() {
@@ -828,7 +955,11 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
+<<<<<<< HEAD
       Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
+=======
+      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       SmallBean smallBean = new SmallBean();
@@ -845,7 +976,11 @@ public class JavaDatasetSuite implements Serializable {
     {
       Row row = new GenericRow(new Object[] { null });
 
+<<<<<<< HEAD
       Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
+=======
+      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       NestedSmallBean nestedSmallBean = new NestedSmallBean();
@@ -862,7 +997,11 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
+<<<<<<< HEAD
       Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
+=======
+      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       ds.collect();

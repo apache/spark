@@ -2114,6 +2114,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     +----+--------------------+
     ...
     >>> model.findSynonyms("a", 2).show()
+<<<<<<< HEAD
     +----+-------------------+
     |word|         similarity|
     +----+-------------------+
@@ -2139,6 +2140,17 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     True
     >>> loadedModel.getVectors().first().vector == model.getVectors().first().vector
     True
+=======
+    +----+--------------------+
+    |word|          similarity|
+    +----+--------------------+
+    |   b| 0.16782984556103436|
+    |   c|-0.46761559092107646|
+    +----+--------------------+
+    ...
+    >>> model.transform(doc).head().model
+    DenseVector([0.5524, -0.4995, -0.3599, 0.0241, 0.3461])
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     .. versionadded:: 1.4.0
     """

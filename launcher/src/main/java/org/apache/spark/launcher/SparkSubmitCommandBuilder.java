@@ -90,7 +90,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   final List<String> sparkArgs;
   private final boolean printInfo;
+<<<<<<< HEAD
   private final boolean isExample;
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Controls whether mixing spark-submit arguments with app arguments is allowed. This is needed
@@ -100,9 +103,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private boolean allowsMixedArguments;
 
   SparkSubmitCommandBuilder() {
+<<<<<<< HEAD
     this.sparkArgs = new ArrayList<>();
     this.printInfo = false;
     this.isExample = false;
+=======
+    this.sparkArgs = new ArrayList<String>();
+    this.printInfo = false;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   SparkSubmitCommandBuilder(List<String> args) {

@@ -28,7 +28,11 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.OneHotEncoder;
 import org.apache.spark.ml.feature.StringIndexer;
 import org.apache.spark.ml.feature.StringIndexerModel;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -58,18 +62,30 @@ public class JavaOneHotEncoderExample {
       new StructField("category", DataTypes.StringType, false, Metadata.empty())
     });
 
+<<<<<<< HEAD
     Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
+=======
+    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     StringIndexerModel indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex")
       .fit(df);
+<<<<<<< HEAD
     Dataset<Row> indexed = indexer.transform(df);
+=======
+    DataFrame indexed = indexer.transform(df);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     OneHotEncoder encoder = new OneHotEncoder()
       .setInputCol("categoryIndex")
       .setOutputCol("categoryVec");
+<<<<<<< HEAD
     Dataset<Row> encoded = encoder.transform(indexed);
+=======
+    DataFrame encoded = encoder.transform(indexed);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     encoded.select("id", "categoryVec").show();
     // $example off$
     jsc.stop();

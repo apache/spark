@@ -22,6 +22,7 @@ import java.util.{Locale, TimeZone}
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.plans._
@@ -32,6 +33,17 @@ import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
+=======
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 abstract class QueryTest extends PlanTest {
 
@@ -72,7 +84,11 @@ abstract class QueryTest extends PlanTest {
    *    for cases where reordering is done on fields.  For such tests, user `checkDecoding` instead
    *    which performs a subset of the checks done by this function.
    */
+<<<<<<< HEAD
   protected def checkDataset[T](
+=======
+  protected def checkAnswer[T](
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       ds: Dataset[T],
       expectedAnswer: T*): Unit = {
     checkAnswer(
@@ -138,8 +154,11 @@ abstract class QueryTest extends PlanTest {
 
     checkJsonFormat(analyzedDF)
 
+<<<<<<< HEAD
     assertEmptyMissingInput(df)
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
@@ -199,10 +218,17 @@ abstract class QueryTest extends PlanTest {
     val logicalPlan = df.queryExecution.analyzed
     // bypass some cases that we can't handle currently.
     logicalPlan.transform {
+<<<<<<< HEAD
       case _: MapPartitions => return
       case _: MapGroups => return
       case _: AppendColumns => return
       case _: CoGroup => return
+=======
+      case _: MapPartitions[_, _] => return
+      case _: MapGroups[_, _, _] => return
+      case _: AppendColumns[_, _] => return
+      case _: CoGroup[_, _, _, _] => return
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       case _: LogicalRelation => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
@@ -214,7 +240,11 @@ abstract class QueryTest extends PlanTest {
     val jsonString = try {
       logicalPlan.toJSON
     } catch {
+<<<<<<< HEAD
       case NonFatal(e) =>
+=======
+      case e =>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         fail(
           s"""
              |Failed to parse logical plan to JSON:
@@ -239,7 +269,11 @@ abstract class QueryTest extends PlanTest {
     val jsonBackPlan = try {
       TreeNode.fromJSON[LogicalPlan](jsonString, sqlContext.sparkContext)
     } catch {
+<<<<<<< HEAD
       case NonFatal(e) =>
+=======
+      case e =>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         fail(
           s"""
              |Failed to rebuild the logical plan from JSON:
@@ -285,6 +319,7 @@ abstract class QueryTest extends PlanTest {
           """.stripMargin)
     }
   }
+<<<<<<< HEAD
 
   /**
     * Asserts that a given [[Queryable]] does not have missing inputs in all the analyzed plans.
@@ -297,6 +332,8 @@ abstract class QueryTest extends PlanTest {
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
       s"The physical plan has missing inputs: ${query.queryExecution.executedPlan}")
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 object QueryTest {

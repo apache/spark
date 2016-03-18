@@ -65,6 +65,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Returns a future for retrieving the first num elements of the RDD.
    */
   def takeAsync(num: Int): FutureAction[Seq[T]] = self.withScope {
+<<<<<<< HEAD
     val callSite = self.context.getCallSite
     val localProperties = self.context.getLocalProperties
     // Cached thread pool to handle aggregation of subtasks.
@@ -82,6 +83,19 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
       if (results.size >= num || partsScanned >= totalParts) {
         Future.successful(results.toSeq)
       } else {
+=======
+    val f = new ComplexFutureAction[Seq[T]]
+    val callSite = self.context.getCallSite
+
+    f.run {
+      // This is a blocking action so we should use "AsyncRDDActions.futureExecutionContext" which
+      // is a cached thread pool.
+      val results = new ArrayBuffer[T](num)
+      val totalParts = self.partitions.length
+      var partsScanned = 0
+      self.context.setCallSite(callSite)
+      while (results.size < num && partsScanned < totalParts) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
         var numPartsToTry = 1L

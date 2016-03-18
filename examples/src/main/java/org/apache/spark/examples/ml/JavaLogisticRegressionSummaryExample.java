@@ -24,8 +24,12 @@ import org.apache.spark.ml.classification.BinaryLogisticRegressionSummary;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.classification.LogisticRegressionTrainingSummary;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.functions;
 // $example off$
@@ -37,7 +41,11 @@ public class JavaLogisticRegressionSummaryExample {
     SQLContext sqlContext = new SQLContext(jsc);
 
     // Load training data
+<<<<<<< HEAD
     Dataset<Row> training = sqlContext.read().format("libsvm")
+=======
+    DataFrame training = sqlContext.read().format("libsvm")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       .load("data/mllib/sample_libsvm_data.txt");
 
     LogisticRegression lr = new LogisticRegression()
@@ -66,14 +74,22 @@ public class JavaLogisticRegressionSummaryExample {
       (BinaryLogisticRegressionSummary) trainingSummary;
 
     // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
+<<<<<<< HEAD
     Dataset<Row> roc = binarySummary.roc();
+=======
+    DataFrame roc = binarySummary.roc();
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     roc.show();
     roc.select("FPR").show();
     System.out.println(binarySummary.areaUnderROC());
 
     // Get the threshold corresponding to the maximum F-Measure and rerun LogisticRegression with
     // this selected threshold.
+<<<<<<< HEAD
     Dataset<Row> fMeasure = binarySummary.fMeasureByThreshold();
+=======
+    DataFrame fMeasure = binarySummary.fMeasureByThreshold();
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     double maxFMeasure = fMeasure.select(functions.max("F-Measure")).head().getDouble(0);
     double bestThreshold = fMeasure.where(fMeasure.col("F-Measure").equalTo(maxFMeasure))
       .select("threshold").head().getDouble(0);

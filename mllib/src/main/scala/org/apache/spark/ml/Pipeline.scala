@@ -26,10 +26,18 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+<<<<<<< HEAD
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
+=======
+import org.apache.spark.{SparkContext, Logging}
+import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
+import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.util.MLReader
+import org.apache.spark.ml.util.MLWriter
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -88,8 +96,12 @@ abstract class PipelineStage extends Params with Logging {
  */
 @Since("1.2.0")
 @Experimental
+<<<<<<< HEAD
 class Pipeline @Since("1.4.0") (
   @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel] with MLWritable {
+=======
+class Pipeline(override val uid: String) extends Estimator[PipelineModel] with MLWritable {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("pipeline"))
@@ -282,8 +294,13 @@ object Pipeline extends MLReadable[Pipeline] {
 @Since("1.2.0")
 @Experimental
 class PipelineModel private[ml] (
+<<<<<<< HEAD
     @Since("1.4.0") override val uid: String,
     @Since("1.4.0") val stages: Array[Transformer])
+=======
+    override val uid: String,
+    val stages: Array[Transformer])
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   extends Model[PipelineModel] with MLWritable with Logging {
 
   /** A Java/Python-friendly auxiliary constructor. */

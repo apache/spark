@@ -17,13 +17,19 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+<<<<<<< HEAD
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+=======
+import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.encoders._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
+<<<<<<< HEAD
 
 /**
  * When planning take() or collect() operations, this special node that is inserted at the top of
@@ -35,6 +41,9 @@ import org.apache.spark.sql.types._
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
+=======
+import scala.collection.mutable.ArrayBuffer
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -112,6 +121,13 @@ case class Filter(condition: Expression, child: LogicalPlan)
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+<<<<<<< HEAD
+=======
+  override def output: Seq[Attribute] =
+    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
+      leftAttr.withNullability(leftAttr.nullable || rightAttr.nullable)
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   protected def leftConstraints: Set[Expression] = left.constraints
 
@@ -236,11 +252,17 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     })
   }
 
+<<<<<<< HEAD
   override protected def validConstraints: Set[Expression] = {
     children
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(_ intersect _)
   }
+=======
+case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+  /** We don't use right.output because those rows get excluded from the set. */
+  override def output: Seq[Attribute] = left.output
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 case class Join(
@@ -441,9 +463,13 @@ case class Window(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] =
+<<<<<<< HEAD
     child.output ++ windowExpressions.map(_.toAttribute)
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
+=======
+    projectList ++ windowExpressions.map(_.toAttribute)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 private[sql] object Expand {
@@ -454,14 +480,25 @@ private[sql] object Expand {
    * @param attrs the attributes in sequence
    * @return the attributes of non selected specified via bitmask (with the bit set to 1)
    */
+<<<<<<< HEAD
   private def buildNonSelectAttrSet(
       bitmask: Int,
       attrs: Seq[Attribute]): AttributeSet = {
     val nonSelect = new ArrayBuffer[Attribute]()
+=======
+  private def buildNonSelectExprSet(
+      bitmask: Int,
+      exprs: Seq[Expression]): ArrayBuffer[Expression] = {
+    val set = new ArrayBuffer[Expression](2)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     var bit = attrs.length - 1
     while (bit >= 0) {
+<<<<<<< HEAD
       if (((bitmask >> bit) & 1) == 1) nonSelect += attrs(attrs.length - bit - 1)
+=======
+      if (((bitmask >> bit) & 1) == 0) set += exprs(bit)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       bit -= 1
     }
 
@@ -473,15 +510,23 @@ private[sql] object Expand {
    * multiple output rows for a input row.
    *
    * @param bitmasks The bitmask set represents the grouping sets
+<<<<<<< HEAD
    * @param groupByAliases The aliased original group by expressions
    * @param groupByAttrs The attributes of aliased group by expressions
+=======
+   * @param groupByExprs The grouping by expressions
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * @param gid Attribute of the grouping id
    * @param child Child operator
    */
   def apply(
     bitmasks: Seq[Int],
+<<<<<<< HEAD
     groupByAliases: Seq[Alias],
     groupByAttrs: Seq[Attribute],
+=======
+    groupByExprs: Seq[Expression],
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     gid: Attribute,
     child: LogicalPlan): Expand = {
     // Create an array of Projections for the child projection, and replace the projections'
@@ -491,6 +536,7 @@ private[sql] object Expand {
       // get the non selected grouping attributes according to the bit mask
       val nonSelectedGroupAttrSet = buildNonSelectAttrSet(bitmask, groupByAttrs)
 
+<<<<<<< HEAD
       child.output ++ groupByAttrs.map { attr =>
         if (nonSelectedGroupAttrSet.contains(attr)) {
           // if the input attribute in the Invalid Grouping Expression set of for this group
@@ -504,6 +550,19 @@ private[sql] object Expand {
     }
     val output = child.output ++ groupByAttrs :+ gid
     Expand(projections, output, Project(child.output ++ groupByAliases, child))
+=======
+      (child.output :+ gid).map(expr => expr transformDown {
+        // TODO this causes a problem when a column is used both for grouping and aggregation.
+        case x: Expression if nonSelectedGroupExprSet.exists(_.semanticEquals(x)) =>
+          // if the input attribute in the Invalid Grouping Expression set of for this group
+          // replace it with constant null
+          Literal.create(null, expr.dataType)
+        case x if x == gid =>
+          // replace the groupingId with concrete value (the bit mask)
+          Literal.create(bitmask, IntegerType)
+      })
+    }
+    Expand(projections, child.output :+ gid, child)
   }
 }
 
@@ -524,9 +583,42 @@ case class Expand(
     AttributeSet(projections.flatten.flatMap(_.references))
 
   override def statistics: Statistics = {
+    // TODO shouldn't we factor in the size of the projection versus the size of the backing child
+    //      row?
+    val sizeInBytes = child.statistics.sizeInBytes * projections.length
+    Statistics(sizeInBytes = sizeInBytes)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
+  }
+}
+
+/**
+ * Apply a number of projections to every input row, hence we will get multiple output rows for
+ * a input row.
+ *
+ * @param projections to apply
+ * @param output of all projections.
+ * @param child operator.
+ */
+case class Expand(
+    projections: Seq[Seq[Expression]],
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
+  override def references: AttributeSet =
+    AttributeSet(projections.flatten.flatMap(_.references))
+
+<<<<<<< HEAD
+  override def statistics: Statistics = {
     val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
+=======
+  // Needs to be unresolved before its translated to Aggregate + Expand because output attributes
+  // will change in analysis.
+  override lazy val resolved: Boolean = false
+
+  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /**
@@ -583,7 +675,25 @@ object Limit {
   }
 }
 
+<<<<<<< HEAD
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+=======
+case class Pivot(
+    groupByExprs: Seq[NamedExpression],
+    pivotColumn: Expression,
+    pivotValues: Seq[Literal],
+    aggregates: Seq[Expression],
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
+    case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
+    case _ => pivotValues.flatMap{ value =>
+      aggregates.map(agg => AttributeReference(value + "_" + agg.prettyString, agg.dataType)())
+    }
+  }
+}
+
+case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
@@ -687,3 +797,123 @@ case object OneRowRelation extends LeafNode {
    */
   override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
+<<<<<<< HEAD
+=======
+
+/**
+ * A relation produced by applying `func` to each partition of the `child`. tEncoder/uEncoder are
+ * used respectively to decode/encode from the JVM object representation expected by `func.`
+ */
+case class MapPartitions[T, U](
+    func: Iterator[T] => Iterator[U],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  override def missingInput: AttributeSet = AttributeSet.empty
+}
+
+/** Factory for constructing new `AppendColumn` nodes. */
+object AppendColumns {
+  def apply[T, U : Encoder](
+      func: T => U,
+      tEncoder: ExpressionEncoder[T],
+      child: LogicalPlan): AppendColumns[T, U] = {
+    val attrs = encoderFor[U].schema.toAttributes
+    new AppendColumns[T, U](func, tEncoder, encoderFor[U], attrs, child)
+  }
+}
+
+/**
+ * A relation produced by applying `func` to each partition of the `child`, concatenating the
+ * resulting columns at the end of the input row. tEncoder/uEncoder are used respectively to
+ * decode/encode from the JVM object representation expected by `func.`
+ */
+case class AppendColumns[T, U](
+    func: T => U,
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
+    newColumns: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output ++ newColumns
+  override def missingInput: AttributeSet = super.missingInput -- newColumns
+}
+
+/** Factory for constructing new `MapGroups` nodes. */
+object MapGroups {
+  def apply[K, T, U : Encoder](
+      func: (K, Iterator[T]) => TraversableOnce[U],
+      kEncoder: ExpressionEncoder[K],
+      tEncoder: ExpressionEncoder[T],
+      groupingAttributes: Seq[Attribute],
+      child: LogicalPlan): MapGroups[K, T, U] = {
+    new MapGroups(
+      func,
+      kEncoder,
+      tEncoder,
+      encoderFor[U],
+      groupingAttributes,
+      encoderFor[U].schema.toAttributes,
+      child)
+  }
+}
+
+/**
+ * Applies func to each unique group in `child`, based on the evaluation of `groupingAttributes`.
+ * Func is invoked with an object representation of the grouping key an iterator containing the
+ * object representation of all the rows with that key.
+ */
+case class MapGroups[K, T, U](
+    func: (K, Iterator[T]) => TraversableOnce[U],
+    kEncoder: ExpressionEncoder[K],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
+    groupingAttributes: Seq[Attribute],
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  override def missingInput: AttributeSet = AttributeSet.empty
+}
+
+/** Factory for constructing new `CoGroup` nodes. */
+object CoGroup {
+  def apply[Key, Left, Right, Result : Encoder](
+      func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+      keyEnc: ExpressionEncoder[Key],
+      leftEnc: ExpressionEncoder[Left],
+      rightEnc: ExpressionEncoder[Right],
+      leftGroup: Seq[Attribute],
+      rightGroup: Seq[Attribute],
+      left: LogicalPlan,
+      right: LogicalPlan): CoGroup[Key, Left, Right, Result] = {
+    CoGroup(
+      func,
+      keyEnc,
+      leftEnc,
+      rightEnc,
+      encoderFor[Result],
+      encoderFor[Result].schema.toAttributes,
+      leftGroup,
+      rightGroup,
+      left,
+      right)
+  }
+}
+
+/**
+ * A relation produced by applying `func` to each grouping key and associated values from left and
+ * right children.
+ */
+case class CoGroup[Key, Left, Right, Result](
+    func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+    keyEnc: ExpressionEncoder[Key],
+    leftEnc: ExpressionEncoder[Left],
+    rightEnc: ExpressionEncoder[Right],
+    resultEnc: ExpressionEncoder[Result],
+    output: Seq[Attribute],
+    leftGroup: Seq[Attribute],
+    rightGroup: Seq[Attribute],
+    left: LogicalPlan,
+    right: LogicalPlan) extends BinaryNode {
+  override def missingInput: AttributeSet = AttributeSet.empty
+}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

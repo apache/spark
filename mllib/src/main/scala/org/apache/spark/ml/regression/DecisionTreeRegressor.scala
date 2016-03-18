@@ -80,9 +80,12 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
 
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
+<<<<<<< HEAD
   /** @group setParam */
   def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
@@ -90,6 +93,7 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
     val strategy = getOldStrategy(categoricalFeatures)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), parentUID = Some(uid))
+<<<<<<< HEAD
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
@@ -98,6 +102,8 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
       oldStrategy: OldStrategy): DecisionTreeRegressionModel = {
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 0L, parentUID = Some(uid))
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 

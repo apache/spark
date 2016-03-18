@@ -61,8 +61,11 @@ case class ScriptTransformation(
   extends UnaryNode {
 
   override protected def otherCopyArgs: Seq[HiveContext] = sc :: Nil
+<<<<<<< HEAD
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   private val serializedHiveConf = new SerializableConfiguration(sc.hiveconf)
 

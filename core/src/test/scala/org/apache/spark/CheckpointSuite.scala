@@ -512,6 +512,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     assert(rdd.isCheckpointedAndMaterialized === true)
     assert(rdd.partitions.size === 0)
   }
+<<<<<<< HEAD
 
   runTest("checkpointAllMarkedAncestors") { reliableCheckpoint: Boolean =>
     testCheckpointAllMarkedAncestors(reliableCheckpoint, checkpointAllMarkedAncestors = true)
@@ -533,6 +534,8 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
       sc.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, null)
     }
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 /** RDD partition that has large serialized size. */

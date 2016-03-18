@@ -27,6 +27,12 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+<<<<<<< HEAD
+=======
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeRowWriter, BufferHolder}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -40,7 +46,21 @@ import org.apache.spark.util.collection.BitSet
 /**
  * A data source for reading text files.
  */
+<<<<<<< HEAD
 class DefaultSource extends FileFormat with DataSourceRegister {
+=======
+class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      paths: Array[String],
+      dataSchema: Option[StructType],
+      partitionColumns: Option[StructType],
+      parameters: Map[String, String]): HadoopFsRelation = {
+    dataSchema.foreach(verifySchema)
+    new TextRelation(None, dataSchema, partitionColumns, paths)(sqlContext)
+  }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override def shortName(): String = "text"
 
@@ -55,11 +75,40 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         s"Text data source supports only a string column, but you have ${tpe.simpleString}.")
     }
   }
+<<<<<<< HEAD
 
   override def inferSchema(
       sqlContext: SQLContext,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = Some(new StructType().add("value", StringType))
+=======
+}
+
+private[sql] class TextRelation(
+    val maybePartitionSpec: Option[PartitionSpec],
+    val textSchema: Option[StructType],
+    override val userDefinedPartitionColumns: Option[StructType],
+    override val paths: Array[String] = Array.empty[String],
+    parameters: Map[String, String] = Map.empty[String, String])
+    (@transient val sqlContext: SQLContext)
+  extends HadoopFsRelation(maybePartitionSpec, parameters) {
+
+  /** Data schema is always a single column, named "value" if original Data source has no schema. */
+  override def dataSchema: StructType =
+    textSchema.getOrElse(new StructType().add("value", StringType))
+  /** This is an internal data source that outputs internal row format. */
+  override val needConversion: Boolean = false
+
+
+  override private[sql] def buildInternalScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputPaths: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+    val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
+    val paths = inputPaths.map(_.getPath).sortBy(_.toUri)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override def prepareWrite(
       sqlContext: SQLContext,

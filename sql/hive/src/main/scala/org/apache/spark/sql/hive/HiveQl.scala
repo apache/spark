@@ -34,8 +34,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.plans._
+=======
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.{logical, _}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -617,8 +622,108 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
           (Nil, Option(hiveConf.getVar(ConfVars.HIVESCRIPTSERDE)), serdeProps, true)
       }
 
+<<<<<<< HEAD
       val (inRowFormat, inSerdeClass, inSerdeProps, useDefaultRecordReader) =
         matchSerDe(inputSerdeClause)
+=======
+    /* Stars (*) */
+    case Token("TOK_ALLCOLREF", Nil) => UnresolvedStar(None)
+    // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
+    // has a single child which is tableName.
+    case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) =>
+      UnresolvedStar(Some(UnresolvedAttribute.parseAttributeName(name)))
+
+    /* Aggregate Functions */
+    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
+      Count(args.map(nodeToExpr)).toAggregateExpression(isDistinct = true)
+    case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) =>
+      Count(Literal(1)).toAggregateExpression()
+
+    /* Casts */
+    case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), StringType)
+    case Token("TOK_FUNCTION", Token("TOK_VARCHAR", _) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), StringType)
+    case Token("TOK_FUNCTION", Token("TOK_CHAR", _) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), StringType)
+    case Token("TOK_FUNCTION", Token("TOK_INT", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), IntegerType)
+    case Token("TOK_FUNCTION", Token("TOK_BIGINT", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), LongType)
+    case Token("TOK_FUNCTION", Token("TOK_FLOAT", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), FloatType)
+    case Token("TOK_FUNCTION", Token("TOK_DOUBLE", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DoubleType)
+    case Token("TOK_FUNCTION", Token("TOK_SMALLINT", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), ShortType)
+    case Token("TOK_FUNCTION", Token("TOK_TINYINT", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), ByteType)
+    case Token("TOK_FUNCTION", Token("TOK_BINARY", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), BinaryType)
+    case Token("TOK_FUNCTION", Token("TOK_BOOLEAN", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), BooleanType)
+    case Token("TOK_FUNCTION", Token("TOK_DECIMAL", precision :: scale :: nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DecimalType(precision.getText.toInt, scale.getText.toInt))
+    case Token("TOK_FUNCTION", Token("TOK_DECIMAL", precision :: Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DecimalType(precision.getText.toInt, 0))
+    case Token("TOK_FUNCTION", Token("TOK_DECIMAL", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DecimalType.USER_DEFAULT)
+    case Token("TOK_FUNCTION", Token("TOK_TIMESTAMP", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), TimestampType)
+    case Token("TOK_FUNCTION", Token("TOK_DATE", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DateType)
+
+    /* Arithmetic */
+    case Token("+", child :: Nil) => nodeToExpr(child)
+    case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
+    case Token("~", child :: Nil) => BitwiseNot(nodeToExpr(child))
+    case Token("+", left :: right:: Nil) => Add(nodeToExpr(left), nodeToExpr(right))
+    case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
+    case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
+    case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token(DIV(), left :: right:: Nil) =>
+      Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
+    case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
+    case Token("&", left :: right:: Nil) => BitwiseAnd(nodeToExpr(left), nodeToExpr(right))
+    case Token("|", left :: right:: Nil) => BitwiseOr(nodeToExpr(left), nodeToExpr(right))
+    case Token("^", left :: right:: Nil) => BitwiseXor(nodeToExpr(left), nodeToExpr(right))
+
+    /* Comparisons */
+    case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
+    case Token("==", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
+    case Token("<=>", left :: right:: Nil) => EqualNullSafe(nodeToExpr(left), nodeToExpr(right))
+    case Token("!=", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
+    case Token("<>", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
+    case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))
+    case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
+    case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
+    case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
+    case Token(LIKE(), left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
+    case Token(RLIKE(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token(REGEXP(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) =>
+      IsNotNull(nodeToExpr(child))
+    case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>
+      IsNull(nodeToExpr(child))
+    case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
+      In(nodeToExpr(value), list.map(nodeToExpr))
+    case Token("TOK_FUNCTION",
+           Token(BETWEEN(), Nil) ::
+           kw ::
+           target ::
+           minValue ::
+           maxValue :: Nil) =>
+
+      val targetExpression = nodeToExpr(target)
+      val betweenExpr =
+        And(
+          GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),
+          LessThanOrEqual(targetExpression, nodeToExpr(maxValue)))
+      kw match {
+        case Token("KW_FALSE", Nil) => betweenExpr
+        case Token("KW_TRUE", Nil) => Not(betweenExpr)
+      }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
       val (outRowFormat, outSerdeClass, outSerdeProps, useDefaultRecordWriter) =
         matchSerDe(outputSerdeClause)
@@ -654,6 +759,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     case _ => None
   }
 
+<<<<<<< HEAD
   protected override def nodeToGenerator(node: ASTNode): Generator = node match {
     case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
       val functionInfo: FunctionInfo =
@@ -663,6 +769,41 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
       HiveGenericUDTF(
         functionName, new HiveFunctionWrapper(functionClassName), children.map(nodeToExpr))
     case other => super.nodeToGenerator(node)
+=======
+  val explode = "(?i)explode".r
+  val jsonTuple = "(?i)json_tuple".r
+  def nodesToGenerator(nodes: Seq[Node]): (Generator, Seq[String]) = {
+    val function = nodes.head
+
+    val attributes = nodes.flatMap {
+      case Token(a, Nil) => a.toLowerCase :: Nil
+      case _ => Nil
+    }
+
+    function match {
+      case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
+        (Explode(nodeToExpr(child)), attributes)
+
+      case Token("TOK_FUNCTION", Token(jsonTuple(), Nil) :: children) =>
+        (JsonTuple(children.map(nodeToExpr)), attributes)
+
+      case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
+        val functionInfo: FunctionInfo =
+          Option(FunctionRegistry.getFunctionInfo(functionName.toLowerCase)).getOrElse(
+            sys.error(s"Couldn't find function $functionName"))
+        val functionClassName = functionInfo.getFunctionClass.getName
+
+        (HiveGenericUDTF(
+          new HiveFunctionWrapper(functionClassName),
+          children.map(nodeToExpr)), attributes)
+
+      case a: ASTNode =>
+        throw new NotImplementedError(
+          s"""No parse rules for ASTNode type: ${a.getType}, text: ${a.getText}, tree:
+             |${dumpTree(a).toString}
+           """.stripMargin)
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   // This is based the getColumns methods in

@@ -19,8 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.UsingJoin
+=======
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, AggregateExpression}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -58,7 +62,11 @@ trait CheckAnalysis {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
+<<<<<<< HEAD
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
+=======
+            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns: [$from]")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -151,7 +159,11 @@ trait CheckAnalysis {
 
                   if (!child.deterministic) {
                     failAnalysis(
+<<<<<<< HEAD
                       s"nondeterministic expression ${expr.sql} should not " +
+=======
+                      s"nondeterministic expression ${expr.prettyString} should not " +
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
                         s"appear in the arguments of an aggregate function.")
                   }
                 }
@@ -170,7 +182,11 @@ trait CheckAnalysis {
               // Check if the data type of expr is orderable.
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
+<<<<<<< HEAD
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
+=======
+                  s"expression ${expr.prettyString} cannot be used as a grouping expression " +
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
                     s"because its data type ${expr.dataType.simpleString} is not a orderable " +
                     s"data type.")
               }
@@ -179,7 +195,11 @@ trait CheckAnalysis {
                 // This is just a sanity check, our analysis rule PullOutNondeterministic should
                 // already pull out those nondeterministic expressions and evaluate them in
                 // a Project node.
+<<<<<<< HEAD
                 failAnalysis(s"nondeterministic expression ${expr.sql} should not " +
+=======
+                failAnalysis(s"nondeterministic expression ${expr.prettyString} should not " +
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
                   s"appear in grouping expression.")
               }
             }
@@ -249,8 +269,12 @@ trait CheckAnalysis {
               s"unresolved operator ${operator.simpleString}")
 
           case o if o.expressions.exists(!_.deterministic) &&
+<<<<<<< HEAD
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
+=======
+            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] & !o.isInstanceOf[Aggregate] =>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
             // The rule above is used to check Aggregate operator.
             failAnalysis(
               s"""nondeterministic expressions are only allowed in

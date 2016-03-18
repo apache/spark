@@ -20,7 +20,11 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
+<<<<<<< HEAD
 import org.apache.spark.annotation.{Experimental, Since}
+=======
+import org.apache.spark.annotation.{Since, Experimental}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -219,6 +223,23 @@ class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
   @Since("1.6.0")
   override def copy(extra: ParamMap): Interaction = defaultCopy(extra)
 
+<<<<<<< HEAD
+}
+
+@Since("1.6.0")
+object Interaction extends DefaultParamsReadable[Interaction] {
+
+  @Since("1.6.0")
+  override def load(path: String): Interaction = super.load(path)
+=======
+  @Since("1.6.0")
+  override def validateParams(): Unit = {
+    require(get(inputCols).isDefined, "Input cols must be defined first.")
+    require(get(outputCol).isDefined, "Output col must be defined first.")
+    require($(inputCols).length > 0, "Input cols must have non-zero length.")
+    require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
+  }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 @Since("1.6.0")

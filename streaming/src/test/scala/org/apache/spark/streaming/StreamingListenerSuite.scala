@@ -30,7 +30,10 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
+<<<<<<< HEAD
 import org.apache.spark.internal.Logging
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
@@ -220,6 +223,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     assert(failureReasons(1).contains("This is another failed job"))
   }
 
+<<<<<<< HEAD
   test("StreamingListener receives no events after stopping StreamingListenerBus") {
     val streamingListener = mock(classOf[StreamingListener])
 
@@ -241,6 +245,8 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     verifyNoMoreInteractions(streamingListener)
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   private def startStreamingContextAndCallStop(_ssc: StreamingContext): Unit = {
     val contextStoppingCollector = new StreamingContextStoppingCollector(_ssc)
     _ssc.addStreamingListener(contextStoppingCollector)
@@ -365,6 +371,29 @@ class FailureReasonsCollector extends StreamingListener {
       failureReasons.synchronized
       {
         failureReasons(outputOperationCompleted.outputOperationInfo.id) = f
+      }
+    }
+  }
+}
+/**
+ * A StreamingListener that calls StreamingContext.stop().
+ */
+class StreamingContextStoppingCollector(val ssc: StreamingContext) extends StreamingListener {
+  @volatile var sparkExSeen = false
+
+  private var isFirstBatch = true
+
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+    if (isFirstBatch) {
+      // We should only call `ssc.stop()` in the first batch. Otherwise, it's possible that the main
+      // thread is calling `ssc.stop()`, while StreamingContextStoppingCollector is also calling
+      // `ssc.stop()` in the listener thread, which becomes a dead-lock.
+      isFirstBatch = false
+      try {
+        ssc.stop()
+      } catch {
+        case se: SparkException =>
+          sparkExSeen = true
       }
     }
   }

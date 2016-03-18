@@ -158,7 +158,11 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""
+<<<<<<< HEAD
        |public java.lang.Object generate(Object[] references) {
+=======
+       |public java.lang.Object generate($exprType[] exprs) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
        |  return new SpecificUnsafeRowJoiner();
        |}
        |
@@ -187,7 +191,11 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    $copyVariableLengthRow2
        |    $updateOffset
        |
+<<<<<<< HEAD
        |    out.pointTo(buf, sizeInBytes);
+=======
+       |    out.pointTo(buf, ${schema1.size + schema2.size}, sizeInBytes);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
        |
        |    return out;
        |  }

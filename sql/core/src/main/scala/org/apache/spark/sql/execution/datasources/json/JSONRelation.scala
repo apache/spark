@@ -45,6 +45,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def inferSchema(
       sqlContext: SQLContext,
+<<<<<<< HEAD
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     if (files.isEmpty) {
@@ -61,6 +62,34 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         sqlContext.conf.columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
+=======
+      paths: Array[String],
+      dataSchema: Option[StructType],
+      partitionColumns: Option[StructType],
+      parameters: Map[String, String]): HadoopFsRelation = {
+
+    new JSONRelation(
+      inputRDD = None,
+      maybeDataSchema = dataSchema,
+      maybePartitionSpec = None,
+      userDefinedPartitionColumns = partitionColumns,
+      paths = paths,
+      parameters = parameters)(sqlContext)
+  }
+}
+
+private[sql] class JSONRelation(
+    val inputRDD: Option[RDD[String]],
+    val maybeDataSchema: Option[StructType],
+    val maybePartitionSpec: Option[PartitionSpec],
+    override val userDefinedPartitionColumns: Option[StructType],
+    override val paths: Array[String] = Array.empty[String],
+    parameters: Map[String, String] = Map.empty[String, String])
+    (@transient val sqlContext: SQLContext)
+  extends HadoopFsRelation(maybePartitionSpec, parameters) {
+
+  val options: JSONOptions = JSONOptions.createFromConfigMap(parameters)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
       Some(jsonSchema)
     }
@@ -77,6 +106,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
+<<<<<<< HEAD
     new OutputWriterFactory {
       override def newInstance(
           path: String,
@@ -85,6 +115,25 @@ class DefaultSource extends FileFormat with DataSourceRegister {
           context: TaskAttemptContext): OutputWriter = {
         new JsonOutputWriter(path, bucketId, dataSchema, context)
       }
+=======
+    sqlContext.sparkContext.hadoopRDD(
+      conf.asInstanceOf[JobConf],
+      classOf[TextInputFormat],
+      classOf[LongWritable],
+      classOf[Text]).map(_._2.toString) // get the text line
+  }
+
+  override lazy val dataSchema: StructType = {
+    val jsonSchema = maybeDataSchema.getOrElse {
+      val files = cachedLeafStatuses().filterNot { status =>
+        val name = status.getPath.getName
+        name.startsWith("_") || name.startsWith(".")
+      }.toArray
+      InferSchema.infer(
+        inputRDD.getOrElse(createBaseRdd(files)),
+        sqlContext.conf.columnNameOfCorruptRecord,
+        options)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 
@@ -103,10 +152,17 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val parsedOptions: JSONOptions = new JSONOptions(options)
     val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
     val rows = JacksonParser.parse(
+<<<<<<< HEAD
       createBaseRdd(sqlContext, jsonFiles),
       requiredDataSchema,
       sqlContext.conf.columnNameOfCorruptRecord,
       parsedOptions)
+=======
+      inputRDD.getOrElse(createBaseRdd(inputPaths)),
+      requiredDataSchema,
+      sqlContext.conf.columnNameOfCorruptRecord,
+      options)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     rows.mapPartitions { iterator =>
       val unsafeProjection = UnsafeProjection.create(requiredDataSchema)

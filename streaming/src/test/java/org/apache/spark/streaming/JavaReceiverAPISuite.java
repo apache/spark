@@ -127,8 +127,12 @@ public class JavaReceiverAPISuite implements Serializable {
         BufferedReader in = null;
         try {
           socket = new Socket(host, port);
+<<<<<<< HEAD
           in = new BufferedReader(
               new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+=======
+          in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           String userInput;
           while ((userInput = in.readLine()) != null) {
             store(userInput);

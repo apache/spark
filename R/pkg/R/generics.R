@@ -437,7 +437,11 @@ setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
 
 #' @rdname statfunctions
 #' @export
+<<<<<<< HEAD
 setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
+=======
+setGeneric("corr", function(x, ...) {standardGeneric("corr") })
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 #' @rdname summary
 #' @export
@@ -783,12 +787,17 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
+<<<<<<< HEAD
 #' @rdname hash
 #' @export
 setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 
 #' @rdname cume_dist
 #' @export
+=======
+#' @rdname cume_dist
+#' @export
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 setGeneric("cume_dist", function(x) { standardGeneric("cume_dist") })
 
 #' @rdname datediff
@@ -816,6 +825,7 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
 #' @rdname decode
+<<<<<<< HEAD
 #' @export
 setGeneric("decode", function(x, charset) { standardGeneric("decode") })
 
@@ -825,6 +835,17 @@ setGeneric("dense_rank", function(x) { standardGeneric("dense_rank") })
 
 #' @rdname encode
 #' @export
+=======
+#' @export
+setGeneric("decode", function(x, charset) { standardGeneric("decode") })
+
+#' @rdname dense_rank
+#' @export
+setGeneric("dense_rank", function(x) { standardGeneric("dense_rank") })
+
+#' @rdname encode
+#' @export
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 setGeneric("encode", function(x, charset) { standardGeneric("encode") })
 
 #' @rdname explode
@@ -1161,6 +1182,7 @@ setGeneric("year", function(x) { standardGeneric("year") })
 setGeneric("glm")
 
 #' @rdname predict
+<<<<<<< HEAD
 #' @export
 setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 
@@ -1175,3 +1197,11 @@ setGeneric("kmeans")
 #' @rdname fitted
 #' @export
 setGeneric("fitted")
+=======
+#' @export
+setGeneric("predict", function(object, ...) { standardGeneric("predict") })
+
+#' @rdname rbind
+#' @export
+setGeneric("rbind", signature = "...")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3

@@ -387,6 +387,7 @@ class LocalLDAModel private[spark] (
       }
   }
 
+<<<<<<< HEAD
   /**
    * Predicts the topic mixture distribution for a document (often called "theta" in the
    * literature).  Returns a vector of zeros for an empty document.
@@ -413,6 +414,8 @@ class LocalLDAModel private[spark] (
     }
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   /**
    * Java-friendly version of [[topicDistributions]]
    */

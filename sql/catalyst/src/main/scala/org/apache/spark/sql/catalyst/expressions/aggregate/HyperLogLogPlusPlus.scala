@@ -68,8 +68,11 @@ case class HyperLogLogPlusPlus(
       inputAggBufferOffset = 0)
   }
 
+<<<<<<< HEAD
   override def prettyName: String = "approx_count_distinct"
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -449,7 +452,10 @@ object HyperLogLogPlusPlus {
 
   private def validateDoubleLiteral(exp: Expression): Double = exp match {
     case Literal(d: Double, DoubleType) => d
+<<<<<<< HEAD
     case Literal(dec: Decimal, _) => dec.toDouble
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     case _ =>
       throw new AnalysisException("The second argument should be a double literal.")
   }

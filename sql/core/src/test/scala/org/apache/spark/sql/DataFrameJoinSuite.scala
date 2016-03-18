@@ -149,7 +149,11 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     assert(plan2.collect { case p: BroadcastHashJoin => p }.size === 0)
 
     // planner should not crash without a join
+<<<<<<< HEAD
     broadcast(df1).queryExecution.sparkPlan
+=======
+    broadcast(df1).queryExecution.executedPlan
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // SPARK-12275: no physical plan for BroadcastHint in some condition
     withTempPath { path =>
@@ -157,6 +161,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       val pf1 = sqlContext.read.parquet(path.getCanonicalPath)
       assert(df1.join(broadcast(pf1)).count() === 4)
     }
+<<<<<<< HEAD
   }
 
   test("join - outer join conversion") {
@@ -203,5 +208,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       leftJoin2Inner,
       Row(1, 2, "1", 1, 3, "1") :: Nil)
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

@@ -20,7 +20,10 @@ package org.apache.spark.sql.execution
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
+<<<<<<< HEAD
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -32,6 +35,7 @@ private[sql] trait Queryable {
 
   override def toString: String = {
     try {
+<<<<<<< HEAD
       val builder = new StringBuilder
       val fields = schema.take(2).map {
         case f => s"${f.name}: ${f.dataType.simpleString(2)}"
@@ -46,6 +50,9 @@ private[sql] trait Queryable {
         }
       }
       builder.append("]").toString()
+=======
+      schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     } catch {
       case NonFatal(e) =>
         s"Invalid tree; ${e.getMessage}:\n$queryExecution"

@@ -2155,6 +2155,11 @@ If the number of tasks launched per second is high (say, 50 or more per second),
 of sending out tasks to the slaves may be significant and will make it hard to achieve sub-second
 latencies. The overhead can be reduced by the following changes:
 
+<<<<<<< HEAD
+=======
+* **Task Serialization**: Using Kryo serialization for serializing tasks can reduce the task sizes, and therefore reduce the time taken to send them to the slaves. This is controlled by the ```spark.closure.serializer``` property. However, at this time, Kryo serialization cannot be enabled for closure serialization. This may be resolved in a future release.
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 * **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to
   better task launch times than the fine-grained Mesos mode. Please refer to the
   [Running on Mesos guide](running-on-mesos.html) for more details.

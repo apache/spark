@@ -100,9 +100,27 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
   }
 
   /** Decodes a param value from JSON. */
+<<<<<<< HEAD
   def jsonDecode(json: String): T = Param.jsonDecode[T](json)
 
   private[this] val stringRepresentation = s"${parent}__$name"
+=======
+  def jsonDecode(json: String): T = {
+    parse(json) match {
+      case JString(x) =>
+        x.asInstanceOf[T]
+      case JObject(v) =>
+        val keys = v.map(_._1)
+        assert(keys.contains("type") && keys.contains("values"),
+          s"Expect a JSON serialized vector but cannot find fields 'type' and 'values' in $json.")
+        Vectors.fromJson(json).asInstanceOf[T]
+      case _ =>
+        throw new NotImplementedError(
+          "The default jsonDecode only supports string and vector. " +
+            s"${this.getClass.getName} must override jsonDecode to support its value type.")
+    }
+  }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override final def toString: String = stringRepresentation
 

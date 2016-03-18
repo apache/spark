@@ -293,8 +293,11 @@ class HiveContext private[hive](
       IsolatedClientLoader.forVersion(
         hiveMetastoreVersion = hiveMetastoreVersion,
         hadoopVersion = VersionInfo.getVersion,
+<<<<<<< HEAD
         sparkConf = sc.conf,
         hadoopConf = sc.hadoopConfiguration,
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         config = allConfig,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -459,6 +462,43 @@ class HiveContext private[hive](
     setConf(entry.key, entry.stringConverter(value))
   }
 
+<<<<<<< HEAD
+=======
+  /* A catalyst metadata catalog that points to the Hive Metastore. */
+  @transient
+  override protected[sql] lazy val catalog =
+    new HiveMetastoreCatalog(metadataHive, this) with OverrideCatalog
+
+  // Note that HiveUDFs will be overridden by functions registered in this context.
+  @transient
+  override protected[sql] lazy val functionRegistry: FunctionRegistry =
+    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), this.executionHive)
+
+  // The Hive UDF current_database() is foldable, will be evaluated by optimizer, but the optimizer
+  // can't access the SessionState of metadataHive.
+  functionRegistry.registerFunction(
+    "current_database",
+    (expressions: Seq[Expression]) => new CurrentDatabase(this))
+
+  /* An analyzer that uses the Hive metastore. */
+  @transient
+  override protected[sql] lazy val analyzer: Analyzer =
+    new Analyzer(catalog, functionRegistry, conf) {
+      override val extendedResolutionRules =
+        catalog.ParquetConversions ::
+        catalog.CreateTables ::
+        catalog.PreInsertionCasts ::
+        ExtractPythonUDFs ::
+        ResolveHiveWindowFunction ::
+        PreInsertCastAndRename ::
+        (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
+
+      override val extendedCheckRules = Seq(
+        PreWriteCheck(catalog)
+      )
+    }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   /** Overridden by child classes that need to set configuration before the client init. */
   protected def configure(): Map[String, String] = {
     // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
@@ -528,6 +568,46 @@ class HiveContext private[hive](
     c
   }
 
+<<<<<<< HEAD
+=======
+  protected[sql] override lazy val conf: SQLConf = new SQLConf {
+    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+    override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+  }
+
+  protected[sql] override def getSQLDialect(): ParserDialect = {
+    if (conf.dialect == "hiveql") {
+      new HiveQLDialect(this)
+    } else {
+      super.getSQLDialect()
+    }
+  }
+
+  @transient
+  private val hivePlanner = new SparkPlanner with HiveStrategies {
+    val hiveContext = self
+
+    override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
+      DataSourceStrategy,
+      HiveCommandStrategy(self),
+      HiveDDLStrategy,
+      DDLStrategy,
+      TakeOrderedAndProject,
+      InMemoryScans,
+      HiveTableScans,
+      DataSinks,
+      Scripts,
+      Aggregation,
+      LeftSemiJoin,
+      EquiJoinSelection,
+      BasicOperators,
+      BroadcastNestedLoop,
+      CartesianProduct,
+      DefaultJoin
+    )
+  }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   private def functionOrMacroDDLPattern(command: String) = Pattern.compile(
     ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL).matcher(command)
 

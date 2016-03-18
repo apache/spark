@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.execution
 
+<<<<<<< HEAD
 import org.apache.spark.TaskContext
+=======
+import org.apache.spark.{InternalAccumulator, TaskContext}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -49,7 +53,12 @@ case class ReferenceSort(
       val context = TaskContext.get()
       context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
       context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+<<<<<<< HEAD
       context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
+=======
+      context.internalMetricsToAccumulators(
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsedBytes)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
     }, preservesPartitioning = true)
   }

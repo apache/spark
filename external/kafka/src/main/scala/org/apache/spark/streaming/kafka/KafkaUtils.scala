@@ -25,21 +25,35 @@ import java.util.{List => JList, Map => JMap, Set => JSet}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+import com.google.common.base.Charsets.UTF_8
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
+<<<<<<< HEAD
 import kafka.serializer.{Decoder, DefaultDecoder, StringDecoder}
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.function.{Function => JFunction}
+=======
+import kafka.serializer.{DefaultDecoder, Decoder, StringDecoder}
+import net.razorvine.pickle.{Opcodes, Pickler, IObjectPickler}
+
+import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.streaming.util.WriteAheadLogUtils
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java._
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
+<<<<<<< HEAD
 import org.apache.spark.streaming.util.WriteAheadLogUtils
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 object KafkaUtils {
   /**
@@ -787,7 +801,11 @@ private object KafkaUtilsPythonHelper {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler) {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
+<<<<<<< HEAD
         out.write(s"$module\nKafkaMessageAndMetadata\n".getBytes(StandardCharsets.UTF_8))
+=======
+        out.write(s"$module\nKafkaMessageAndMetadata\n".getBytes(UTF_8))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       } else {
         pickler.save(this)
         val msgAndMetaData = obj.asInstanceOf[PythonMessageAndMetadata]

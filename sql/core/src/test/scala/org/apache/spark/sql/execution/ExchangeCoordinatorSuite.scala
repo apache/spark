@@ -321,7 +321,11 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         }
       }
 
+<<<<<<< HEAD
       withSQLContext(test, 2000, minNumPostShufflePartitions)
+=======
+      withSQLContext(test, 1700, minNumPostShufflePartitions)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
 
     test(s"determining the number of reducers: join operator$testNameNote") {

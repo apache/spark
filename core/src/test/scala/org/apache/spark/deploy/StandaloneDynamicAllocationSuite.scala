@@ -466,6 +466,41 @@ class StandaloneDynamicAllocationSuite
     }
   }
 
+  test("disable force kill for busy executors (SPARK-9552)") {
+    sc = new SparkContext(appConf)
+    val appId = sc.applicationId
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.size === 1)
+      assert(apps.head.id === appId)
+      assert(apps.head.executors.size === 2)
+      assert(apps.head.getExecutorLimit === Int.MaxValue)
+    }
+    var apps = getApplications()
+    // sync executors between the Master and the driver, needed because
+    // the driver refuses to kill executors it does not know about
+    syncExecutors(sc)
+    val executors = getExecutorIds(sc)
+    assert(executors.size === 2)
+
+    // simulate running a task on the executor
+    val getMap = PrivateMethod[mutable.HashMap[String, Int]]('executorIdToTaskCount)
+    val taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
+    val executorIdToTaskCount = taskScheduler invokePrivate getMap()
+    executorIdToTaskCount(executors.head) = 1
+    // kill the busy executor without force; this should fail
+    assert(killExecutor(sc, executors.head, force = false))
+    apps = getApplications()
+    assert(apps.head.executors.size === 2)
+
+    // force kill busy executor
+    assert(killExecutor(sc, executors.head, force = true))
+    apps = getApplications()
+    // kill executor successfully
+    assert(apps.head.executors.size === 1)
+
+  }
+
   // ===============================
   // | Utility methods for testing |
   // ===============================

@@ -32,7 +32,11 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rpc.RpcTimeout
+<<<<<<< HEAD
 import org.apache.spark.scheduler.{AccumulableInfo, DirectTaskResult, IndirectTaskResult, Task}
+=======
+import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
@@ -118,6 +122,7 @@ private[spark] class Executor(
   private val heartbeatReceiverRef =
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
+<<<<<<< HEAD
   /**
    * When an executor is unable to send heartbeats to the driver more than `HEARTBEAT_MAX_FAILURES`
    * times, it should kill itself. The default value is 60. It means we will retry to send
@@ -131,6 +136,8 @@ private[spark] class Executor(
    */
   private var heartbeatFailures = 0
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   startDriverHeartbeater()
 
   def launchTask(

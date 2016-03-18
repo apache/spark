@@ -21,10 +21,19 @@ import java.io._
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+<<<<<<< HEAD
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.Random
 import scala.util.control.NonFatal
+=======
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Random
+import scala.util.control.NonFatal
+
+import sun.nio.ch.DirectBuffer
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
@@ -39,7 +48,10 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.serializer.{Serializer, SerializerInstance}
 import org.apache.spark.shuffle.ShuffleManager
+<<<<<<< HEAD
 import org.apache.spark.storage.memory._
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.util._
 import org.apache.spark.util.io.{ByteArrayChunkOutputStream, ChunkedByteBuffer}
 
@@ -1280,11 +1292,19 @@ private[spark] class BlockManager(
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
   }
 
+<<<<<<< HEAD
   /** Serializes into a chunked byte buffer. */
   def dataSerialize(blockId: BlockId, values: Iterator[Any]): ChunkedByteBuffer = {
     val byteArrayChunkOutputStream = new ByteArrayChunkOutputStream(1024 * 1024 * 4)
     dataSerializeStream(blockId, byteArrayChunkOutputStream, values)
     new ChunkedByteBuffer(byteArrayChunkOutputStream.toArrays.map(ByteBuffer.wrap))
+=======
+  /** Serializes into a byte buffer. */
+  def dataSerialize(blockId: BlockId, values: Iterator[Any]): ByteBuffer = {
+    val byteStream = new ByteArrayOutputStream(4096)
+    dataSerializeStream(blockId, byteStream, values)
+    ByteBuffer.wrap(byteStream.toByteArray)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**
@@ -1294,6 +1314,7 @@ private[spark] class BlockManager(
   def dataDeserialize(blockId: BlockId, bytes: ByteBuffer): Iterator[Any] = {
     bytes.rewind()
     dataDeserializeStream(blockId, new ByteBufferInputStream(bytes, true))
+<<<<<<< HEAD
   }
 
   /**
@@ -1302,6 +1323,8 @@ private[spark] class BlockManager(
    */
   def dataDeserialize(blockId: BlockId, bytes: ChunkedByteBuffer): Iterator[Any] = {
     dataDeserializeStream(blockId, bytes.toInputStream(dispose = true))
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**

@@ -26,7 +26,11 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.RFormula;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.StructField;
@@ -55,12 +59,20 @@ public class JavaRFormulaExample {
       RowFactory.create(9, "NZ", 15, 0.0)
     ));
 
+<<<<<<< HEAD
     Dataset<Row> dataset = sqlContext.createDataFrame(rdd, schema);
+=======
+    DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     RFormula formula = new RFormula()
       .setFormula("clicked ~ country + hour")
       .setFeaturesCol("features")
       .setLabelCol("label");
+<<<<<<< HEAD
     Dataset<Row> output = formula.fit(dataset).transform(dataset);
+=======
+    DataFrame output = formula.fit(dataset).transform(dataset);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     output.select("features", "label").show();
     // $example off$
     jsc.stop();

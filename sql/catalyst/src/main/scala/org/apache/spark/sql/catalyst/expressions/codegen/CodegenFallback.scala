@@ -36,6 +36,7 @@ trait CodegenFallback extends Expression {
     val idx = ctx.references.length
     ctx.references += this
     val objectTerm = ctx.freshName("obj")
+<<<<<<< HEAD
     if (nullable) {
       s"""
         /* expression: ${toCommentSafeString(this.toString)} */
@@ -54,5 +55,16 @@ trait CodegenFallback extends Expression {
         ${ctx.javaType(this.dataType)} ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
       """
     }
+=======
+    s"""
+      /* expression: ${this.toCommentSafeString} */
+      java.lang.Object $objectTerm = expressions[${ctx.references.size - 1}].eval(${ctx.INPUT_ROW});
+      boolean ${ev.isNull} = $objectTerm == null;
+      ${ctx.javaType(this.dataType)} ${ev.value} = ${ctx.defaultValue(this.dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
+      }
+    """
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

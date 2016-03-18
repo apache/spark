@@ -153,6 +153,7 @@ This file is divided into 3 sections:
   <check customId="visiblefortesting" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">@VisibleForTesting</parameter></parameters>
     <customMessage><![CDATA[
+<<<<<<< HEAD
       @VisibleForTesting causes classpath issues. Please note this in the java doc instead (SPARK-11615).
     ]]></customMessage>
   </check>
@@ -178,6 +179,9 @@ This file is divided into 3 sections:
       // scalastyle:off mutablesynchronizedbuffer
       mutable.SynchronizedBuffer[...]
       // scalastyle:on mutablesynchronizedbuffer
+=======
+      @VisibleForTesting auses classpath issues. Please note this in the java doc instead (SPARK-11615).
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     ]]></customMessage>
   </check>
 

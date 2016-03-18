@@ -57,7 +57,11 @@ public abstract class RpcHandler {
 
   /**
    * Receives an RPC message that does not expect a reply. The default implementation will
+<<<<<<< HEAD:common/network-common/src/main/java/org/apache/spark/network/server/RpcHandler.java
    * call "{@link #receive(TransportClient, ByteBuffer, RpcResponseCallback)}" and log a warning if
+=======
+   * call "{@link receive(TransportClient, byte[], RpcResponseCallback)}" and log a warning if
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/main/java/org/apache/spark/network/server/RpcHandler.java
    * any of the callback methods are called.
    *
    * @param client A channel client which enables the handler to make requests back to the sender
@@ -69,12 +73,16 @@ public abstract class RpcHandler {
   }
 
   /**
+<<<<<<< HEAD:common/network-common/src/main/java/org/apache/spark/network/server/RpcHandler.java
    * Invoked when the channel associated with the given client is active.
    */
   public void channelActive(TransportClient client) { }
 
   /**
    * Invoked when the channel associated with the given client is inactive.
+=======
+   * Invoked when the connection associated with the given client has been invalidated.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/main/java/org/apache/spark/network/server/RpcHandler.java
    * No further requests will come from this client.
    */
   public void channelInactive(TransportClient client) { }

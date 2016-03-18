@@ -17,9 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+<<<<<<< HEAD
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.analysis
+=======
+import org.apache.spark.sql.catalyst.expressions.Explode
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder

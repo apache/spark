@@ -111,7 +111,10 @@ exportMethods("%in%",
               "add_months",
               "alias",
               "approxCountDistinct",
+<<<<<<< HEAD
               "approxQuantile",
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
               "array_contains",
               "asc",
               "ascii",
@@ -137,7 +140,10 @@ exportMethods("%in%",
               "count",
               "countDistinct",
               "crc32",
+<<<<<<< HEAD
               "hash",
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
               "cume_dist",
               "date_add",
               "date_format",
@@ -278,15 +284,23 @@ export("as.DataFrame",
        "createExternalTable",
        "dropTempTable",
        "jsonFile",
+       "read.json",
        "loadDF",
        "parquetFile",
        "read.df",
+<<<<<<< HEAD
        "read.json",
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
        "read.parquet",
        "read.text",
        "sql",
        "str",
+<<<<<<< HEAD
        "tableToDF",
+=======
+       "table",
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
        "tableNames",
        "tables",
        "uncacheTable")

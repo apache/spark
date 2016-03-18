@@ -30,7 +30,10 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
+<<<<<<< HEAD
 import org.apache.spark.internal.Logging
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -43,8 +46,11 @@ private[hive] object IsolatedClientLoader extends Logging {
   def forVersion(
       hiveMetastoreVersion: String,
       hadoopVersion: String,
+<<<<<<< HEAD
       sparkConf: SparkConf,
       hadoopConf: Configuration,
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       config: Map[String, String] = Map.empty,
       ivyPath: Option[String] = None,
       sharedPrefixes: Seq[String] = Seq.empty,
@@ -79,8 +85,12 @@ private[hive] object IsolatedClientLoader extends Logging {
     }
 
     new IsolatedClientLoader(
+<<<<<<< HEAD
       hiveVersion(hiveMetastoreVersion),
       sparkConf,
+=======
+      version = hiveVersion(hiveMetastoreVersion),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       execJars = files,
       hadoopConf = hadoopConf,
       config = config,

@@ -24,14 +24,25 @@ import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 /**
  * An iterator used to evaluate [[AggregateFunction]]. It assumes the input rows have been
+<<<<<<< HEAD
  * sorted by values of [[groupingExpressions]].
+=======
+ * sorted by values of [[groupingKeyAttributes]].
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
  */
 class SortBasedAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     valueAttributes: Seq[Attribute],
     inputIterator: Iterator[InternalRow],
+<<<<<<< HEAD
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
+=======
+    nonCompleteAggregateExpressions: Seq[AggregateExpression],
+    nonCompleteAggregateAttributes: Seq[Attribute],
+    completeAggregateExpressions: Seq[AggregateExpression],
+    completeAggregateAttributes: Seq[Attribute],
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),

@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.dsl.expressions._
+=======
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -62,7 +68,14 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
 
   private def trimHigherOrder[T](expressions: Seq[T]) = expressions.take(momentOrder + 1)
 
+<<<<<<< HEAD
   override val aggBufferAttributes = trimHigherOrder(Seq(n, avg, m2, m3, m4))
+=======
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, s"function $prettyName")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   override val initialValues: Seq[Expression] = Array.fill(momentOrder + 1)(Literal(0.0))
 
@@ -166,8 +179,33 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
       m2 / n)
   }
 
+<<<<<<< HEAD
   override def prettyName: String = "var_pop"
 }
+=======
+  /**
+   * Compute aggregate statistic from sufficient moments.
+   * @param centralMoments Length `momentOrder + 1` array of central moments (un-normalized)
+   *                       needed to compute the aggregate stat.
+   */
+  def getStatistic(n: Double, mean: Double, centralMoments: Array[Double]): Any
+
+  override final def eval(buffer: InternalRow): Any = {
+    val n = buffer.getDouble(nOffset)
+    val mean = buffer.getDouble(meanOffset)
+    val moments = Array.ofDim[Double](momentOrder + 1)
+    moments(0) = 1.0
+    moments(1) = 0.0
+    if (momentOrder >= 2) {
+      moments(2) = buffer.getDouble(secondMomentOffset)
+    }
+    if (momentOrder >= 3) {
+      moments(3) = buffer.getDouble(thirdMomentOffset)
+    }
+    if (momentOrder >= 4) {
+      moments(4) = buffer.getDouble(fourthMomentOffset)
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 // Compute the sample variance of a column
 case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {

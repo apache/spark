@@ -20,8 +20,13 @@ package org.apache.spark.sql.execution.columnar.compression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/execution/columnar/compression/BooleanBitSetSuite.scala
 import org.apache.spark.sql.execution.columnar.{BOOLEAN, NoopColumnStats}
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+=======
+import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.execution.columnar.{BOOLEAN, NoopColumnStats}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:sql/core/src/test/scala/org/apache/spark/sql/execution/columnar/compression/BooleanBitSetSuite.scala
 
 class BooleanBitSetSuite extends SparkFunSuite {
   import BooleanBitSet._

@@ -19,7 +19,10 @@ package org.apache.spark.sql
 
 import org.scalatest.Matchers._
 
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -629,7 +632,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     }
 
     def checkNumProjects(df: DataFrame, expectedNumProjects: Int): Unit = {
+<<<<<<< HEAD
       val projects = df.queryExecution.sparkPlan.collect {
+=======
+      val projects = df.queryExecution.executedPlan.collect {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         case tungstenProject: Project => tungstenProject
       }
       assert(projects.size === expectedNumProjects)

@@ -113,12 +113,20 @@ private[sql] object PartitioningUtils {
       // It will be recognised as conflicting directory structure:
       //   "hdfs://host:9000/invalidPath"
       //   "hdfs://host:9000/path"
+<<<<<<< HEAD
       // TODO: Selective case sensitivity.
       val discoveredBasePaths = optDiscoveredBasePaths.flatMap(x => x).map(_.toString.toLowerCase())
       assert(
         discoveredBasePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
           discoveredBasePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
+=======
+      val disvoeredBasePaths = optDiscoveredBasePaths.flatMap(x => x)
+      assert(
+        disvoeredBasePaths.distinct.size == 1,
+        "Conflicting directory structures detected. Suspicious paths:\b" +
+          disvoeredBasePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           "If provided paths are partition directories, please set " +
           "\"basePath\" in the options of the data source to specify the " +
           "root directory of the table. If there are multiple root directories, " +

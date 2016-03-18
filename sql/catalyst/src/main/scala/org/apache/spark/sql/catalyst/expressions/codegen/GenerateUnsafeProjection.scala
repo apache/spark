@@ -145,6 +145,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _ => s"$rowWriter.write($index, ${input.value});"
         }
 
+<<<<<<< HEAD
         if (input.isNull == "false") {
           s"""
             ${input.code}
@@ -160,6 +161,16 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             }
           """
         }
+=======
+        s"""
+          ${input.code}
+          if (${input.isNull}) {
+            ${setNull.trim}
+          } else {
+            ${writeField.trim}
+          }
+        """
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
 
     s"""
@@ -293,9 +304,15 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   def createCode(
+<<<<<<< HEAD
       ctx: CodegenContext,
       expressions: Seq[Expression],
       useSubexprElimination: Boolean = false): ExprCode = {
+=======
+      ctx: CodeGenContext,
+      expressions: Seq[Expression],
+      useSubexprElimination: Boolean = false): GeneratedExpressionCode = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprTypes = expressions.map(_.dataType)
 
@@ -330,12 +347,23 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val writeExpressions =
       writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, holder, isTopLevel = true)
 
+    // Reset the subexpression values for each row.
+    val subexprReset = ctx.subExprResetVariables.mkString("\n")
+
     val code =
       s"""
+<<<<<<< HEAD
         $resetBufferHolder
         $evalSubexpr
         $writeExpressions
         $updateRowSize
+=======
+        $bufferHolder.reset();
+        $subexprReset
+        ${writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, bufferHolder)}
+
+        $result.pointTo($bufferHolder.buffer, ${expressions.length}, $bufferHolder.totalSize());
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       """
     ExprCode(code, "false", result)
   }
@@ -351,11 +379,19 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
     create(canonicalize(expressions), subexpressionEliminationEnabled)
   }
+<<<<<<< HEAD
 
   protected def create(references: Seq[Expression]): UnsafeProjection = {
     create(references, subexpressionEliminationEnabled = false)
   }
 
+=======
+
+  protected def create(expressions: Seq[Expression]): UnsafeProjection = {
+    create(expressions, subexpressionEliminationEnabled = false)
+  }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   private def create(
       expressions: Seq[Expression],
       subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
@@ -363,15 +399,28 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
 
     val code = s"""
+<<<<<<< HEAD
       public java.lang.Object generate(Object[] references) {
         return new SpecificUnsafeProjection(references);
+=======
+      public java.lang.Object generate($exprType[] exprs) {
+        return new SpecificUnsafeProjection(exprs);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
 
       class SpecificUnsafeProjection extends ${classOf[UnsafeProjection].getName} {
 
+<<<<<<< HEAD
         private Object[] references;
         ${ctx.declareMutableStates()}
         ${ctx.declareAddedFunctions()}
+=======
+        private $exprType[] expressions;
+
+        ${declareMutableStates(ctx)}
+
+        ${declareAddedFunctions(ctx)}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
         public SpecificUnsafeProjection(Object[] references) {
           this.references = references;

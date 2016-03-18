@@ -626,6 +626,7 @@ class JDBCSuite extends SparkFunSuite
       === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
 
+<<<<<<< HEAD
   test("test credentials in the properties are not in plan output") {
     val df = sql("SELECT * FROM parts")
     val explain = ExplainCommand(df.queryExecution.logical, extended = true)
@@ -646,6 +647,8 @@ class JDBCSuite extends SparkFunSuite
     }
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("SPARK 12941: The data type mapping for StringType to Oracle") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).

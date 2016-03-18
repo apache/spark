@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.client
 
 import java.util.concurrent._
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -124,7 +125,11 @@ private[spark] class AppClient(
      */
     private def registerWithMaster(nthRetry: Int) {
       registerMasterFutures.set(tryRegisterAllMasters())
+<<<<<<< HEAD
       registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
+=======
+      registrationRetryTimer.set(registrationRetryThread.scheduleAtFixedRate(new Runnable {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         override def run(): Unit = {
           if (registered.get) {
             registerMasterFutures.get.foreach(_.cancel(true))
@@ -136,7 +141,11 @@ private[spark] class AppClient(
             registerWithMaster(nthRetry + 1)
           }
         }
+<<<<<<< HEAD
       }, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+=======
+      }, REGISTRATION_TIMEOUT_SECONDS, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
 
     /**

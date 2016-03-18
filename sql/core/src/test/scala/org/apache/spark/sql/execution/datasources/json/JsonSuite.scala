@@ -20,19 +20,31 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.{File, StringWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import scala.collection.JavaConverters._
 
 import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.core.JsonFactory
+<<<<<<< HEAD
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
+=======
+import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, PathFilter}
+import org.scalactic.Tolerance._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+<<<<<<< HEAD
 import org.apache.spark.sql.execution.datasources.DataSource
+=======
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -582,6 +594,38 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
   }
 
+<<<<<<< HEAD
+=======
+  test("jsonFile should be based on JSONRelation") {
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalFile.toURI.toString
+    sparkContext.parallelize(1 to 100)
+      .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
+    val jsonDF = sqlContext.read.option("samplingRatio", "0.49").json(path)
+
+    val analyzed = jsonDF.queryExecution.analyzed
+    assert(
+      analyzed.isInstanceOf[LogicalRelation],
+      "The DataFrame returned by jsonFile should be based on LogicalRelation.")
+    val relation = analyzed.asInstanceOf[LogicalRelation].relation
+    assert(
+      relation.isInstanceOf[JSONRelation],
+      "The DataFrame returned by jsonFile should be based on JSONRelation.")
+    assert(relation.asInstanceOf[JSONRelation].paths === Array(path))
+    assert(relation.asInstanceOf[JSONRelation].options.samplingRatio === (0.49 +- 0.001))
+
+    val schema = StructType(StructField("a", LongType, true) :: Nil)
+    val logicalRelation =
+      sqlContext.read.schema(schema).json(path)
+        .queryExecution.analyzed.asInstanceOf[LogicalRelation]
+    val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
+    assert(relationWithSchema.paths === Array(path))
+    assert(relationWithSchema.schema === schema)
+    assert(relationWithSchema.options.samplingRatio > 0.99)
+  }
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("Loading a JSON dataset from a text file") {
     val dir = Utils.createTempDir()
     dir.delete()
@@ -1173,6 +1217,51 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("JSONRelation equality test") {
+<<<<<<< HEAD
+=======
+    val relation0 = new JSONRelation(
+      Some(empty),
+      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
+      None,
+      None)(sqlContext)
+    val logicalRelation0 = LogicalRelation(relation0)
+    val relation1 = new JSONRelation(
+      Some(singleRow),
+      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
+      None,
+      None)(sqlContext)
+    val logicalRelation1 = LogicalRelation(relation1)
+    val relation2 = new JSONRelation(
+      Some(singleRow),
+      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
+      None,
+      None,
+      parameters = Map("samplingRatio" -> "0.5"))(sqlContext)
+    val logicalRelation2 = LogicalRelation(relation2)
+    val relation3 = new JSONRelation(
+      Some(singleRow),
+      Some(StructType(StructField("b", IntegerType, true) :: Nil)),
+      None,
+      None)(sqlContext)
+    val logicalRelation3 = LogicalRelation(relation3)
+
+    assert(relation0 !== relation1)
+    assert(!logicalRelation0.sameResult(logicalRelation1),
+      s"$logicalRelation0 and $logicalRelation1 should be considered not having the same result.")
+
+    assert(relation1 === relation2)
+    assert(logicalRelation1.sameResult(logicalRelation2),
+      s"$logicalRelation1 and $logicalRelation2 should be considered having the same result.")
+
+    assert(relation1 !== relation3)
+    assert(!logicalRelation1.sameResult(logicalRelation3),
+      s"$logicalRelation1 and $logicalRelation3 should be considered not having the same result.")
+
+    assert(relation2 !== relation3)
+    assert(!logicalRelation2.sameResult(logicalRelation3),
+      s"$logicalRelation2 and $logicalRelation3 should be considered not having the same result.")
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     withTempPath(dir => {
       val path = dir.getCanonicalFile.toURI.toString
       sparkContext.parallelize(1 to 100)
@@ -1199,7 +1288,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
+<<<<<<< HEAD
     val emptySchema = InferSchema.infer(empty, "", new JSONOptions(Map()))
+=======
+    val emptySchema = InferSchema.infer(empty, "", JSONOptions())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1223,7 +1316,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
+<<<<<<< HEAD
     val emptySchema = InferSchema.infer(emptyRecords, "", new JSONOptions(Map()))
+=======
+    val emptySchema = InferSchema.infer(emptyRecords, "", JSONOptions())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1426,6 +1523,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+<<<<<<< HEAD
   test("Parse JSON rows having an array type and a struct type in the same field.") {
     withTempDir { dir =>
       val dir = Utils.createTempDir()
@@ -1527,4 +1625,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
     }
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

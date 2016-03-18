@@ -18,15 +18,21 @@
 package org.apache.spark.sql.catalyst.trees
 
 import java.util.UUID
+<<<<<<< HEAD
 
 import scala.collection.Map
 import scala.collection.mutable.Stack
 
+=======
+import scala.collection.Map
+import scala.collection.mutable.Stack
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
+<<<<<<< HEAD
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
@@ -35,6 +41,20 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
+=======
+import org.apache.spark.util.Utils
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.rdd.{EmptyRDD, RDD}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.ScalaReflection._
+import org.apache.spark.sql.catalyst.{TableIdentifier, ScalaReflectionLock}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.catalyst.errors._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.types.{StructType, DataType}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
@@ -446,6 +466,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+<<<<<<< HEAD
    * All the nodes that will be used to generate tree string.
    *
    * For example:
@@ -494,13 +515,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   protected def innerChildren: Seq[BaseType] = Nil
 
   /**
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * Appends the string represent of this node and its children to the given StringBuilder.
    *
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
    * `lastChildren` for the root node should be empty.
    */
+<<<<<<< HEAD
   def generateTreeString(
+=======
+  protected def generateTreeString(
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       depth: Int, lastChildren: Seq[Boolean], builder: StringBuilder): StringBuilder = {
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -515,6 +542,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     builder.append(simpleString)
     builder.append("\n")
 
+<<<<<<< HEAD
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
         depth + 2, lastChildren :+ false :+ false, builder))
@@ -524,6 +552,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (treeChildren.nonEmpty) {
       treeChildren.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
       treeChildren.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
+=======
+    if (children.nonEmpty) {
+      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
+      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
 
     builder
@@ -563,7 +596,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   protected def jsonFields: List[JField] = {
+<<<<<<< HEAD
     val fieldNames = getConstructorParameterNames(getClass)
+=======
+    val fieldNames = getConstructorParameters(getClass).map(_._1)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val fieldValues = productIterator.toSeq ++ otherCopyArgs
     assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
       fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
@@ -611,7 +648,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case obj if obj.getClass.getName.endsWith("$") => "object" -> obj.getClass.getName
     // returns null if the product type doesn't have a primary constructor, e.g. HiveFunctionWrapper
     case p: Product => try {
+<<<<<<< HEAD
       val fieldNames = getConstructorParameterNames(p.getClass)
+=======
+      val fieldNames = getConstructorParameters(p.getClass).map(_._1)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       val fieldValues = p.productIterator.toSeq
       assert(fieldNames.length == fieldValues.length)
       ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
@@ -707,8 +748,11 @@ object TreeNode {
       case t if t <:< definitions.DoubleTpe =>
         value.asInstanceOf[JDouble].num: java.lang.Double
 
+<<<<<<< HEAD
       case t if t <:< localTypeOf[java.lang.Boolean] =>
         value.asInstanceOf[JBool].value: java.lang.Boolean
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       case t if t <:< localTypeOf[BigInt] => value.asInstanceOf[JInt].num
       case t if t <:< localTypeOf[java.lang.String] => value.asInstanceOf[JString].s
       case t if t <:< localTypeOf[UUID] => UUID.fromString(value.asInstanceOf[JString].s)

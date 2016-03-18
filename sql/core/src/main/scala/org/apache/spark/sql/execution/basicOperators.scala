@@ -29,6 +29,7 @@ import org.apache.spark.util.random.PoissonSampler
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryNode with CodegenSupport {
 
+<<<<<<< HEAD
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
   override def upstreams(): Seq[RDD[InternalRow]] = {
@@ -76,6 +77,12 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 
 case class Filter(condition: Expression, child: SparkPlan)
   extends UnaryNode with CodegenSupport with PredicateHelper {
+=======
+case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
+
+  override private[sql] lazy val metrics = Map(
+    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
@@ -83,6 +90,7 @@ case class Filter(condition: Expression, child: SparkPlan)
     case _ => false
   }
 
+<<<<<<< HEAD
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
   private val notNullAttributes = notNullPreds.flatMap(_.references)
 
@@ -92,6 +100,16 @@ case class Filter(condition: Expression, child: SparkPlan)
         a.withNullability(false)
       } else {
         a
+=======
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = longMetric("numRows")
+    child.execute().mapPartitionsInternal { iter =>
+      val project = UnsafeProjection.create(projectList, child.output,
+        subexpressionEliminationEnabled)
+      iter.map { row =>
+        numRows += 1
+        project(row)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
     }
   }
@@ -196,6 +214,7 @@ case class Sample(
   }
 }
 
+<<<<<<< HEAD
 case class Range(
     start: Long,
     step: Long,
@@ -203,6 +222,25 @@ case class Range(
     numElements: BigInt,
     output: Seq[Attribute])
   extends LeafNode with CodegenSupport {
+=======
+/**
+ * Union two plans, without a distinct. This is UNION ALL in SQL.
+ */
+case class Union(children: Seq[SparkPlan]) extends SparkPlan {
+  override def output: Seq[Attribute] = {
+    children.tail.foldLeft(children.head.output) { case (currentOutput, child) =>
+      currentOutput.zip(child.output).map { case (a1, a2) =>
+        a1.withNullability(a1.nullable || a2.nullable)
+      }
+    }
+  }
+  override def outputsUnsafeRows: Boolean = children.forall(_.outputsUnsafeRows)
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+  protected override def doExecute(): RDD[InternalRow] =
+    sparkContext.union(children.map(_.execute()))
+}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
@@ -215,6 +253,7 @@ case class Range(
       .map(i => InternalRow(i)) :: Nil
   }
 
+<<<<<<< HEAD
   protected override def doProduce(ctx: CodegenContext): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
@@ -235,6 +274,25 @@ case class Range(
     } else {
       s"$number > $partitionEnd"
     }
+=======
+  protected override def doExecute(): RDD[InternalRow] = {
+    val rdd: RDD[_ <: Product2[Boolean, InternalRow]] = if (sortBasedShuffleOn) {
+      child.execute().mapPartitionsInternal { iter =>
+        iter.take(limit).map(row => (false, row.copy()))
+      }
+    } else {
+      child.execute().mapPartitionsInternal { iter =>
+        val mutablePair = new MutablePair[Boolean, InternalRow]()
+        iter.take(limit).map(row => mutablePair.update(false, row))
+      }
+    }
+    val part = new HashPartitioner(1)
+    val shuffled = new ShuffledRDD[Boolean, InternalRow, InternalRow](rdd, part)
+    shuffled.setSerializer(new SparkSqlSerializer(child.sqlContext.sparkContext.getConf))
+    shuffled.mapPartitionsInternal(_.take(limit).map(_._2))
+  }
+}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     ctx.addNewFunction("initRange",
       s"""
@@ -401,6 +459,7 @@ case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPl
 }
 
 /**
+<<<<<<< HEAD
  * A plan as subquery.
  *
  * This is used to generate tree string for SparkScalarSubquery.
@@ -412,5 +471,128 @@ case class Subquery(name: String, child: SparkPlan) extends UnaryNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException
+=======
+ * Applies the given function to each input row and encodes the result.
+ */
+case class MapPartitions[T, U](
+    func: Iterator[T] => Iterator[U],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
+    output: Seq[Attribute],
+    child: SparkPlan) extends UnaryNode {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val tBoundEncoder = tEncoder.bind(child.output)
+      func(iter.map(tBoundEncoder.fromRow)).map(uEncoder.toRow)
+    }
+  }
+}
+
+/**
+ * Applies the given function to each input row, appending the encoded result at the end of the row.
+ */
+case class AppendColumns[T, U](
+    func: T => U,
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
+    newColumns: Seq[Attribute],
+    child: SparkPlan) extends UnaryNode {
+
+  // We are using an unsafe combiner.
+  override def canProcessSafeRows: Boolean = false
+  override def canProcessUnsafeRows: Boolean = true
+
+  override def output: Seq[Attribute] = child.output ++ newColumns
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val tBoundEncoder = tEncoder.bind(child.output)
+      val combiner = GenerateUnsafeRowJoiner.create(tEncoder.schema, uEncoder.schema)
+      iter.map { row =>
+        val newColumns = uEncoder.toRow(func(tBoundEncoder.fromRow(row)))
+        combiner.join(row.asInstanceOf[UnsafeRow], newColumns.asInstanceOf[UnsafeRow]): InternalRow
+      }
+    }
+  }
+}
+
+/**
+ * Groups the input rows together and calls the function with each group and an iterator containing
+ * all elements in the group.  The result of this function is encoded and flattened before
+ * being output.
+ */
+case class MapGroups[K, T, U](
+    func: (K, Iterator[T]) => TraversableOnce[U],
+    kEncoder: ExpressionEncoder[K],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
+    groupingAttributes: Seq[Attribute],
+    output: Seq[Attribute],
+    child: SparkPlan) extends UnaryNode {
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(groupingAttributes) :: Nil
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val grouped = GroupedIterator(iter, groupingAttributes, child.output)
+      val groupKeyEncoder = kEncoder.bind(groupingAttributes)
+      val groupDataEncoder = tEncoder.bind(child.output)
+
+      grouped.flatMap { case (key, rowIter) =>
+        val result = func(
+          groupKeyEncoder.fromRow(key),
+          rowIter.map(groupDataEncoder.fromRow))
+        result.map(uEncoder.toRow)
+      }
+    }
+  }
+}
+
+/**
+ * Co-groups the data from left and right children, and calls the function with each group and 2
+ * iterators containing all elements in the group from left and right side.
+ * The result of this function is encoded and flattened before being output.
+ */
+case class CoGroup[Key, Left, Right, Result](
+    func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+    keyEnc: ExpressionEncoder[Key],
+    leftEnc: ExpressionEncoder[Left],
+    rightEnc: ExpressionEncoder[Right],
+    resultEnc: ExpressionEncoder[Result],
+    output: Seq[Attribute],
+    leftGroup: Seq[Attribute],
+    rightGroup: Seq[Attribute],
+    left: SparkPlan,
+    right: SparkPlan) extends BinaryNode {
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    leftGroup.map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
+      val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
+      val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
+      val boundKeyEnc = keyEnc.bind(leftGroup)
+      val boundLeftEnc = leftEnc.bind(left.output)
+      val boundRightEnc = rightEnc.bind(right.output)
+
+      new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
+        case (key, leftResult, rightResult) =>
+          val result = func(
+            boundKeyEnc.fromRow(key),
+            leftResult.map(boundLeftEnc.fromRow),
+            rightResult.map(boundRightEnc.fromRow))
+          result.map(resultEnc.toRow)
+      }
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

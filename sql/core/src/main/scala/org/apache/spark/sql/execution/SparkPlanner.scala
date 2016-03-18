@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 import org.apache.spark.sql.internal.SQLConf
 
+<<<<<<< HEAD
 class SparkPlanner(
     val sparkContext: SparkContext,
     val conf: SQLConf,
@@ -30,13 +31,23 @@ class SparkPlanner(
   extends SparkStrategies {
 
   def numPartitions: Int = conf.numShufflePartitions
+=======
+class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
+  val sparkContext: SparkContext = sqlContext.sparkContext
+
+  def numPartitions: Int = sqlContext.conf.numShufflePartitions
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   def strategies: Seq[Strategy] =
     experimentalMethods.extraStrategies ++ (
       FileSourceStrategy ::
       DataSourceStrategy ::
       DDLStrategy ::
+<<<<<<< HEAD
       SpecialLimits ::
+=======
+      TakeOrderedAndProject ::
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       Aggregation ::
       LeftSemiJoin ::
       EquiJoinSelection ::

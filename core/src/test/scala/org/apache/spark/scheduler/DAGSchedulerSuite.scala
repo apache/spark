@@ -19,8 +19,12 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+<<<<<<< HEAD
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+=======
+import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 

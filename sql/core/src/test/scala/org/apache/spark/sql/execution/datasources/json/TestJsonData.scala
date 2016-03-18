@@ -205,6 +205,7 @@ private[json] trait TestJsonData {
         """{"b": [{"c": {}}]}""" ::
         """]""" :: Nil)
 
+<<<<<<< HEAD
   def timestampAsLong: RDD[String] =
     sqlContext.sparkContext.parallelize(
       """{"ts":1451732645}""" :: Nil)
@@ -214,6 +215,8 @@ private[json] trait TestJsonData {
       """{"a": {"b": 1}}""" ::
       """{"a": []}""" :: Nil)
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   lazy val singleRow: RDD[String] = sqlContext.sparkContext.parallelize("""{"a":123}""" :: Nil)
 
   def empty: RDD[String] = sqlContext.sparkContext.parallelize(Seq[String]())

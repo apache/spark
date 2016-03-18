@@ -24,7 +24,11 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+<<<<<<< HEAD
 import org.apache.spark.sql.types.{LongType, StringType, TypeCollection}
+=======
+import org.apache.spark.sql.types.{LongType, TypeCollection, StringType}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
@@ -132,7 +136,11 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(If('booleanField, 'intField, 'booleanField))
 
     assertError(
+<<<<<<< HEAD
       CaseWhen(Seq(('booleanField.attr, 'intField.attr), ('booleanField.attr, 'mapField.attr))),
+=======
+      CaseWhen(Seq('booleanField, 'intField, 'booleanField, 'mapField)),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       "THEN and ELSE expressions should all be same type or coercible to a common type")
     assertError(
       CaseKeyWhen('intField, Seq('intField, 'stringField, 'intField, 'mapField)),

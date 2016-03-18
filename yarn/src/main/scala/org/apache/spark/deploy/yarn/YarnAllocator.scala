@@ -32,7 +32,11 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.log4j.{Level, Logger}
 
+<<<<<<< HEAD
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+=======
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -117,7 +121,12 @@ private[yarn] class YarnAllocator(
   private[yarn] val resource = Resource.newInstance(executorMemory + memoryOverhead, executorCores)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
+<<<<<<< HEAD
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
+=======
+    "ContainerLauncher",
+    sparkConf.getInt("spark.yarn.containerLauncherMaxThreads", 25))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   // For testing
   private val launchContainers = sparkConf.getBoolean("spark.yarn.launchContainers", true)

@@ -18,11 +18,19 @@
 package org.apache.spark.repl
 
 import java.io.File
+<<<<<<< HEAD
 import java.net.{URI, URL, URLClassLoader}
 import java.nio.channels.{FileChannel, ReadableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Paths, StandardOpenOption}
 import java.util
+=======
+import java.net.{URL, URLClassLoader}
+import java.nio.charset.StandardCharsets
+import java.util
+
+import com.google.common.io.Files
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import scala.concurrent.duration._
 import scala.io.Source
@@ -119,7 +127,11 @@ class ExecutorClassLoaderSuite
 
   test("resource from parent") {
     val parentLoader = new URLClassLoader(urls2, null)
+<<<<<<< HEAD
     val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, true)
+=======
+    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val resourceName: String = parentResourceNames.head
     val is = classLoader.getResourceAsStream(resourceName)
     assert(is != null, s"Resource $resourceName not found")
@@ -129,7 +141,11 @@ class ExecutorClassLoaderSuite
 
   test("resources from parent") {
     val parentLoader = new URLClassLoader(urls2, null)
+<<<<<<< HEAD
     val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, true)
+=======
+    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val resourceName: String = parentResourceNames.head
     val resources: util.Enumeration[URL] = classLoader.getResources(resourceName)
     assert(resources.hasMoreElements, s"Resource $resourceName not found")

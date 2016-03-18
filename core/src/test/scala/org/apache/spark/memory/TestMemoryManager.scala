@@ -23,6 +23,12 @@ import org.apache.spark.storage.BlockId
 class TestMemoryManager(conf: SparkConf)
   extends MemoryManager(conf, numCores = 1, Long.MaxValue, Long.MaxValue) {
 
+<<<<<<< HEAD
+=======
+class TestMemoryManager(conf: SparkConf)
+  extends MemoryManager(conf, numCores = 1, Long.MaxValue, Long.MaxValue) {
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   override private[memory] def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
@@ -44,6 +50,13 @@ class TestMemoryManager(conf: SparkConf)
   override def releaseStorageMemory(numBytes: Long): Unit = {}
   override private[memory] def releaseExecutionMemory(
       numBytes: Long,
+<<<<<<< HEAD
+=======
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
+  override def releaseStorageMemory(numBytes: Long): Unit = {}
+  override private[memory] def releaseExecutionMemory(
+      numBytes: Long,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       taskAttemptId: Long,
       memoryMode: MemoryMode): Unit = {
     available += numBytes

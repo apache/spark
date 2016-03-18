@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
  */
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
+<<<<<<< HEAD
   def assertAnalyzed(): Unit = try sqlContext.sessionState.analyzer.checkAnalysis(analyzed) catch {
     case e: AnalysisException =>
       val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
@@ -39,22 +40,39 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
   }
 
   lazy val analyzed: LogicalPlan = sqlContext.sessionState.analyzer.execute(logical)
+=======
+  def assertAnalyzed(): Unit = sqlContext.analyzer.checkAnalysis(analyzed)
+
+  lazy val analyzed: LogicalPlan = sqlContext.analyzer.execute(logical)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
     sqlContext.cacheManager.useCachedData(analyzed)
   }
 
+<<<<<<< HEAD
   lazy val optimizedPlan: LogicalPlan = sqlContext.sessionState.optimizer.execute(withCachedData)
 
   lazy val sparkPlan: SparkPlan = {
     SQLContext.setActive(sqlContext)
     sqlContext.sessionState.planner.plan(ReturnAnswer(optimizedPlan)).next()
+=======
+  lazy val optimizedPlan: LogicalPlan = sqlContext.optimizer.execute(withCachedData)
+
+  lazy val sparkPlan: SparkPlan = {
+    SQLContext.setActive(sqlContext)
+    sqlContext.planner.plan(optimizedPlan).next()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
+<<<<<<< HEAD
   lazy val executedPlan: SparkPlan = sqlContext.sessionState.prepareForExecution.execute(sparkPlan)
+=======
+  lazy val executedPlan: SparkPlan = sqlContext.prepareForExecution.execute(sparkPlan)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()

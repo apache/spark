@@ -194,10 +194,13 @@ class ScalaReflectionSuite extends SparkFunSuite {
       nullable = true))
   }
 
+<<<<<<< HEAD
   test("type-aliased data") {
     assert(schemaFor[GenericData[Int]] == schemaFor[GenericData.IntData])
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
@@ -241,6 +244,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(anyTypes.forall(!_.isPrimitive))
     assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
   }
+<<<<<<< HEAD
 
   private val dataTypeForComplexData = dataTypeFor[ComplexData]
   private val typeOfComplexData = typeOf[ComplexData]
@@ -277,4 +281,6 @@ class ScalaReflectionSuite extends SparkFunSuite {
           }
         }
     }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

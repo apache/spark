@@ -17,16 +17,28 @@
 
 package org.apache.spark.streaming
 
+<<<<<<< HEAD
+=======
+import org.apache.spark.streaming.rdd.MapWithStateRDDRecord
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import scala.collection.{immutable, mutable, Map}
 import scala.reflect.ClassTag
 import scala.util.Random
 
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+<<<<<<< HEAD
 import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer._
 import org.apache.spark.streaming.rdd.MapWithStateRDDRecord
+=======
+import com.esotericsoftware.kryo.io.{Output, Input}
+
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.streaming.util.{EmptyStateMap, OpenHashMapBasedStateMap, StateMap}
 
 class StateMapSuite extends SparkFunSuite {
@@ -182,7 +194,11 @@ class StateMapSuite extends SparkFunSuite {
      *
      * - These operations are done on a test map in "sets". After each set, the map is "copied"
      *   to create a new map, and the next set of operations are done on the new one. This tests
+<<<<<<< HEAD
      *   whether the map data persist correctly across copies.
+=======
+     *   whether the map data persistes correctly across copies.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
      *
      * - Within each set, there are a number of operations to test whether the map correctly
      *   updates and removes data without affecting the parent state map.
@@ -280,7 +296,11 @@ class StateMapSuite extends SparkFunSuite {
     testSerialization(new KryoSerializer(conf), map, msg)
   }
 
+<<<<<<< HEAD
   private def testSerialization[T: ClassTag](
+=======
+  private def testSerialization[T : ClassTag](
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       serializer: Serializer,
       map: OpenHashMapBasedStateMap[T, T],
       msg: String): OpenHashMapBasedStateMap[T, T] = {

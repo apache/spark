@@ -45,8 +45,12 @@ import static org.apache.spark.unsafe.Platform.*;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
+<<<<<<< HEAD:common/unsafe/src/main/java/org/apache/spark/unsafe/types/UTF8String.java
 public final class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable,
   Cloneable {
+=======
+public final class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:unsafe/src/main/java/org/apache/spark/unsafe/types/UTF8String.java
 
   // These are only updated by readExternal() or read()
   @Nonnull

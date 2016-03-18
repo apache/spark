@@ -23,12 +23,19 @@ import scala.language.postfixOps
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Accumulators
+<<<<<<< HEAD
 import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+=======
+import org.apache.spark.sql.execution.columnar._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
+import org.apache.spark.storage.{StorageLevel, RDDBlockId}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 private case class BigData(s: String)
 

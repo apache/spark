@@ -155,8 +155,13 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     }
     val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
     val code = s"""
+<<<<<<< HEAD
       public java.lang.Object generate(Object[] references) {
         return new SpecificSafeProjection(references);
+=======
+      public java.lang.Object generate($exprType[] expr) {
+        return new SpecificSafeProjection(expr);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
 
       class SpecificSafeProjection extends ${classOf[BaseProjection].getName} {

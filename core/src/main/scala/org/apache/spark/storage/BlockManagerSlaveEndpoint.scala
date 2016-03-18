@@ -19,8 +19,12 @@ package org.apache.spark.storage
 
 import scala.concurrent.{ExecutionContext, Future}
 
+<<<<<<< HEAD
 import org.apache.spark.{MapOutputTracker, SparkEnv}
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.{Logging, MapOutputTracker, SparkEnv}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}

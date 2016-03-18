@@ -49,7 +49,11 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
 
   test("[SPARK-2210] boolean cast on boolean value should be removed") {
     val q = "select cast(cast(key=0 as boolean) as boolean) from src"
+<<<<<<< HEAD
     val project = TestHive.sql(q).queryExecution.sparkPlan.collect {
+=======
+    val project = TestHive.sql(q).queryExecution.executedPlan.collect {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       case e: Project => e
     }.head
 

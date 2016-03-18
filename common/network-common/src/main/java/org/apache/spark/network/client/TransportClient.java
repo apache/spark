@@ -292,7 +292,11 @@ public class TransportClient implements Closeable {
   /**
    * Removes any state associated with the given RPC.
    *
+<<<<<<< HEAD:common/network-common/src/main/java/org/apache/spark/network/client/TransportClient.java
    * @param requestId The RPC id returned by {@link #sendRpc(ByteBuffer, RpcResponseCallback)}.
+=======
+   * @param requestId The RPC id returned by {@link #sendRpc(byte[], RpcResponseCallback)}.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/main/java/org/apache/spark/network/client/TransportClient.java
    */
   public void removeRpcRequest(long requestId) {
     handler.removeRpcRequest(requestId);

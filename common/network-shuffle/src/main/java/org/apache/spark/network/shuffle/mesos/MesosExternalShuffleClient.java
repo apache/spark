@@ -19,9 +19,12 @@ package org.apache.spark.network.shuffle.mesos;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+<<<<<<< HEAD:common/network-shuffle/src/main/java/org/apache/spark/network/shuffle/mesos/MesosExternalShuffleClient.java
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/shuffle/src/main/java/org/apache/spark/network/shuffle/mesos/MesosExternalShuffleClient.java
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
@@ -72,6 +75,7 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
       long heartbeatIntervalMs) throws IOException {
 
     checkInit();
+<<<<<<< HEAD:common/network-shuffle/src/main/java/org/apache/spark/network/shuffle/mesos/MesosExternalShuffleClient.java
     ByteBuffer registerDriver = new RegisterDriver(appId, heartbeatTimeoutMs).toByteBuffer();
     TransportClient client = clientFactory.createClient(host, port);
     client.sendRpc(registerDriver, new RegisterDriverCallback(client, heartbeatIntervalMs));
@@ -96,6 +100,19 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
     @Override
     public void onFailure(Throwable e) {
       logger.warn("Unable to register app " + appId + " with external shuffle service. " +
+=======
+    ByteBuffer registerDriver = new RegisterDriver(appId).toByteBuffer();
+    TransportClient client = clientFactory.createClient(host, port);
+    client.sendRpc(registerDriver, new RpcResponseCallback() {
+      @Override
+      public void onSuccess(ByteBuffer response) {
+        logger.info("Successfully registered app " + appId + " with external shuffle service.");
+      }
+
+      @Override
+      public void onFailure(Throwable e) {
+        logger.warn("Unable to register app " + appId + " with external shuffle service. " +
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/shuffle/src/main/java/org/apache/spark/network/shuffle/mesos/MesosExternalShuffleClient.java
           "Please manually remove shuffle data after driver exit. Error: " + e);
     }
   }

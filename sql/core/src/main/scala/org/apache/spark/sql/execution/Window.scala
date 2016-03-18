@@ -289,7 +289,11 @@ case class Window(
       new Iterator[InternalRow] {
 
         // Get all relevant projections.
+<<<<<<< HEAD
         val result = createResultProjection(expressions)
+=======
+        val result = createResultProjection(unboundExpressions)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         val grouping = UnsafeProjection.create(partitionSpec, child.output)
 
         // Manage the stream and the grouping.

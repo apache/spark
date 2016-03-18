@@ -26,6 +26,10 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
+<<<<<<< HEAD
+=======
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 case class BroadcastNestedLoopJoin(
     left: SparkPlan,
@@ -120,6 +124,7 @@ case class BroadcastNestedLoopJoin(
       val joinedRow = new JoinedRow
       val nulls = new GenericMutableRow(broadcast.output.size)
 
+<<<<<<< HEAD
       // Returns an iterator to avoid copy the rows.
       new Iterator[InternalRow] {
         // current row from stream side
@@ -180,6 +185,12 @@ case class BroadcastNestedLoopJoin(
     assert(buildSide == BuildRight)
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
+=======
+    /** All rows that either match both-way, or rows from streamed joined with nulls. */
+    val matchesOrStreamedRowsWithNulls = streamed.execute().mapPartitions { streamedIter =>
+      val matchedRows = new CompactBuffer[InternalRow]
+      val includedBroadcastTuples = new BitSet(broadcastedRelation.value.size)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       val joinedRow = new JoinedRow
 
       if (condition.isDefined) {
@@ -211,9 +222,27 @@ case class BroadcastNestedLoopJoin(
 
       streamedIter.foreach { streamedRow =>
         var i = 0
+<<<<<<< HEAD
         while (i < buildRows.length) {
           if (boundCondition(joinedRow(streamedRow, buildRows(i)))) {
             matched.set(i)
+=======
+        var streamRowMatched = false
+        numStreamedRows += 1
+
+        while (i < broadcastedRelation.value.size) {
+          val broadcastedRow = broadcastedRelation.value(i)
+          buildSide match {
+            case BuildRight if boundCondition(joinedRow(streamedRow, broadcastedRow)) =>
+              matchedRows += resultProj(joinedRow(streamedRow, broadcastedRow)).copy()
+              streamRowMatched = true
+              includedBroadcastTuples.set(i)
+            case BuildLeft if boundCondition(joinedRow(broadcastedRow, streamedRow)) =>
+              matchedRows += resultProj(joinedRow(broadcastedRow, streamedRow)).copy()
+              streamRowMatched = true
+              includedBroadcastTuples.set(i)
+            case _ =>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
           }
           i += 1
         }
@@ -239,10 +268,17 @@ case class BroadcastNestedLoopJoin(
       return sparkContext.makeRDD(buf.toSeq)
     }
 
+<<<<<<< HEAD
     val matchedStreamRows = streamRdd.mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
       val nulls = new GenericMutableRow(broadcast.output.size)
+=======
+    val includedBroadcastTuples = matchesOrStreamedRowsWithNulls.map(_._2)
+    val allIncludedBroadcastTuples = includedBroadcastTuples.fold(
+      new BitSet(broadcastedRelation.value.size)
+    )(_ | _)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
       streamedIter.flatMap { streamedRow =>
         var i = 0
@@ -268,6 +304,7 @@ case class BroadcastNestedLoopJoin(
       val nulls = new GenericMutableRow(streamed.output.size)
       val buf: CompactBuffer[InternalRow] = new CompactBuffer()
       var i = 0
+<<<<<<< HEAD
       val buildRows = relation.value
       val joinedRow = new JoinedRow
       joinedRow.withLeft(nulls)
@@ -276,6 +313,29 @@ case class BroadcastNestedLoopJoin(
           buf += joinedRow.withRight(buildRows(i)).copy()
         }
         i += 1
+=======
+      val rel = broadcastedRelation.value
+      (joinType, buildSide) match {
+        case (RightOuter | FullOuter, BuildRight) =>
+          val joinedRow = new JoinedRow
+          joinedRow.withLeft(leftNulls)
+          while (i < rel.length) {
+            if (!allIncludedBroadcastTuples.get(i)) {
+              buf += resultProj(joinedRow.withRight(rel(i))).copy()
+            }
+            i += 1
+          }
+        case (LeftOuter | FullOuter, BuildLeft) =>
+          val joinedRow = new JoinedRow
+          joinedRow.withRight(rightNulls)
+          while (i < rel.length) {
+            if (!allIncludedBroadcastTuples.get(i)) {
+              buf += resultProj(joinedRow.withLeft(rel(i))).copy()
+            }
+            i += 1
+          }
+        case _ =>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       }
       buf.toSeq
     }

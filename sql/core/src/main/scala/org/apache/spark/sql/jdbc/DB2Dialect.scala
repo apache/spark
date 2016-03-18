@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.jdbc
 
+<<<<<<< HEAD
 import org.apache.spark.sql.types.{BooleanType, DataType, StringType}
+=======
+import org.apache.spark.sql.types.{BooleanType, StringType, DataType}
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 private object DB2Dialect extends JdbcDialect {
 

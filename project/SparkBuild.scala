@@ -34,6 +34,7 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
+<<<<<<< HEAD
   val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer) = Seq(
     "catalyst", "sql", "hive", "hive-thriftserver"
   ).map(ProjectRef(buildLocation, _))
@@ -50,14 +51,28 @@ object BuildCommons {
     "core", "graphx", "mllib", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "test-tags", "sketch"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
+=======
+  val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
+    sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
+    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags) =
+    Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
+      "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
+      "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
+      "streaming-zeromq", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests) =
     Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
+<<<<<<< HEAD
   val assemblyProjects@Seq(assembly, networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
     Seq("assembly", "network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
+=======
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingMqttAssembly, streamingKinesisAslAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly", "streaming-mqtt-assembly", "streaming-kinesis-asl-assembly")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       .map(ProjectRef(buildLocation, _))
 
   val copyJarsProjects@Seq(examples) = Seq("examples").map(ProjectRef(buildLocation, _))
@@ -241,9 +256,15 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
+<<<<<<< HEAD
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
       ExcludedDependencies.settings))
+=======
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
+    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
+      ExcludedDependencies.settings ++ Revolver.settings))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -285,6 +306,11 @@ object SparkBuild extends PomBuild {
 
   enable(Java8TestSettings.settings)(java8Tests)
 
+<<<<<<< HEAD
+=======
+  enable(Java8TestSettings.settings)(java8Tests)
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   /**
@@ -363,6 +389,21 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
 }
 
+object DockerIntegrationTests {
+  // This serves to override the override specified in DependencyOverrides:
+  lazy val settings = Seq(
+    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
+  )
+}
+
+/**
+ * Overrides to work around sbt's dependency resolution being different from Maven's.
+ */
+object DependencyOverrides {
+  lazy val settings = Seq(
+    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
+}
+
 /**
   This excludes library dependencies in sbt, which are specified in maven but are
   not needed by sbt build.
@@ -390,6 +431,7 @@ object OldDeps {
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.5",
+<<<<<<< HEAD
     libraryDependencies := allPreviousArtifactKeys.value.flatten
   )
 }
@@ -446,6 +488,12 @@ object Catalyst {
     resourceGenerators in Compile += Def.task {
       ((sourceManaged in Compile).value ** "*.tokens").get.toSeq
     }.taskValue
+=======
+    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
+      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
+      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
+      "spark-core").map(versionArtifact(_).get intransitive())
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   )
 }
 
@@ -644,9 +692,15 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
+<<<<<<< HEAD
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, yarn, testTags),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, yarn, testTags),
+=======
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
+    unidocProjectFilter in(JavaUnidoc, unidoc) :=
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, streamingFlumeSink, yarn, testTags),
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.
@@ -697,6 +751,7 @@ object Unidoc {
   )
 }
 
+<<<<<<< HEAD
 object CopyDependencies {
 
   val copyDeps = TaskKey[Unit]("copyDeps", "Copies needed dependencies to the build directory.")
@@ -725,13 +780,19 @@ object CopyDependencies {
 
 }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 object Java8TestSettings {
   import BuildCommons._
 
   lazy val settings = Seq(
     javacJVMVersion := "1.8",
     // Targeting Java 8 bytecode is only supported in Scala 2.11.4 and higher:
+<<<<<<< HEAD
     scalacJVMVersion := (if (System.getProperty("scala-2.10") == "true") "1.7" else "1.8")
+=======
+    scalacJVMVersion := (if (System.getProperty("scala-2.11") == "true") "1.8" else "1.7")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   )
 }
 

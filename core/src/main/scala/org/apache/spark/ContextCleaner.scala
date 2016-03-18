@@ -18,7 +18,11 @@
 package org.apache.spark
 
 import java.lang.ref.{ReferenceQueue, WeakReference}
+<<<<<<< HEAD
 import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledExecutorService, TimeUnit}
+=======
+import java.util.concurrent.{TimeUnit, ScheduledExecutorService}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import scala.collection.JavaConverters._
 

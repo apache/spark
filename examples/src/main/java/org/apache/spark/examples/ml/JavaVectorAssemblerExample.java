@@ -28,7 +28,11 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.VectorAssembler;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.*;
@@ -52,13 +56,21 @@ public class JavaVectorAssemblerExample {
     });
     Row row = RowFactory.create(0, 18, 1.0, Vectors.dense(0.0, 10.0, 0.5), 1.0);
     JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(row));
+<<<<<<< HEAD
     Dataset<Row> dataset = sqlContext.createDataFrame(rdd, schema);
+=======
+    DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     VectorAssembler assembler = new VectorAssembler()
       .setInputCols(new String[]{"hour", "mobile", "userFeatures"})
       .setOutputCol("features");
 
+<<<<<<< HEAD
     Dataset<Row> output = assembler.transform(dataset);
+=======
+    DataFrame output = assembler.transform(dataset);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     System.out.println(output.select("features", "clicked").first());
     // $example off$
     jsc.stop();

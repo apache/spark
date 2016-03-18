@@ -233,7 +233,68 @@ This example follows the simple text document `Pipeline` illustrated in the figu
 <div class="codetabs">
 
 <div data-lang="scala">
+<<<<<<< HEAD
 {% include_example scala/org/apache/spark/examples/ml/PipelineExample.scala %}
+=======
+{% highlight scala %}
+import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.sql.Row
+
+// Prepare training documents from a list of (id, text, label) tuples.
+val training = sqlContext.createDataFrame(Seq(
+  (0L, "a b c d e spark", 1.0),
+  (1L, "b d", 0.0),
+  (2L, "spark f g h", 1.0),
+  (3L, "hadoop mapreduce", 0.0)
+)).toDF("id", "text", "label")
+
+// Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
+val tokenizer = new Tokenizer()
+  .setInputCol("text")
+  .setOutputCol("words")
+val hashingTF = new HashingTF()
+  .setNumFeatures(1000)
+  .setInputCol(tokenizer.getOutputCol)
+  .setOutputCol("features")
+val lr = new LogisticRegression()
+  .setMaxIter(10)
+  .setRegParam(0.01)
+val pipeline = new Pipeline()
+  .setStages(Array(tokenizer, hashingTF, lr))
+
+// Fit the pipeline to training documents.
+val model = pipeline.fit(training)
+
+// now we can optionally save the fitted pipeline to disk
+model.save("/tmp/spark-logistic-regression-model")
+
+// we can also save this unfit pipeline to disk
+pipeline.save("/tmp/unfit-lr-model")
+
+// and load it back in during production
+val sameModel = PipelineModel.load("/tmp/spark-logistic-regression-model")
+
+// Prepare test documents, which are unlabeled (id, text) tuples.
+val test = sqlContext.createDataFrame(Seq(
+  (4L, "spark i j k"),
+  (5L, "l m n"),
+  (6L, "mapreduce spark"),
+  (7L, "apache hadoop")
+)).toDF("id", "text")
+
+// Make predictions on test documents.
+model.transform(test)
+  .select("id", "text", "probability", "prediction")
+  .collect()
+  .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
+  }
+
+{% endhighlight %}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 
 <div data-lang="java">
@@ -309,6 +370,7 @@ The `ParamMap` which produces the best evaluation metric is selected as the best
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+<<<<<<< HEAD
 {% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaTrainValidationSplitExample.scala %}
 </div>
 
@@ -318,6 +380,93 @@ The `ParamMap` which produces the best evaluation metric is selected as the best
 
 <div data-lang="python">
 {% include_example python/ml/train_validation_split.py %}
+=======
+{% highlight scala %}
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
+
+// Prepare training and test data.
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_linear_regression_data.txt")
+val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
+
+val lr = new LinearRegression()
+
+// We use a ParamGridBuilder to construct a grid of parameters to search over.
+// TrainValidationSplit will try all combinations of values and determine best model using
+// the evaluator.
+val paramGrid = new ParamGridBuilder()
+  .addGrid(lr.regParam, Array(0.1, 0.01))
+  .addGrid(lr.fitIntercept)
+  .addGrid(lr.elasticNetParam, Array(0.0, 0.5, 1.0))
+  .build()
+
+// In this case the estimator is simply the linear regression.
+// A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+val trainValidationSplit = new TrainValidationSplit()
+  .setEstimator(lr)
+  .setEvaluator(new RegressionEvaluator)
+  .setEstimatorParamMaps(paramGrid)
+  // 80% of the data will be used for training and the remaining 20% for validation.
+  .setTrainRatio(0.8)
+
+// Run train validation split, and choose the best set of parameters.
+val model = trainValidationSplit.fit(training)
+
+// Make predictions on test data. model is the model with combination of parameters
+// that performed best.
+model.transform(test)
+  .select("features", "label", "prediction")
+  .show()
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import org.apache.spark.ml.evaluation.RegressionEvaluator;
+import org.apache.spark.ml.param.ParamMap;
+import org.apache.spark.ml.regression.LinearRegression;
+import org.apache.spark.ml.tuning.*;
+import org.apache.spark.sql.DataFrame;
+
+DataFrame data = jsql.read().format("libsvm").load("data/mllib/sample_linear_regression_data.txt");
+
+// Prepare training and test data.
+DataFrame[] splits = data.randomSplit(new double[] {0.9, 0.1}, 12345);
+DataFrame training = splits[0];
+DataFrame test = splits[1];
+
+LinearRegression lr = new LinearRegression();
+
+// We use a ParamGridBuilder to construct a grid of parameters to search over.
+// TrainValidationSplit will try all combinations of values and determine best model using
+// the evaluator.
+ParamMap[] paramGrid = new ParamGridBuilder()
+  .addGrid(lr.regParam(), new double[] {0.1, 0.01})
+  .addGrid(lr.fitIntercept())
+  .addGrid(lr.elasticNetParam(), new double[] {0.0, 0.5, 1.0})
+  .build();
+
+// In this case the estimator is simply the linear regression.
+// A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
+  .setEstimator(lr)
+  .setEvaluator(new RegressionEvaluator())
+  .setEstimatorParamMaps(paramGrid)
+  .setTrainRatio(0.8); // 80% for training and the remaining 20% for validation
+
+// Run train validation split, and choose the best set of parameters.
+TrainValidationSplitModel model = trainValidationSplit.fit(training);
+
+// Make predictions on test data. model is the model with combination of parameters
+// that performed best.
+model.transform(test)
+  .select("features", "label", "prediction")
+  .show();
+
+{% endhighlight %}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 
 </div>

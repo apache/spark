@@ -20,6 +20,10 @@ package org.apache.spark.memory
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
+<<<<<<< HEAD
+=======
+import scala.concurrent.duration.Duration
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
@@ -31,17 +35,27 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
+<<<<<<< HEAD
 import org.apache.spark.storage.{BlockId, BlockStatus, StorageLevel}
 import org.apache.spark.storage.memory.MemoryStore
+=======
+import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore, StorageLevel}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 
 /**
  * Helper trait for sharing code among [[MemoryManager]] tests.
  */
 private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
+<<<<<<< HEAD
 
   protected val evictedBlocks = new mutable.ArrayBuffer[(BlockId, BlockStatus)]
 
+=======
+
+  protected val evictedBlocks = new mutable.ArrayBuffer[(BlockId, BlockStatus)]
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   import MemoryManagerSuite.DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED
 
   // Note: Mockito's verify mechanism does not provide a way to reset method call counts
@@ -71,7 +85,12 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
    */
   protected def makeMemoryStore(mm: MemoryManager): MemoryStore = {
     val ms = mock(classOf[MemoryStore], RETURNS_SMART_NULLS)
+<<<<<<< HEAD
     when(ms.evictBlocksToFreeSpace(any(), anyLong())).thenAnswer(evictBlocksToFreeSpaceAnswer(mm))
+=======
+    when(ms.evictBlocksToFreeSpace(any(), anyLong(), any()))
+      .thenAnswer(evictBlocksToFreeSpaceAnswer(mm))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     mm.setMemoryStore(ms)
     ms
   }
@@ -89,9 +108,15 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     * records the number of bytes this is called with. This variable is expected to be cleared
     * by the test code later through [[assertEvictBlocksToFreeSpaceCalled]].
     */
+<<<<<<< HEAD
   private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Long] = {
     new Answer[Long] {
       override def answer(invocation: InvocationOnMock): Long = {
+=======
+  private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Boolean] = {
+    new Answer[Boolean] {
+      override def answer(invocation: InvocationOnMock): Boolean = {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         val args = invocation.getArguments
         val numBytesToFree = args(1).asInstanceOf[Long]
         assert(numBytesToFree > 0)
@@ -101,12 +126,29 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
         if (numBytesToFree <= mm.storageMemoryUsed) {
           // We can evict enough blocks to fulfill the request for space
           mm.releaseStorageMemory(numBytesToFree)
+<<<<<<< HEAD
           evictedBlocks.append(
             (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L)))
           numBytesToFree
         } else {
           // No blocks were evicted because eviction would not free enough space.
           0L
+=======
+          args.last.asInstanceOf[mutable.Buffer[(BlockId, BlockStatus)]].append(
+            (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L, 0L)))
+          // We need to add this call so that that the suite-level `evictedBlocks` is updated when
+          // execution evicts storage; in that case, args.last will not be equal to evictedBlocks
+          // because it will be a temporary buffer created inside of the MemoryManager rather than
+          // being passed in by the test code.
+          if (!(evictedBlocks eq args.last)) {
+            evictedBlocks.append(
+              (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L, 0L)))
+          }
+          true
+        } else {
+          // No blocks were evicted because eviction would not free enough space.
+          false
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         }
       }
     }

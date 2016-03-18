@@ -83,4 +83,12 @@ class RegressionEvaluatorSuite
       .setMetricName("r2")
     testDefaultReadWrite(evaluator)
   }
+
+  test("read/write") {
+    val evaluator = new RegressionEvaluator()
+      .setPredictionCol("myPrediction")
+      .setLabelCol("myLabel")
+      .setMetricName("r2")
+    testDefaultReadWrite(evaluator)
+  }
 }

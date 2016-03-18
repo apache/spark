@@ -24,7 +24,11 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.Matchers
 
+<<<<<<< HEAD
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+=======
+import org.apache.spark.SparkException
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
@@ -284,14 +288,25 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
+<<<<<<< HEAD
     val conf = new SparkConf().set("spark.rpc.message.maxSize", "1")
+=======
+    val conf = new SparkConf().set("spark.akka.frameSize", "1")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     sc = new SparkContext("local", "SparkListenerSuite", conf)
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
 
+<<<<<<< HEAD
     // Make a task whose result is larger than the RPC message size
     val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
     assert(maxRpcMessageSize === 1024 * 1024)
+=======
+    // Make a task whose result is larger than the akka frame size
+    val akkaFrameSize =
+      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
+    assert(akkaFrameSize === 1024 * 1024)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val result = sc.parallelize(Seq(1), 1)
       .map { x => 1.to(maxRpcMessageSize).toArray }
       .reduce { case (x, y) => x }

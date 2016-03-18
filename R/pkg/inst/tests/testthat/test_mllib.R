@@ -96,9 +96,9 @@ test_that("summary coefficients match with native glm of family 'binomial'", {
   training <- filter(df, df$Species != "setosa")
   stats <- summary(glm(Species ~ Sepal_Length + Sepal_Width, data = training,
     family = "binomial"))
-  coefs <- as.vector(stats$coefficients[, 1])
+  coefs <- as.vector(stats$coefficients[,1])
 
-  rTraining <- iris[iris$Species %in% c("versicolor", "virginica"), ]
+  rTraining <- iris[iris$Species %in% c("versicolor","virginica"),]
   rCoefs <- as.vector(coef(glm(Species ~ Sepal.Length + Sepal.Width, data = rTraining,
     family = binomial(link = "logit"))))
 
@@ -112,32 +112,4 @@ test_that("summary works on base GLM models", {
   baseModel <- stats::glm(Sepal.Width ~ Sepal.Length + Species, data = iris)
   baseSummary <- summary(baseModel)
   expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
-})
-
-test_that("kmeans", {
-  newIris <- iris
-  newIris$Species <- NULL
-  training <- suppressWarnings(createDataFrame(sqlContext, newIris))
-
-  # Cache the DataFrame here to work around the bug SPARK-13178.
-  cache(training)
-  take(training, 1)
-
-  model <- kmeans(x = training, centers = 2)
-  sample <- take(select(predict(model, training), "prediction"), 1)
-  expect_equal(typeof(sample$prediction), "integer")
-  expect_equal(sample$prediction, 1)
-
-  # Test stats::kmeans is working
-  statsModel <- kmeans(x = newIris, centers = 2)
-  expect_equal(sort(unique(statsModel$cluster)), c(1, 2))
-
-  # Test fitted works on KMeans
-  fitted.model <- fitted(model)
-  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction), c(0, 1))
-
-  # Test summary works on KMeans
-  summary.model <- summary(model)
-  cluster <- summary.model$cluster
-  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 })

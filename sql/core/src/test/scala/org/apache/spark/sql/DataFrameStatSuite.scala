@@ -80,7 +80,11 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     // Verify that the splits span the entire dataset
     assert(splits.flatMap(_.collect()).toSet == data.collect().toSet)
 
+<<<<<<< HEAD
     // Verify that the splits don't overlap
+=======
+    // Verify that the splits don't overalap
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     assert(splits(0).intersect(splits(1)).collect().isEmpty)
 
     // Verify that the results are deterministic across multiple runs
@@ -241,6 +245,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
       Seq(Row(0, 6), Row(1, 11)))
+<<<<<<< HEAD
   }
 
   // This test case only verifies that `DataFrame.countMinSketch()` methods do return
@@ -332,6 +337,8 @@ class DataFrameStatPerfSuite extends QueryTest with SharedSQLContext with Loggin
       StatFunctions.multipleApproxQuantiles(df, Seq("col1"), Seq(0.1, 0.25, 0.5, 0.75, 0.9), 0.01)
     }
     logDebug(s"T1 = $t1, T2 = $t2")
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
 }

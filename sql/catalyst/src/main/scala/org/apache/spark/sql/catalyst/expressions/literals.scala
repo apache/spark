@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+<<<<<<< HEAD
 import java.nio.charset.StandardCharsets
+=======
+import org.json4s.JsonAST._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import java.sql.{Date, Timestamp}
 
 import org.json4s.JsonAST._

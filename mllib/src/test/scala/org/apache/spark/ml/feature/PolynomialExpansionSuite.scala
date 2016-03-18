@@ -20,7 +20,10 @@ package org.apache.spark.ml.feature
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
+<<<<<<< HEAD
 import org.apache.spark.ml.param.ParamsSuite
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -93,6 +96,7 @@ class PolynomialExpansionSuite
     }
   }
 
+<<<<<<< HEAD
   test("Polynomial expansion with degree 1 is identity on vectors") {
     val df = sqlContext.createDataFrame(data.zip(data)).toDF("features", "expected")
 
@@ -109,6 +113,8 @@ class PolynomialExpansionSuite
     }
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("read/write") {
     val t = new PolynomialExpansion()
       .setInputCol("myInputCol")

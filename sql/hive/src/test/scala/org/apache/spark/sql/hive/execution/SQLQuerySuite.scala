@@ -1775,6 +1775,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       """
         |SELECT json_tuple(json, 'f1', 'f2'), 3.14, str
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json, 'hello' as str) test
+<<<<<<< HEAD
       """.stripMargin), Row("value1", "12", BigDecimal("3.14"), "hello"))
   }
 
@@ -1805,5 +1806,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           sql("SELECT col FROM source LATERAL VIEW EXPLODE(arr) exp AS col WHERE col > 3"))
       }
     }
+=======
+      """.stripMargin), Row("value1", "12", 3.14, "hello"))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

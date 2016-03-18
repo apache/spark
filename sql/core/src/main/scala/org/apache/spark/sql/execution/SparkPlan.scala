@@ -36,7 +36,10 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
+<<<<<<< HEAD
 import org.apache.spark.util.ThreadUtils
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 /**
  * The base class for physical operators.
@@ -49,12 +52,20 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
+<<<<<<< HEAD
   protected[spark] final val sqlContext = SQLContext.getActive().orNull
+=======
+  protected[spark] final val sqlContext = SQLContext.getActive().getOrElse(null)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
+<<<<<<< HEAD
   // the value of subexpressionEliminationEnabled will be set by the deserializer after the
+=======
+  // the value of subexpressionEliminationEnabled will be set by the desserializer after the
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   // constructor has run.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.subexpressionEliminationEnabled
@@ -331,6 +342,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       partsScanned += p.size
     }
 
+<<<<<<< HEAD
     if (buf.size > n) {
       buf.take(n).toArray
     } else {
@@ -346,16 +358,60 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       useSubexprElimination: Boolean = false): () => MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
     GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
+=======
+  protected def newMutableProjection(
+      expressions: Seq[Expression], inputSchema: Seq[Attribute]): () => MutableProjection = {
+    log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
+    try {
+      GenerateMutableProjection.generate(expressions, inputSchema)
+    } catch {
+      case e: Exception =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate mutable projection, fallback to interpreted", e)
+          () => new InterpretedMutableProjection(expressions, inputSchema)
+        }
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
+<<<<<<< HEAD
     GeneratePredicate.generate(expression, inputSchema)
+=======
+    try {
+      GeneratePredicate.generate(expression, inputSchema)
+    } catch {
+      case e: Exception =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate predicate, fallback to interpreted", e)
+          InterpretedPredicate.create(expression, inputSchema)
+        }
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   protected def newOrdering(
       order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
+<<<<<<< HEAD
     GenerateOrdering.generate(order, inputSchema)
+=======
+    try {
+      GenerateOrdering.generate(order, inputSchema)
+    } catch {
+      case e: Exception =>
+        if (isTesting) {
+          throw e
+        } else {
+          log.error("Failed to generate ordering, fallback to interpreted", e)
+          new InterpretedOrdering(order, inputSchema)
+        }
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   /**

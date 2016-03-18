@@ -365,10 +365,17 @@ class DataFrame(object):
         +---+-----+
         |age| name|
         +---+-----+
+<<<<<<< HEAD
         |  5|  Bob|
         |  5|  Bob|
         |  2|Alice|
         |  2|Alice|
+=======
+        |  2|Alice|
+        |  2|Alice|
+        |  5|  Bob|
+        |  5|  Bob|
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         +---+-----+
         >>> data = data.repartition(7, "age")
         >>> data.show()
@@ -539,6 +546,9 @@ class DataFrame(object):
 
         >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
         [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
+
+        >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
+        [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
 
         >>> cond = [df.name == df3.name, df.age == df3.age]
         >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()

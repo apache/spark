@@ -459,7 +459,11 @@ column, we should get the following:
 "a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
 index `2`.
 
+<<<<<<< HEAD
 Additionally, there are two strategies regarding how `StringIndexer` will handle
+=======
+Additionaly, there are two strategies regarding how `StringIndexer` will handle
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 unseen labels when you have fit a `StringIndexer` on one dataset and then use it
 to transform another:
 
@@ -573,6 +577,7 @@ for more details on the API.
 </div>
 
 <div data-lang="java" markdown="1">
+<<<<<<< HEAD
 
 Refer to the [IndexToString Java docs](api/java/org/apache/spark/ml/feature/IndexToString.html)
 for more details on the API.
@@ -588,6 +593,23 @@ for more details on the API.
 
 {% include_example python/ml/index_to_string_example.py %}
 
+=======
+
+Refer to the [IndexToString Java docs](api/java/org/apache/spark/ml/feature/IndexToString.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaIndexToStringExample.java %}
+
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [IndexToString Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IndexToString)
+for more details on the API.
+
+{% include_example python/ml/index_to_string_example.py %}
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 </div>
 
@@ -770,6 +792,7 @@ and the [MinMaxScalerModel Java docs](api/java/org/apache/spark/ml/feature/MinMa
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaMinMaxScalerExample.java %}
+<<<<<<< HEAD
 </div>
 </div>
 
@@ -802,6 +825,8 @@ and the [MaxAbsScalerModel Java docs](api/java/org/apache/spark/ml/feature/MaxAb
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaMaxAbsScalerExample.java %}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 </div>
 </div>
 
@@ -892,6 +917,7 @@ for more details on the API.
 {% include_example python/ml/elementwise_product_example.py %}
 </div>
 </div>
+<<<<<<< HEAD
 
 ## SQLTransformer
 
@@ -903,6 +929,19 @@ the output, it can be any select clause that Spark SQL supports. Users can also
 use Spark SQL built-in function and UDFs to operate on these selected columns.
 For example, `SQLTransformer` supports statements like:
 
+=======
+
+## SQLTransformer
+
+`SQLTransformer` implements the transformations which are defined by SQL statement.
+Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
+where `"__THIS__"` represents the underlying table of the input dataset.
+The select clause specifies the fields, constants, and expressions to display in
+the output, it can be any select clause that Spark SQL supports. Users can also
+use Spark SQL built-in function and UDFs to operate on these selected columns.
+For example, `SQLTransformer` supports statements like:
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 * `SELECT a, a + b AS a_b FROM __THIS__`
 * `SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5`
 * `SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b`
@@ -1150,6 +1189,7 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaVectorSlicerExample.java %}
 </div>
 </div>
+<<<<<<< HEAD
 
 ## RFormula
 
@@ -1164,6 +1204,8 @@ The basic operators are:
 * `.` all columns except target
 
 Suppose `a` and `b` are double columns, we use the following simple examples to illustrate the effect of `RFormula`:
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 * `y ~ a + b` means model `y ~ w0 + w1 * a + w2 * b` where `w0` is the intercept and `w1, w2` are coefficients.
 * `y ~ a + b + a:b - 1` means model `y ~ w1 * a + w2 * b + w3 * a * b` where `w1, w2, w3` are coefficients.

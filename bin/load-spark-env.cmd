@@ -27,7 +27,11 @@ if [%SPARK_ENV_LOADED%] == [] (
   if not [%SPARK_CONF_DIR%] == [] (
     set user_conf_dir=%SPARK_CONF_DIR%
   ) else (
+<<<<<<< HEAD
     set user_conf_dir=..\conf
+=======
+    set user_conf_dir=%~dp0..\conf
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   )
 
   call :LoadSparkEnv

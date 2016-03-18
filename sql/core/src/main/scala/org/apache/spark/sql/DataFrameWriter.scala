@@ -22,10 +22,16 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource}
+=======
+import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, InsertIntoTable}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -268,7 +274,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
+<<<<<<< HEAD
     assertNotBucketed()
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
@@ -291,6 +300,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         ifNotExists = false)).toRdd
   }
 
+<<<<<<< HEAD
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
     cols.map(normalize(_, "Partition"))
   }
@@ -341,6 +351,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     if (numBuckets.isDefined || sortColumnNames.isDefined) {
       throw new IllegalArgumentException(
         "Currently we don't support writing bucketed data to this data source.")
+=======
+  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { parCols =>
+    parCols.map { col =>
+      df.logicalPlan.output
+        .map(_.name)
+        .find(df.sqlContext.analyzer.resolver(_, col))
+        .getOrElse(throw new AnalysisException(s"Partition column $col not found in existing " +
+          s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
   }
 

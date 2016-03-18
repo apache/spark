@@ -24,7 +24,10 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
+<<<<<<< HEAD
 import org.apache.spark.sql.internal.SQLConf
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.types._
 
 
@@ -175,6 +178,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       }
     }
   }
+<<<<<<< HEAD
 
   test(s"SPARK-13537: Fix readBytes in VectorizedPlainValuesReader") {
     withTempPath { file =>
@@ -228,4 +232,6 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       }
     }
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }

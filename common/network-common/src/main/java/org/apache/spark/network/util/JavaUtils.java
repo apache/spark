@@ -207,8 +207,14 @@ public class JavaUtils {
   }
 
   /**
+<<<<<<< HEAD:common/network-common/src/main/java/org/apache/spark/network/util/JavaUtils.java
    * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to the given. If no suffix is
    * provided, a direct conversion to the provided unit is attempted.
+=======
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to a ByteUnit for
+   * internal use. If no suffix is provided a direct conversion of the provided default is
+   * attempted.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/main/java/org/apache/spark/network/util/JavaUtils.java
    */
   public static long byteStringAs(String str, ByteUnit unit) {
     String lower = str.toLowerCase().trim();

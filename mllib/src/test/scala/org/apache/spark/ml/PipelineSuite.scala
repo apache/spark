@@ -26,10 +26,16 @@ import org.scalatest.mock.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline.SharedReadWrite
+<<<<<<< HEAD
 import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vectors
+=======
+import org.apache.spark.ml.feature.HashingTF
+import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.util._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -175,6 +181,7 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       }
     }
   }
+<<<<<<< HEAD
 
   test("pipeline validateParams") {
     val df = sqlContext.createDataFrame(
@@ -195,6 +202,8 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
        pipeline.fit(df)
     }
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 }
 
 

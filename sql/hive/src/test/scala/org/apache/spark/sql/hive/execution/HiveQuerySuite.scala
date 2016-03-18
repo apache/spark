@@ -26,15 +26,24 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
+<<<<<<< HEAD
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
 import org.apache.spark.sql.hive._
+<<<<<<< HEAD
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.{SparkException, SparkFiles}
 
 case class TestData(a: Int, b: String)
 
@@ -1205,6 +1214,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   }
 
+<<<<<<< HEAD
   test("use database") {
     val currentDatabase = sql("select current_database()").first().getString(0)
 
@@ -1220,6 +1230,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(currentDatabase == sql("select current_database()").first().getString(0))
   }
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   test("lookup hive UDF in another thread") {
     val e = intercept[AnalysisException] {
       range(1).selectExpr("not_a_udf()")

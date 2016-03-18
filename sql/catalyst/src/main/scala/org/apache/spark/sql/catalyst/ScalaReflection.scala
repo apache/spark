@@ -17,9 +17,15 @@
 
 package org.apache.spark.sql.catalyst
 
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+=======
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.expressions._
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -35,7 +41,10 @@ object ScalaReflection extends ScalaReflection {
   // SPARK-13640: Synchronize this because universe.runtimeMirror is not thread-safe in Scala 2.10.
   override def mirror: universe.Mirror = ScalaReflectionLock.synchronized {
     universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
+<<<<<<< HEAD
   }
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   import universe._
 
@@ -476,6 +485,7 @@ object ScalaReflection extends ScalaReflection {
             // For non-primitives, we can just extract the object from the Option and then recurse.
             case other =>
               val className = getClassNameFromType(optType)
+<<<<<<< HEAD
               val newPath = s"""- option value class: "$className"""" +: walkedTypePath
 
               val optionObjectType: DataType = other match {
@@ -485,6 +495,12 @@ object ScalaReflection extends ScalaReflection {
                 case arr if arr <:< localTypeOf[Array[_]] => arrayClassFor(t)
                 case cls => ObjectType(getClassFromType(cls))
               }
+=======
+              val classObj = Utils.classForName(className)
+              val optionObjectType = ObjectType(classObj)
+              val newPath = s"""- option value class: "$className"""" +: walkedTypePath
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
               val unwrapped = UnwrapOption(optionObjectType, inputObject)
 
               expressions.If(
@@ -618,6 +634,7 @@ object ScalaReflection extends ScalaReflection {
     getConstructorParameters(t)
   }
 
+<<<<<<< HEAD
   /**
    * Returns the parameter names for the primary constructor of this class.
    *
@@ -635,6 +652,8 @@ object ScalaReflection extends ScalaReflection {
   /*
    * Retrieves the runtime class corresponding to the provided type.
    */
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
 }
 
@@ -676,16 +695,23 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
+<<<<<<< HEAD
   // SPARK-13640: Synchronize this because TypeTag.tpe is not thread-safe in Scala 2.10.
   def localTypeOf[T: TypeTag]: `Type` = ScalaReflectionLock.synchronized {
     val tag = implicitly[TypeTag[T]]
     tag.in(mirror).tpe.normalize
   }
+=======
+  def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
     val className = getClassNameFromType(tpe)
+<<<<<<< HEAD
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     tpe match {
 
       case t if Utils.classIsLoadable(className) &&
@@ -760,6 +786,7 @@ trait ScalaReflection {
     case _: UnsupportedOperationException => Schema(NullType, nullable = true)
   }
 
+<<<<<<< HEAD
   /**
     * Returns the full class name for a type. The returned name is the canonical
     * Scala name, where each component is separated by a period. It is NOT the
@@ -770,6 +797,9 @@ trait ScalaReflection {
     * or nested classes in package objects, it uses the dollar sign ($) to create
     * synthetic classes, emulating behaviour in Java bytecode.
     */
+=======
+  /** Returns the full class name for a type. */
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   def getClassNameFromType(tpe: `Type`): String = {
     tpe.erasure.typeSymbol.asClass.fullName
   }
@@ -792,7 +822,25 @@ trait ScalaReflection {
   def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
     val formalTypeArgs = tpe.typeSymbol.asClass.typeParams
     val TypeRef(_, _, actualTypeArgs) = tpe
+<<<<<<< HEAD
     constructParams(tpe).map { p =>
+=======
+    val constructorSymbol = tpe.member(nme.CONSTRUCTOR)
+    val params = if (constructorSymbol.isMethod) {
+      constructorSymbol.asMethod.paramss
+    } else {
+      // Find the primary constructor, and use its parameter ordering.
+      val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
+        s => s.isMethod && s.asMethod.isPrimaryConstructor)
+      if (primaryConstructorSymbol.isEmpty) {
+        sys.error("Internal SQL error: Product object did not have a primary constructor.")
+      } else {
+        primaryConstructorSymbol.get.asMethod.paramss
+      }
+    }
+
+    params.flatten.map { p =>
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
     }
   }

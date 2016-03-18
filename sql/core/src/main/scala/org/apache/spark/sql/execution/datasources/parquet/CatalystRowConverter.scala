@@ -644,8 +644,13 @@ private[parquet] object CatalystRowConverter {
     // copying it.
     val buffer = binary.toByteBuffer
     val bytes = buffer.array()
+<<<<<<< HEAD
     val start = buffer.arrayOffset() + buffer.position()
     val end = buffer.arrayOffset() + buffer.limit()
+=======
+    val start = buffer.position()
+    val end = buffer.limit()
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     var unscaled = 0L
     var i = start

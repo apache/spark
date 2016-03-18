@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.classification
 
+<<<<<<< HEAD
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -96,6 +99,7 @@ final class DecisionTreeClassifier @Since("1.4.0") (
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), parentUID = Some(uid))
+<<<<<<< HEAD
     trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
 
@@ -104,6 +108,8 @@ final class DecisionTreeClassifier @Since("1.4.0") (
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 0L, parentUID = Some(uid))
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
 

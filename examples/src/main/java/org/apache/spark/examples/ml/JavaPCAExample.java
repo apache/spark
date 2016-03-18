@@ -29,7 +29,11 @@ import org.apache.spark.ml.feature.PCA;
 import org.apache.spark.ml.feature.PCAModel;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.Metadata;
@@ -54,7 +58,11 @@ public class JavaPCAExample {
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
     });
 
+<<<<<<< HEAD
     Dataset<Row> df = jsql.createDataFrame(data, schema);
+=======
+    DataFrame df = jsql.createDataFrame(data, schema);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     PCAModel pca = new PCA()
       .setInputCol("features")
@@ -62,7 +70,11 @@ public class JavaPCAExample {
       .setK(3)
       .fit(df);
 
+<<<<<<< HEAD
     Dataset<Row> result = pca.transform(df).select("pcaFeatures");
+=======
+    DataFrame result = pca.transform(df).select("pcaFeatures");
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     result.show();
     // $example off$
     jsc.stop();

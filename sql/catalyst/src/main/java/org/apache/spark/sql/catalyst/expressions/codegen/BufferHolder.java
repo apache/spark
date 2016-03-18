@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
 
 /**
+<<<<<<< HEAD
  * A helper class to manage the data buffer for an unsafe row.  The data buffer can grow and
  * automatically re-point the unsafe row to it.
  *
@@ -33,6 +34,9 @@ import org.apache.spark.unsafe.Platform;
  * Generally we should call `UnsafeRow.setTotalSize` and pass in `BufferHolder.totalSize` to update
  * the size of the result row, after writing a record to the buffer. However, we can skip this step
  * if the fields of row are all fixed-length, as the size of result row is also fixed.
+=======
+ * A helper class to manage the row buffer when construct unsafe rows.
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
  */
 public class BufferHolder {
   public byte[] buffer;
@@ -51,10 +55,25 @@ public class BufferHolder {
     this.row.pointTo(buffer, buffer.length);
   }
 
+<<<<<<< HEAD
   /**
    * Grows the buffer by at least neededSize and points the row to the buffer.
    */
   public void grow(int neededSize) {
+=======
+  public BufferHolder() {
+    this(64);
+  }
+
+  public BufferHolder(int size) {
+    buffer = new byte[size];
+  }
+
+  /**
+   * Grows the buffer to at least neededSize. If row is non-null, points the row to the buffer.
+   */
+  public void grow(int neededSize, UnsafeRow row) {
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
@@ -66,12 +85,26 @@ public class BufferHolder {
         Platform.BYTE_ARRAY_OFFSET,
         totalSize());
       buffer = tmp;
+<<<<<<< HEAD
       row.pointTo(buffer, buffer.length);
+=======
+      if (row != null) {
+        row.pointTo(buffer, length * 2);
+      }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     }
+  }
+
+  public void grow(int neededSize) {
+    grow(neededSize, null);
   }
 
   public void reset() {
     cursor = Platform.BYTE_ARRAY_OFFSET + fixedSize;
+  }
+  public void resetTo(int offset) {
+    assert(offset <= buffer.length);
+    cursor = Platform.BYTE_ARRAY_OFFSET + offset;
   }
 
   public int totalSize() {

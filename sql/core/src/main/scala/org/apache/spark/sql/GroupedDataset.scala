@@ -21,10 +21,16 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
+=======
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, OuterScopes}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateStruct, Attribute}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.expressions.Aggregator
 
 /**
  * :: Experimental ::
@@ -64,7 +70,11 @@ class GroupedDataset[K, V] private[sql](
 
   private def groupedData =
     new GroupedData(
+<<<<<<< HEAD
       Dataset.newDataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
+=======
+      new DataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
   /**
    * Returns a new [[GroupedDataset]] where the type of the key has been mapped to the specified
@@ -111,12 +121,22 @@ class GroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+<<<<<<< HEAD
     Dataset[U](
       sqlContext,
       MapGroups(
         f,
         groupingAttributes,
         dataAttributes,
+=======
+    new Dataset[U](
+      sqlContext,
+      MapGroups(
+        f,
+        resolvedKEncoder,
+        resolvedVEncoder,
+        groupingAttributes,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
         logicalPlan))
   }
 
@@ -223,7 +243,11 @@ class GroupedDataset[K, V] private[sql](
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
    * and code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
+<<<<<<< HEAD
    * TODO: does not handle aggregations that return nonflat results,
+=======
+   * TODO: does not handle aggrecations that return nonflat results,
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
@@ -307,11 +331,18 @@ class GroupedDataset[K, V] private[sql](
   def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+<<<<<<< HEAD
     implicit val uEncoder = other.unresolvedVEncoder
     Dataset[R](
+=======
+    new Dataset[R](
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
       sqlContext,
       CoGroup(
         f,
+        this.resolvedKEncoder,
+        this.resolvedVEncoder,
+        other.resolvedVEncoder,
         this.groupingAttributes,
         other.groupingAttributes,
         this.dataAttributes,

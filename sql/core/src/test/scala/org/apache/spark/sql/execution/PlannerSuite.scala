@@ -24,9 +24,13 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal,
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
+<<<<<<< HEAD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchange, ReuseExchange, ShuffleExchange}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin, SortMergeJoin}
+=======
+import org.apache.spark.sql.execution.joins.{SortMergeJoin, BroadcastHashJoin}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -143,7 +147,11 @@ class PlannerSuite extends SharedSQLContext {
         val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
+<<<<<<< HEAD
         assert(sortMergeJoins.isEmpty, "Should not use shuffled hash join")
+=======
+        assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
         sqlContext.clearCache()
       }
@@ -156,6 +164,25 @@ class PlannerSuite extends SharedSQLContext {
       testData.write.parquet(path)
       val df = sqlContext.read.parquet(path)
       sqlContext.registerDataFrameAsTable(df, "testPushed")
+<<<<<<< HEAD
+=======
+
+      withTempTable("testPushed") {
+        val exp = sql("select * from testPushed where key = 15").queryExecution.executedPlan
+        assert(exp.toString.contains("PushedFilters: [EqualTo(key,15)]"))
+      }
+    }
+  }
+
+  test("efficient limit -> project -> sort") {
+    {
+      val query =
+        testData.select('key, 'value).sort('key).limit(2).logicalPlan
+      val planned = sqlContext.planner.TakeOrderedAndProject(query)
+      assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
+      assert(planned.head.output === testData.select('key, 'value).logicalPlan.output)
+    }
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
       withTempTable("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan

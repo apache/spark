@@ -554,9 +554,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Returns the top k (largest) elements from this RDD as defined by
    * the specified Comparator[T] and maintains the order.
+<<<<<<< HEAD
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * @param num k, the number of top elements to return
    * @param comp the comparator that defines the order
    * @return an array of top elements
@@ -568,9 +571,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Returns the top k (largest) elements from this RDD using the
    * natural ordering for T and maintains the order.
+<<<<<<< HEAD
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
    * @param num k, the number of top elements to return
    * @return an array of top elements
    */

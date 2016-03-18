@@ -20,7 +20,10 @@ package org.apache.spark.rdd
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.{Text, Writable}
 import org.apache.hadoop.mapreduce.InputSplit
+<<<<<<< HEAD
 import org.apache.hadoop.mapreduce.task.JobContextImpl
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 import org.apache.spark.{Partition, SparkContext}
 import org.apache.spark.input.WholeTextFileInputFormat
@@ -45,7 +48,11 @@ private[spark] class WholeTextFileRDD(
         configurable.setConf(conf)
       case _ =>
     }
+<<<<<<< HEAD
     val jobContext = new JobContextImpl(conf, jobId)
+=======
+    val jobContext = newJobContext(conf, jobId)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
     inputFormat.setMinPartitions(jobContext, minPartitions)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)

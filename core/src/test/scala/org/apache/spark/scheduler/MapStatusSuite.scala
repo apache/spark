@@ -23,7 +23,13 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
+<<<<<<< HEAD
 import org.apache.spark.storage.BlockManagerId
+=======
+import org.roaringbitmap.RoaringBitmap
+
+import scala.util.Random
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 class MapStatusSuite extends SparkFunSuite {
 

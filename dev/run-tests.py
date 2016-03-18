@@ -433,7 +433,10 @@ def run_python_tests(test_modules, parallelism):
 def run_build_tests():
     set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
     run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
+<<<<<<< HEAD
     pass
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 
 def run_sparkr_tests():

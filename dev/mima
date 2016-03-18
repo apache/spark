@@ -28,7 +28,18 @@ SPARK_PROFILES="-Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -P
 TOOLS_CLASSPATH="$(build/sbt "export tools/fullClasspath" | tail -n1)"
 OLD_DEPS_CLASSPATH="$(build/sbt $SPARK_PROFILES "export oldDeps/fullClasspath" | tail -n1)"
 
+<<<<<<< HEAD
 rm -f .generated-mima*
+=======
+# Generate Mima Ignore is called twice, first with latest built jars
+# on the classpath and then again with previous version jars on the classpath.
+# Because of a bug in GenerateMIMAIgnore that when old jars are ahead on classpath
+# it did not process the new classes (which are in assembly jar).
+generate_mima_ignore
+
+export SPARK_CLASSPATH="$(build/sbt "export oldDeps/fullClasspath" | tail -n1)"
+echo "SPARK_CLASSPATH=$SPARK_CLASSPATH"
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
 java \
   -XX:MaxPermSize=1g \

@@ -36,6 +36,11 @@ class StreamInterceptor implements TransportFrameDecoder.Interceptor {
   private final StreamCallback callback;
   private long bytesRead;
 
+<<<<<<< HEAD:common/network-common/src/main/java/org/apache/spark/network/client/StreamInterceptor.java
+=======
+  private volatile long bytesRead;
+
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3:network/common/src/main/java/org/apache/spark/network/client/StreamInterceptor.java
   StreamInterceptor(
       TransportResponseHandler handler,
       String streamId,

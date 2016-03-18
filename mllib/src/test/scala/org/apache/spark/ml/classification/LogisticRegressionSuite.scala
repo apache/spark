@@ -23,7 +23,11 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
+<<<<<<< HEAD
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+=======
+import org.apache.spark.ml.util.{Identifiable, DefaultReadWriteTest, MLTestingUtils}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -881,6 +885,7 @@ class LogisticRegressionSuite
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
   }
 
+<<<<<<< HEAD
   test("logistic regression with all labels the same") {
     val sameLabels = dataset
       .withColumn("zeroLabel", lit(0.0))
@@ -921,6 +926,18 @@ class LogisticRegressionSuite
       .fit(sameLabels)
     assert(allOneNoInterceptModel.intercept === 0.0)
     assert(allOneNoInterceptModel.summary.totalIterations > 0)
+=======
+  test("read/write") {
+    def checkModelData(model: LogisticRegressionModel, model2: LogisticRegressionModel): Unit = {
+      assert(model.intercept === model2.intercept)
+      assert(model.coefficients.toArray === model2.coefficients.toArray)
+      assert(model.numClasses === model2.numClasses)
+      assert(model.numFeatures === model2.numFeatures)
+    }
+    val lr = new LogisticRegression()
+    testEstimatorAndModelReadWrite(lr, dataset, LogisticRegressionSuite.allParamSettings,
+      checkModelData)
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 
   test("read/write") {
@@ -934,6 +951,26 @@ class LogisticRegressionSuite
     testEstimatorAndModelReadWrite(lr, dataset, LogisticRegressionSuite.allParamSettings,
       checkModelData)
   }
+}
+
+object LogisticRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = ProbabilisticClassifierSuite.allParamSettings ++ Map(
+    "probabilityCol" -> "myProbability",
+    "thresholds" -> Array(0.4, 0.6),
+    "regParam" -> 0.01,
+    "elasticNetParam" -> 0.1,
+    "maxIter" -> 2,  // intentionally small
+    "fitIntercept" -> true,
+    "tol" -> 0.8,
+    "standardization" -> false,
+    "threshold" -> 0.6
+  )
 }
 
 object LogisticRegressionSuite {

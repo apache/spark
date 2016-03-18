@@ -26,8 +26,12 @@ import org.apache.spark.ml.classification.DecisionTreeClassifier;
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.feature.*;
+<<<<<<< HEAD
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+=======
+import org.apache.spark.sql.DataFrame;
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.sql.SQLContext;
 // $example off$
 
@@ -39,7 +43,11 @@ public class JavaDecisionTreeClassificationExample {
 
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
+<<<<<<< HEAD
     Dataset<Row> data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+=======
+    DataFrame data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.
@@ -56,9 +64,15 @@ public class JavaDecisionTreeClassificationExample {
       .fit(data);
 
     // Split the data into training and test sets (30% held out for testing)
+<<<<<<< HEAD
     Dataset<Row>[] splits = data.randomSplit(new double[]{0.7, 0.3});
     Dataset<Row> trainingData = splits[0];
     Dataset<Row> testData = splits[1];
+=======
+    DataFrame[] splits = data.randomSplit(new double[]{0.7, 0.3});
+    DataFrame trainingData = splits[0];
+    DataFrame testData = splits[1];
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Train a DecisionTree model.
     DecisionTreeClassifier dt = new DecisionTreeClassifier()
@@ -79,7 +93,11 @@ public class JavaDecisionTreeClassificationExample {
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
+<<<<<<< HEAD
     Dataset<Row> predictions = model.transform(testData);
+=======
+    DataFrame predictions = model.transform(testData);
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 
     // Select example rows to display.
     predictions.select("predictedLabel", "label", "features").show(5);
@@ -96,7 +114,10 @@ public class JavaDecisionTreeClassificationExample {
       (DecisionTreeClassificationModel) (model.stages()[2]);
     System.out.println("Learned classification tree model:\n" + treeModel.toDebugString());
     // $example off$
+<<<<<<< HEAD
 
     jsc.stop();
+=======
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
   }
 }

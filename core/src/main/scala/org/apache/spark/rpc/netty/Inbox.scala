@@ -21,8 +21,12 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
 
+<<<<<<< HEAD
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+=======
+import org.apache.spark.{Logging, SparkException}
+>>>>>>> 022e06d18471bf54954846c815c8a3666aef9fc3
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, ThreadSafeRpcEndpoint}
 
 
