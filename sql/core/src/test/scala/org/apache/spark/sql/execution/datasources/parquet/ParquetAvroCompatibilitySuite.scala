@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.File
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -59,7 +59,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
               .setLongColumn(i.toLong * 10)
               .setFloatColumn(i.toFloat + 0.1f)
               .setDoubleColumn(i.toDouble + 0.2d)
-              .setBinaryColumn(ByteBuffer.wrap(s"val_$i".getBytes("UTF-8")))
+              .setBinaryColumn(ByteBuffer.wrap(s"val_$i".getBytes(StandardCharsets.UTF_8)))
               .setStringColumn(s"val_$i")
               .build())
         }
@@ -74,7 +74,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
           i.toLong * 10,
           i.toFloat + 0.1f,
           i.toDouble + 0.2d,
-          s"val_$i".getBytes("UTF-8"),
+          s"val_$i".getBytes(StandardCharsets.UTF_8),
           s"val_$i")
       })
     }
@@ -103,7 +103,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
               .setMaybeLongColumn(i.toLong * 10)
               .setMaybeFloatColumn(i.toFloat + 0.1f)
               .setMaybeDoubleColumn(i.toDouble + 0.2d)
-              .setMaybeBinaryColumn(ByteBuffer.wrap(s"val_$i".getBytes("UTF-8")))
+              .setMaybeBinaryColumn(ByteBuffer.wrap(s"val_$i".getBytes(StandardCharsets.UTF_8)))
               .setMaybeStringColumn(s"val_$i")
               .build()
           }
@@ -124,7 +124,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
             i.toLong * 10,
             i.toFloat + 0.1f,
             i.toDouble + 0.2d,
-            s"val_$i".getBytes("UTF-8"),
+            s"val_$i".getBytes(StandardCharsets.UTF_8),
             s"val_$i")
         }
       })

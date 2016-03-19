@@ -673,7 +673,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           classOf[AlwaysFailOutputCommitter].getName)
 
         // Code below shouldn't throw since customized output committer should be disabled.
-        val df = sqlContext.range(10).coalesce(1)
+        val df = sqlContext.range(10).toDF().coalesce(1)
         df.write.format(dataSourceName).save(dir.getCanonicalPath)
         checkAnswer(
           sqlContext
