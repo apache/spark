@@ -131,7 +131,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case g: Generate =>
       generateToSQL(g)
 
-    case Limit(limitExpr, child) =>
+    case Limit(limitExpr, child, _) =>
       s"${toSQL(child)} LIMIT ${limitExpr.sql}"
 
     case Filter(condition, child) =>
