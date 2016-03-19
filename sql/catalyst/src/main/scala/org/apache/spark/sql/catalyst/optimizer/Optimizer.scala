@@ -898,7 +898,10 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
 
       // If there is no nondeterministic conditions, push down the whole condition.
       if (nondeterministic.isEmpty) {
-        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+        val newFilter = Filter(replaceAlias(condition, aliasMap), grandChild)
+        val newFields = fields.map(RewriteAttributes.execute(newFilter.outputSet, _))
+          .asInstanceOf[Seq[NamedExpression]]
+        project.copy(projectList = newFields, child = newFilter)
       } else {
         // If they are all nondeterministic conditions, leave it un-changed.
         if (deterministic.isEmpty) {
@@ -907,8 +910,11 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
           // Push down the small conditions without nondeterministic expressions.
           val pushedCondition =
             deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
+          val newFilter = Filter(pushedCondition, grandChild)
+          val newFields = fields.map(RewriteAttributes.execute(newFilter.outputSet, _))
+            .asInstanceOf[Seq[NamedExpression]]
           Filter(nondeterministic.reduce(And),
-            project.copy(child = Filter(pushedCondition, grandChild)))
+            project.copy(projectList = newFields, child = newFilter))
         }
       }
   }
@@ -930,9 +936,17 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
       }
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
+        val newFilter = Filter(pushDownPredicate, g.child)
+        val newGeneratorOutput =
+          g.generatorOutput.map(RewriteAttributes.execute(newFilter.outputSet, _))
         val newGenerate = Generate(g.generator, join = g.join, outer = g.outer,
-          g.qualifier, g.generatorOutput, Filter(pushDownPredicate, g.child))
-        if (stayUp.isEmpty) newGenerate else Filter(stayUp.reduce(And), newGenerate)
+          g.qualifier, g.generatorOutput, newFilter)
+        if (stayUp.isEmpty) {
+          newGenerate
+        } else {
+          val newCondition = RewriteAttributes.execute(newGenerate.outputSet, stayUp.reduce(And))
+          Filter(newCondition, newGenerate)
+        }
       } else {
         filter
       }
@@ -964,10 +978,22 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
         val replaced = replaceAlias(pushDownPredicate, aliasMap)
-        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
+        val newFilter = Filter(replaced, aggregate.child)
+        val newGroupingExpressions =
+          aggregate.groupingExpressions.map(RewriteAttributes.execute(newFilter.outputSet, _))
+        val newAggregateExpressions =
+          aggregate.aggregateExpressions.map(RewriteAttributes.execute(newFilter.outputSet, _))
+          .asInstanceOf[Seq[NamedExpression]]
+        val newAggregate = aggregate.copy(groupingExpressions = newGroupingExpressions,
+          aggregateExpressions = newAggregateExpressions, child = newFilter)
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
-        if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
+        if (stayUp.isEmpty) {
+          newAggregate
+        } else {
+          val newCondition = RewriteAttributes.execute(newAggregate.outputSet, stayUp.reduce(And))
+          Filter(newCondition, newAggregate)
+        }
       } else {
         filter
       }
