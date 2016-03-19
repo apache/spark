@@ -27,10 +27,11 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.impl.TreeTests;
+import org.apache.spark.ml.tree.impl.TreeTests;
 import org.apache.spark.mllib.classification.LogisticRegressionSuite;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 
 
 public class JavaGBTClassifierSuite implements Serializable {
@@ -56,8 +57,8 @@ public class JavaGBTClassifierSuite implements Serializable {
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
-    Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
-    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
+    Map<Integer, Integer> categoricalFeatures = new HashMap<>();
+    Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
     // This tests setters. Training with various options is tested in Scala.
     GBTClassifier rf = new GBTClassifier()

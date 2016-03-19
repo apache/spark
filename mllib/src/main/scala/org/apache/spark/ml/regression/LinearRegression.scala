@@ -24,8 +24,9 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, 
 import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
@@ -158,19 +159,19 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   override protected def train(dataset: DataFrame): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
-    val numFeatures = dataset.select(col($(featuresCol))).limit(1).map {
+    val numFeatures = dataset.select(col($(featuresCol))).limit(1).rdd.map {
       case Row(features: Vector) => features.size
     }.first()
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
-    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 && numFeatures <= 4096) ||
-      $(solver) == "normal") {
+    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 &&
+      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
       require($(elasticNetParam) == 0.0, "Only L2 regularization can be used when normal " +
         "solver is used.'")
       // For low dimensional data, WeightedLeastSquares is more efficiently since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
       val instances: RDD[Instance] = dataset.select(
-        col($(labelCol)), w, col($(featuresCol))).map {
+        col($(labelCol)), w, col($(featuresCol))).rdd.map {
           case Row(label: Double, weight: Double, features: Vector) =>
             Instance(label, weight, features)
       }
@@ -196,10 +197,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       return lrModel.setSummary(trainingSummary)
     }
 
-    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
-      case Row(label: Double, weight: Double, features: Vector) =>
-        Instance(label, weight, features)
-    }
+    val instances: RDD[Instance] =
+      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
+        case Row(label: Double, weight: Double, features: Vector) =>
+          Instance(label, weight, features)
+      }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -396,12 +398,8 @@ class LinearRegressionModel private[ml] (
    * thrown if `trainingSummary == None`.
    */
   @Since("1.5.0")
-  def summary: LinearRegressionTrainingSummary = trainingSummary match {
-    case Some(summ) => summ
-    case None =>
-      throw new SparkException(
-        "No training summary available for this LinearRegressionModel",
-        new NullPointerException())
+  def summary: LinearRegressionTrainingSummary = trainingSummary.getOrElse {
+    throw new SparkException("No training summary available for this LinearRegressionModel")
   }
 
   private[regression] def setSummary(summary: LinearRegressionTrainingSummary): this.type = {
@@ -513,6 +511,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
  * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
  * training coefficients except for the objective trace.
+ *
  * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
@@ -537,6 +536,7 @@ class LinearRegressionTrainingSummary private[regression] (
 /**
  * :: Experimental ::
  * Linear regression results evaluated on a dataset.
+ *
  * @param predictions predictions outputted by the model's `transform` method.
  */
 @Since("1.5.0")
@@ -551,6 +551,7 @@ class LinearRegressionSummary private[regression] (
   @transient private val metrics = new RegressionMetrics(
     predictions
       .select(predictionCol, labelCol)
+      .rdd
       .map { case Row(pred: Double, label: Double) => (pred, label) },
     !model.getFitIntercept)
 

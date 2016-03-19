@@ -773,6 +773,38 @@ for more details on the API.
 </div>
 </div>
 
+
+## MaxAbsScaler
+
+`MaxAbsScaler` transforms a dataset of `Vector` rows, rescaling each feature to range [-1, 1] 
+by dividing through the maximum absolute value in each feature. It does not shift/center the 
+data, and thus does not destroy any sparsity.
+
+`MaxAbsScaler` computes summary statistics on a data set and produces a `MaxAbsScalerModel`. The 
+model can then transform each feature individually to range [-1, 1].
+
+The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [-1, 1].
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [MaxAbsScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScaler)
+and the [MaxAbsScalerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScalerModel)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/MaxAbsScalerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [MaxAbsScaler Java docs](api/java/org/apache/spark/ml/feature/MaxAbsScaler.html)
+and the [MaxAbsScalerModel Java docs](api/java/org/apache/spark/ml/feature/MaxAbsScalerModel.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaMaxAbsScalerExample.java %}
+</div>
+</div>
+
 ## Bucketizer
 
 `Bucketizer` transforms a column of continuous features to a column of feature buckets, where the buckets are specified by users. It takes a parameter:

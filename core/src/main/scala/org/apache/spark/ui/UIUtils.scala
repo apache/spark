@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
@@ -406,13 +406,6 @@ private[spark] object UIUtils extends Logging {
     <sup>
       (<a data-toggle="tooltip" data-placement={position} title={text}>?</a>)
     </sup>
-  }
-
-  /** Return a script element that automatically expands the DAG visualization on page load. */
-  def expandDagVizOnLoad(forJob: Boolean): Seq[Node] = {
-    <script type="text/javascript">
-      {Unparsed("$(document).ready(function() { toggleDagViz(" + forJob + ") });")}
-    </script>
   }
 
   /**

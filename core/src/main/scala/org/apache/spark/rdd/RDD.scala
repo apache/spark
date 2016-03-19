@@ -33,11 +33,12 @@ import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
@@ -85,10 +86,14 @@ abstract class RDD[T: ClassTag](
   private def sc: SparkContext = {
     if (_sc == null) {
       throw new SparkException(
-        "RDD transformations and actions can only be invoked by the driver, not inside of other " +
-        "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid because " +
-        "the values transformation and count action cannot be performed inside of the rdd1.map " +
-        "transformation. For more information, see SPARK-5063.")
+        "This RDD lacks a SparkContext. It could happen in the following cases: \n(1) RDD " +
+        "transformations and actions are NOT invoked by the driver, but inside of other " +
+        "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid " +
+        "because the values transformation and count action cannot be performed inside of the " +
+        "rdd1.map transformation. For more information, see SPARK-5063.\n(2) When a Spark " +
+        "Streaming job recovers from checkpoint, this exception will be hit if a reference to " +
+        "an RDD not defined by the streaming job is used in DStream operations. For more " +
+        "information, See SPARK-13758.")
     }
     _sc
   }
@@ -272,7 +277,7 @@ abstract class RDD[T: ClassTag](
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
-      SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)
+      getOrCompute(split, context)
     } else {
       computeOrReadCheckpoint(split, context)
     }
@@ -311,6 +316,35 @@ abstract class RDD[T: ClassTag](
       firstParent[T].iterator(split, context)
     } else {
       compute(split, context)
+    }
+  }
+
+  /**
+   * Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached.
+   */
+  private[spark] def getOrCompute(partition: Partition, context: TaskContext): Iterator[T] = {
+    val blockId = RDDBlockId(id, partition.index)
+    var readCachedBlock = true
+    // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
+    SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, () => {
+      readCachedBlock = false
+      computeOrReadCheckpoint(partition, context)
+    }) match {
+      case Left(blockResult) =>
+        if (readCachedBlock) {
+          val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
+          existingMetrics.incBytesReadInternal(blockResult.bytes)
+          new InterruptibleIterator[T](context, blockResult.data.asInstanceOf[Iterator[T]]) {
+            override def next(): T = {
+              existingMetrics.incRecordsReadInternal(1)
+              delegate.next()
+            }
+          }
+        } else {
+          new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
+        }
+      case Right(iter) =>
+        new InterruptibleIterator(context, iter.asInstanceOf[Iterator[T]])
     }
   }
 
@@ -689,7 +723,7 @@ abstract class RDD[T: ClassTag](
    *                        An example of pipe the RDD data of groupBy() in a streaming way,
    *                        instead of constructing a huge String to concat all the elements:
    *                        def printRDDElement(record:(String, Seq[String]), f:String=&gt;Unit) =
-   *                          for (e &lt;- record._2){f(e)}
+   *                          for (e &lt;- record._2) {f(e)}
    * @param separateWorkingDir Use separate working directories for each task.
    * @return the result RDD
    */

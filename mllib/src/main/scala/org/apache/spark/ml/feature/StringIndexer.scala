@@ -39,7 +39,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputColName = $(inputCol)
     val inputDataType = schema(inputColName).dataType
     require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
@@ -83,6 +82,7 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
 
   override def fit(dataset: DataFrame): StringIndexerModel = {
     val counts = dataset.select(col($(inputCol)).cast(StringType))
+      .rdd
       .map(_.getString(0))
       .countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
@@ -274,7 +274,6 @@ class IndexToString private[ml] (override val uid: String)
   final def getLabels: Array[String] = $(labels)
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputColName = $(inputCol)
     val inputDataType = schema(inputColName).dataType
     require(inputDataType.isInstanceOf[NumericType],

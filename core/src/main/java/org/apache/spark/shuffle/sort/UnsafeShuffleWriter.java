@@ -25,7 +25,6 @@ import java.util.Iterator;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
-import scala.collection.immutable.Map;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
@@ -117,7 +116,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.mapId = mapId;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.shuffleId = dep.shuffleId();
-    this.serializer = Serializer.getSerializer(dep.serializer()).newInstance();
+    this.serializer = dep.serializer().newInstance();
     this.partitioner = dep.partitioner();
     this.writeMetrics = taskContext.taskMetrics().registerShuffleWriteMetrics();
     this.taskContext = taskContext;

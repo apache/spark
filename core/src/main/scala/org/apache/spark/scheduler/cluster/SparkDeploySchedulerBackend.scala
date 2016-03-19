@@ -19,9 +19,10 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._

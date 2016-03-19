@@ -73,37 +73,37 @@ public class TaskMemoryManagerSuite {
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
     c1.use(100);
-    assert(c1.getUsed() == 100);
+    Assert.assertEquals(100, c1.getUsed());
     c2.use(100);
-    assert(c2.getUsed() == 100);
-    assert(c1.getUsed() == 0);  // spilled
+    Assert.assertEquals(100, c2.getUsed());
+    Assert.assertEquals(0, c1.getUsed());  // spilled
     c1.use(100);
-    assert(c1.getUsed() == 100);
-    assert(c2.getUsed() == 0);  // spilled
+    Assert.assertEquals(100, c1.getUsed());
+    Assert.assertEquals(0, c2.getUsed());  // spilled
 
     c1.use(50);
-    assert(c1.getUsed() == 50);  // spilled
-    assert(c2.getUsed() == 0);
+    Assert.assertEquals(50, c1.getUsed());  // spilled
+    Assert.assertEquals(0, c2.getUsed());
     c2.use(50);
-    assert(c1.getUsed() == 50);
-    assert(c2.getUsed() == 50);
+    Assert.assertEquals(50, c1.getUsed());
+    Assert.assertEquals(50, c2.getUsed());
 
     c1.use(100);
-    assert(c1.getUsed() == 100);
-    assert(c2.getUsed() == 0);  // spilled
+    Assert.assertEquals(100, c1.getUsed());
+    Assert.assertEquals(0, c2.getUsed());  // spilled
 
     c1.free(20);
-    assert(c1.getUsed() == 80);
+    Assert.assertEquals(80, c1.getUsed());
     c2.use(10);
-    assert(c1.getUsed() == 80);
-    assert(c2.getUsed() == 10);
+    Assert.assertEquals(80, c1.getUsed());
+    Assert.assertEquals(10, c2.getUsed());
     c2.use(100);
-    assert(c2.getUsed() == 100);
-    assert(c1.getUsed() == 0);  // spilled
+    Assert.assertEquals(100, c2.getUsed());
+    Assert.assertEquals(0, c1.getUsed());  // spilled
 
     c1.free(0);
     c2.free(100);
-    assert(manager.cleanUpAllAllocatedMemory() == 0);
+    Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
   }
 
   @Test
@@ -114,7 +114,7 @@ public class TaskMemoryManagerSuite {
       .set("spark.unsafe.offHeap", "true")
       .set("spark.memory.offHeap.size", "1000");
     final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
-    assert(manager.tungstenMemoryMode == MemoryMode.OFF_HEAP);
+    Assert.assertSame(MemoryMode.OFF_HEAP, manager.tungstenMemoryMode);
   }
 
 }

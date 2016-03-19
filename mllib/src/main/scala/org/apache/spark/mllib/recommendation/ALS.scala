@@ -17,9 +17,9 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.recommendation.{ALS => NewALS}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -226,12 +226,12 @@ class ALS private (
     val sc = ratings.context
 
     val numUserBlocks = if (this.numUserBlocks == -1) {
-      math.max(sc.defaultParallelism, ratings.partitions.size / 2)
+      math.max(sc.defaultParallelism, ratings.partitions.length / 2)
     } else {
       this.numUserBlocks
     }
     val numProductBlocks = if (this.numProductBlocks == -1) {
-      math.max(sc.defaultParallelism, ratings.partitions.size / 2)
+      math.max(sc.defaultParallelism, ratings.partitions.length / 2)
     } else {
       this.numProductBlocks
     }

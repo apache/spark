@@ -23,8 +23,8 @@ import java.net.URI
 import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
-import java.util.UUID.randomUUID
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.generic.Growable
@@ -50,8 +50,8 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat,
   WholeTextFileInputFormat}
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.RpcEndpointRef
@@ -244,7 +244,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
-  def isLocal: Boolean = (master == "local" || master.startsWith("local["))
+  def isLocal: Boolean = Utils.isLocalMaster(_conf)
 
   /**
    * @return true if context is stopped or in the midst of stopping.
@@ -391,8 +391,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
 
-    _jars = _conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
-    _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.size != 0))
+    _jars = _conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
+    _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.nonEmpty))
       .toSeq.flatten
 
     _eventLogDir =
@@ -526,10 +526,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // Optionally scale number of executors dynamically based on workload. Exposed for testing.
     val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
-    if (!dynamicAllocationEnabled && _conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
-      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
-    }
-
     _executorAllocationManager =
       if (dynamicAllocationEnabled) {
         Some(new ExecutorAllocationManager(this, listenerBus, _conf))
@@ -1283,12 +1279,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     assertNotStopped()
-    if (classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass)) {
-      // This is a warning instead of an exception in order to avoid breaking user programs that
-      // might have created RDD broadcast variables but not used them:
-      logWarning("Can not directly broadcast RDDs; instead, call collect() and "
-        + "broadcast the result (see SPARK-5063)")
-    }
+    require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
+      "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
@@ -2314,6 +2306,7 @@ object SparkContext extends Logging {
    * Create a task scheduler based on a given master URL.
    * Return a 2-tuple of the scheduler backend and the task scheduler.
    */
+  @tailrec
   private def createTaskScheduler(
       sc: SparkContext,
       master: String,

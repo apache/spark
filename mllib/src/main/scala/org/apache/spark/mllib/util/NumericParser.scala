@@ -98,7 +98,7 @@ private[mllib] object NumericParser {
         }
       } else if (token == ")") {
         parsing = false
-      } else if (token.trim.isEmpty){
+      } else if (token.trim.isEmpty) {
           // ignore whitespaces between delim chars, e.g. ", ["
       } else {
         // expecting a number

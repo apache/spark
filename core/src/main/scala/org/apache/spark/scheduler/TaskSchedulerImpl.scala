@@ -30,6 +30,7 @@ import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
@@ -620,10 +621,10 @@ private[spark] object TaskSchedulerImpl {
     while (found) {
       found = false
       for (key <- keyList) {
-        val containerList: ArrayBuffer[T] = map.get(key).getOrElse(null)
+        val containerList: ArrayBuffer[T] = map.getOrElse(key, null)
         assert(containerList != null)
         // Get the index'th entry for this host - if present
-        if (index < containerList.size){
+        if (index < containerList.size) {
           retval += containerList.apply(index)
           found = true
         }

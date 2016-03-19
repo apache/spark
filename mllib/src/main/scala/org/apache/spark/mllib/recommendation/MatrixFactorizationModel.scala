@@ -29,9 +29,10 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -369,13 +370,13 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val rank = (metadata \ "rank").extract[Int]
-      val userFeatures = sqlContext.read.parquet(userPath(path))
-        .map { case Row(id: Int, features: Seq[_]) =>
+      val userFeatures = sqlContext.read.parquet(userPath(path)).rdd.map {
+        case Row(id: Int, features: Seq[_]) =>
           (id, features.asInstanceOf[Seq[Double]].toArray)
-        }
-      val productFeatures = sqlContext.read.parquet(productPath(path))
-        .map { case Row(id: Int, features: Seq[_]) =>
-        (id, features.asInstanceOf[Seq[Double]].toArray)
+      }
+      val productFeatures = sqlContext.read.parquet(productPath(path)).rdd.map {
+        case Row(id: Int, features: Seq[_]) =>
+          (id, features.asInstanceOf[Seq[Double]].toArray)
       }
       new MatrixFactorizationModel(rank, userFeatures, productFeatures)
     }

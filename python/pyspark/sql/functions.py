@@ -142,7 +142,7 @@ _functions_1_6 = {
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
              'polar coordinates (r, theta).',
-    'hypot': 'Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.',
+    'hypot': 'Computes `sqrt(a^2 + b^2)` without intermediate overflow or underflow.',
     'pow': 'Returns the value of the first argument raised to the power of the second argument.',
 }
 
@@ -348,13 +348,13 @@ def grouping_id(*cols):
     grouping columns).
 
     >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
-    +-----+------------+--------+
-    | name|groupingid()|sum(age)|
-    +-----+------------+--------+
-    | null|           1|       7|
-    |Alice|           0|       2|
-    |  Bob|           0|       5|
-    +-----+------------+--------+
+    +-----+-------------+--------+
+    | name|grouping_id()|sum(age)|
+    +-----+-------------+--------+
+    | null|            1|       7|
+    |Alice|            0|       2|
+    |  Bob|            0|       5|
+    +-----+-------------+--------+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.grouping_id(_to_seq(sc, cols, _to_java_column))
@@ -616,10 +616,10 @@ def log(arg1, arg2=None):
 
     If there is only one argument, then this takes the natural logarithm of the argument.
 
-    >>> df.select(log(10.0, df.age).alias('ten')).map(lambda l: str(l.ten)[:7]).collect()
+    >>> df.select(log(10.0, df.age).alias('ten')).rdd.map(lambda l: str(l.ten)[:7]).collect()
     ['0.30102', '0.69897']
 
-    >>> df.select(log(df.age).alias('e')).map(lambda l: str(l.e)[:7]).collect()
+    >>> df.select(log(df.age).alias('e')).rdd.map(lambda l: str(l.e)[:7]).collect()
     ['0.69314', '1.60943']
     """
     sc = SparkContext._active_spark_context

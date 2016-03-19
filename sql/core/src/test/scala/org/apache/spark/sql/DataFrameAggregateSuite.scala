@@ -257,7 +257,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("count") {
-    assert(testData2.count() === testData2.map(_ => 1).count())
+    assert(testData2.count() === testData2.rdd.map(_ => 1).count())
 
     checkAnswer(
       testData2.agg(count('a), sumDistinct('a)), // non-partial

@@ -16,10 +16,9 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.util.Arrays;
-import java.util.Iterator;
+import java.util.*;
+
+import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -30,8 +29,6 @@ import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
-
-import org.apache.commons.lang.NotImplementedException;
 
 /**
  * This class is the in memory representation of rows as they are streamed through operators. It
@@ -58,6 +55,9 @@ public final class ColumnarBatch {
 
   // True if the row is filtered.
   private final boolean[] filteredRows;
+
+  // Column indices that cannot have null values.
+  private final Set<Integer> nullFilteredColumns;
 
   // Total number of rows that have been filtered.
   private int numRowsFiltered = 0;
@@ -193,29 +193,17 @@ public final class ColumnarBatch {
 
     @Override
     public final Decimal getDecimal(int ordinal, int precision, int scale) {
-      if (precision <= Decimal.MAX_LONG_DIGITS()) {
-        return Decimal.apply(getLong(ordinal), precision, scale);
-      } else {
-        // TODO: best perf?
-        byte[] bytes = getBinary(ordinal);
-        BigInteger bigInteger = new BigInteger(bytes);
-        BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
-        return Decimal.apply(javaDecimal, precision, scale);
-      }
+      return columns[ordinal].getDecimal(rowId, precision, scale);
     }
 
     @Override
     public final UTF8String getUTF8String(int ordinal) {
-      ColumnVector.Array a = columns[ordinal].getByteArray(rowId);
-      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
+      return columns[ordinal].getUTF8String(rowId);
     }
 
     @Override
     public final byte[] getBinary(int ordinal) {
-      ColumnVector.Array array = columns[ordinal].getByteArray(rowId);
-      byte[] bytes = new byte[array.length];
-      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
-      return bytes;
+      return columns[ordinal].getBinary(rowId);
     }
 
     @Override
@@ -265,9 +253,11 @@ public final class ColumnarBatch {
 
       @Override
       public Row next() {
-        assert(hasNext());
         while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
           ++rowId;
+        }
+        if (rowId >= maxRows) {
+          throw new NoSuchElementException();
         }
         row.rowId = rowId++;
         return row;
@@ -295,11 +285,23 @@ public final class ColumnarBatch {
   }
 
   /**
-   * Sets the number of rows that are valid.
+   * Sets the number of rows that are valid. Additionally, marks all rows as "filtered" if one or
+   * more of their attributes are part of a non-nullable column.
    */
   public void setNumRows(int numRows) {
     assert(numRows <= this.capacity);
     this.numRows = numRows;
+
+    for (int ordinal : nullFilteredColumns) {
+      if (columns[ordinal].numNulls != 0) {
+        for (int rowId = 0; rowId < numRows; rowId++) {
+          if (!filteredRows[rowId] && columns[ordinal].getIsNull(rowId)) {
+            filteredRows[rowId] = true;
+            ++numRowsFiltered;
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -331,6 +333,17 @@ public final class ColumnarBatch {
   public ColumnVector column(int ordinal) { return columns[ordinal]; }
 
   /**
+   * Sets (replaces) the column at `ordinal` with column. This can be used to do very efficient
+   * projections.
+   */
+  public void setColumn(int ordinal, ColumnVector column) {
+    if (column instanceof OffHeapColumnVector) {
+      throw new NotImplementedException("Need to ref count columns.");
+    }
+    columns[ordinal] = column;
+  }
+
+  /**
    * Returns the row in this batch at `rowId`. Returned row is reused across calls.
    */
   public ColumnarBatch.Row getRow(int rowId) {
@@ -345,15 +358,24 @@ public final class ColumnarBatch {
    * in this batch will not include this row.
    */
   public final void markFiltered(int rowId) {
-    assert(filteredRows[rowId] == false);
+    assert(!filteredRows[rowId]);
     filteredRows[rowId] = true;
     ++numRowsFiltered;
+  }
+
+  /**
+   * Marks a given column as non-nullable. Any row that has a NULL value for the corresponding
+   * attribute is filtered out.
+   */
+  public final void filterNullsInColumn(int ordinal) {
+    nullFilteredColumns.add(ordinal);
   }
 
   private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
     this.schema = schema;
     this.capacity = maxRows;
     this.columns = new ColumnVector[schema.size()];
+    this.nullFilteredColumns = new HashSet<>();
     this.filteredRows = new boolean[maxRows];
 
     for (int i = 0; i < schema.fields().length; ++i) {

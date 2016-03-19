@@ -21,7 +21,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -103,20 +105,15 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
     val attemptId = binding.attemptId
     logInfo(s"Starting Yarn extension services with app $appId and attemptId $attemptId")
 
-    serviceOption = sparkContext.getConf.getOption(SchedulerExtensionServices.SPARK_YARN_SERVICES)
-    services = serviceOption
-      .map { s =>
-        s.split(",").map(_.trim()).filter(!_.isEmpty)
-          .map { sClass =>
-            val instance = Utils.classForName(sClass)
-              .newInstance()
-              .asInstanceOf[SchedulerExtensionService]
-            // bind this service
-            instance.start(binding)
-            logInfo(s"Service $sClass started")
-            instance
-          }.toList
-      }.getOrElse(Nil)
+    services = sparkContext.conf.get(SCHEDULER_SERVICES).map { sClass =>
+      val instance = Utils.classForName(sClass)
+        .newInstance()
+        .asInstanceOf[SchedulerExtensionService]
+      // bind this service
+      instance.start(binding)
+      logInfo(s"Service $sClass started")
+      instance
+    }.toList
   }
 
   /**
@@ -143,12 +140,4 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
     |(serviceOption=$serviceOption,
     | services=$services,
     | started=$started)""".stripMargin
-}
-
-private[spark] object SchedulerExtensionServices {
-
-  /**
-   * A list of comma separated services to instantiate in the scheduler
-   */
-  val SPARK_YARN_SERVICES = "spark.yarn.services"
 }

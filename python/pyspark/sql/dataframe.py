@@ -26,7 +26,7 @@ if sys.version >= '3':
 else:
     from itertools import imap as map
 
-from pyspark import since
+from pyspark import copy_func, since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -173,8 +173,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        WholeStageCodegen
-        :  +- Scan ExistingRDD[age#0,name#1]
+        Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -267,44 +266,6 @@ class DataFrame(object):
                 self._jdf, num)
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
-    @ignore_unicode_prefix
-    @since(1.3)
-    def map(self, f):
-        """ Returns a new :class:`RDD` by applying a the ``f`` function to each :class:`Row`.
-
-        This is a shorthand for ``df.rdd.map()``.
-
-        >>> df.map(lambda p: p.name).collect()
-        [u'Alice', u'Bob']
-        """
-        return self.rdd.map(f)
-
-    @ignore_unicode_prefix
-    @since(1.3)
-    def flatMap(self, f):
-        """ Returns a new :class:`RDD` by first applying the ``f`` function to each :class:`Row`,
-        and then flattening the results.
-
-        This is a shorthand for ``df.rdd.flatMap()``.
-
-        >>> df.flatMap(lambda p: p.name).collect()
-        [u'A', u'l', u'i', u'c', u'e', u'B', u'o', u'b']
-        """
-        return self.rdd.flatMap(f)
-
-    @since(1.3)
-    def mapPartitions(self, f, preservesPartitioning=False):
-        """Returns a new :class:`RDD` by applying the ``f`` function to each partition.
-
-        This is a shorthand for ``df.rdd.mapPartitions()``.
-
-        >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
-        >>> def f(iterator): yield 1
-        >>> rdd.mapPartitions(f).sum()
-        4
-        """
-        return self.rdd.mapPartitions(f, preservesPartitioning)
-
     @since(1.3)
     def foreach(self, f):
         """Applies the ``f`` function to all :class:`Row` of this :class:`DataFrame`.
@@ -315,7 +276,7 @@ class DataFrame(object):
         ...     print(person.name)
         >>> df.foreach(f)
         """
-        return self.rdd.foreach(f)
+        self.rdd.foreach(f)
 
     @since(1.3)
     def foreachPartition(self, f):
@@ -328,7 +289,7 @@ class DataFrame(object):
         ...         print(person.name)
         >>> df.foreachPartition(f)
         """
-        return self.rdd.foreachPartition(f)
+        self.rdd.foreachPartition(f)
 
     @since(1.3)
     def cache(self):
@@ -868,8 +829,6 @@ class DataFrame(object):
             raise TypeError("condition should be string or Column")
         return DataFrame(jdf, self.sql_ctx)
 
-    where = filter
-
     @ignore_unicode_prefix
     @since(1.3)
     def groupBy(self, *cols):
@@ -1400,8 +1359,20 @@ class DataFrame(object):
     # Pandas compatibility
     ##########################################################################################
 
-    groupby = groupBy
-    drop_duplicates = dropDuplicates
+    groupby = copy_func(
+        groupBy,
+        sinceversion=1.4,
+        doc=":func:`groupby` is an alias for :func:`groupBy`.")
+
+    drop_duplicates = copy_func(
+        dropDuplicates,
+        sinceversion=1.4,
+        doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.")
+
+    where = copy_func(
+        filter,
+        sinceversion=1.3,
+        doc=":func:`where` is an alias for :func:`filter`.")
 
 
 def _to_scala_map(sc, jm):

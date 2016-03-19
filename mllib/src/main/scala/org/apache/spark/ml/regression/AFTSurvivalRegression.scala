@@ -23,8 +23,9 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -99,7 +100,6 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     if (fitting) {
       SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
@@ -184,7 +184,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    * and put it in an RDD with strong types.
    */
   protected[ml] def extractAFTPoints(dataset: DataFrame): RDD[AFTPoint] = {
-    dataset.select($(featuresCol), $(labelCol), $(censorCol)).map {
+    dataset.select($(featuresCol), $(labelCol), $(censorCol)).rdd.map {
       case Row(features: Vector, label: Double, censor: Double) =>
         AFTPoint(features, label, censor)
     }

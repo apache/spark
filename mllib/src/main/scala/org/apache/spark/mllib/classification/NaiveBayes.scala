@@ -24,8 +24,9 @@ import scala.collection.JavaConverters._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -74,7 +75,7 @@ class NaiveBayesModel private[spark] (
     case Multinomial => (None, None)
     case Bernoulli =>
       val negTheta = thetaMatrix.map(value => math.log(1.0 - math.exp(value)))
-      val ones = new DenseVector(Array.fill(thetaMatrix.numCols){1.0})
+      val ones = new DenseVector(Array.fill(thetaMatrix.numCols) {1.0})
       val thetaMinusNegTheta = thetaMatrix.map { value =>
         value - math.log(1.0 - math.exp(value))
       }

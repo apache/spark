@@ -21,7 +21,6 @@ import java.io._
 import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
 
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.{SparkContext, SparkFunSuite}
@@ -49,8 +48,8 @@ class ReplSuite extends SparkFunSuite {
     val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
 
-    System.setProperty("spark.master", master)
-      Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
+    Main.conf.set("spark.master", master)
+    Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
 
     if (oldExecutorClasspath != null) {
       System.setProperty(CONF_EXECUTOR_CLASSPATH, oldExecutorClasspath)

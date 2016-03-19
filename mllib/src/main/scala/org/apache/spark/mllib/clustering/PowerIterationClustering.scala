@@ -21,10 +21,11 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
@@ -93,7 +94,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
       val assignments = sqlContext.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[PowerIterationClustering.Assignment](assignments.schema)
 
-      val assignmentsRDD = assignments.map {
+      val assignmentsRDD = assignments.rdd.map {
         case Row(id: Long, cluster: Int) => PowerIterationClustering.Assignment(id, cluster)
       }
 
