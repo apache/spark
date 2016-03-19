@@ -101,7 +101,7 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
     checkComparison(LessThan(i, d1), DecimalType(11, 1))
     checkComparison(LessThanOrEqual(d1, d2), DecimalType(5, 2))
     checkComparison(GreaterThan(d2, u), DecimalType.SYSTEM_DEFAULT)
-    checkComparison(GreaterThanOrEqual(d1, f), DecimalType(14, 7))
+    checkComparison(GreaterThanOrEqual(d1, f), DoubleType)
     checkComparison(GreaterThan(d2, d2), DecimalType(5, 2))
   }
 
@@ -120,13 +120,13 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
 
   test("bringing in primitive types") {
     checkType(Add(d1, i), DecimalType(12, 1))
-    checkType(Add(d1, f), DecimalType(15, 7))
+    checkType(Add(d1, f), DoubleType)
     checkType(Add(i, d1), DecimalType(12, 1))
-    checkType(Add(f, d1), DecimalType(15, 7))
+    checkType(Add(f, d1), DoubleType)
     checkType(Add(d1, Cast(i, LongType)), DecimalType(22, 1))
     checkType(Add(d1, Cast(i, ShortType)), DecimalType(7, 1))
     checkType(Add(d1, Cast(i, ByteType)), DecimalType(5, 1))
-    checkType(Add(d1, Cast(i, DoubleType)), DecimalType(31, 15))
+    checkType(Add(d1, Cast(i, DoubleType)), DoubleType)
   }
 
   test("maximum decimals") {
@@ -150,17 +150,13 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
     checkType(Remainder(i, u), DecimalType(28, 18))
     checkType(Remainder(u, u), DecimalType.SYSTEM_DEFAULT)
 
-    checkType(Add(f, u), DecimalType(38, 18))
-    checkType(Subtract(f, u), DecimalType(38, 18))
-    checkType(Multiply(f, u), DecimalType(38, 25))
-    checkType(Divide(f, u), DecimalType(38, 25))
-    checkType(Remainder(f, u), DecimalType(25, 18))
-
-    checkType(Add(b, u), DecimalType(38, 18))
-    checkType(Subtract(b, u), DecimalType(38, 18))
-    checkType(Multiply(b, u), DecimalType(38, 33))
-    checkType(Divide(b, u), DecimalType(38, 21))
-    checkType(Remainder(b, u), DecimalType(33, 18))
+    for (expr <- Seq(f, b)) {
+      checkType(Add(expr, u), DoubleType)
+      checkType(Subtract(expr, u), DoubleType)
+      checkType(Multiply(expr, u), DoubleType)
+      checkType(Divide(expr, u), DoubleType)
+      checkType(Remainder(expr, u), DoubleType)
+    }
   }
 
   test("DecimalType.isWiderThan") {
