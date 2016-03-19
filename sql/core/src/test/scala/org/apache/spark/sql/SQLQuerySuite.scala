@@ -2161,11 +2161,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("order by ordinal number") {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY 1 DESC"),
-      Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2)))
+      sql("SELECT * FROM testData2 ORDER BY a DESC"))
     // If the position is not an integer, ignore it.
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY 1 + 0 DESC, b ASC"),
-      Seq(Row(1, 1), Row(2, 1), Row(3, 1), Row(1, 2), Row(2, 2), Row(3, 2)))
+      sql("SELECT * FROM testData2 ORDER BY b ASC"))
 
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
