@@ -1423,10 +1423,10 @@ if 'MySqlOperator' in dir(operators):
         def test_mysql_to_hive(self):
             # import airflow.operators
             from airflow.operators.mysql_to_hive import MySqlToHiveTransfer
-            sql = "SELECT * FROM task_instance LIMIT 1000;"
+            sql = "SELECT * FROM baby_names LIMIT 1000;"
             t = MySqlToHiveTransfer(
                 task_id='test_m2h',
-                mysql_conn_id='airflow_db',
+                mysql_conn_id='airflow_ci',
                 hive_cli_conn_id='beeline_default',
                 sql=sql,
                 hive_table='test_mysql_to_hive',
@@ -1444,7 +1444,7 @@ if 'MySqlOperator' in dir(operators):
                 hive_cli_conn_id='beeline_default',
                 sql=sql,
                 hive_table='test_mysql_to_hive_part',
-                partition={'ds': DEFAULT_DATE_DS},
+                partition={'org_year': DEFAULT_DATE_DS},
                 recreate=False,
                 create=True,
                 delimiter=",",
