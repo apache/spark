@@ -86,7 +86,7 @@ class HiveContext private[hive](
     @transient protected[hive] val executionHive: HiveClientImpl,
     @transient protected[hive] val metadataHive: HiveClient,
     isRootContext: Boolean,
-    private[sql] val hiveCatalog: HiveCatalog)
+    @transient private[sql] val hiveCatalog: HiveCatalog)
   extends SQLContext(sc, cacheManager, listener, isRootContext, hiveCatalog) with Logging {
   self =>
 

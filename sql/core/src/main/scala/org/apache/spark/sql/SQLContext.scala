@@ -67,7 +67,7 @@ class SQLContext private[sql](
     @transient protected[sql] val cacheManager: CacheManager,
     @transient private[sql] val listener: SQLListener,
     val isRootContext: Boolean,
-    private[sql] val externalCatalog: ExternalCatalog)
+    @transient private[sql] val externalCatalog: ExternalCatalog)
   extends Logging with Serializable {
 
   self =>
@@ -698,7 +698,10 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sessionState.catalog.createTempTable(tableName, df.logicalPlan, ignoreIfExists = true)
+    sessionState.catalog.createTempTable(
+      sessionState.sqlParser.parseTableIdentifier(tableName).table,
+      df.logicalPlan,
+      ignoreIfExists = true)
   }
 
   /**
