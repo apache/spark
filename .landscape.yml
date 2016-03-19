@@ -5,6 +5,8 @@ max-line-length: 90
 uses:
     - flask
 autodetect: yes
+requirements:
+    - scripts/ci/requirements.txt
 pylint:
   disable:
     - cyclic-import
