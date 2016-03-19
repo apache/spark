@@ -858,18 +858,21 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Reset this map to initialized state.
+   * Resets this map to initialized state. Returns the number of bytes freed.
    */
-  public void reset() {
+  public long reset() {
+    long memoryFreed = 0L;
     numElements = 0;
     longArray.zeroOut();
 
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
+      memoryFreed += dataPage.size();
       freePage(dataPage);
     }
     currentPage = null;
     pageCursor = 0;
+    return memoryFreed;
   }
 
   /**

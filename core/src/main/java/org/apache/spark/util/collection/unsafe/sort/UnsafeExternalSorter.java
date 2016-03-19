@@ -52,7 +52,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private final TaskMemoryManager taskMemoryManager;
   private final BlockManager blockManager;
   private final TaskContext taskContext;
-  private ShuffleWriteMetrics writeMetrics;
 
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
   private final int fileBufferSizeBytes;
@@ -122,7 +121,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.fileBufferSizeBytes = 32 * 1024;
-    this.writeMetrics = taskContext.taskMetrics().registerShuffleWriteMetrics();
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(
@@ -178,6 +176,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       spillWriters.size(),
       spillWriters.size() > 1 ? " times" : " time");
 
+    final ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
     // We only write out contents of the inMemSorter if it is not empty.
     if (inMemSorter.numRecords() > 0) {
       final UnsafeSorterSpillWriter spillWriter =
@@ -202,6 +201,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // pages will currently be counted as memory spilled even though that space isn't actually
     // written to disk. This also counts the space needed to store the sorter's pointer array.
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
+    taskContext.taskMetrics().incDiskBytesSpilled(writeMetrics.shuffleBytesWritten());
 
     return spillSize;
   }
@@ -451,6 +451,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         UnsafeInMemorySorter.SortedIterator inMemIterator =
           ((UnsafeInMemorySorter.SortedIterator) upstream).clone();
 
+        final ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
         // Iterate over the records that have not been returned and spill them.
         final UnsafeSorterSpillWriter spillWriter =
           new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
@@ -480,6 +481,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           }
           allocatedPages.clear();
         }
+
+        long spillSize = released;
+        if (lastPage != null) {
+          spillSize += lastPage.size();
+        }
+        taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
+        taskContext.taskMetrics().incDiskBytesSpilled(writeMetrics.shuffleBytesWritten());
 
         // in-memory sorter will not be used after spilling
         assert(inMemSorter != null);

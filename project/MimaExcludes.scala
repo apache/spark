@@ -184,6 +184,9 @@ object MimaExcludes {
         // SPARK-12510 Refactor ActorReceiver to support Java
         ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.streaming.receiver.ActorReceiver")
       ) ++ Seq(
+        // SPARK-12688 Fix spill size metric in unsafe external sorter
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.unsafe.map.BytesToBytesMap.reset")
+      ) ++ Seq(
         // SPARK-12895 Implement TaskMetrics using accumulators
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.internalMetricsToAccumulators"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.collectInternalAccumulators"),

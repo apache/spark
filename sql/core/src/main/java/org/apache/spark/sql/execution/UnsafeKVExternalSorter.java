@@ -124,8 +124,12 @@ public final class UnsafeKVExternalSorter {
         inMemSorter);
 
       // reset the map, so we can re-use it to insert new records. the inMemSorter will not used
-      // anymore, so the underline array could be used by map again.
-      map.reset();
+      // anymore, so the underline array could be used by map again. When the sorter spills, it
+      // increases zero to the number of in-memory bytes spilled because the records are stored
+      // in the map instead of the sorter. So we need update the metric after resetting the map
+      // here.
+      final long spillSize = map.reset();
+      taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
     }
   }
 
