@@ -120,16 +120,14 @@ class HiveContext private[hive](
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
-    val newExecutionHive = executionHive.newSession()
-    val newMetadataHive = metadataHive.newSession()
     new HiveContext(
       sc = sc,
       cacheManager = cacheManager,
       listener = listener,
-      executionHive = newExecutionHive,
-      metadataHive = newMetadataHive,
+      executionHive = executionHive.newSession(),
+      metadataHive = metadataHive.newSession(),
       isRootContext = false,
-      hiveCatalog = hiveCatalog.newSession(newMetadataHive))
+      hiveCatalog = hiveCatalog)
   }
 
   @transient

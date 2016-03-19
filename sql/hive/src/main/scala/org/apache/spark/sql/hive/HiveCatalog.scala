@@ -34,7 +34,7 @@ import org.apache.spark.sql.hive.client.HiveClient
  * A persistent implementation of the system catalog using Hive.
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveCatalog(var client: HiveClient) extends ExternalCatalog with Logging {
+private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog with Logging {
   import ExternalCatalog._
 
   // Exceptions thrown by the hive client that we would like to wrap
@@ -83,14 +83,6 @@ private[spark] class HiveCatalog(var client: HiveClient) extends ExternalCatalog
 
   private def requireTableExists(db: String, table: String): Unit = {
     withClient { getTable(db, table) }
-  }
-
-  /**
-   * Switch our client to one that belongs to the new session.
-   */
-  def newSession(newClient: HiveClient): this.type = {
-    client = newClient
-    this
   }
 
   // --------------------------------------------------------------------------

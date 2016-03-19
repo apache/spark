@@ -135,16 +135,14 @@ class TestHiveContext private[hive](
   }
 
   override def newSession(): HiveContext = {
-    val newExecutionHive = executionHive.newSession()
-    val newMetadataHive = metadataHive.newSession()
     new TestHiveContext(
       sc = sc,
       cacheManager = cacheManager,
       listener = listener,
-      executionHive = newExecutionHive,
-      metadataHive = newMetadataHive,
+      executionHive = executionHive.newSession(),
+      metadataHive = metadataHive.newSession(),
       isRootContext = false,
-      hiveCatalog = hiveCatalog.newSession(newMetadataHive),
+      hiveCatalog = hiveCatalog,
       warehousePath = warehousePath,
       scratchDirPath = scratchDirPath)
   }
