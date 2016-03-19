@@ -1,5 +1,6 @@
 # Airflow
 
+[![PyPI version](https://badge.fury.io/py/airflow.svg)](https://badge.fury.io/py/airflow)
 [![Build Status](https://travis-ci.org/airbnb/airflow.svg)](https://travis-ci.org/airbnb/airflow)
 [![Coverage Status](https://coveralls.io/repos/airbnb/airflow/badge.svg?service=github)](https://coveralls.io/github/airbnb/airflow)
 [![Code Health](https://landscape.io/github/airbnb/airflow/master/landscape.svg?style=flat)](https://landscape.io/github/airbnb/airflow/master)
