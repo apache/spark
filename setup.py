@@ -67,9 +67,10 @@ hive = [
     'hive-thrift-py>=0.0.1',
     'pyhive>=0.1.3',
     'impyla>=0.13.3',
+    'unicodecsv>=0.14.1'
 ]
 jdbc = ['jaydebeapi>=0.2.0']
-mssql = ['pymssql>=2.1.1', 'unicodecsv>=0.13.0']
+mssql = ['pymssql>=2.1.1', 'unicodecsv>=0.14.1']
 mysql = ['mysqlclient>=1.3.6']
 optional = ['librabbitmq>=1.6.1']
 oracle = ['cx_Oracle>=5.1.2']

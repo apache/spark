@@ -16,7 +16,7 @@
 from __future__ import print_function
 from builtins import zip
 from past.builtins import basestring
-import csv
+import unicodecsv as csv
 import logging
 import re
 import subprocess
@@ -477,7 +477,7 @@ class HiveServer2Hook(BaseHook):
                 schema = cur.description
                 with open(csv_filepath, 'wb') as f:
                     writer = csv.writer(f, delimiter=delimiter,
-                        lineterminator=lineterminator)
+                        lineterminator=lineterminator, encoding='utf-8')
                     if output_header:
                         writer.writerow([c[0]
                             for c in cur.description])
