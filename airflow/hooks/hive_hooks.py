@@ -121,9 +121,9 @@ class HiveCliHook(BaseHook):
                 self.sp = sp
                 stdout = ''
                 for line in iter(sp.stdout.readline, ''):
-                    stdout += line
+                    stdout += line.decode('UTF-8')
                     if verbose:
-                        logging.info(line.strip())
+                        logging.info(line.decode('UTF-8').strip())
                 sp.wait()
 
                 if sp.returncode:
