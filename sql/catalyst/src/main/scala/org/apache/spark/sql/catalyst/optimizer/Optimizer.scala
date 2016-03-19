@@ -832,7 +832,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 object EliminateSorts  extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
-      val newOrders = orders.filter(!_.child.foldable)
+      val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) child else s.copy(order = newOrders)
   }
 }
