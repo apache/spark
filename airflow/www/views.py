@@ -656,7 +656,6 @@ class Airflow(BaseView):
     @expose('/sandbox')
     @login_required
     def sandbox(self):
-        from airflow import configuration
         title = "Sandbox Suggested Configuration"
         cfg_loc = conf.AIRFLOW_CONFIG + '.sandbox'
         f = open(cfg_loc, 'r')
@@ -800,7 +799,7 @@ class Airflow(BaseView):
                 # load remote logs
                 remote_log_base = conf.get('core', 'REMOTE_BASE_LOG_FOLDER')
                 remote_log = os.path.join(remote_log_base, log_relative)
-                log += '\n*** Reading remote logs...\n'.format(remote_log)
+                log += '\n*** Reading remote logs...\n'
 
                 # S3
                 if remote_log.startswith('s3:/'):
@@ -2199,7 +2198,6 @@ class UserModelView(wwwutils.SuperUserMixin, AirflowModelView):
 class ConfigurationView(wwwutils.SuperUserMixin, BaseView):
     @expose('/')
     def conf(self):
-        from airflow import configuration
         raw = request.args.get('raw') == "true"
         title = "Airflow Configuration"
         subtitle = conf.AIRFLOW_CONFIG

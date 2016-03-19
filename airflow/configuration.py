@@ -13,6 +13,10 @@ import logging
 import os
 import subprocess
 
+
+class AirflowConfigException(Exception):
+    pass
+
 try:
     from cryptography.fernet import Fernet
 except:
@@ -42,6 +46,7 @@ def expand_env_var(env_var):
         else:
             env_var = interpolated
 
+
 def run_command(command):
     """
     Runs command and returns stdout
@@ -51,16 +56,13 @@ def run_command(command):
     output, stderr = process.communicate()
 
     if process.returncode != 0:
-        raise AirflowException(
+        raise AirflowConfigException(
             "Cannot execute {}. Error code is: {}. Output: {}, Stderr: {}"
-            .format(cmd, process.returncode, output, stderr)
+            .format(command, process.returncode, output, stderr)
         )
 
     return output
 
-
-class AirflowConfigException(Exception):
-    pass
 
 defaults = {
     'core': {
