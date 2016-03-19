@@ -13,8 +13,6 @@ workflows.
 When workflows are defined as code, they become more maintainable,
 versionable, testable, and collaborative.
 
-![img] (http://i.imgur.com/6Gs4hxT.gif)
-
 Use airflow to author workflows as directed acyclic graphs (DAGs) of tasks.
 The airflow scheduler executes your tasks on an array of workers while
 following the specified dependencies. Rich command line utilities make
@@ -43,6 +41,26 @@ unit of work and continuity.
 - **Extensible**:  Easily define your own operators, executors and extend the library so that it fits the level of abstraction that suits your environment.
 - **Elegant**:  Airflow pipelines are lean and explicit. Parameterizing your scripts is built into the core of Airflow using the powerful **Jinja** templating engine.
 - **Scalable**:  Airflow has a modular architecture and uses a message queue to orchestrate an arbitrary number of workers. Airflow is ready to scale to infinity.
+
+## User Interface
+
+- **DAGs**: Overview of all DAGs in your environment.
+![](/docs/img/dags.png)
+
+- **Tree View**: Tree representation of a DAG that spans across time.
+![](/docs/img/tree.png)
+
+- **Graph View**: Visualization of a DAG's dependencies and their current status for a specific run.
+![](/docs/img/graph.png)
+
+- **Task Duration**: Total time spent on different tasks over time.
+![](/docs/img/duration.png)
+
+- **Gantt View**: Duration and overlap of a DAG.
+![](/docs/img/gantt.png)
+
+- **Code View**:  Quick way to view source code of a DAG.
+![](/docs/img/code.png)
 
 ## Who uses Airflow?
 
