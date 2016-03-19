@@ -28,7 +28,8 @@ import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.serializer.{DeserializationStream, KryoSerializer, SerializationStream}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -87,8 +88,7 @@ private[state] class HDFSBackedStateStoreProvider(
 
     private val newVersion = version + 1
     private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
-    private val tempDeltaFileStream = new DataOutputStream(
-      new LZ4CompressionCodec(new SparkConf).compressedOutputStream(fs.create(tempDeltaFile, true)))
+    private val tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
 
     // private val tempDeltaFileStream = fs.create(tempDeltaFile, true)
     private val allUpdates = new java.util.HashMap[UnsafeRow, StoreUpdate]()
@@ -344,8 +344,7 @@ private[state] class HDFSBackedStateStoreProvider(
     }
     var input: DataInputStream = null
     try {
-      input = new DataInputStream(
-        new LZ4CompressionCodec(new SparkConf).compressedInputStream(fs.open(fileToRead)))
+      input = decompressStream(fs.open(fileToRead))
       var eof = false
 
       while(!eof) {
@@ -530,7 +529,7 @@ private[state] class HDFSBackedStateStoreProvider(
     new DataOutputStream(compressed)
   }
 
-  private def compressStream(inputStream: DataInputStream): DataInputStream = {
+  private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = new LZ4CompressionCodec(new SparkConf).compressedInputStream(inputStream)
     new DataInputStream(compressed)
   }
