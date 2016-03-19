@@ -74,7 +74,7 @@ class HiveCliHook(BaseHook):
 
         with TemporaryDirectory(prefix='airflow_hiveop_') as tmp_dir:
             with NamedTemporaryFile(dir=tmp_dir) as f:
-                f.write(bytes(hql, 'UTF-8'))
+                f.write(hql.encode('UTF-8'))
                 f.flush()
                 fname = f.name
                 hive_bin = 'hive'
