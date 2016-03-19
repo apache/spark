@@ -290,10 +290,10 @@ class WebHdfsSensor(BaseSensorOperator):
             *args, **kwargs):
         super(WebHdfsSensor, self).__init__(*args, **kwargs)
         self.filepath = filepath
-        self.hdfs_conn_id = webhdfs_conn_id
+        self.webhdfs_conn_id = webhdfs_conn_id
 
     def poke(self, context):
-        c = hooks.WebHDFSHook(self.webhdfs_conn_id).get_conn()
+        c = hooks.WebHDFSHook(self.webhdfs_conn_id)
         logging.info(
             'Poking for file {self.filepath} '.format(**locals()))
         return c.check_for_path(hdfs_path=self.filepath)

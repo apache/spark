@@ -1165,6 +1165,24 @@ class HttpOpSensorTest(unittest.TestCase):
             dag=self.dag)
         sensor.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+class FakeWebHDFSHook(object):
+    def __init__(self, conn_id):
+        self.conn_id = conn_id
+
+    def get_conn(self):
+        return self.conn_id
+
+    def check_for_path(self, hdfs_path):
+        return hdfs_path
+
+class WebHdfsSensorTest(unittest.TestCase):
+
+    @mock.patch('airflow.hooks.WebHDFSHook', FakeWebHDFSHook)
+    def test_poke(self):
+        s = operators.WebHdfsSensor(filepath='fakepath',
+                                    task_id='webhdfs_sensor_check',
+                                    owner='webhdfs')
+        assert s.poke({}) == 'fakepath'
 
 class ConnectionTest(unittest.TestCase):
     def setUp(self):
