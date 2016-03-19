@@ -2376,7 +2376,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, MLReadable, MLWritabl
     ...     (0.0, 0.0, "a")
     ... ], ["y", "x", "s"])
     >>> rf = RFormula(formula="y ~ x + s")
-    >>> rf.fit(df).transform(df).show()
+    >>> model = rf.fit(df)
+    >>> model.transform(df).show()
     +---+---+---+---------+-----+
     |  y|  x|  s| features|label|
     +---+---+---+---------+-----+
@@ -2385,8 +2386,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, MLReadable, MLWritabl
     |0.0|0.0|  a|[0.0,1.0]|  0.0|
     +---+---+---+---------+-----+
     ...
-    >>> model = rf.fit(df, {rf.formula: "y ~ . - s"})
-    >>> model.transform(df).show()
+    >>> rf.fit(df, {rf.formula: "y ~ . - s"}).transform(df).show()
     +---+---+---+--------+-----+
     |  y|  x|  s|features|label|
     +---+---+---+--------+-----+
@@ -2404,19 +2404,19 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, MLReadable, MLWritabl
     True
     >>> loadedRF.getLabelCol() == rf.getLabelCol()
     True
-    >>> modelPath = temp_path + "/rFormula-model"
+    >>> modelPath = temp_path + "/rFormulaModel"
     >>> model.save(modelPath)
     >>> loadedModel = RFormulaModel.load(modelPath)
     >>> loadedModel.uid == model.uid
     True
     >>> loadedModel.transform(df).show()
-    +---+---+---+--------+-----+
-    |  y|  x|  s|features|label|
-    +---+---+---+--------+-----+
-    |1.0|1.0|  a|   [1.0]|  1.0|
-    |0.0|2.0|  b|   [2.0]|  0.0|
-    |0.0|0.0|  a|   [0.0]|  0.0|
-    +---+---+---+--------+-----+
+    +---+---+---+---------+-----+
+    |  y|  x|  s| features|label|
+    +---+---+---+---------+-----+
+    |1.0|1.0|  a|[1.0,1.0]|  1.0|
+    |0.0|2.0|  b|[2.0,0.0]|  0.0|
+    |0.0|0.0|  a|[0.0,1.0]|  0.0|
+    +---+---+---+---------+-----+
     ...
 
     .. versionadded:: 1.5.0
