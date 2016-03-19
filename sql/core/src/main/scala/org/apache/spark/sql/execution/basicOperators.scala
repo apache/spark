@@ -84,11 +84,11 @@ case class Filter(condition: Expression, child: SparkPlan)
   }
 
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
-  private val notNullAttributes = notNullPreds.flatMap(_.references).distinct
+  private val notNullAttributes = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
 
   override def output: Seq[Attribute] = {
     child.output.map { a =>
-      if (a.nullable && notNullAttributes.contains(a)) {
+      if (a.nullable && notNullAttributes.contains(a.exprId)) {
         a.withNullability(false)
       } else {
         a
@@ -112,7 +112,7 @@ case class Filter(condition: Expression, child: SparkPlan)
 
     // filter out the nulls
     val filterOutNull = notNullAttributes.map { a =>
-      val idx = child.output.indexOf(a)
+      val idx = child.output.map(_.exprId).indexOf(a)
       if (idx != -1) {
         s"if (${input(idx).isNull}) continue;"
       } else {
@@ -139,7 +139,7 @@ case class Filter(condition: Expression, child: SparkPlan)
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
     val resultVars = input.zipWithIndex.map { case (ev, i) =>
-      if (notNullAttributes.contains(child.output(i))) {
+      if (notNullAttributes.contains(child.output(i).exprId)) {
         ev.isNull = "false"
       }
       ev
