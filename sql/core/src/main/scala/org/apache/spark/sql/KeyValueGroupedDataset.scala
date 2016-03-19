@@ -29,18 +29,13 @@ import org.apache.spark.sql.execution.QueryExecution
 /**
  * :: Experimental ::
  * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not
- * construct a [[GroupedDataset]] directly, but should instead call `groupBy` on an existing
+ * construct a [[KeyValueGroupedDataset]] directly, but should instead call `groupBy` on an existing
  * [[Dataset]].
  *
- * COMPATIBILITY NOTE: Long term we plan to make [[GroupedDataset)]] extend `GroupedData`.  However,
- * making this change to the class hierarchy would break some function signatures. As such, this
- * class should be considered a preview of the final API.  Changes will be made to the interface
- * after Spark 1.6.
- *
- * @since 1.6.0
+ * @since 2.0.0
  */
 @Experimental
-class GroupedDataset[K, V] private[sql](
+class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],
     val queryExecution: QueryExecution,
@@ -62,18 +57,22 @@ class GroupedDataset[K, V] private[sql](
   private def logicalPlan = queryExecution.analyzed
   private def sqlContext = queryExecution.sqlContext
 
-  private def groupedData =
-    new GroupedData(
-      Dataset.newDataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
+  private def groupedData = {
+    new RelationalGroupedDataset(
+      Dataset.newDataFrame(sqlContext, logicalPlan),
+      groupingAttributes,
+      RelationalGroupedDataset.GroupByType)
+  }
 
   /**
-   * Returns a new [[GroupedDataset]] where the type of the key has been mapped to the specified
-   * type. The mapping of key columns to the type follows the same rules as `as` on [[Dataset]].
+   * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
+   * specified type. The mapping of key columns to the type follows the same rules as `as` on
+   * [[Dataset]].
    *
    * @since 1.6.0
    */
-  def keyAs[L : Encoder]: GroupedDataset[L, V] =
-    new GroupedDataset(
+  def keyAs[L : Encoder]: KeyValueGroupedDataset[L, V] =
+    new KeyValueGroupedDataset(
       encoderFor[L],
       unresolvedVEncoder,
       queryExecution,
@@ -294,7 +293,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]))
+  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]()))
 
   /**
    * Applies the given function to each cogrouped data.  For each unique group, the function will
@@ -305,7 +304,7 @@ class GroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def cogroup[U, R : Encoder](
-      other: GroupedDataset[K, U])(
+      other: KeyValueGroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
     implicit val uEncoder = other.unresolvedVEncoder
     Dataset[R](
@@ -329,7 +328,7 @@ class GroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def cogroup[U, R](
-      other: GroupedDataset[K, U],
+      other: KeyValueGroupedDataset[K, U],
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] = {
     cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
