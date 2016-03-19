@@ -52,15 +52,18 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       <text x="35px" y="42px">Removed</text>
     </svg></div>.toString.filter(_ != '\n')
 
-  private def getLastStageNameAndDescription(job: JobUIData): (String, String) = {
+  private def getLastStageNameAndDescription(job: JobUIData, descPlain: Boolean)
+    : (String, String) = {
     val lastStageInfo = Option(job.stageIds)
       .filter(_.nonEmpty)
-      .flatMap { ids => parent.jobProgresslistener.stageIdToInfo.get(ids.max)}
+      .flatMap { ids => parent.jobProgresslistener.stageIdToInfo.get(ids.max) }
     val lastStageData = lastStageInfo.flatMap { s =>
       parent.jobProgresslistener.stageIdToData.get((s.stageId, s.attemptId))
     }
     val name = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
-    val description = lastStageData.flatMap(_.description).getOrElse("")
+    val description = lastStageData.flatMap { s =>
+      if (descPlain && s.descriptionPlain.isDefined) s.descriptionPlain else s.description
+    }.getOrElse("")
     (name, description)
   }
 
@@ -70,7 +73,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     }.map { jobUIData =>
       val jobId = jobUIData.jobId
       val status = jobUIData.status
-      val (jobName, jobDescription) = getLastStageNameAndDescription(jobUIData)
+      val (jobName, jobDescription) = getLastStageNameAndDescription(jobUIData, descPlain = true)
       val displayJobDescription = if (jobDescription.isEmpty) jobName else jobDescription
       val submissionTime = jobUIData.submissionTime.get
       val completionTimeOpt = jobUIData.completionTime
@@ -215,7 +218,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     }
 
     def makeRow(job: JobUIData): Seq[Node] = {
-      val (lastStageName, lastStageDescription) = getLastStageNameAndDescription(job)
+      val (lastStageName, lastStageDescription) =
+        getLastStageNameAndDescription(job, descPlain = false)
       val duration: Option[Long] = {
         job.submissionTime.map { start =>
           val end = job.completionTime.getOrElse(System.currentTimeMillis())
