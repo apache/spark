@@ -49,8 +49,8 @@ In `cluster` mode, the driver runs on a different machine than the client, so `S
     $ ./bin/spark-submit --class my.main.Class \
         --master yarn \
         --deploy-mode cluster \
-        --jars my-other-jar.jar,my-other-other-jar.jar
-        my-main-jar.jar
+        --jars my-other-jar.jar,my-other-other-jar.jar \
+        my-main-jar.jar \
         app_arg1 app_arg2
 
 
