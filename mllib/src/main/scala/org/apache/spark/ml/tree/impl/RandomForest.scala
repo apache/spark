@@ -865,7 +865,7 @@ private[ml] object RandomForest extends Logging {
         .flatMap(point => continuousFeatures.map(idx => (idx, point.features(idx))))
         .groupByKey(numPartitions)
         .map { case (idx, samples) =>
-          val thresholds = findSplitsForContinuousFeature(samples.toArray, metadata, idx)
+          val thresholds = findSplitsForContinuousFeature(samples, metadata, idx)
           val splits: Array[Split] = thresholds.map(thresh => new ContinuousSplit(idx, thresh))
           logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
           (idx, splits)
@@ -934,7 +934,7 @@ private[ml] object RandomForest extends Logging {
    * @return array of splits
    */
   private[tree] def findSplitsForContinuousFeature(
-      featureSamples: Array[Double],
+      featureSamples: Iterable[Double],
       metadata: DecisionTreeMetadata,
       featureIndex: Int): Array[Double] = {
     require(metadata.isContinuous(featureIndex),
@@ -956,7 +956,7 @@ private[ml] object RandomForest extends Logging {
         valueCounts.map(_._1)
       } else {
         // stride between splits
-        val stride: Double = featureSamples.length.toDouble / (numSplits + 1)
+        val stride: Double = featureSamples.size.toDouble / (numSplits + 1)
         logDebug("stride = " + stride)
 
         // iterate `valueCount` to find splits
