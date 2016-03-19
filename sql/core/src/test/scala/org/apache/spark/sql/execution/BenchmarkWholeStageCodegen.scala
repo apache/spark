@@ -56,7 +56,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   // These benchmark are skipped in normal build
-  test("range/filter/sum") {
+  ignore("range/filter/sum") {
     val N = 500L << 20
     runBenchmark("rang/filter/sum", N) {
       sqlContext.range(N).filter("(id & 1) = 1").groupBy().sum().collect()
