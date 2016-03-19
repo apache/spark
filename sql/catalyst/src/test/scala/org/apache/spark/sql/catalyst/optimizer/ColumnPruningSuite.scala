@@ -34,9 +34,9 @@ class ColumnPruningSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Column pruning", FixedPoint(100),
+      PushPredicateThroughProject,
       ColumnPruning,
-      CollapseProject,
-      PushPredicateThroughProject) :: Nil
+      CollapseProject) :: Nil
   }
 
   test("Column pruning for Generate when Generate.join = false") {
