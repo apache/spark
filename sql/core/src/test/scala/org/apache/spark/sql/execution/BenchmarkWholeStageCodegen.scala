@@ -42,7 +42,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val sc = SparkContext.getOrCreate(conf)
   lazy val sqlContext = SQLContext.getOrCreate(sc)
 
-  def runBenchmark(name: String, values: Int)(f: => Unit): Unit = {
+  def runBenchmark(name: String, values: Long)(f: => Unit): Unit = {
     val benchmark = new Benchmark(name, values)
 
     Seq(false, true).foreach { enabled =>
@@ -57,7 +57,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
   // These benchmark are skipped in normal build
   ignore("range/filter/sum") {
-    val N = 500 << 20
+    val N = 500L << 20
     runBenchmark("rang/filter/sum", N) {
       sqlContext.range(N).filter("(id & 1) = 1").groupBy().sum().collect()
     }
@@ -71,7 +71,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("range/limit/sum") {
-    val N = 500 << 20
+    val N = 500L << 20
     runBenchmark("range/limit/sum", N) {
       sqlContext.range(N).limit(1000000).groupBy().sum().collect()
     }
@@ -85,7 +85,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("stat functions") {
-    val N = 100 << 20
+    val N = 100L << 20
 
     runBenchmark("stddev", N) {
       sqlContext.range(N).groupBy().agg("id" -> "stddev").collect()
