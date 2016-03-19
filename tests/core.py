@@ -1440,7 +1440,7 @@ if 'MySqlOperator' in dir(operators):
             sql = "SELECT * FROM baby_names LIMIT 1000;"
             t = MySqlToHiveTransfer(
                 task_id='test_m2h',
-                mysql_conn_id='airflow_db',
+                mysql_conn_id='airflow_ci',
                 hive_cli_conn_id='beeline_default',
                 sql=sql,
                 hive_table='test_mysql_to_hive_part',
