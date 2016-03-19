@@ -51,8 +51,8 @@ from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 from pyspark.sql.functions import UserDefinedFunction, sha2
 from pyspark.sql.window import Window
+from pyspark.sql.types import WrappedJStructType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
-
 
 class UTCOffsetTimezone(datetime.tzinfo):
     """
@@ -346,23 +346,34 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_apply_schema_to_row(self):
         df = self.sqlCtx.read.json(self.sc.parallelize(["""{"a":2}"""]))
-        df2 = self.sqlCtx.createDataFrame(df.rdd.map(lambda x: x), df.schema)
-        self.assertEqual(df.collect(), df2.collect())
+        df2 = self.sqlCtx.read.json(self.sc.parallelize(["""{"a":2}"""]))
+        df2._schema = WrappedJStructType(df2._jdf.schema())
+        df3a = self.sqlCtx.createDataFrame(df.rdd.map(lambda x: x), df.schema)
+        df3b = self.sqlCtx.createDataFrame(df.rdd.map(lambda x: x), df2.schema)
+        self.assertEqual(df.collect(), df3a.collect())
+        self.assertEqual(df.collect(), df3b.collect())
 
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
-        df3 = self.sqlCtx.createDataFrame(rdd, df.schema)
-        self.assertEqual(10, df3.count())
+        df4a = self.sqlCtx.createDataFrame(rdd, df.schema)
+        df4b = self.sqlCtx.createDataFrame(rdd, df2.schema)
+        self.assertEqual(10, df4a.count())
+        self.assertEqual(10, df4b.count())
 
     def test_infer_schema_to_local(self):
         input = [{"a": 1}, {"b": "coffee"}]
         rdd = self.sc.parallelize(input)
         df = self.sqlCtx.createDataFrame(input)
-        df2 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
-        self.assertEqual(df.schema, df2.schema)
+        df2 = self.sqlCtx.createDataFrame(input)
+        df2._schema = WrappedJStructType(df2._jdf.schema())
+        df3 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
+        #self.assertEqual(df.schema, df2.schema)
+        self.assertEqual(df.schema, df3.schema)
 
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x, b=None))
-        df3 = self.sqlCtx.createDataFrame(rdd, df.schema)
-        self.assertEqual(10, df3.count())
+        df4a = self.sqlCtx.createDataFrame(rdd, df.schema)
+        df4b = self.sqlCtx.createDataFrame(rdd, df2.schema)
+        self.assertEqual(10, df4a.count())
+        self.assertEqual(10, df4b.count())
 
     def test_create_dataframe_schema_mismatch(self):
         input = [Row(a=1)]

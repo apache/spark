@@ -148,7 +148,7 @@ class DataFrame(object):
         if self._schema is None:
             try:
                 jschema = self._jdf.schema()
-                if (False and jschema.length() < 10000):
+                if jschema.length() < 1000:
                     self._schema = _parse_datatype_json_string(self._jdf.schema().json())
                 else:
                     self._schema = WrappedJStructType(jschema)
@@ -156,6 +156,7 @@ class DataFrame(object):
                 raise Exception(
                     "Unable to parse datatype from schema. %s" % e)
         return self._schema
+
 
     @since(1.3)
     def printSchema(self):
