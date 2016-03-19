@@ -314,7 +314,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
-      .set("spark.sql.streaming.stateStore.managementInterval", "10ms")
+      .set(StateStore.MAINTENANCE_INTERVAL_CONFIG, "10ms")
     val opId = 0
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val storeId = StateStoreId(dir, opId, 0)
@@ -417,7 +417,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   def newStoreProvider(
       opId: Long = Random.nextLong,
       partition: Int = 0,
-      maxDeltaChainForSnapshots: Int = DEFAULT_MAX_DELTA_CHAIN_FOR_SNAPSHOTS
+      maxDeltaChainForSnapshots: Int = MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT
     ): HDFSBackedStateStoreProvider = {
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val sparkConf = new SparkConf()

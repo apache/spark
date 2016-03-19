@@ -234,9 +234,9 @@ private[state] class HDFSBackedStateStoreProvider(
   private val fs = baseDir.getFileSystem(hadoopConf)
   private val serializer = new KryoSerializer(sparkConf)
   private val minBatchesToRetain = sparkConf.getInt(
-    MIN_BATCHES_TO_RETAIN_CONF, DEFAULT_MIN_BATCHES_TO_RETAIN)
+    MIN_BATCHES_TO_RETAIN_CONF, MIN_BATCHES_TO_RETAIN_DEFAULT)
   private val maxDeltaChainForSnapshots = sparkConf.getInt(
-    MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF, DEFAULT_MAX_DELTA_CHAIN_FOR_SNAPSHOTS)
+    MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF, MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT)
 
   initialize()
 
@@ -552,8 +552,8 @@ private[state] class HDFSBackedStateStoreProvider(
 
 private[state] object HDFSBackedStateStoreProvider {
   val MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF = "spark.sql.streaming.stateStore.maxDeltaChain"
-  val DEFAULT_MAX_DELTA_CHAIN_FOR_SNAPSHOTS = 10
+  val MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT = 10
 
   val MIN_BATCHES_TO_RETAIN_CONF = "spark.sql.streaming.stateStore.minBatchesToRetain"
-  val DEFAULT_MIN_BATCHES_TO_RETAIN = 2
+  val MIN_BATCHES_TO_RETAIN_DEFAULT = 2
 }
