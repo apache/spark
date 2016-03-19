@@ -29,7 +29,7 @@ import org.apache.spark.{Logging, SparkEnv, SparkException}
 /**
  * A cleaner that renders closures serializable if they can be done so safely.
  */
-private[spark] object   ClosureCleaner extends Logging {
+private[spark] object ClosureCleaner extends Logging {
 
   // Get an ASM class reader for a given class from the JAR that loaded it
   private[util] def getClassReader(cls: Class[_]): ClassReader = {

@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinator
 import org.apache.spark.sql.execution.streaming.{ContinuousQueryListenerBus, Sink, StreamExecution}
 import org.apache.spark.sql.util.ContinuousQueryListener
 
