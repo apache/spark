@@ -56,6 +56,9 @@ import org.apache.spark.util.Utils;
  * batches processed exceeds `numBatchesTimeout`.
  */
 public class JavaStreamingTestExample {
+
+  private static int timeoutCounter = 0;
+
   public static void main(String[] args) {
     if (args.length != 3) {
       System.err.println("Usage: JavaStreamingTestExample " +
@@ -76,7 +79,7 @@ public class JavaStreamingTestExample {
     JavaDStream<BinarySample> data = ssc.textFileStream(dataDir).map(
       new Function<String, BinarySample>() {
         @Override
-        public BinarySample call(String line) throws Exception {
+        public BinarySample call(String line) {
           String[] ts = line.split(",");
           boolean label = Boolean.valueOf(ts[0]);
           double value = Double.valueOf(ts[1]);
@@ -94,22 +97,21 @@ public class JavaStreamingTestExample {
     // $example off$
 
     // Stop processing if test becomes significant or we time out
-    final Accumulator<Integer> timeoutCounter =
-      ssc.sparkContext().accumulator(numBatchesTimeout);
+    timeoutCounter = numBatchesTimeout;
 
     out.foreachRDD(new VoidFunction<JavaRDD<StreamingTestResult>>() {
       @Override
-      public void call(JavaRDD<StreamingTestResult> rdd) throws Exception {
-        timeoutCounter.add(-1);
+      public void call(JavaRDD<StreamingTestResult> rdd) {
+        timeoutCounter -= 1;
 
-        long cntSignificant = rdd.filter(new Function<StreamingTestResult, Boolean>() {
+        boolean anySignificant = !rdd.filter(new Function<StreamingTestResult, Boolean>() {
           @Override
-          public Boolean call(StreamingTestResult v) throws Exception {
+          public Boolean call(StreamingTestResult v) {
             return v.pValue() < 0.05;
           }
-        }).count();
+        }).isEmpty();
 
-        if (timeoutCounter.value() <= 0 || cntSignificant > 0) {
+        if (timeoutCounter <= 0 || anySignificant) {
           rdd.context().stop();
         }
       }
