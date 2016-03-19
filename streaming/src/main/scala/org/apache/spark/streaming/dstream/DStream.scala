@@ -269,7 +269,7 @@ abstract class DStream[T: ClassTag] (
       checkpointDuration == null || rememberDuration > checkpointDuration,
       s"The remember duration for ${this.getClass.getSimpleName} has been set to " +
         s" $rememberDuration which is not more than the checkpoint interval" +
-        s" ($checkpointDuration). Please set it to a higher value than $checkpointDuration."
+        s" ($checkpointDuration). Please set it to a value higher than $checkpointDuration."
     )
 
     dependencies.foreach(_.validateAtStart())

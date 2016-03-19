@@ -132,7 +132,7 @@ class StreamingContext private[streaming] (
       "both SparkContext and checkpoint as null")
   }
 
-  private[streaming] val isCheckpointPresent = _cp != null
+  private[streaming] val isCheckpointPresent: Boolean = _cp != null
 
   private[streaming] val sc: SparkContext = {
     if (_sc != null) {

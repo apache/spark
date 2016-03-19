@@ -45,7 +45,7 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
   /**
    * Updates the checkpoint data of the DStream. This gets called every time
    * the graph checkpoint is initiated. Default implementation records the
-   * checkpoint files to which the generated RDDs of the DStream have been saved.
+   * checkpoint files at which the generated RDDs of the DStream have been saved.
    */
   def update(time: Time) {
 
@@ -102,7 +102,7 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
   }
 
   /**
-   * Restore the checkpoint data. This gets called once while the DStream graph
+   * Restore the checkpoint data. This gets called once when the DStream graph
    * (along with its output DStreams) is being restored from a graph checkpoint file.
    * Default implementation restores the RDDs from their checkpoint files.
    */
