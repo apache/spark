@@ -24,12 +24,12 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
-class PruneSortsSuite extends PlanTest {
+class EliminateSortsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Prune Sorts", Once,
-        PruneSorts) :: Nil
+      Batch("Eliminate Sorts", Once,
+        EliminateSorts) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)

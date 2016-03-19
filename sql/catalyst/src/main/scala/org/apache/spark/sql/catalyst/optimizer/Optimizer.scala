@@ -87,7 +87,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SimplifyConditionals,
       RemoveDispensableExpressions,
       PruneFilters,
-      PruneSorts,
+      EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       EliminateSerialization) ::
@@ -829,11 +829,11 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 /**
  * Removes no-op SortOrder from Sort
  */
-object PruneSorts extends Rule[LogicalPlan] {
+object EliminateSorts  extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case s @ Sort(orders, _, child) if orders.exists(_.references.isEmpty) || orders.isEmpty =>
-      val newOrder = orders.filter(_.references.nonEmpty)
-      if (newOrder.isEmpty) child else s.copy(order = newOrder)
+    case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
+      val newOrders = orders.filter(_.references.nonEmpty)
+      if (newOrders.isEmpty) child else s.copy(order = newOrders)
   }
 }
 
