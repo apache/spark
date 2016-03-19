@@ -29,8 +29,9 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.Utils
 
@@ -241,4 +242,20 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
       "" -> "This is a test for Spark-11624")
   }
+
+  test("SPARK-14021 Custom context test") {
+    lazy val className = classOf[TestContext].getName
+
+    runCliWithin(2.minute, Seq("--conf", s"spark.sql.context.class=$className"))(
+      "SET spark.sql.context.class;" -> s"spark.sql.context.class=$className",
+      "SET spark.sql.test.config;" -> "spark.sql.test.config=IAmADifferentContext"
+    )
+  }
+}
+
+/**
+ * This is to create a Derived HiveContext for test SPARK-14021.
+ */
+class TestContext(sc: SparkContext) extends HiveContext(sc) {
+  setConf("spark.sql.test.config", "IAmADifferentContext")
 }

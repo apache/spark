@@ -34,6 +34,20 @@ private[hive] object SparkSQLEnv extends Logging {
   var hiveContext: HiveContext = _
   var sparkContext: SparkContext = _
 
+  private def readContextClassFromConf(sparkConf: SparkConf): Class[_ <: HiveContext] = {
+    val className =
+      sparkConf.get("spark.sql.context.class", "org.apache.spark.sql.hive.HiveContext")
+    val configuredContextClass = Utils.classForName(className)
+    val defaultContextClass = classOf[HiveContext]
+    if (defaultContextClass.isAssignableFrom(configuredContextClass)) {
+      configuredContextClass.asInstanceOf[Class[_ <: HiveContext]]
+    } else {
+      log.warn(s"Configured context class $className is not a subclass of `HiveContext`," +
+        " falling back to using `HiveContext`.")
+      defaultContextClass
+    }
+  }
+
   def init() {
     if (hiveContext == null) {
       val sparkConf = new SparkConf(loadDefaults = true)
@@ -56,7 +70,8 @@ private[hive] object SparkSQLEnv extends Logging {
 
       sparkContext = new SparkContext(sparkConf)
       sparkContext.addSparkListener(new StatsReportListener())
-      hiveContext = new HiveContext(sparkContext)
+      val contextClass = readContextClassFromConf(sparkConf)
+      hiveContext = contextClass.getConstructor(classOf[SparkContext]).newInstance(sparkContext)
 
       hiveContext.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
       hiveContext.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
