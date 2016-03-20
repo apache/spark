@@ -465,6 +465,13 @@ class StructType(DataType):
                 "fields should be a list of StructField"
         self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
 
+    def __eq__(self, other):
+        return (isinstance(other, StructType)
+            and self.fields == other.fields)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
         Construct a StructType by adding new elements to it to define the schema. The method accepts
