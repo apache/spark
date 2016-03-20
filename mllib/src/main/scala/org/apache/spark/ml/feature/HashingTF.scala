@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
  * :: Experimental ::
- * Maps a sequence of terms to their term frequencies using the hashing trick.
+ * Maps a sequence of terms to their teram frequencies using the hashing trick.
  */
 @Experimental
 class HashingTF(override val uid: String)
