@@ -1385,29 +1385,30 @@ class EmailSmtpTest(unittest.TestCase):
         assert not mock_smtp_ssl.called
 
 
-class HiveServer2Test(unittest.TestCase):
-    def setUp(self):
-        configuration.test_mode()
+if 'HiveOperator' in dir(operators):
+    class HiveServer2Test(unittest.TestCase):
+        def setUp(self):
+            configuration.test_mode()
 
-    def test_select_conn(self):
-        from airflow.hooks.hive_hooks import HiveServer2Hook
-        sql = "select 1"
-        hook = HiveServer2Hook()
-        hook.get_records(sql)
+        def test_select_conn(self):
+            from airflow.hooks.hive_hooks import HiveServer2Hook
+            sql = "select 1"
+            hook = HiveServer2Hook()
+            hook.get_records(sql)
 
-    def test_get_metastore_databases(self):
-        if six.PY2:
-            from airflow.hooks.hive_hooks import HiveMetastoreHook
-            hook = HiveMetastoreHook()
-            hook.get_databases()
+        def test_get_metastore_databases(self):
+            if six.PY2:
+                from airflow.hooks.hive_hooks import HiveMetastoreHook
+                hook = HiveMetastoreHook()
+                hook.get_databases()
 
-    def test_to_csv(self):
-        from airflow.hooks.hive_hooks import HiveServer2Hook
-        sql = "select 1"
-        hook = HiveServer2Hook()
-        hook.to_csv(hql=sql, csv_filepath="/tmp/test_to_csv")
+        def test_to_csv(self):
+            from airflow.hooks.hive_hooks import HiveServer2Hook
+            sql = "select 1"
+            hook = HiveServer2Hook()
+            hook.to_csv(hql=sql, csv_filepath="/tmp/test_to_csv")
 
-if 'MySqlOperator' in dir(operators):
+if 'MySqlOperator' in dir(operators) and 'HiveOperator' in dir(operators):
     class TransferTests(unittest.TestCase):
         cluster = None
 
@@ -1450,7 +1451,6 @@ if 'MySqlOperator' in dir(operators):
                 delimiter=",",
                 dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
-
 
 if 'AIRFLOW_RUNALL_TESTS' in os.environ:
 
