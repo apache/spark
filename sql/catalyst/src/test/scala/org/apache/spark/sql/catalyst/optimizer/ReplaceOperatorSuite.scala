@@ -73,6 +73,20 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(Optimize.execute(query1.analyze), correctAnswer1)
   }
 
+  test("continuous Intersect whose children do not contain Distinct") {
+    val table1 = LocalRelation('a.int, 'b.int)
+    val table2 = LocalRelation('c.int, 'd.int)
+    val table3 = LocalRelation('e.int, 'f.int)
+
+    // Just need one Distinct for continuous Intersect, even if no child has Distinct.
+    val query1 = table1.intersect(table2).intersect(table3)
+    val correctAnswer1 =
+      table1
+        .join(table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd)).groupBy('a, 'b)('a, 'b)
+        .join(table3, LeftSemi, Option('a <=> 'e && 'b <=> 'f)).analyze
+    comparePlans(Optimize.execute(query1.analyze), correctAnswer1)
+  }
+
   test("replace Intersect with Left-semi Join whose left is inferred to have distinct values") {
     val table1 = LocalRelation('a.int)
     val table2 = LocalRelation('c.int, 'd.int)
