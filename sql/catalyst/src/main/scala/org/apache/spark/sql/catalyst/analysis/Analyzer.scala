@@ -495,9 +495,15 @@ class Analyzer(
 
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        val expanded = expandStarExpressions(a.aggregateExpressions, a.child)
+        if (conf.groupByOrdinal && a.groupingExpressions.exists(IntegerIndex.unapply(_).nonEmpty)) {
+          failAnalysis(
+            "Group by position: star is not allowed to use in the select list " +
+            "when using ordinals in group by")
+        } else {
+          val expanded = expandStarExpressions(a.aggregateExpressions, a.child)
             .map(_.asInstanceOf[NamedExpression])
-        a.copy(aggregateExpressions = expanded)
+          a.copy(aggregateExpressions = expanded)
+        }
 
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>

@@ -512,11 +512,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Group By Ordinal - negative cases") {
     intercept[UnresolvedException[Aggregate]] {
-      sql("SELECT * FROM testData2 GROUP BY -1").collect()
+      sql("SELECT a, b FROM testData2 GROUP BY -1").collect()
     }
 
     intercept[UnresolvedException[Aggregate]] {
-      sql("SELECT * FROM testData2 GROUP BY 3").collect()
+      sql("SELECT a, b FROM testData2 GROUP BY 3").collect()
     }
 
     val e = intercept[UnresolvedException[Aggregate]](
@@ -524,10 +524,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e.getMessage contains
       "Invalid call to Group by position: the '1'th column in the select is an aggregate function")
 
-    val ae = intercept[AnalysisException](
+    var ae = intercept[AnalysisException](
       sql("SELECT a, rand(0), sum(b) FROM testData2 GROUP BY a, 2").queryExecution.analyzed)
     assert(ae.getMessage contains
       "nondeterministic expression rand(0) should not appear in grouping expression")
+
+    ae = intercept[AnalysisException](
+      sql("SELECT * FROM testData2 GROUP BY a, b, 1").queryExecution.analyzed)
+    assert(ae.getMessage contains
+      "Group by position: star is not allowed to use in the select list " +
+        "when using ordinals in group by")
   }
 
   test("Group By Ordinal: spark.sql.orderByOrdinal=false") {
@@ -536,6 +542,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       intercept[AnalysisException] {
         sql("SELECT a, sum(b) FROM testData2 GROUP BY 1").collect()
       }
+      // '*' is not allowed to use in the select list when users specify ordinals in group by
+      checkAnswer(
+        sql("SELECT * FROM testData2 GROUP BY a, b, 1"),
+        sql("SELECT * FROM testData2 GROUP BY a, b"))
     }
   }
 
