@@ -78,7 +78,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     "Minimum information gain for a split to be considered at a tree node.")
 
   /**
-   * Maximum memory in MB allocated to histogram aggregation.
+   * Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be
+   * split per iteration, and its aggregates may exceed this size.
    * (default = 256 MB)
    * @group expertParam
    */

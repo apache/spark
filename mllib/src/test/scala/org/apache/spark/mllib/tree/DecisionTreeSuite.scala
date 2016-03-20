@@ -55,7 +55,6 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val split = rootNode.split.get
     assert(split.categories === List(1.0))
     assert(split.featureType === Categorical)
-    assert(split.threshold === Double.MinValue)
 
     val stats = rootNode.stats.get
     assert(stats.gain > 0)
@@ -84,7 +83,6 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(split.categories.length === 1)
     assert(split.categories.contains(1.0))
     assert(split.featureType === Categorical)
-    assert(split.threshold === Double.MinValue)
 
     val stats = rootNode.stats.get
     assert(stats.gain > 0)
@@ -125,9 +123,9 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
     val stats = rootNode.stats.get
-    assert(stats.gain === 0)
-    assert(stats.leftImpurity === 0)
-    assert(stats.rightImpurity === 0)
+    assert(stats.gain === Double.MinValue)
+    assert(stats.leftImpurity === -1)
+    assert(stats.rightImpurity === -1)
   }
 
   test("Binary classification stump with fixed label 1 for Gini") {
@@ -143,9 +141,9 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
     val stats = rootNode.stats.get
-    assert(stats.gain === 0)
-    assert(stats.leftImpurity === 0)
-    assert(stats.rightImpurity === 0)
+    assert(stats.gain === Double.MinValue)
+    assert(stats.leftImpurity === -1)
+    assert(stats.rightImpurity === -1)
     assert(rootNode.predict.predict === 1)
   }
 
@@ -162,9 +160,9 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
     val stats = rootNode.stats.get
-    assert(stats.gain === 0)
-    assert(stats.leftImpurity === 0)
-    assert(stats.rightImpurity === 0)
+    assert(stats.gain === Double.MinValue)
+    assert(stats.leftImpurity === -1)
+    assert(stats.rightImpurity === -1)
     assert(rootNode.predict.predict === 0)
   }
 
@@ -181,9 +179,9 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
     val stats = rootNode.stats.get
-    assert(stats.gain === 0)
-    assert(stats.leftImpurity === 0)
-    assert(stats.rightImpurity === 0)
+    assert(stats.gain === Double.MinValue)
+    assert(stats.leftImpurity === -1)
+    assert(stats.rightImpurity === -1)
     assert(rootNode.predict.predict === 1)
   }
 

@@ -141,22 +141,6 @@ private[spark] object RandomForest extends Logging {
     // TODO: Calculate memory usage more precisely.
     val maxMemoryUsage: Long = strategy.maxMemoryInMB * 1024L * 1024L
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
-    val maxMemoryPerNode = {
-      val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
-        // Find numFeaturesPerNode largest bins to get an upper bound on memory usage.
-        Some(metadata.numBins.zipWithIndex.sortBy(- _._1)
-          .take(metadata.numFeaturesPerNode).map(_._2))
-      } else {
-        None
-      }
-      RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
-    }
-    require(maxMemoryPerNode <= maxMemoryUsage,
-      s"RandomForest/DecisionTree given maxMemoryInMB = ${strategy.maxMemoryInMB}," +
-        " which is too small for the given features." +
-        s"  Minimum value = ${maxMemoryPerNode / (1024L * 1024L)}")
-
-    timer.stop("init")
 
     /*
      * The main idea here is to perform group-wise training of the decision tree nodes thus
@@ -186,6 +170,8 @@ private[spark] object RandomForest extends Logging {
     // Allocate and queue root nodes.
     val topNodes = Array.fill[LearningNode](numTrees)(LearningNode.emptyNode(nodeIndex = 1))
     Range(0, numTrees).foreach(treeIndex => nodeQueue.enqueue((treeIndex, topNodes(treeIndex))))
+
+    timer.stop("init")
 
     while (nodeQueue.nonEmpty) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
@@ -1066,7 +1052,9 @@ private[spark] object RandomForest extends Logging {
       new mutable.HashMap[Int, mutable.HashMap[Int, NodeIndexInfo]]()
     var memUsage: Long = 0L
     var numNodesInGroup = 0
-    while (nodeQueue.nonEmpty && memUsage < maxMemoryUsage) {
+    // If maxMemoryInMB is set very small, we want to still try to split 1 node,
+    // so we allow one iteration if memUsage == 0.
+    while (nodeQueue.nonEmpty && (memUsage < maxMemoryUsage || memUsage == 0)) {
       val (treeIndex, node) = nodeQueue.head
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
@@ -1077,7 +1065,7 @@ private[spark] object RandomForest extends Logging {
       }
       // Check if enough memory remains to add this node to the group.
       val nodeMemUsage = RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
-      if (memUsage + nodeMemUsage <= maxMemoryUsage) {
+      if (memUsage + nodeMemUsage <= maxMemoryUsage || memUsage == 0) {
         nodeQueue.dequeue()
         mutableNodesForGroup.getOrElseUpdate(treeIndex, new mutable.ArrayBuffer[LearningNode]()) +=
           node
@@ -1087,6 +1075,12 @@ private[spark] object RandomForest extends Logging {
       }
       numNodesInGroup += 1
       memUsage += nodeMemUsage
+    }
+    if (memUsage > maxMemoryUsage && maxMemoryUsage != 0) {
+      // If maxMemoryUsage is 0, we should still allow splitting 1 node.
+      logWarning(s"Tree learning is using approximately $memUsage bytes per iteration, which" +
+        s" exceeds requested limit maxMemoryUsage=$maxMemoryUsage. This allows splitting" +
+        s" $numNodesInGroup nodes in this iteration.")
     }
     // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[LearningNode]] =
