@@ -110,7 +110,7 @@ class NaiveBayes @Since("1.5.0") (
     if (attr.isDefined) {
       nbModel.setFeatureNames(attr.get.map(_.name.getOrElse("NA")))
     }
-    nbModel.setLabelNames(oldModel.labels.map(_.toString))
+    nbModel
   }
 
   @Since("1.5.0")
@@ -235,27 +235,13 @@ class NaiveBayesModel private[ml] (
   override def write: MLWriter = new NaiveBayesModel.NaiveBayesModelWriter(this)
 
   private var featureNames: Option[Array[String]] = None
-  private var labelNames: Option[Array[String]] = None
 
   private[classification] def setFeatureNames(names: Array[String]): this.type = {
     this.featureNames = Some(names)
     this
   }
 
-  private[classification] def setLabelNames(names: Array[String]): this.type = {
-    this.labelNames = Some(names)
-    this
-  }
-
   private[ml] def getFeatureNames: Array[String] = featureNames match {
-    case Some(names) => names
-    case None =>
-      throw new SparkException(
-        s"No training result available for the ${this.getClass.getSimpleName}",
-        new NullPointerException())
-  }
-
-  private[ml] def getLabelNames: Array[String] = labelNames match {
     case Some(names) => names
     case None =>
       throw new SparkException(

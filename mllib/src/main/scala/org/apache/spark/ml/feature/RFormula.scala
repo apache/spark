@@ -77,15 +77,13 @@ class RFormula(override val uid: String)
 
   /**
    * R formula parameter. The formula is provided in string form.
-    *
-    * @group param
+   * @group param
    */
   val formula: Param[String] = new Param(this, "formula", "R model formula")
 
   /**
    * Sets the formula to use for this transformer. Must be called before use.
-    *
-    * @group setParam
+   * @group setParam
    * @param value an R formula in string form (e.g. "y ~ x + z")
    */
   def setFormula(value: String): this.type = set(formula, value)
@@ -195,8 +193,7 @@ object RFormula extends DefaultParamsReadable[RFormula] {
 /**
  * :: Experimental ::
  * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
-  *
-  * @param resolvedFormula the fitted R formula.
+ * @param resolvedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
 @Experimental
