@@ -412,7 +412,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // window w1 as (partition by p_mfgr order by p_name
     //               range between 2 preceding and 2 following),
     //        w2 as w1
-    val windowMap = baseWindowMap.mapValues {
+    val windowMapView = baseWindowMap.mapValues {
       case WindowSpecReference(name) =>
         baseWindowMap.get(name) match {
           case Some(spec: WindowSpecDefinition) =>
@@ -424,7 +424,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         }
       case spec: WindowSpecDefinition => spec
     }
-    WithWindowDefinition(windowMap, query)
+
+    // Note that mapValues creates a view instead of materialized map. We force materialization by
+    // mapping over identity.
+    WithWindowDefinition(windowMapView.map(identity), query)
   }
 
   /**
@@ -449,7 +452,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
             val e = typedVisit[Expression](eCtx)
             val index = expressionMap.find(_._1.semanticEquals(e)).map(_._2).getOrElse(
               throw new ParseException(
-                s"${e.treeString} doesn't show up in the GROUP BY list", ctx))
+                s"$e doesn't show up in the GROUP BY list", ctx))
             // 0 means that the column at the given index is a grouping column, 1 means it is not,
             // so we unset the bit in bitmap.
             bitmap & ~(1 << (numExpressions - 1 - index))
@@ -511,6 +514,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitJoinRelation(ctx: JoinRelationContext): LogicalPlan = withOrigin(ctx) {
     val baseJoinType = ctx.joinType match {
+      case null => Inner
       case jt if jt.FULL != null => FullOuter
       case jt if jt.SEMI != null => LeftSemi
       case jt if jt.LEFT != null => LeftOuter
@@ -557,6 +561,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     // Create a sampled plan if we need one.
     def sample(fraction: Double): Sample = {
+      // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
+      // function takes X PERCENT as the input and the range of X is [0, 100], we need to
+      // adjust the fraction.
+      val eps = RandomSampler.roundingEpsilon
+      assert(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
+        s"Sampling fraction ($fraction) must be on interval [0, 1]",
+        ctx)
       Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)(true)
     }
 
@@ -568,13 +579,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
         case SqlBaseParser.PERCENTLIT =>
           val fraction = ctx.percentage.getText.toDouble
-          // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
-          // function takes X PERCENT as the input and the range of X is [0, 100], we need to
-          // adjust the fraction.
-          val eps = RandomSampler.roundingEpsilon
-          assert(fraction >= 0.0 - eps && fraction <= 100.0 + eps,
-            s"Sampling fraction ($fraction) must be on interval [0, 100]",
-            ctx)
           sample(fraction / 100.0d)
 
         case SqlBaseParser.BUCKET if ctx.ON != null =>

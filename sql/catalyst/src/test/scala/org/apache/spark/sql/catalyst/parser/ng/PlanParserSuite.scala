@@ -17,9 +17,10 @@
 package org.apache.spark.sql.catalyst.parser.ng
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{UnspecifiedFrame, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.IntegerType
 
 class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
@@ -172,61 +173,183 @@ class PlanParserSuite extends PlanTest {
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
-      insert(Map.empty, true))
+      insert(Map.empty, overwrite = true))
     assertEqual(s"insert overwrite table s if not exists $sql",
-      insert(Map.empty, true, true))
+      insert(Map.empty, overwrite = true, ifNotExists = true))
     assertEqual(s"insert into s $sql",
       insert(Map.empty))
     assertEqual(s"insert into table s partition (c = 'd', e = 1) $sql",
       insert(Map("c" -> Option("d"), "e" -> Option("1"))))
     assertEqual(s"insert overwrite table s partition (c = 'd', x) if not exists $sql",
-      insert(Map("c" -> Option("d"), "x" -> None), true, true))
+      insert(Map("c" -> Option("d"), "x" -> None), overwrite = true, ifNotExists = true))
 
     // Multi insert
     val plan2 = table("t").where('x > 5).select(all())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
-      InsertIntoTable(table("s"), Map.empty, plan.limit(1), false, false).unionAll(
-        InsertIntoTable(table("u"), Map.empty, plan2, false, false)))
+      InsertIntoTable(
+        table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).unionAll(
+        InsertIntoTable(
+          table("u"), Map.empty, plan2, overwrite = false, ifNotExists = false)))
   }
 
-
   test("aggregation") {
+    val sql = "select a, b, sum(c) as c from d group by a, b"
+
     // Normal
-    // Cube/Rollup/Grouping Sets
+    assertEqual(sql, table("d").groupBy('a, 'b)('a, 'b, 'sum.function('c).as("c")))
+
+    // Cube
+    assertEqual(s"$sql with cube",
+      table("d").groupBy(Cube(Seq('a, 'b)))('a, 'b, 'sum.function('c).as("c")))
+
+    // Rollup
+    assertEqual(s"$sql with rollup",
+      table("d").groupBy(Rollup(Seq('a, 'b)))('a, 'b, 'sum.function('c).as("c")))
+
+    // Grouping Sets
+    assertEqual(s"$sql grouping sets((a, b), (a), ())",
+      GroupingSets(Seq(0, 1, 3), Seq('a, 'b), table("d"), Seq('a, 'b, 'sum.function('c).as("c"))))
+    intercept(s"$sql grouping sets((a, b), (c), ())",
+      "c doesn't show up in the GROUP BY list")
   }
 
   test("limit") {
-    // Expressions
+    val sql = "select * from t"
+    val plan = table("t").select(all())
+    assertEqual(s"$sql limit 10", plan.limit(10))
+    assertEqual(s"$sql limit cast(9 / 4 as int)", plan.limit(Cast(Literal(9) / 4, IntegerType)))
   }
 
   test("window spec") {
-    // Spec.
-    // Named
-    // Referencing each other
+    // Note that WindowSpecs are testing in the ExpressionParserSuite
+    val sql = "select * from t"
+    val plan = table("t").select(all())
+    val spec = WindowSpecDefinition(Seq('a, 'b), Seq('c.asc),
+      SpecifiedWindowFrame(RowFrame, ValuePreceding(1), ValueFollowing(1)))
+
+    // Test window resolution.
+    val ws1 = Map("w1" -> spec, "w2" -> spec, "w3" -> spec)
+    assertEqual(
+      s"""$sql
+         |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
+         |       w2 as w1,
+         |       w3 as w1""".stripMargin,
+      WithWindowDefinition(ws1, plan))
+
+    // Fail with no reference.
+    intercept(s"$sql window w2 as w1", "Cannot resolve window reference 'w1'")
+
+    // Fail when resolved reference is not a window spec.
+    intercept(
+      s"""$sql
+         |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
+         |       w2 as w1,
+         |       w3 as w2""".stripMargin,
+      "Window reference 'w2' is not a window specification"
+    )
   }
 
   test("lateral view") {
     // Single lateral view
+    assertEqual(
+      "select * from t lateral view explode(x) expl as x",
+      table("t")
+        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+        .select(all()))
+
     // Multiple lateral views
+    assertEqual(
+      """select *
+        |from t
+        |lateral view explode(x) expl as x
+        |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
+      table("t")
+        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+        .generate(JsonTuple(Seq('x, 'y)), join = true, outer = true, Some("jtup"), Seq("q", "z"))
+        .select(all()))
+
     // Multi-Insert lateral views.
+    val from = table("t1").generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+    assertEqual(
+      """from t1
+        |lateral view explode(x) expl as x
+        |insert into t2
+        |select *
+        |lateral view json_tuple(x, y) jtup q, z
+        |insert into t3
+        |select *
+        |where s < 10
+      """.stripMargin,
+      Union(from
+        .generate(JsonTuple(Seq('x, 'y)), join = true, outer = false, Some("jtup"), Seq("q", "z"))
+        .select(all())
+        .insertInto("t2"),
+        from.where('s < 10).select(all()).insertInto("t3")))
+
+    // Unsupported generator.
+    intercept(
+      "select * from t lateral view posexplode(x) posexpl as x, y",
+      "Generator function 'posexplode' is not supported")
   }
 
   test("joins") {
-    // Alias
-    // - Query
-    // - Plan
+    val testUnconditionalJoin = (sql: String, jt: JoinType) => {
+      assertEqual(
+        s"select * from t as tt $sql u",
+        table("t").as("tt").join(table("u"), jt, None).select(all()))
+    }
+    val testConditionalJoin = (sql: String, jt: JoinType) => {
+      assertEqual(
+        s"select * from t $sql u as uu on a = b",
+        table("t").join(table("u").as("uu"), jt, Option('a === 'b)).select(all()))
+    }
+    val testNaturalJoin = (sql: String, jt: JoinType) => {
+      assertEqual(
+        s"select * from t tt natural $sql u as uu",
+        table("t").as("tt").join(table("u").as("uu"), NaturalJoin(jt), None).select(all()))
+    }
+    val testUsingJoin = (sql: String, jt: JoinType) => {
+      assertEqual(
+        s"select * from t $sql u using(a, b)",
+        table("t").join(table("u"), UsingJoin(jt, Seq('a.attr, 'b.attr)), None).select(all()))
+    }
+    val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
+
+    def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
+      tests.foreach(_(sql, jt))
+    }
+    test("cross join", Inner, Seq(testUnconditionalJoin))
+    test(",", Inner, Seq(testUnconditionalJoin))
+    test("join", Inner, testAll)
+    test("inner join", Inner, testAll)
+    test("left join", LeftOuter, testAll)
+    test("left outer join", LeftOuter, testAll)
+    test("right join", RightOuter, testAll)
+    test("right outer join", RightOuter, testAll)
+    test("full join", FullOuter, testAll)
+    test("full outer join", FullOuter, testAll)
   }
 
   test("sampled relations") {
-    //
+    val sql = "select * from t"
+    assertEqual(s"$sql tablesample(100 rows)",
+      table("t").limit(100).select(all()))
+    assertEqual(s"$sql as x tablesample(43 percent)",
+      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x"))(true).select(all()))
+    assertEqual(s"$sql as x tablesample(bucket 4 out of 10)",
+      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(all()))
+    intercept(s"$sql as x tablesample(bucket 4 out of 10 on x)",
+      "TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported")
+    intercept(s"$sql as x tablesample(bucket 11 out of 10)",
+      s"Sampling fraction (${11.0/10.0}) must be on interval [0, 1]")
   }
 
   test("subquery") {
   }
 
   test("table reference") {
-    assertEqual("table a", table("a"))
-    assertEqual("table a.b", table("a", "b"))
+    assertEqual("table t", table("t"))
+    assertEqual("table d.t", table("d", "t"))
   }
 
   test("inline table") {
