@@ -318,8 +318,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
     /**
      * Given a list of nodes from a tree, construct the tree.
-      *
-      * @param data array of all node data in a tree.
+     * @param data array of all node data in a tree.
      */
     def constructTree(data: Array[NodeData]): Node = {
       val dataMap: Map[Int, NodeData] = data.map(n => n.nodeId -> n).toMap
