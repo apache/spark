@@ -246,7 +246,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
       val model = new RandomForestModel(algo, trees)
       val leafRdd = model.leaf(trainRdd.map(_.features))
-      leafRdd.foreach { vec =>
+      leafRdd.collect.foreach { vec =>
         assert(vec.size === 3)
         (vec.toArray zip numLeave).foreach {
           case (value, num) =>
