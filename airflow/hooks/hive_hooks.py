@@ -1,17 +1,26 @@
+# -*- coding: utf-8 -*-
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 from __future__ import print_function
 from builtins import zip
 from past.builtins import basestring
-import csv
+import unicodecsv as csv
 import logging
 import re
 import subprocess
 from tempfile import NamedTemporaryFile
-
-
-from thrift.transport import TSocket, TTransport
-from thrift.protocol import TBinaryProtocol
-from hive_service import ThriftHive
-import pyhs2
 
 from airflow.utils import AirflowException
 from airflow.hooks.base_hook import BaseHook
@@ -64,7 +73,7 @@ class HiveCliHook(BaseHook):
 
         with TemporaryDirectory(prefix='airflow_hiveop_') as tmp_dir:
             with NamedTemporaryFile(dir=tmp_dir) as f:
-                f.write(hql)
+                f.write(hql.encode('UTF-8'))
                 f.flush()
                 fname = f.name
                 hive_bin = 'hive'
@@ -112,10 +121,13 @@ class HiveCliHook(BaseHook):
                     cwd=tmp_dir)
                 self.sp = sp
                 stdout = ''
-                for line in iter(sp.stdout.readline, ''):
-                    stdout += line
+                while True:
+                    line = sp.stdout.readline()
+                    if not line:
+                        break
+                    stdout += line.decode('UTF-8')
                     if verbose:
-                        logging.info(line.strip())
+                        logging.info(line.decode('UTF-8').strip())
                 sp.wait()
 
                 if sp.returncode:
@@ -256,6 +268,9 @@ class HiveMetastoreHook(BaseHook):
         self.__dict__['metastore'] = self.get_metastore_client()
 
     def get_metastore_client(self):
+        from thrift.transport import TSocket, TTransport
+        from thrift.protocol import TBinaryProtocol
+        from hive_service import ThriftHive
         """
         Returns a Hive thrift client.
         """
@@ -263,6 +278,7 @@ class HiveMetastoreHook(BaseHook):
         transport = TSocket.TSocket(ms.host, ms.port)
         transport = TTransport.TBufferedTransport(transport)
         protocol = TBinaryProtocol.TBinaryProtocol(transport)
+
         return ThriftHive.Client(protocol)
 
     def get_conn(self):
@@ -376,7 +392,6 @@ class HiveMetastoreHook(BaseHook):
 
         return max([p[field] for p in parts])
 
-
     def table_exists(self, table_name, db='default'):
         """
         Check if table exists
@@ -396,25 +411,34 @@ class HiveMetastoreHook(BaseHook):
 
 class HiveServer2Hook(BaseHook):
     """
-    Wrapper around the pyhs2 library
+    Wrapper around the impala library
 
-    Note that the default authMechanism is NOSASL, to override it you
+    Note that the default authMechanism is PLAIN, to override it you
     can specify it in the ``extra`` of your connection in the UI as in
-    ``{"authMechanism": "PLAIN"}``. Refer to the pyhs2 for more details.
     """
     def __init__(self, hiveserver2_conn_id='hiveserver2_default'):
         self.hiveserver2_conn_id = hiveserver2_conn_id
 
     def get_conn(self):
         db = self.get_connection(self.hiveserver2_conn_id)
-        auth_mechanism = db.extra_dejson.get('authMechanism', 'NOSASL')
+        auth_mechanism = db.extra_dejson.get('authMechanism', 'PLAIN')
+        kerberos_service_name = None
         if configuration.get('core', 'security') == 'kerberos':
-            auth_mechanism = db.extra_dejson.get('authMechanism', 'KERBEROS')
+            auth_mechanism = db.extra_dejson.get('authMechanism', 'GSSAPI')
+            kerberos_service_name = db.extra_dejson.get('kerberos_service_name', 'hive')
 
-        return pyhs2.connect(
+        # impyla uses GSSAPI instead of KERBEROS as a auth_mechanism identifier
+        if auth_mechanism == 'KERBEROS':
+            logging.warning("Detected deprecated 'KERBEROS' for authMechanism for %s. Please use 'GSSAPI' instead",
+                            self.hiveserver2_conn_id)
+            auth_mechanism = 'GSSAPI'
+
+        from impala.dbapi import connect
+        return connect(
             host=db.host,
             port=db.port,
-            authMechanism=auth_mechanism,
+            auth_mechanism=auth_mechanism,
+            kerberos_service_name=kerberos_service_name,
             user=db.login,
             database=db.schema or 'default')
 
@@ -433,7 +457,7 @@ class HiveServer2Hook(BaseHook):
                     if records:
                         results = {
                             'data': records,
-                            'header': cur.getSchema(),
+                            'header': cur.description,
                         }
             return results
 
@@ -450,16 +474,19 @@ class HiveServer2Hook(BaseHook):
             with conn.cursor() as cur:
                 logging.info("Running query: " + hql)
                 cur.execute(hql)
-                schema = cur.getSchema()
-                with open(csv_filepath, 'w') as f:
+                schema = cur.description
+                with open(csv_filepath, 'wb') as f:
                     writer = csv.writer(f, delimiter=delimiter,
-                        lineterminator=lineterminator)
+                        lineterminator=lineterminator, encoding='utf-8')
                     if output_header:
-                        writer.writerow([c['columnName']
-                            for c in cur.getSchema()])
+                        writer.writerow([c[0]
+                            for c in cur.description])
                     i = 0
-                    while cur.hasMoreRows:
+                    while True:
                         rows = [row for row in cur.fetchmany() if row]
+                        if not rows:
+                            break
+
                         writer.writerows(rows)
                         i += len(rows)
                         logging.info("Written {0} rows so far.".format(i))
@@ -489,5 +516,5 @@ class HiveServer2Hook(BaseHook):
         import pandas as pd
         res = self.get_results(hql, schema=schema)
         df = pd.DataFrame(res['data'])
-        df.columns = [c['columnName'] for c in res['header']]
+        df.columns = [c[0] for c in res['header']]
         return df
