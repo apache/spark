@@ -8,5 +8,6 @@ pylint:
   disable:
     - cyclic-import
     - invalid-name
+    - super-on-old-class
   options:
     docstring-min-length: 10

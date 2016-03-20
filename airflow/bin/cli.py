@@ -14,12 +14,12 @@ import json
 
 import airflow
 from airflow import jobs, settings, utils
-from airflow import configuration
+from airflow import configuration as conf
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow.models import DagModel, DagBag, TaskInstance, DagPickle, DagRun
 from airflow.utils import AirflowException, State
 
-DAGS_FOLDER = os.path.expanduser(configuration.get('core', 'DAGS_FOLDER'))
+DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 
 # Common help text across subcommands
 mark_success_help = "Mark jobs as succeeded without running them"
@@ -27,7 +27,7 @@ subdir_help = "File location or directory from which to look for the dag"
 
 
 def process_subdir(subdir):
-    dags_folder = configuration.get("core", "DAGS_FOLDER")
+    dags_folder = conf.get("core", "DAGS_FOLDER")
     dags_folder = os.path.expanduser(dags_folder)
     if subdir:
         if "DAGS_FOLDER" in subdir:
@@ -78,7 +78,7 @@ def backfill(args):
             mark_success=args.mark_success,
             include_adhoc=args.include_adhoc,
             local=args.local,
-            donot_pickle=(args.donot_pickle or configuration.getboolean('core', 'donot_pickle')),
+            donot_pickle=(args.donot_pickle or conf.getboolean('core', 'donot_pickle')),
             ignore_dependencies=args.ignore_dependencies,
             pool=args.pool)
 
@@ -139,7 +139,7 @@ def run(args):
     utils.pessimistic_connection_handling()
 
     # Setting up logging
-    log_base = os.path.expanduser(configuration.get('core', 'BASE_LOG_FOLDER'))
+    log_base = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
     directory = log_base + "/{args.dag_id}/{args.task_id}".format(args=args)
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -229,16 +229,16 @@ def run(args):
         executor.end()
 
     # store logs remotely
-    remote_base = configuration.get('core', 'REMOTE_BASE_LOG_FOLDER')
+    remote_base = conf.get('core', 'REMOTE_BASE_LOG_FOLDER')
 
     # deprecated as of March 2016
-    if not remote_base and configuration.get('core', 'S3_LOG_FOLDER'):
+    if not remote_base and conf.get('core', 'S3_LOG_FOLDER'):
         warnings.warn(
-            'The S3_LOG_FOLDER configuration key has been replaced by '
-            'REMOTE_BASE_LOG_FOLDER. Your configuration still works but please '
+            'The S3_LOG_FOLDER conf key has been replaced by '
+            'REMOTE_BASE_LOG_FOLDER. Your conf still works but please '
             'update airflow.cfg to ensure future compatibility.',
             DeprecationWarning)
-        remote_base = configuration.get('core', 'S3_LOG_FOLDER')
+        remote_base = conf.get('core', 'S3_LOG_FOLDER')
 
     if os.path.exists(filename):
         # read log and remove old logs to get just the latest additions
@@ -367,8 +367,8 @@ def webserver(args):
     print(settings.HEADER)
 
     from airflow.www.app import cached_app
-    app = cached_app(configuration)
-    workers = args.workers or configuration.get('webserver', 'workers')
+    app = cached_app(conf)
+    workers = args.workers or conf.get('webserver', 'workers')
     if args.debug:
         print(
             "Starting the web server on port {0} and host {1}.".format(
@@ -402,15 +402,15 @@ def serve_logs(args):
     flask_app = flask.Flask(__name__)
 
     @flask_app.route('/log/<path:filename>')
-    def serve_logs(filename):
-        log = os.path.expanduser(configuration.get('core', 'BASE_LOG_FOLDER'))
+    def serve_logs(filename):  # noqa
+        log = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
         return flask.send_from_directory(
             log,
             filename,
             mimetype="application/json",
             as_attachment=False)
     WORKER_LOG_SERVER_PORT = \
-        int(configuration.get('celery', 'WORKER_LOG_SERVER_PORT'))
+        int(conf.get('celery', 'WORKER_LOG_SERVER_PORT'))
     flask_app.run(
         host='0.0.0.0', port=WORKER_LOG_SERVER_PORT)
 
@@ -436,7 +436,7 @@ def worker(args):
     sp.kill()
 
 
-def initdb(args):
+def initdb(args):  # noqa
     print("DB: " + repr(settings.engine.url))
     utils.initdb()
     print("Done.")
@@ -454,18 +454,18 @@ def resetdb(args):
         print("Bail.")
 
 
-def upgradedb(args):
+def upgradedb(args):  # noqa
     print("DB: " + repr(settings.engine.url))
     utils.upgradedb()
 
 
-def version(args):
+def version(args):  # noqa
     print(settings.HEADER + "  v" + airflow.__version__)
 
 
 def flower(args):
-    broka = configuration.get('celery', 'BROKER_URL')
-    args.port = args.port or configuration.get('celery', 'FLOWER_PORT')
+    broka = conf.get('celery', 'BROKER_URL')
+    args.port = args.port or conf.get('celery', 'FLOWER_PORT')
     port = '--port=' + args.port
     api = ''
     if args.broker_api:
@@ -474,7 +474,7 @@ def flower(args):
     sp.wait()
 
 
-def kerberos(args):
+def kerberos(args):  # noqa
     print(settings.HEADER)
 
     import airflow.security.kerberos
@@ -659,22 +659,22 @@ def get_parser():
     parser_webserver = subparsers.add_parser('webserver', help=ht)
     parser_webserver.add_argument(
         "-p", "--port",
-        default=configuration.get('webserver', 'WEB_SERVER_PORT'),
+        default=conf.get('webserver', 'WEB_SERVER_PORT'),
         type=int,
         help="Set the port on which to run the web server")
     parser_webserver.add_argument(
         "-w", "--workers",
-        default=configuration.get('webserver', 'WORKERS'),
+        default=conf.get('webserver', 'WORKERS'),
         type=int,
         help="Number of workers to run the webserver on")
     parser_webserver.add_argument(
         "-k", "--workerclass",
-        default=configuration.get('webserver', 'WORKER_CLASS'),
+        default=conf.get('webserver', 'WORKER_CLASS'),
         choices=['sync', 'eventlet', 'gevent', 'tornado'],
         help="The worker class to use for gunicorn")
     parser_webserver.add_argument(
         "-hn", "--hostname",
-        default=configuration.get('webserver', 'WEB_SERVER_HOST'),
+        default=conf.get('webserver', 'WEB_SERVER_HOST'),
         help="Set the hostname on which to run the web server")
     ht = "Use the server that ships with Flask in debug mode"
     parser_webserver.add_argument(
@@ -743,12 +743,12 @@ def get_parser():
     parser_worker.add_argument(
         "-q", "--queues",
         help="Comma delimited list of queues to serve",
-        default=configuration.get('celery', 'DEFAULT_QUEUE'))
+        default=conf.get('celery', 'DEFAULT_QUEUE'))
     parser_worker.add_argument(
         "-c", "--concurrency",
         type=int,
         help="The number of worker processes",
-        default=configuration.get('celery', 'celeryd_concurrency'))
+        default=conf.get('celery', 'celeryd_concurrency'))
     parser_worker.set_defaults(func=worker)
 
     ht = "Serve logs generate by worker"
@@ -770,10 +770,10 @@ def get_parser():
     parser_kerberos = subparsers.add_parser('kerberos', help=ht)
     parser_kerberos.add_argument(
         "-kt", "--keytab", help="keytab",
-        nargs='?', default=configuration.get('kerberos', 'keytab'))
+        nargs='?', default=conf.get('kerberos', 'keytab'))
     parser_kerberos.add_argument(
         "principal", help="kerberos principal",
-        nargs='?', default=configuration.get('kerberos', 'principal'))
+        nargs='?', default=conf.get('kerberos', 'principal'))
     parser_kerberos.set_defaults(func=kerberos)
 
     ht = "Render a task instance's template(s)"
