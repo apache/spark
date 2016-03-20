@@ -26,7 +26,7 @@ class DatastoreHook(GoogleCloudBaseHook):
                  scope=None,
                  datastore_conn_id='google_cloud_datastore_default',
                  delegate_to=None):
-        scope = scrope or [
+        scope = scope or [
                 'https://www.googleapis.com/auth/datastore',
                 'https://www.googleapis.com/auth/userinfo.email']
         super(DatastoreHook, self).__init__(scope, datastore_conn_id, delegate_to)
