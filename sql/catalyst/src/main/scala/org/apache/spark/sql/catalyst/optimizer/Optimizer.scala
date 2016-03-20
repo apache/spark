@@ -89,7 +89,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PruneFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
-      EliminateSerialization) ::
+      EliminateSerialization,
+      EliminateDistinct) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -1194,6 +1195,41 @@ object RemoveDispensableExpressions extends Rule[LogicalPlan] {
 }
 
 /**
+ * Removes useless Distinct that are not necessary.
+ */
+object EliminateDistinct extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Eliminate the useless distinct.
+    // Distinct has been replaced by Aggregate in the rule ReplaceDistinctWithAggregate
+    case a @ Aggregate(grouping, aggs, child) if isDistinct(a) && isDistinct(child) => child
+  }
+
+  // propagate the distinct property from the child
+  @tailrec
+  private def isDistinct(plan: LogicalPlan): Boolean = plan match {
+    // Distinct(left) or Aggregate(left.output, left.output, _) always returns distinct results
+    case _: Distinct => true
+    case Aggregate(grouping, aggs, _) if grouping == aggs => true
+    // BinaryNode:
+    case p @ Join(_, _, LeftSemi, _) => isDistinct(p.left)
+    case p: Intersect => isDistinct(p.left)
+    case p: Except => isDistinct(p.left)
+    // UnaryNode:
+    case p: Project if p.child.outputSet.subsetOf(p.outputSet) => isDistinct(p.child)
+    case p: Aggregate if p.child.outputSet.subsetOf(p.outputSet) => isDistinct(p.child)
+    case p: Filter => isDistinct(p.child)
+    case p: GlobalLimit => isDistinct(p.child)
+    case p: LocalLimit => isDistinct(p.child)
+    case p: Sort => isDistinct(p.child)
+    case p: BroadcastHint => isDistinct(p.child)
+    case p: Sample => isDistinct(p.child)
+    case p: SubqueryAlias => isDistinct(p.child)
+    // Others:
+    case o => false
+  }
+}
+
+/**
  * Combines two adjacent [[Limit]] operators into one, merging the
  * expressions into one single expression.
  */
@@ -1291,7 +1327,7 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Intersect(left, right) =>
       assert(left.output.size == right.output.size)
-      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
+      val joinCond = left.output.zip(right.output).map(EqualNullSafe.tupled)
       Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
   }
 }

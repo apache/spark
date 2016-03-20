@@ -28,8 +28,9 @@ class ReplaceOperatorSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Replace Operators", FixedPoint(100),
+        ReplaceIntersectWithSemiJoin,
         ReplaceDistinctWithAggregate,
-        ReplaceIntersectWithSemiJoin) :: Nil
+        EliminateDistinct) :: Nil
   }
 
   test("replace Intersect with Left-semi Join") {
@@ -40,8 +41,65 @@ class ReplaceOperatorSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
-      Aggregate(table1.output, table1.output,
-        Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))).analyze
+      table1.join(table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd)).groupBy('a, 'b)('a, 'b).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Intersect with Left-semi Join whose left is Distinct") {
+    val table1 = LocalRelation('a.int, 'b.int)
+    val table2 = LocalRelation('c.int, 'd.int)
+
+    val query = table1.distinct().intersect(table2)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      table1.groupBy('a, 'b)('a, 'b).join(table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("continuous Intersect whose children containing Distinct") {
+    val table1 = LocalRelation('a.int, 'b.int)
+    val table2 = LocalRelation('c.int, 'd.int)
+    val table3 = LocalRelation('e.int, 'f.int)
+
+    // DISTINCT (actually, it is AGGREGATE) is the direct child
+    val query1 = table1.distinct().intersect(table2).intersect(table3)
+    val correctAnswer1 =
+      table1.groupBy('a, 'b)('a, 'b)
+        .join(table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))
+        .join(table3, LeftSemi, Option('a <=> 'e && 'b <=> 'f)).analyze
+    comparePlans(Optimize.execute(query1.analyze), correctAnswer1)
+  }
+
+  test("replace Intersect with Left-semi Join whose left is inferred to have distinct values") {
+    val table1 = LocalRelation('a.int)
+    val table2 = LocalRelation('c.int, 'd.int)
+    val table3 = LocalRelation('e.int, 'f.int)
+
+    // DISTINCT is inferred from the child's child
+    val query2 = table1.distinct()
+      .where('a > 3).limit(5)
+      .select('a.attr, ('a + 1).as("b")).orderBy('a.asc, 'b.desc)
+      .intersect(table2).intersect(table3)
+    val correctAnswer2 =
+      table1.groupBy('a)('a).where('a > 3).limit(5)
+        .select('a.attr, ('a + 1).as("b")).orderBy('a.asc, 'b.desc)
+        .join(table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))
+        .join(table3, LeftSemi, Option('a <=> 'e && 'b <=> 'f)).analyze
+    comparePlans(Optimize.execute(query2.analyze), correctAnswer2)
+  }
+
+  test("replace Intersect with Left-semi Join whose left is the Distinct") {
+    val table1 = LocalRelation('a.int, 'b.int)
+    val table2 = LocalRelation('c.int, 'd.int)
+
+    val query = table1.groupBy('a, 'b)('a, 'b).intersect(table2)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      table1.groupBy('a, 'b)('a, 'b).join(table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -49,10 +107,10 @@ class ReplaceOperatorSuite extends PlanTest {
   test("replace Distinct with Aggregate") {
     val input = LocalRelation('a.int, 'b.int)
 
-    val query = Distinct(input)
+    val query = input.distinct()
     val optimized = Optimize.execute(query.analyze)
 
-    val correctAnswer = Aggregate(input.output, input.output, input)
+    val correctAnswer = input.groupBy('a, 'b)('a, 'b).analyze
 
     comparePlans(optimized, correctAnswer)
   }
