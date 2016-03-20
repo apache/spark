@@ -218,6 +218,29 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
     Utils.deleteRecursively(tempDir)
   }
 
+  test("Leaf transformation") {
+    val trainRdd = sc.parallelize(GradientBoostedTreesSuite.trainData, 2)
+
+    val trees = Range(0, 3).map(_ => DecisionTreeSuite.createModel(Regression)).toArray
+    val treeWeights = Array(0.1, 0.3, 1.1)
+
+    val numLeave = trees.map { tree =>
+      tree.topNode.subtreeIterator.count(_.isLeaf)
+    }
+
+    Array(Classification, Regression).foreach { algo =>
+      val model = new GradientBoostedTreesModel(algo, trees, treeWeights)
+      val leafRdd = model.leaf(trainRdd.map(_.features))
+      leafRdd.foreach { vec =>
+        assert(vec.size === 3)
+        (vec.toArray zip numLeave).foreach {
+          case (value, num) =>
+            assert(value >= 0 && value < num)
+        }
+      }
+    }
+  }
+
 }
 
 private object GradientBoostedTreesSuite {

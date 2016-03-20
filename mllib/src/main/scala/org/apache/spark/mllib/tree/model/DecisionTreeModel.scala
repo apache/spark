@@ -110,7 +110,7 @@ class DecisionTreeModel @Since("1.0.0") (
    * @return Int index of the leaf
    */
   @Since("2.0.0")
-  def leaf(features: Vector): Int = {
+  private[tree] def leaf(features: Vector): Int = {
     val leafId = topNode.leaf(features)
     // encode the leaf Id, from 0
     leafMap.get(leafId).get
