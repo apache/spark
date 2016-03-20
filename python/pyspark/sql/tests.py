@@ -54,6 +54,7 @@ from pyspark.sql.window import Window
 from pyspark.sql.types import WrappedJStructType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 
+
 class UTCOffsetTimezone(datetime.tzinfo):
     """
     Specifies timezone in UTC offset

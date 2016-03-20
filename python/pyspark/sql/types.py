@@ -466,8 +466,7 @@ class StructType(DataType):
         self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
 
     def __eq__(self, other):
-        return (isinstance(other, StructType)
-            and self.fields == other.fields)
+        return (isinstance(other, StructType) and self.fields == other.fields)
 
     def __ne__(self, other):
         return not self.__eq__(other)

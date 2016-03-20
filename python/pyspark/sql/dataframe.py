@@ -157,7 +157,6 @@ class DataFrame(object):
                     "Unable to parse datatype from schema. %s" % e)
         return self._schema
 
-
     @since(1.3)
     def printSchema(self):
         """Prints out the schema in the tree format.
