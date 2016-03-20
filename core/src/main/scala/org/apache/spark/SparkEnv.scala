@@ -157,14 +157,6 @@ object SparkEnv extends Logging {
   }
 
   /**
-   * Returns the ThreadLocal SparkEnv.
-   */
-  @deprecated("Use SparkEnv.get instead", "1.2.0")
-  def getThreadLocal: SparkEnv = {
-    env
-  }
-
-  /**
    * Create a SparkEnv for the driver.
    */
   private[spark] def createDriverEnv(
