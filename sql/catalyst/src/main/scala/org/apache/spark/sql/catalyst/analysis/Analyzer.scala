@@ -636,8 +636,8 @@ class Analyzer(
             aggs(index - 1) match {
               case Alias(c, _) if c.isInstanceOf[AggregateExpression] =>
                 throw new UnresolvedException(a,
-                  s"Group by position: the '$index'th column in the select is " +
-                    s"an aggregate function: ${c.sql}")
+                  s"Group by position: the '$index'th column in the select is an aggregate " +
+                    s"function: ${c.sql}. Aggregate functions are not allowed in GROUP BY")
               // Group by clause is unable to use the alias defined in aggregateExpressions
               case Alias(c, _) => c
               case o => o
