@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.analysis._
 private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
 
+  def groupByOrdinal: Boolean
+
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determin if two
    * identifiers are equal.
@@ -43,8 +45,15 @@ object EmptyConf extends CatalystConf {
   override def caseSensitiveAnalysis: Boolean = {
     throw new UnsupportedOperationException
   }
+
+  override def groupByOrdinal: Boolean = {
+    throw new UnsupportedOperationException
+  }
 }
 
 /** A CatalystConf that can be used for local testing. */
-case class SimpleCatalystConf(caseSensitiveAnalysis: Boolean) extends CatalystConf {
+case class SimpleCatalystConf(
+    caseSensitiveAnalysis: Boolean,
+    groupByOrdinal: Boolean = true)
+  extends CatalystConf {
 }

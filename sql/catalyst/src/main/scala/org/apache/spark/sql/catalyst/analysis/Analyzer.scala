@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatal
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -40,7 +41,10 @@ import org.apache.spark.sql.types._
  * references.
  */
 object SimpleAnalyzer
-  extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(true))
+  extends Analyzer(
+    EmptyCatalog,
+    EmptyFunctionRegistry,
+    new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
@@ -80,6 +84,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUpCast ::
+      ResolveOrdinal ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -610,6 +615,39 @@ class Analyzer(
       }
     } catch {
       case a: AnalysisException if !throws => expr
+    }
+  }
+
+ /**
+  * In many dialects of SQL it is valid to use ordinal positions in group by clauses. This rule is
+  * to convert ordinal positions to the corresponding expressions in the select list.
+  *
+  * Before the release of Spark 2.0, the literals in group by clauses have no effect on the results.
+  */
+  object ResolveOrdinal extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      // Replace the index with the corresponding expression in aggregateExpressions. The index is
+      // a 1-base position of aggregateExpressions, which is output columns (select expression)
+      case a @ Aggregate(groups, aggs, child)
+          if conf.groupByOrdinal && child.resolved && aggs.forall(_.resolved) &&
+            groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
+        val newGroups = groups.map {
+          case IntegerIndex(index) if index > 0 && index <= aggs.size =>
+            aggs(index - 1) match {
+              case Alias(c, _) if c.isInstanceOf[AggregateExpression] =>
+                throw new UnresolvedException(a,
+                  s"Group by position: the '$index'th column in the select is " +
+                    s"an aggregate function: ${c.sql}")
+              // Group by clause is unable to use the alias defined in aggregateExpressions
+              case Alias(c, _) => c
+              case o => o
+            }
+          case IntegerIndex(index) =>
+            throw new UnresolvedException(a,
+              s"Group by position: '$index' exceeds the size of the select list '${aggs.size}'.")
+          case o => o
+        }
+        Aggregate(newGroups, aggs, child)
     }
   }
 

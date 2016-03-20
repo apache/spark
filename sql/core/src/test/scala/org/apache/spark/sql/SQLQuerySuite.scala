@@ -21,6 +21,8 @@ import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
@@ -457,23 +459,84 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
   }
 
-  test("literal in agg grouping expressions") {
+  test("Group By Ordinal - basic") {
     checkAnswer(
-      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-    checkAnswer(
-      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+      sql("SELECT a, sum(b) FROM testData2 GROUP BY 1"),
+      sql("SELECT a, sum(b) FROM testData2 GROUP BY a"))
 
+    // duplicate group-by columns
     checkAnswer(
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+
+    checkAnswer(
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY 1, 2"),
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+  }
+
+  test("Group By Ordinal - non aggregate expressions") {
+    checkAnswer(
+      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, 2"),
+      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
+
+    checkAnswer(
+      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"),
+      Seq(Row(1, 3, 1), Row(1, 4, 1), Row(2, 3, 1), Row(2, 4, 1), Row(3, 3, 1), Row(3, 4, 1)))
+  }
+
+  test("Group By Ordinal - non-foldable constant expression") {
+    checkAnswer(
+      sql("SELECT a, b, sum(b) FROM testData2 GROUP BY a, b, 1 + 0"),
+      sql("SELECT a, b, sum(b) FROM testData2 GROUP BY a, b"))
+
     checkAnswer(
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+  }
+
+  test("Group By Ordinal - alias") {
+    checkAnswer(
+      sql("SELECT a, (b + 2) as c, count(2) FROM testData2 GROUP BY a, 2"),
+      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
+
+    checkAnswer(
+      sql("SELECT a as b, b as a, sum(b) FROM testData2 GROUP BY 1, 2"),
+      sql("SELECT a, b, sum(b) FROM testData2 GROUP BY a, b"))
+  }
+
+  test("Group By Ordinal - constants") {
     checkAnswer(
       sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
       sql("SELECT 1, 2, sum(b) FROM testData2"))
+  }
+
+  test("Group By Ordinal - negative cases") {
+    intercept[UnresolvedException[Aggregate]] {
+      sql("SELECT * FROM testData2 GROUP BY -1").collect()
+    }
+
+    intercept[UnresolvedException[Aggregate]] {
+      sql("SELECT * FROM testData2 GROUP BY 3").collect()
+    }
+
+    val e = intercept[UnresolvedException[Aggregate]](
+      sql("SELECT SUM(a) FROM testData2 GROUP BY 1").queryExecution.analyzed)
+    assert(e.getMessage contains
+      "Invalid call to Group by position: the '1'th column in the select is an aggregate function")
+
+    val ae = intercept[AnalysisException](
+      sql("SELECT a, rand(0), sum(b) FROM testData2 GROUP BY a, 2").queryExecution.analyzed)
+    assert(ae.getMessage contains
+      "nondeterministic expression rand(0) should not appear in grouping expression")
+  }
+
+  test("Group By Ordinal: spark.sql.orderByOrdinal=false") {
+    withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
+      // If spark.sql.groupByOrdinal=false, ignore the position number.
+      intercept[AnalysisException] {
+        sql("SELECT a, sum(b) FROM testData2 GROUP BY 1").collect()
+      }
+    }
   }
 
   test("aggregates with nulls") {
