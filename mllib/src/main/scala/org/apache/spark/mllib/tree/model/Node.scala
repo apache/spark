@@ -104,6 +104,32 @@ class Node @Since("1.2.0") (
   }
 
   /**
+   * get the leaf id corresponding to the data point
+   * @param features feature value
+   * @return leaf id
+   */
+  @Since("2.0.0")
+  private[tree] def leaf(features: Vector) : Int = {
+    if (isLeaf) {
+      id
+    } else {
+      if (split.get.featureType == Continuous) {
+        if (features(split.get.feature) <= split.get.threshold) {
+          leftNode.get.leaf(features)
+        } else {
+          rightNode.get.leaf(features)
+        }
+      } else {
+        if (split.get.categories.contains(features(split.get.feature))) {
+          leftNode.get.leaf(features)
+        } else {
+          rightNode.get.leaf(features)
+        }
+      }
+    }
+  }
+
+  /**
    * Returns a deep copy of the subtree rooted at this node.
    */
   private[tree] def deepCopy(): Node = {

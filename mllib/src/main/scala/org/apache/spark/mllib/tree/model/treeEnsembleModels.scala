@@ -27,8 +27,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -352,6 +351,40 @@ private[tree] sealed class TreeEnsembleModel(
    */
   def predict(features: JavaRDD[Vector]): JavaRDD[java.lang.Double] = {
     predict(features.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
+  }
+
+  /**
+   * Transform values for a single data point using the model trained.
+   *
+   * @param features Vector representing a single data point
+   * @return Indices vector of the leaf per tree from the trained model
+   */
+  @Since("2.0.0")
+  def leaf(features: Vector) : Vector = {
+    val indices = trees.map(tree => tree.leaf(features).toDouble)
+    Vectors.dense(indices)
+  }
+
+  /**
+   * Leaf transform values for the given data set.
+   *
+   * @param features RDD representing data points to be transformed
+   * @return Indices vector of the leaf per tree from the trained model
+   */
+  @Since("2.0.0")
+  def leaf(features: RDD[Vector]) : RDD[Vector] = {
+    features.map(x => leaf(x))
+  }
+
+  /**
+   * Java-friendly version of [[org.apache.spark.mllib.tree.model.TreeEnsembleModel#leafTransform]].
+   *
+   * @param features RDD representing data points to be transformed
+   * @return Indices vector of the leaf per tree from the trained model
+   */
+  @Since("2.0.0")
+  def leaf(features: JavaRDD[Vector]) : JavaRDD[Vector] = {
+    leaf(features.rdd)
   }
 
   /**

@@ -96,6 +96,48 @@ class DecisionTreeModel @Since("1.0.0") (
     topNode.subtreeDepth
   }
 
+  // Node Ids for leave
+  private lazy val leafMap = {
+    topNode.subtreeIterator
+      .filter(_.isLeaf).map(_.id)
+      .toArray.sorted.zipWithIndex.toMap
+  }
+
+  /**
+   * Transform a single data point using the model trained into the leaf index.
+   *
+   * @param features array representing a single data point
+   * @return Int index of the leaf
+   */
+  @Since("2.0.0")
+  def leaf(features: Vector): Int = {
+    val leafId = topNode.leaf(features)
+    // encode the leaf Id, from 0
+    leafMap.get(leafId).get
+  }
+
+  /**
+   * Transform values for the given data set using the model trained.
+   *
+   * @param features RDD representing data points to be transformed
+   * @return RDD of leaf index for each of the given data points
+   */
+  @Since("2.0.0")
+  def leaf(features: RDD[Vector]): RDD[Int] = {
+    features.map(x => leaf(x))
+  }
+
+  /**
+   * Transform values for the given data set using the model trained.
+   *
+   * @param features JavaRDD representing data points to be transformed
+   * @return JavaRDD of leaf index for each of the given data points
+   */
+  @Since("2.0.0")
+  def leaf(features: JavaRDD[Vector]): JavaRDD[Int] = {
+    leaf(features.rdd)
+  }
+
   /**
    * Print a summary of the model.
    */
@@ -276,7 +318,8 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
     /**
      * Given a list of nodes from a tree, construct the tree.
-     * @param data array of all node data in a tree.
+      *
+      * @param data array of all node data in a tree.
      */
     def constructTree(data: Array[NodeData]): Node = {
       val dataMap: Map[Int, NodeData] = data.map(n => n.nodeId -> n).toMap
