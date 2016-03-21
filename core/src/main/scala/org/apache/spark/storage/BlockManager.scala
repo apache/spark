@@ -1167,7 +1167,7 @@ private[spark] class BlockManager(
    *
    * @return the block's new effective StorageLevel.
    */
-  private[storage] def dropFromMemory[T](
+  private[storage] def dropFromMemory[T: ClassTag](
       blockId: BlockId,
       data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
     logInfo(s"Dropping block $blockId from memory")
