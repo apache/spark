@@ -446,7 +446,7 @@ class Analyzer(
           } transformUp {
             case other => other transformExpressions {
               case a: Attribute =>
-                attributeRewrites.get(a).getOrElse(a).withQualifiers(a.qualifiers)
+                attributeRewrites.get(a).getOrElse(a).withQualifier(a.qualifier)
             }
           }
           newRight
@@ -571,7 +571,7 @@ class Analyzer(
           if n.outerPointer.isEmpty &&
              n.cls.isMemberClass &&
              !Modifier.isStatic(n.cls.getModifiers) =>
-          val outer = OuterScopes.outerScopes.get(n.cls.getDeclaringClass.getName)
+          val outer = OuterScopes.getOuterScope(n.cls)
           if (outer == null) {
             throw new AnalysisException(
               s"Unable to generate an encoder for inner class `${n.cls.getName}` without " +
@@ -1467,8 +1467,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
   def trimNonTopLevelAliases(e: Expression): Expression = e match {
     case a: Alias =>
-      Alias(trimAliases(a.child), a.name)(
-        a.exprId, a.qualifiers, a.explicitMetadata, a.isGenerated)
+      a.withNewChildren(trimAliases(a.child) :: Nil)
     case other => trimAliases(other)
   }
 

@@ -61,10 +61,10 @@ trait NamedExpression extends Expression {
    * multiple qualifiers, it is possible that there are other possible way to refer to this
    * attribute.
    */
-  def qualifiedName: String = (qualifiers.headOption.toSeq :+ name).mkString(".")
+  def qualifiedName: String = (qualifier.toSeq :+ name).mkString(".")
 
   /**
-   * All possible qualifiers for the expression.
+   * Optional qualifier for the expression.
    *
    * For now, since we do not allow using original table name to qualify a column name once the
    * table is aliased, this can only be:
@@ -73,7 +73,7 @@ trait NamedExpression extends Expression {
    *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
    * 2. Single element: either the table name or the alias name of the table.
    */
-  def qualifiers: Seq[String]
+  def qualifier: Option[String]
 
   def toAttribute: Attribute
 
@@ -102,7 +102,7 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   override def references: AttributeSet = AttributeSet(this)
 
   def withNullability(newNullability: Boolean): Attribute
-  def withQualifiers(newQualifiers: Seq[String]): Attribute
+  def withQualifier(newQualifier: Option[String]): Attribute
   def withName(newName: String): Attribute
 
   override def toAttribute: Attribute = this
@@ -122,7 +122,7 @@ abstract class Attribute extends LeafExpression with NamedExpression {
  * @param name The name to be associated with the result of computing [[child]].
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
  *               alias. Auto-assigned if left blank.
- * @param qualifiers A list of strings that can be used to referred to this attribute in a fully
+ * @param qualifier An optional string that can be used to referred to this attribute in a fully
  *                   qualified way. Consider the examples tableName.name, subQueryAlias.name.
  *                   tableName and subQueryAlias are possible qualifiers.
  * @param explicitMetadata Explicit metadata associated with this alias that overwrites child's.
@@ -130,7 +130,7 @@ abstract class Attribute extends LeafExpression with NamedExpression {
  */
 case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifiers: Seq[String] = Nil,
+    val qualifier: Option[String] = None,
     val explicitMetadata: Option[Metadata] = None,
     override val isGenerated: java.lang.Boolean = false)
   extends UnaryExpression with NamedExpression {
@@ -158,12 +158,12 @@ case class Alias(child: Expression, name: String)(
 
   def newInstance(): NamedExpression =
     Alias(child, name)(
-      qualifiers = qualifiers, explicitMetadata = explicitMetadata, isGenerated = isGenerated)
+      qualifier = qualifier, explicitMetadata = explicitMetadata, isGenerated = isGenerated)
 
   override def toAttribute: Attribute = {
     if (resolved) {
       AttributeReference(name, child.dataType, child.nullable, metadata)(
-        exprId, qualifiers, isGenerated)
+        exprId, qualifier, isGenerated)
     } else {
       UnresolvedAttribute(name)
     }
@@ -172,19 +172,19 @@ case class Alias(child: Expression, name: String)(
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
-    exprId :: qualifiers :: explicitMetadata :: isGenerated :: Nil
+    exprId :: qualifier :: explicitMetadata :: isGenerated :: Nil
   }
 
   override def equals(other: Any): Boolean = other match {
     case a: Alias =>
-      name == a.name && exprId == a.exprId && child == a.child && qualifiers == a.qualifiers &&
+      name == a.name && exprId == a.exprId && child == a.child && qualifier == a.qualifier &&
         explicitMetadata == a.explicitMetadata
     case _ => false
   }
 
   override def sql: String = {
-    val qualifiersString = if (qualifiers.isEmpty) "" else qualifiers.head + "."
-    s"${child.sql} AS $qualifiersString${quoteIdentifier(name)}"
+    val qualifierPrefix = qualifier.map(_ + ".").getOrElse("")
+    s"${child.sql} AS $qualifierPrefix${quoteIdentifier(name)}"
   }
 }
 
@@ -197,9 +197,9 @@ case class Alias(child: Expression, name: String)(
  * @param metadata The metadata of this attribute.
  * @param exprId A globally unique id used to check if different AttributeReferences refer to the
  *               same attribute.
- * @param qualifiers A list of strings that can be used to referred to this attribute in a fully
- *                   qualified way. Consider the examples tableName.name, subQueryAlias.name.
- *                   tableName and subQueryAlias are possible qualifiers.
+ * @param qualifier An optional string that can be used to referred to this attribute in a fully
+ *                  qualified way. Consider the examples tableName.name, subQueryAlias.name.
+ *                  tableName and subQueryAlias are possible qualifiers.
  * @param isGenerated A flag to indicate if this reference is generated by Catalyst
  */
 case class AttributeReference(
@@ -208,7 +208,7 @@ case class AttributeReference(
     nullable: Boolean = true,
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifiers: Seq[String] = Nil,
+    val qualifier: Option[String] = None,
     override val isGenerated: java.lang.Boolean = false)
   extends Attribute with Unevaluable {
 
@@ -220,7 +220,7 @@ case class AttributeReference(
   override def equals(other: Any): Boolean = other match {
     case ar: AttributeReference =>
       name == ar.name && dataType == ar.dataType && nullable == ar.nullable &&
-        metadata == ar.metadata && exprId == ar.exprId && qualifiers == ar.qualifiers
+        metadata == ar.metadata && exprId == ar.exprId && qualifier == ar.qualifier
     case _ => false
   }
 
@@ -241,13 +241,13 @@ case class AttributeReference(
     h = h * 37 + nullable.hashCode()
     h = h * 37 + metadata.hashCode()
     h = h * 37 + exprId.hashCode()
-    h = h * 37 + qualifiers.hashCode()
+    h = h * 37 + qualifier.hashCode()
     h
   }
 
   override def newInstance(): AttributeReference =
     AttributeReference(name, dataType, nullable, metadata)(
-      qualifiers = qualifiers, isGenerated = isGenerated)
+      qualifier = qualifier, isGenerated = isGenerated)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -256,7 +256,7 @@ case class AttributeReference(
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifiers, isGenerated)
+      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifier, isGenerated)
     }
   }
 
@@ -264,18 +264,18 @@ case class AttributeReference(
     if (name == newName) {
       this
     } else {
-      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifiers, isGenerated)
+      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifier, isGenerated)
     }
   }
 
   /**
-   * Returns a copy of this [[AttributeReference]] with new qualifiers.
+   * Returns a copy of this [[AttributeReference]] with new qualifier.
    */
-  override def withQualifiers(newQualifiers: Seq[String]): AttributeReference = {
-    if (newQualifiers.toSet == qualifiers.toSet) {
+  override def withQualifier(newQualifier: Option[String]): AttributeReference = {
+    if (newQualifier == qualifier) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifiers, isGenerated)
+      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifier, isGenerated)
     }
   }
 
@@ -283,12 +283,12 @@ case class AttributeReference(
     if (exprId == newExprId) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifiers, isGenerated)
+      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifier, isGenerated)
     }
   }
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
-    exprId :: qualifiers :: isGenerated :: Nil
+    exprId :: qualifier :: isGenerated :: Nil
   }
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
@@ -298,8 +298,8 @@ case class AttributeReference(
   override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
 
   override def sql: String = {
-    val qualifiersString = if (qualifiers.isEmpty) "" else qualifiers.head + "."
-    s"$qualifiersString${quoteIdentifier(name)}"
+    val qualifierPrefix = qualifier.map(_ + ".").getOrElse("")
+    s"$qualifierPrefix${quoteIdentifier(name)}"
   }
 }
 
@@ -324,10 +324,10 @@ case class PrettyAttribute(
   override def withNullability(newNullability: Boolean): Attribute =
     throw new UnsupportedOperationException
   override def newInstance(): Attribute = throw new UnsupportedOperationException
-  override def withQualifiers(newQualifiers: Seq[String]): Attribute =
+  override def withQualifier(newQualifier: Option[String]): Attribute =
     throw new UnsupportedOperationException
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
-  override def qualifiers: Seq[String] = throw new UnsupportedOperationException
+  override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = throw new UnsupportedOperationException
 }
