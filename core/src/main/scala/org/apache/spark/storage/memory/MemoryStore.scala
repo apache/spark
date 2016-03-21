@@ -47,7 +47,8 @@ private case class SerializedMemoryEntry(buffer: ChunkedByteBuffer) extends Memo
  * Stores blocks in memory, either as Arrays of deserialized Java objects or as
  * serialized ByteBuffers.
  */
-private[spark] class MemoryStore( conf: SparkConf,
+private[spark] class MemoryStore(
+    conf: SparkConf,
     blockManager: BlockManager,
     memoryManager: MemoryManager)
   extends Logging {
