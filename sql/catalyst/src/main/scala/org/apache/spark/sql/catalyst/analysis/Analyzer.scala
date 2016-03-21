@@ -84,6 +84,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUpCast ::
+      ResolveOrdinal ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -494,9 +495,15 @@ class Analyzer(
 
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        val expanded = expandStarExpressions(a.aggregateExpressions, a.child)
+        if (conf.groupByOrdinal && a.groupingExpressions.exists(IntegerIndex.unapply(_).nonEmpty)) {
+          failAnalysis(
+            "Group by position: star is not allowed to use in the select list " +
+            "when using ordinals in group by")
+        } else {
+          val expanded = expandStarExpressions(a.aggregateExpressions, a.child)
             .map(_.asInstanceOf[NamedExpression])
-        a.copy(aggregateExpressions = expanded)
+          a.copy(aggregateExpressions = expanded)
+        }
 
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>
@@ -617,6 +624,39 @@ class Analyzer(
       }
     } catch {
       case a: AnalysisException if !throws => expr
+    }
+  }
+
+ /**
+  * In many dialects of SQL it is valid to use ordinal positions in group by clauses. This rule is
+  * to convert ordinal positions to the corresponding expressions in the select list.
+  *
+  * Before the release of Spark 2.0, the literals in group by clauses have no effect on the results.
+  */
+  object ResolveOrdinal extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      // Replace the index with the corresponding expression in aggregateExpressions. The index is
+      // a 1-base position of aggregateExpressions, which is output columns (select expression)
+      case a @ Aggregate(groups, aggs, child)
+          if conf.groupByOrdinal && child.resolved && aggs.forall(_.resolved) &&
+            groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
+        val newGroups = groups.map {
+          case IntegerIndex(index) if index > 0 && index <= aggs.size =>
+            aggs(index - 1) match {
+              case Alias(c, _) if c.isInstanceOf[AggregateExpression] =>
+                throw new UnresolvedException(a,
+                  s"Group by position: the '$index'th column in the select is an aggregate " +
+                    s"function: ${c.sql}. Aggregate functions are not allowed in GROUP BY")
+              // Group by clause is unable to use the alias defined in aggregateExpressions
+              case Alias(c, _) => c
+              case o => o
+            }
+          case IntegerIndex(index) =>
+            throw new UnresolvedException(a,
+              s"Group by position: '$index' exceeds the size of the select list '${aggs.size}'.")
+          case o => o
+        }
+        Aggregate(newGroups, aggs, child)
     }
   }
 
