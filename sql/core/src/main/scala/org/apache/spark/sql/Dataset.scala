@@ -1517,7 +1517,10 @@ class Dataset[T] private[sql](
     }
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
-      attr != expression
+      expression match {
+        case ar: AttributeReference => attr.exprId != ar.exprId
+        case _ => true
+      }
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }
