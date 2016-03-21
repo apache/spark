@@ -524,9 +524,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --proxy-user NAME           User to impersonate when submitting the application.
         |                              This argument does not work with --principal / --keytab.
         |
-        |  --help, -h                  Show this help message and exit
-        |  --verbose, -v               Print additional debug output
-        |  --version,                  Print the version of current Spark
+        |  --help, -h                  Show this help message and exit.
+        |  --verbose, -v               Print additional debug output.
+        |  --version,                  Print the version of current Spark.
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
