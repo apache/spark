@@ -67,7 +67,7 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * the stop words set to be filtered out
-   * Default: [[StopWords.English]]
+   * Default: [[StopWords.languageMap("english")]]
    * @group param
    */
   val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
@@ -142,7 +142,7 @@ class StopWordsRemover(override val uid: String)
   def getAdditionalWords: Array[String] = $(additionalWords)
 
   setDefault(stopWords -> StopWords.languageMap("english"),
-    language -> "en",
+    language -> "english",
     ignoredWords -> Array.empty[String],
     additionalWords -> Array.empty[String],
     caseSensitive -> false)
