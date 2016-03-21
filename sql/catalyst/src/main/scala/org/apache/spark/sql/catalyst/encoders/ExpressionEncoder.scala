@@ -282,8 +282,14 @@ case class ExpressionEncoder[T](
     // If we have nested tuple, the `fromRowExpression` will contains `GetStructField` instead of
     // `UnresolvedExtractValue`, so we need to check if their ordinals are all valid.
     // Note that, `BoundReference` contains the expected type, but here we need the actual type, so
-    // we unbound it by the given `schema` and propagate the actual type to `GetStructField`.
-    val unbound = fromRowExpression transform {
+    // we unbound it by the given `schema` and propagate the actual type to `GetStructField`, after
+    // we resolve the `fromRowExpression`.
+    val resolved = SimpleAnalyzer.resolveExpression(
+      fromRowExpression,
+      LocalRelation(schema),
+      throws = true)
+
+    val unbound = resolved transform {
       case b: BoundReference => schema(b.ordinal)
     }
 
