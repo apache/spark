@@ -267,8 +267,9 @@ class BlockMatrix @Since("1.3.0") (
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
   @Since("1.3.0")
   def toIndexedRowMatrix(): IndexedRowMatrix = {
-    require(numCols() < Int.MaxValue, "The number of columns must be within the integer range. " +
-      s"numCols: ${numCols()}")
+    val cols = numCols().toInt
+
+    require(cols < Int.MaxValue, s"The number of columns should be less than Int.MaxValue ($cols).")
 
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
       mat.rowIter.zipWithIndex.map {
@@ -276,16 +277,17 @@ class BlockMatrix @Since("1.3.0") (
           blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.toBreeze)
       }
     }.groupByKey().map { case (rowIdx, vectors) =>
+      val numberNonZeroPerRow = vectors.map(_._2.activeSize).sum.toDouble / cols.toDouble
 
-      val wholeVector = vectors.head match {
-        case (idx, v: BDV[_]) => BDV.zeros[Double](numCols().toInt)
-        case (idx, v: BSV[_]) => BSV.zeros[Double](numCols().toInt)
-        case _ => throw new SparkException(s"Cannot convert an empty vector to an indexed row")
+      val wholeVector = if (numberNonZeroPerRow <= 0.1) { // Sparse at 1/10th nnz
+        BSV.zeros[Double](cols)
+      } else {
+        BDV.zeros[Double](cols)
       }
 
       vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
         val offset = colsPerBlock * blockColIdx
-        wholeVector(offset until offset + vec.size) := vec
+        wholeVector(offset until offset + colsPerBlock) := vec
       }
       new IndexedRow(rowIdx, Vectors.fromBreeze(wholeVector))
     }
