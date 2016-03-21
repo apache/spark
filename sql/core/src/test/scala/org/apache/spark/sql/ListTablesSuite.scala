@@ -51,13 +51,13 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
     assert(sqlContext.tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
   }
 
-  test("getting all Tables with a database name has no impact on returned table names") {
+  test("getting all tables with a database name has no impact on returned table names") {
     checkAnswer(
-      sqlContext.tables("DB").filter("tableName = 'ListTablesSuiteTable'"),
+      sqlContext.tables("default").filter("tableName = 'ListTablesSuiteTable'"),
       Row("ListTablesSuiteTable", true))
 
     checkAnswer(
-      sql("show TABLES in DB").filter("tableName = 'ListTablesSuiteTable'"),
+      sql("show TABLES in default").filter("tableName = 'ListTablesSuiteTable'"),
       Row("ListTablesSuiteTable", true))
 
     sqlContext.sessionState.catalog.dropTable(
