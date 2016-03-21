@@ -175,7 +175,7 @@ public abstract class ColumnVector {
     }
 
     @Override
-    public boolean isNullAt(int ordinal) { return data.getIsNull(offset + ordinal); }
+    public boolean isNullAt(int ordinal) { return data.isNullAt(offset + ordinal); }
 
     @Override
     public boolean getBoolean(int ordinal) {

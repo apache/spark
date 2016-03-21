@@ -168,7 +168,7 @@ public final class ColumnarBatch {
     }
 
     @Override
-    public boolean isNullAt(int ordinal) { return columns[ordinal].getIsNull(rowId); }
+    public boolean isNullAt(int ordinal) { return columns[ordinal].isNullAt(rowId); }
 
     @Override
     public boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
