@@ -180,7 +180,7 @@ case class WindowExec(
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
       val key = (tpe, fr.frameType, FrameBoundary(fr.frameStart), FrameBoundary(fr.frameEnd),
-        e.asInstanceOf[WindowExpression].windowSpec.excludeSpec.excludeType)
+          e.asInstanceOf[WindowExpression].windowSpec.excludeSpec.excludeType)
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e

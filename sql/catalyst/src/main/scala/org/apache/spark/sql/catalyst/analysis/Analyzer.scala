@@ -324,6 +324,25 @@ class Analyzer(
               aggsBuffer += e
               e
             case e if isPartOfAggregation(e) => e
+            case e: GroupingID =>
+              print("e.groupByExprs: "+e.groupByExprs.mkString(",")+"\n")
+              print("x.groupByExprs: "+x.groupByExprs.mkString(",")+"\n")
+              if (e.groupByExprs.isEmpty || e.groupByExprs == x.groupByExprs) {
+                gid
+              } else {
+                throw new AnalysisException(
+                  s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
+                    s"grouping columns (${x.groupByExprs.mkString(",")})")
+              }
+            case Grouping(col: Expression) =>
+              val idx = x.groupByExprs.indexOf(col)
+              if (idx >= 0) {
+                Cast(BitwiseAnd(ShiftRight(gid, Literal(x.groupByExprs.length - 1 - idx)),
+                  Literal(1)), ByteType)
+              } else {
+                throw new AnalysisException(s"Column of grouping ($col) can't be found " +
+                  s"in grouping columns ${x.groupByExprs.mkString(",")}")
+              }
             case e =>
               val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
               if (index == -1) {
@@ -1809,6 +1828,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformExpressions {
 
+        // Exclude clause only applies to WindowAggregation functions
         case WindowExpression(wf: WindowFunction,
         WindowSpecDefinition(_, _, _, es: ExcludeClause))
           if (wf.isInstanceOf[RowNumberLike]
