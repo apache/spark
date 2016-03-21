@@ -23,8 +23,9 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -508,12 +509,8 @@ class LogisticRegressionModel private[spark] (
    * thrown if `trainingSummary == None`.
    */
   @Since("1.5.0")
-  def summary: LogisticRegressionTrainingSummary = trainingSummary match {
-    case Some(summ) => summ
-    case None =>
-      throw new SparkException(
-        "No training summary available for this LogisticRegressionModel",
-        new NullPointerException())
+  def summary: LogisticRegressionTrainingSummary = trainingSummary.getOrElse {
+    throw new SparkException("No training summary available for this LogisticRegressionModel")
   }
 
   /**

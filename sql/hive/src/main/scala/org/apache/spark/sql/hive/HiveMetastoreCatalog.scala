@@ -30,7 +30,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Table => HiveTable, _}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
@@ -421,10 +421,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
     if (table.properties.get("spark.sql.sources.provider").isDefined) {
       val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
-      val tableWithQualifiers = SubqueryAlias(qualifiedTableName.name, dataSourceTable)
+      val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+      alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
     } else if (table.tableType == CatalogTableType.VIRTUAL_VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       alias match {
@@ -935,7 +935,7 @@ private[hive] case class MetastoreRelation(
       HiveMetastoreTypes.toDataType(f.dataType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifiers = Seq(alias.getOrElse(tableName)))
+    )(qualifier = Some(alias.getOrElse(tableName)))
   }
 
   /** PartitionKey attributes */

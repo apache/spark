@@ -22,7 +22,8 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}

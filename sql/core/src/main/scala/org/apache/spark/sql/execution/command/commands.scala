@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.util.NoSuchElementException
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
@@ -157,6 +157,15 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
           s"Property ${SQLConf.Deprecated.SORTMERGE_JOIN} is deprecated and " +
             s"will be ignored. Sort merge join will continue to be used.")
         Seq(Row(SQLConf.Deprecated.SORTMERGE_JOIN, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED} is " +
+            s"deprecated and will be ignored. Vectorized parquet reader will be used instead.")
+        Seq(Row(SQLConf.PARQUET_VECTORIZED_READER_ENABLED, "true"))
       }
       (keyValueOutput, runFunc)
 

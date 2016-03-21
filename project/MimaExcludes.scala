@@ -315,6 +315,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrame"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrame$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.LegacyFunctions"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.GroupedDataset"),
 
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.evaluation.MultilabelMetrics.this"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.predictions"),
@@ -559,6 +560,14 @@ object MimaExcludes {
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.Logging.initializeLogIfNecessary"),
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerEvent.logEvent"),
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.OutputWriterFactory.newInstance")
+      ) ++ Seq(
+        // [SPARK-13928] Move org.apache.spark.Logging into org.apache.spark.internal.Logging
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Logging"),
+        (problem: Problem) => problem match {
+          case MissingTypesProblem(_, missing)
+            if missing.map(_.fullName).sameElements(Seq("org.apache.spark.Logging")) => false
+          case _ => true
+        }
       )
     case v if v.startsWith("1.6") =>
       Seq(

@@ -24,7 +24,8 @@ import scala.collection.mutable
 
 import com.google.common.collect.ConcurrentHashMultiset
 
-import org.apache.spark.{Logging, SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.internal.Logging
 
 
 /**

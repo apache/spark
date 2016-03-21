@@ -87,6 +87,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SimplifyConditionals,
       RemoveDispensableExpressions,
       PruneFilters,
+      EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       EliminateSerialization) ::
@@ -826,6 +827,17 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * Removes no-op SortOrder from Sort
+ */
+object EliminateSorts  extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
+      val newOrders = orders.filterNot(_.child.foldable)
+      if (newOrders.isEmpty) child else s.copy(order = newOrders)
+  }
+}
+
+/**
  * Removes filters that can be evaluated trivially.  This can be done through the following ways:
  * 1) by eliding the filter for cases where it will always evaluate to `true`.
  * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
@@ -1133,6 +1145,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
         case FullOuter => f // DO Nothing for Full Outer Join
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
+        case UsingJoin(_, _) => sys.error("Untransformed Using join node")
       }
 
     // push down the join filter into sub query scanning if applicable
@@ -1168,6 +1181,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           Join(newLeft, newRight, LeftOuter, newJoinCond)
         case FullOuter => f
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
+        case UsingJoin(_, _) => sys.error("Untransformed Using join node")
       }
   }
 }

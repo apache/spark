@@ -21,8 +21,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM, SparseVector => BSV, Vector => BV}
 
-import org.apache.spark.{Logging, Partitioner, SparkException}
+import org.apache.spark.{Partitioner, SparkException}
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel

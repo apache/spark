@@ -23,10 +23,10 @@ import java.nio.ByteBuffer
 import scala.concurrent.{Await, Future, Promise}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
-import org.apache.spark.storage.{BlockId, BlockManagerId, StorageLevel}
+import org.apache.spark.storage.{BlockId, StorageLevel}
 
 private[spark]
 abstract class BlockTransferService extends ShuffleClient with Closeable with Logging {
