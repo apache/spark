@@ -4,10 +4,10 @@
   "attempts" : [ {
     "startTimeEpoch" : 1422981779720,
     "endTimeEpoch" : 1422981788731,
-    "lastUpdatedEpoch" : "",
+    "lastUpdatedEpoch" : 0,
     "startTime" : "2015-02-03T16:42:59.720GMT",
     "endTime" : "2015-02-03T16:43:08.731GMT",
-    "lastUpdated" : "",
+    "lastUpdated" : 0,
     "duration" : 9011,
     "sparkUser" : "irashid",
     "completed" : true

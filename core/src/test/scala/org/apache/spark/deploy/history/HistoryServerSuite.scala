@@ -157,14 +157,14 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       // SPARK-10873 added the lastUpdated field for each application's attempt,
       // the REST API returns the last modified time of EVENT LOG file for this field.
       // It is not applicable to hard-code this dynamic field in a static expected file,
-      // so here we skip checking the lastUpdated field's value (setting it as "").
+      // so here we skip checking the lastUpdated field's value (setting it as 0).
       val json = if (jsonOrg.indexOf("lastUpdated") >= 0) {
         val subStrings = jsonOrg.split(",")
         for (i <- subStrings.indices) {
           if (subStrings(i).indexOf("lastUpdatedEpoch") >= 0) {
-            subStrings(i) = "\"lastUpdatedEpoch\":\"\""
+            subStrings(i) = "\"lastUpdatedEpoch\":0"
           } else if (subStrings(i).indexOf("lastUpdated") >= 0) {
-            subStrings(i) = "\"lastUpdated\":\"\""
+            subStrings(i) = "\"lastUpdated\":0"
           }
         }
         subStrings.mkString(",")
