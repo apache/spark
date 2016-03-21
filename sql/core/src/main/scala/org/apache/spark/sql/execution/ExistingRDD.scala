@@ -241,14 +241,8 @@ private[sql] case class DataSourceScan(
     // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
     // here which path to use. Fix this.
 
-    // These assignments avoids accesses to instance variables in a while-loop
-    // Since they are loop invariant variables (LIVs), host them outside the while-loop
-    val colLocalVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2))
-    val columnLIVAssigns = (colLocalVars zip colVars).map { case (localName, name) =>
-      s"$columnVectorClz $localName = $name;" }
-
     ctx.currentVars = null
-    val columns1 = (output zip colLocalVars).map { case (attr, colVar) =>
+    val columns1 = (output zip colVars).map { case (attr, colVar) =>
       genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable) }
     val scanBatches = ctx.freshName("processBatches")
     ctx.addNewFunction(scanBatches,
@@ -261,7 +255,6 @@ private[sql] case class DataSourceScan(
       |       $numOutputRows.add(numRows);
       |     }
       |
-      |     ${columnLIVAssigns.mkString("", "\n", "\n")}
       |     while (!shouldStop() && $idx < numRows) {
       |       int $rowidx = $idx++;
       |       ${consume(ctx, columns1).trim}
