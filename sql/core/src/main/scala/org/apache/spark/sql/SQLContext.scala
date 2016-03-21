@@ -851,7 +851,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    sessionState.catalog.listTables(databaseName).map(_.unquotedString).toArray
+    sessionState.catalog.listTables(databaseName).map(_.table).toArray
   }
 
   @transient
