@@ -449,13 +449,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
       }
       if (longArray.get(pos * 2) == 0) {
         // This is a new key.
-        loc.with(pos, hash, false);
+        loc.with(pos, step, hash, false);
         return;
       } else {
         long stored = longArray.get(pos * 2 + 1);
         if ((int) (stored) == hash) {
           // Full hash code matches.  Let's compare the keys for equality.
-          loc.with(pos, hash, true);
+          loc.with(pos, step, hash, true);
           if (loc.getKeyLength() == keyLength) {
             final boolean areEqual = ByteArrayMethods.arrayEquals(
               keyBase,
@@ -480,11 +480,28 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
+   * Append a pair of key-value at the end, there could other pairs with the same keys.
+   */
+  public boolean append(Object keyBase, long keyOffset, int keyLength, int hash,
+                        Object valueBase, long valueOffset, int valueLength) {
+    assert(longArray != null);
+    int pos = hash & mask;
+    int step = 1;
+    while (longArray.get(pos * 2) != 0) {
+      pos = (pos + step++) & mask;
+    }
+    loc.with(pos, step, hash, false);
+    return loc.putNewKey(keyBase, keyOffset, keyLength, valueBase, valueOffset, valueLength);
+  }
+
+  /**
    * Handle returned by {@link BytesToBytesMap#lookup(Object, long, int)} function.
    */
   public final class Location {
     /** An index into the hash map's Long array */
     private int pos;
+    /** Number of steps to move to next slot for the key that have the same hash (masked) */
+    private int step;
     /** True if this location points to a position where a key is defined, false otherwise */
     private boolean isDefined;
     /**
@@ -521,9 +538,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
       valueLength = totalLength - keyLength - 4;
     }
 
-    private Location with(int pos, int keyHashcode, boolean isDefined) {
+    private Location with(int pos, int step, int keyHashcode, boolean isDefined) {
       assert(longArray != null);
       this.pos = pos;
+      this.step = step;
       this.isDefined = isDefined;
       this.keyHashcode = keyHashcode;
       if (isDefined) {
@@ -552,6 +570,31 @@ public final class BytesToBytesMap extends MemoryConsumer {
       valueOffset = offset + 4 + keyLength;
       valueLength = length - 4 - keyLength;
       return this;
+    }
+
+    /**
+     * Find the next pair that has the same key as current one.
+     */
+    public boolean next() {
+      pos = (pos + step++) & mask;
+      // Remember the current key
+      Object keyBase = getKeyBase();
+      long keyOffset = getKeyOffset();
+      int keyLength = getKeyLength();
+      assert (longArray != null);
+      while (longArray.get(pos * 2) != 0) {
+        long stored = longArray.get(pos * 2 + 1);
+        if ((int) (stored) == keyHashcode) {
+          with(pos, step, keyHashcode, true);
+          if (getKeyLength() == keyLength &&
+            ByteArrayMethods.arrayEquals(keyBase, keyOffset, getKeyBase(), getKeyOffset(),
+              keyLength)) {
+              return true;
+          }
+        }
+        pos = (pos + step++) & mask;
+      }
+      return false;
     }
 
     /**
