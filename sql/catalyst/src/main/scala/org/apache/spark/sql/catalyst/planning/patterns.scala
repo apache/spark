@@ -101,14 +101,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case join @ Join(left, right, joinType, cond) =>
-      val attributeRewrites =
-        (join.left.outputSet ++ join.right.outputSet).map(o => o.exprId -> o).toMap
-      val condition = cond.map(_.transform {
-        case a: AttributeReference if attributeRewrites.contains(a.exprId) =>
-          attributeRewrites(a.exprId)
-      })
-
+    case join @ Join(left, right, joinType, condition) =>
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
