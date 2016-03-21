@@ -824,7 +824,7 @@ test_that("select operators", {
 
   expect_is(df[, 1, drop = F], "DataFrame")
   expect_equal(columns(df[, 1, drop = F]), c("name"))
-  expect_equal(columns(df[,"age", drop = F]), c("age"))
+  expect_equal(columns(df[, "age", drop = F]), c("age"))
   df2 <- df[, c("age", "name")]
   expect_is(df2, "DataFrame")
   expect_equal(columns(df2), c("age", "name"))
