@@ -119,7 +119,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
         def arr2str(a: Array[Double]): String = a.mkString("[", ", ", "]")
         val msg = "\nvalidateModelFit:\n" +
           " piData: " + arr2str(piData) + "\n" +
-          " thetaData: " + thetaData.map(arr2str).mkString("\n") +
+          " thetaData: " + thetaData.map(arr2str).mkString("\n") + "\n" +
           " model.labels: " + arr2str(model.labels) + "\n" +
           " model.pi: " + arr2str(model.pi) + "\n" +
           " model.theta: " + model.theta.map(arr2str).mkString("\n")
