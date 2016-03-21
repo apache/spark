@@ -288,7 +288,7 @@ class ReplSuite extends SparkFunSuite {
         |import org.apache.spark.sql.Encoder
         |import org.apache.spark.sql.expressions.Aggregator
         |import org.apache.spark.sql.TypedColumn
-        |val simpleSum = new Aggregator[Int, Int, Int] with Serializable {
+        |val simpleSum = new Aggregator[Int, Int, Int] {
         |  def zero: Int = 0                     // The initial value.
         |  def reduce(b: Int, a: Int) = b + a    // Add an element to the running total
         |  def merge(b1: Int, b2: Int) = b1 + b2 // Merge intermediate values.
@@ -347,7 +347,7 @@ class ReplSuite extends SparkFunSuite {
         |import org.apache.spark.sql.expressions.Aggregator
         |import org.apache.spark.sql.TypedColumn
         |/** An `Aggregator` that adds up any numeric type returned by the given function. */
-        |class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializable {
+        |class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] {
         |  val numeric = implicitly[Numeric[N]]
         |  override def zero: N = numeric.zero
         |  override def reduce(b: N, a: I): N = numeric.plus(b, f(a))
