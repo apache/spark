@@ -29,7 +29,8 @@ import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDrive
 import org.apache.mesos.Protos._
 import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

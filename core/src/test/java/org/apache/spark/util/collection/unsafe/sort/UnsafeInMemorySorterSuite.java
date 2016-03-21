@@ -80,7 +80,7 @@ public class UnsafeInMemorySorterSuite {
     // Write the records into the data page:
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
-      final byte[] strBytes = str.getBytes("utf-8");
+      final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
       Platform.putInt(baseObject, position, strBytes.length);
       position += 4;
       Platform.copyMemory(
@@ -108,8 +108,8 @@ public class UnsafeInMemorySorterSuite {
         return (int) prefix1 - (int) prefix2;
       }
     };
-    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager, recordComparator,
-      prefixComparator, dataToSort.length);
+    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager,
+      recordComparator, prefixComparator, dataToSort.length);
     // Given a page of records, insert those records into the sorter one-by-one:
     position = dataPage.getBaseOffset();
     for (int i = 0; i < dataToSort.length; i++) {

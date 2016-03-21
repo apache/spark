@@ -19,7 +19,8 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.memory.MemoryStore
 import org.apache.spark.unsafe.array.ByteArrayMethods

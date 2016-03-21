@@ -29,7 +29,7 @@ import org.apache.parquet.schema.{GroupType, MessageType, PrimitiveType, Type}
 import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE, FIXED_LEN_BYTE_ARRAY, INT32, INT64}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}

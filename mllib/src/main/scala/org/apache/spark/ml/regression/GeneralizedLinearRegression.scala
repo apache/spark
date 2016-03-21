@@ -20,8 +20,9 @@ package org.apache.spark.ml.regression
 import breeze.stats.{distributions => dist}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim._
@@ -32,6 +33,7 @@ import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Params for Generalized Linear Regression.
@@ -77,7 +79,10 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   import GeneralizedLinearRegression._
 
   @Since("2.0.0")
-  override def validateParams(): Unit = {
+  override def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
     if ($(solver) == "irls") {
       setDefault(maxIter -> 25)
     }
@@ -86,6 +91,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
         Family.fromName($(family)) -> Link.fromName($(link))), "Generalized Linear Regression " +
         s"with ${$(family)} family does not support ${$(link)} link function.")
     }
+    super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 }
 
@@ -675,8 +681,7 @@ class GeneralizedLinearRegressionModel private[ml] (
   @Since("2.0.0")
   def summary: GeneralizedLinearRegressionSummary = trainingSummary.getOrElse {
     throw new SparkException(
-      "No training summary available for this GeneralizedLinearRegressionModel",
-      new RuntimeException())
+      "No training summary available for this GeneralizedLinearRegressionModel")
   }
 
   private[regression] def setSummary(summary: GeneralizedLinearRegressionSummary): this.type = {

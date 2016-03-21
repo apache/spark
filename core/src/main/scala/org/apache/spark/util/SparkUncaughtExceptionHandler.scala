@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * The default uncaught exception handler for Executors terminates the whole process, to avoid

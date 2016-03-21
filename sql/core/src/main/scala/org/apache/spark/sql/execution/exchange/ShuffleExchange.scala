@@ -261,7 +261,7 @@ object ShuffleExchange {
       new ShuffleDependency[Int, InternalRow, InternalRow](
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
-        Some(serializer))
+        serializer)
 
     dependency
   }
