@@ -84,7 +84,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUpCast ::
-      ResolveOrdinal ::
+      ResolveOrdinalInOrderByAndGroupBy ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -640,7 +640,7 @@ class Analyzer(
   * Before the release of Spark 2.0, the literals in order/sort by and group by clauses
   * have no effect on the results.
   */
-  object ResolveOrdinal extends Rule[LogicalPlan] {
+  object ResolveOrdinalInOrderByAndGroupBy extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       // Replace the index with the related attribute for ORDER BY,
       // which is a 1-base position of the projection list.
