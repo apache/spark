@@ -22,9 +22,10 @@ import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -195,19 +196,42 @@ private[sql] case class DataSourceScan(
     rdd :: Nil
   }
 
+  private def genCodeColumnVector(ctx: CodegenContext, columnVar: String, ordinal: String,
+    dataType: DataType, nullable: Boolean): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+    val value = ctx.getValue(columnVar, dataType, ordinal)
+    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
+    val valueVar = ctx.freshName("value")
+    val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
+    val code = s"/* ${toCommentSafeString(str)} */\n" + (if (nullable) {
+      s"""
+        boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
+        $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
+    } else {
+      s"$javaType ${valueVar} = $value;"
+    }).trim
+    ExprCode(code, isNullVar, valueVar)
+  }
+
   // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
   // never requires UnsafeRow as input.
   override protected def doProduce(ctx: CodegenContext): String = {
     val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
+    val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
     val input = ctx.freshName("input")
     val idx = ctx.freshName("batchIdx")
+    val rowidx = ctx.freshName("rowIdx")
     val batch = ctx.freshName("batch")
     // PhysicalRDD always just has one input
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
     ctx.addMutableState("int", idx, s"$idx = 0;")
+    val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
+    val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
+      ctx.addMutableState(columnVectorClz, name, s"$name = null;")
+      s"$name = ${batch}.column($i);" }
 
-    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
     val numOutputRows = metricTerm(ctx, "numOutputRows")
 
@@ -217,19 +241,22 @@ private[sql] case class DataSourceScan(
     // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
     // here which path to use. Fix this.
 
-    ctx.INPUT_ROW = row
     ctx.currentVars = null
-    val columns1 = exprs.map(_.gen(ctx))
+    val columns1 = (output zip colVars).map { case (attr, colVar) =>
+      genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable) }
     val scanBatches = ctx.freshName("processBatches")
     ctx.addNewFunction(scanBatches,
       s"""
       | private void $scanBatches() throws java.io.IOException {
       |  while (true) {
       |     int numRows = $batch.numRows();
-      |     if ($idx == 0) $numOutputRows.add(numRows);
+      |     if ($idx == 0) {
+      |       ${columnAssigns.mkString("", "\n", "\n")}
+      |       $numOutputRows.add(numRows);
+      |     }
       |
       |     while (!shouldStop() && $idx < numRows) {
-      |       InternalRow $row = $batch.getRow($idx++);
+      |       int $rowidx = $idx++;
       |       ${consume(ctx, columns1).trim}
       |     }
       |     if (shouldStop()) return;
@@ -243,9 +270,10 @@ private[sql] case class DataSourceScan(
       |   }
       | }""".stripMargin)
 
+    val exprRows = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     ctx.INPUT_ROW = row
     ctx.currentVars = null
-    val columns2 = exprs.map(_.gen(ctx))
+    val columns2 = exprRows.map(_.gen(ctx))
     val inputRow = if (outputUnsafeRows) row else null
     val scanRows = ctx.freshName("processRows")
     ctx.addNewFunction(scanRows,

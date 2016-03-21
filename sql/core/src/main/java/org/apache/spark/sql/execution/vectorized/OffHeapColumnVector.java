@@ -109,7 +109,7 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public boolean getIsNull(int rowId) {
+  public boolean isNullAt(int rowId) {
     return Platform.getByte(null, nulls + rowId) == 1;
   }
 
