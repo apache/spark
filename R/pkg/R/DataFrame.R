@@ -1302,7 +1302,7 @@ setMethod("[", signature(x = "DataFrame"),
 #'   subset(df, select = c(1,2))
 #' }
 setMethod("subset", signature(x = "DataFrame"),
-          function(x, subset, select, drop = T, ...) {
+          function(x, subset, select, drop = F, ...) {
             x[subset, select, drop = drop]
           })
 
