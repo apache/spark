@@ -902,7 +902,7 @@ private[spark] class BlockManager(
               if (level.useDisk) {
                 logWarning(s"Persisting block $blockId to disk instead.")
                 diskStore.put(blockId) { fileOutputStream =>
-                  partiallySerializedValues.finishWriting(fileOutputStream)
+                  partiallySerializedValues.finishWritingToStream(fileOutputStream)
                 }
                 size = diskStore.getSize(blockId)
               } else {

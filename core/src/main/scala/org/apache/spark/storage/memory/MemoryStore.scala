@@ -601,6 +601,9 @@ private[storage] class PartiallyUnrolledIterator(
   }
 }
 
+/**
+ * A wrapper which allows an open [[OutputStream]] to be redirected to a different sink.
+ */
 private class RedirectableOutputStream extends OutputStream {
   private[this] var os: OutputStream = _
   def setOutputStream(s: OutputStream): Unit = { os = s }
@@ -613,6 +616,16 @@ private class RedirectableOutputStream extends OutputStream {
 
 /**
  * The result of a failed [[MemoryStore.putIteratorAsBytes()]] call.
+ *
+ * @param memoryStore the MemoryStore, used for freeing memory.
+ * @param blockManager the BlockManager, used for deserializing values.
+ * @param blockId the block id.
+ * @param serializationStream a serialization stream which writes to [[redirectableOutputStream]].
+ * @param redirectableOutputStream an OutputStream which can be redirected to a different sink.
+ * @param unrollMemory the amount of unroll memory used by the values in `unrolled`.
+ * @param unrolled a byte buffer containing the partially-serialized values.
+ * @param rest         the rest of the original iterator passed to
+ *                     [[MemoryStore.putIteratorAsValues()]].
  */
 private[storage] class PartiallySerializedBlock(
     memoryStore: MemoryStore,
@@ -622,8 +635,11 @@ private[storage] class PartiallySerializedBlock(
     redirectableOutputStream: RedirectableOutputStream,
     unrollMemory: Long,
     unrolled: ChunkedByteBuffer,
-    iter: Iterator[Any]) {
+    rest: Iterator[Any]) {
 
+  /**
+   * Called to dispose of this block and free its memory.
+   */
   def discard(): Unit = {
     try {
       serializationStream.close()
@@ -632,20 +648,31 @@ private[storage] class PartiallySerializedBlock(
     }
   }
 
-  def finishWriting(os: OutputStream): Unit = {
+  /**
+   * Finish writing this block to the given output stream by first writing the serialized values
+   * and then serializing the values from the original input iterator.
+   */
+  def finishWritingToStream(os: OutputStream): Unit = {
     ByteStreams.copy(unrolled.toInputStream(), os)
     redirectableOutputStream.setOutputStream(os)
-    while (iter.hasNext) {
-      serializationStream.writeObject(iter.next())
+    while (rest.hasNext) {
+      serializationStream.writeObject(rest.next())
     }
     serializationStream.close()
   }
 
+  /**
+   * Returns an iterator over the values in this block by first deserializing the serialized
+   * values and then consuming the rest of the original input iterator.
+   *
+   * If the caller does not plan to fully consume the resulting iterator then they must call
+   * `close()` on it to free its resources.
+   */
   def valuesIterator: PartiallyUnrolledIterator = {
     new PartiallyUnrolledIterator(
       memoryStore,
       unrollMemory,
       unrolled = blockManager.dataDeserialize(blockId, unrolled),
-      rest = iter)
+      rest = rest)
   }
 }
