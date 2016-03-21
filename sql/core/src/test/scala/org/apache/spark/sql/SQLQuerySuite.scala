@@ -2180,13 +2180,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("order by ordinal number - negative cases") {
     intercept[UnresolvedException[SortOrder]] {
-      sql("SELECT * FROM testData2 ORDER BY 0").collect()
+      sql("SELECT * FROM testData2 ORDER BY 0")
     }
     intercept[UnresolvedException[SortOrder]] {
-      sql("SELECT * FROM testData2 ORDER BY -1 DESC, b ASC").collect()
+      sql("SELECT * FROM testData2 ORDER BY -1 DESC, b ASC")
     }
     intercept[UnresolvedException[SortOrder]] {
-      sql("SELECT * FROM testData2 ORDER BY 3 DESC, b ASC").collect()
+      sql("SELECT * FROM testData2 ORDER BY 3 DESC, b ASC")
     }
   }
 
@@ -2195,7 +2195,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // If spark.sql.orderByOrdinal=false, ignore the position number.
       checkAnswer(
         sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
-        Seq(Row(1, 1), Row(2, 1), Row(3, 1), Row(1, 2), Row(2, 2), Row(3, 2)))
+        sql("SELECT * FROM testData2 ORDER BY b ASC"))
     }
   }
 
