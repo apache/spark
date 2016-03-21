@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser.ng
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types._
@@ -94,11 +94,22 @@ class ExpressionParserSuite extends PlanTest {
     // Multiple AND/OR get converted into a balanced tree
     assertEqual("a or b or c or d or e or f", (('a || 'b) || 'c) || (('d || 'e) || 'f))
     assertEqual("a and b and c and d and e and f", (('a && 'b) && 'c) && (('d && 'e) && 'f))
+
+    // very long binary logical expressions.
+    def testVeryBinaryExpression(op: String, clazz: Class[_]): Unit = {
+      val sql = (1 to 1000).map(x => s"$x == $x").mkString(op)
+      val e = parseExpression(sql)
+      assert(e.collect { case _: EqualTo => true }.size === 1000)
+      assert(e.collect { case x if clazz.isInstance(x) => true }.size === 999)
+    }
+    testVeryBinaryExpression(" AND ", classOf[And])
+    testVeryBinaryExpression(" OR ", classOf[Or])
   }
 
   test("not expressions") {
     assertEqual("not a", !'a)
     assertEqual("!a", !'a)
+    assertEqual("not true > true", Not(GreaterThan(true, true)))
   }
 
   test("exists expression") {
@@ -205,6 +216,16 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc )))
     assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
 
+    // Test use of expressions in window functions.
+    assertEqual(
+      "sum(product + 1) over (partition by ((product) + (1)) order by 2)",
+      WindowExpression('sum.function('product + 1),
+        WindowSpecDefinition(Seq('product + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+    assertEqual(
+      "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
+      WindowExpression('sum.function('product + 1),
+        WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+
     // Range/Row
     val frameTypes = Seq(("rows", RowFrame), ("range", RangeFrame))
     val boundaries = Seq(
@@ -248,10 +269,12 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("scalar sub-query") {
-    assertEqual("(select max(val) from tbl) > current",
-      ScalarSubquery(UnresolvedRelation(TableIdentifier("tbl"), None)
-        .select(UnresolvedAlias(UnresolvedFunction("max", Seq('val), isDistinct = false)))
-      ) > 'current)
+    assertEqual(
+      "(select max(val) from tbl) > current",
+      ScalarSubquery(table("tbl").select('max.function('val))) > 'current)
+    assertEqual(
+      "a = (select b from s)",
+      'a === ScalarSubquery(table("s").select('b)))
   }
 
   test("case when") {
@@ -460,5 +483,11 @@ class ExpressionParserSuite extends PlanTest {
       "interval 3 years '-1-10' year to month 3 weeks '1 0:0:2' day to second",
       Literal(new CalendarInterval(14,
         22 * CalendarInterval.MICROS_PER_DAY + 2 * CalendarInterval.MICROS_PER_SECOND)))
+  }
+
+  test("composed expressions") {
+    assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
+    assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
+    intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
   }
 }

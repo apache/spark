@@ -38,6 +38,13 @@ class PlanParserSuite extends PlanTest {
     }
   }
 
+  test("case insensitive") {
+    val plan = table("a").select(all())
+    assertEqual("sELEct * FroM a", plan)
+    assertEqual("select * fRoM a", plan)
+    assertEqual("SELECT * FROM a", plan)
+  }
+
   test("show functions") {
     assertEqual("show functions", ShowFunctions(None, None))
     assertEqual("show functions foo", ShowFunctions(None, Some("foo")))
@@ -344,7 +351,37 @@ class PlanParserSuite extends PlanTest {
       s"Sampling fraction (${11.0/10.0}) must be on interval [0, 1]")
   }
 
-  test("subquery") {
+  test("sub-query") {
+    val plan = table("t0").select('id)
+    assertEqual("select id from (t0)", plan)
+    assertEqual("select id from ((((((t0))))))", plan)
+    assertEqual(
+      "(select * from t1) union distinct (select * from t2)",
+      Distinct(table("t1").select(all()).unionAll(table("t2").select(all()))))
+    assertEqual(
+      "select * from ((select * from t1) union (select * from t2)) t",
+      Distinct(table("t1").select(all()).unionAll(table("t2").select(all()))).as("t").select(all()))
+    assertEqual(
+      """select  id
+        |from (((select id from t0)
+        |       union all
+        |       (select  id from t0))
+        |      union all
+        |      (select id from t0)) as u_1
+      """.stripMargin,
+      plan.unionAll(plan).unionAll(plan).as("u_1").select('id))
+  }
+
+  test("scalar sub-query") {
+    assertEqual(
+      "select (select max(b) from s) ss from t",
+      table("t").select(ScalarSubquery(table("s").select('max.function('b))).as("ss")))
+    assertEqual(
+      "select * from t where a = (select b from s)",
+      table("t").where('a === ScalarSubquery(table("s").select('b))).select(all()))
+    assertEqual(
+      "select g from t group by g having a > (select b from s)",
+      table("t").groupBy('g)('g).where('a > ScalarSubquery(table("s").select('b))))
   }
 
   test("table reference") {
