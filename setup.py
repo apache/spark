@@ -72,7 +72,7 @@ hive = [
 jdbc = ['jaydebeapi>=0.2.0']
 mssql = ['pymssql>=2.1.1', 'unicodecsv>=0.14.1']
 mysql = ['mysqlclient>=1.3.6']
-optional = ['librabbitmq>=1.6.1']
+rabbitmq = ['librabbitmq>=1.6.1']
 oracle = ['cx_Oracle>=5.1.2']
 postgres = ['psycopg2>=2.6']
 s3 = [
@@ -97,7 +97,10 @@ qds = ['qds-sdk>=1.9.0']
 
 all_dbs = postgres + mysql + hive + mssql + hdfs + vertica
 devel = ['lxml>=3.3.4', 'nose', 'mock']
-devel += all_dbs + doc + samba + s3 + slack + crypto + oracle + docker
+devel_minreq = devel + mysql + doc + password + s3
+devel_hadoop = devel_minreq + hive + hdfs + webhdfs + kerberos
+devel_all = devel + all_dbs + doc + samba + s3 + slack + crypto + oracle + docker
+
 
 setup(
     name='airflow',
@@ -132,12 +135,13 @@ setup(
         'Flask-WTF==0.12'
     ],
     extras_require={
-        'all': devel + optional,
+        'all': devel_all,
         'all_dbs': all_dbs,
         'async': async,
         'celery': celery,
         'crypto': crypto,
-        'devel': devel,
+        'devel': devel_minreq,
+        'devel_hadoop': devel_hadoop,
         'doc': doc,
         'docker': docker,
         'druid': druid,
@@ -150,6 +154,7 @@ setup(
         'mysql': mysql,
         'oracle': oracle,
         'postgres': postgres,
+        'rabbitmq': rabbitmq,
         's3': s3,
         'samba': samba,
         'slack': slack,
