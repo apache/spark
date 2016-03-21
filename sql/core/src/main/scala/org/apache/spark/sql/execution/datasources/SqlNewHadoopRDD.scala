@@ -33,9 +33,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader
+import org.apache.spark.sql.execution.datasources.parquet.VectorizedParquetRecordReader
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
 
@@ -99,8 +99,6 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
 
   // If true, enable using the custom RecordReader for parquet. This only works for
   // a subset of the types (no complex types).
-  protected val enableUnsafeRowParquetReader: Boolean =
-    sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
   protected val enableVectorizedParquetReader: Boolean =
     sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
   protected val enableWholestageCodegen: Boolean =
@@ -174,19 +172,17 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         * fails (for example, unsupported schema), try with the normal reader.
         * TODO: plumb this through a different way?
         */
-      if (enableUnsafeRowParquetReader &&
+      if (enableVectorizedParquetReader &&
         format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
-        val parquetReader: UnsafeRowParquetRecordReader = new UnsafeRowParquetRecordReader()
+        val parquetReader: VectorizedParquetRecordReader = new VectorizedParquetRecordReader()
         if (!parquetReader.tryInitialize(
             split.serializableHadoopSplit.value, hadoopAttemptContext)) {
           parquetReader.close()
         } else {
           reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
-          if (enableVectorizedParquetReader) {
-            parquetReader.resultBatch()
-            // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
-            if (enableWholestageCodegen) parquetReader.enableReturningBatches();
-          }
+          parquetReader.resultBatch()
+          // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
+          if (enableWholestageCodegen) parquetReader.enableReturningBatches()
         }
       }
 
@@ -203,7 +199,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       private[this] var finished = false
 
       override def hasNext: Boolean = {
-        if (context.isInterrupted) {
+        if (context.isInterrupted()) {
           throw new TaskKilledException
         }
         if (!finished && !havePair) {

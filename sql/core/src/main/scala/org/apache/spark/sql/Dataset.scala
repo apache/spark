@@ -61,36 +61,48 @@ private[sql] object Dataset {
 }
 
 /**
- * A [[Dataset]] is a strongly typed collection of objects that can be transformed in parallel
- * using functional or relational operations.
+ * A [[Dataset]] is a strongly typed collection of domain-specific objects that can be transformed
+ * in parallel using functional or relational operations. Each Dataset also has an untyped view
+ * called a [[DataFrame]], which is a Dataset of [[Row]].
  *
- * A [[Dataset]] differs from an [[RDD]] in the following ways:
+ * Operations available on Datasets are divided into transformations and actions. Transformations
+ * are the ones that produce new Datasets, and actions are the ones that trigger computation and
+ * return results. Example transformations include map, filter, select, aggregate (groupBy).
+ * Example actions count, show, or writing data out to file systems.
  *
- *  - Internally, a [[Dataset]] is represented by a Catalyst logical plan and the data is stored
- *    in the encoded form.  This representation allows for additional logical operations and
- *    enables many operations (sorting, shuffling, etc.) to be performed without deserializing to
- *    an object.
- *  - The creation of a [[Dataset]] requires the presence of an explicit [[Encoder]] that can be
- *    used to serialize the object into a binary format.  Encoders are also capable of mapping the
- *    schema of a given object to the Spark SQL type system.  In contrast, RDDs rely on runtime
- *    reflection based serialization. Operations that change the type of object stored in the
- *    dataset also need an encoder for the new type.
+ * Datasets are "lazy", i.e. computations are only triggered when an action is invoked. Internally,
+ * a Dataset represents a logical plan that describes the computation required to produce the data.
+ * When an action is invoked, Spark's query optimizer optimizes the logical plan and generates a
+ * physical plan for efficient execution in a parallel or distributed manner. To explore the
+ * logical plan as well as optimized physical plan, use the `explain` function.
  *
- * Different from DataFrame in Spark 1.6.0 and earlier versions, a [[Dataset]] can be thought of as
- * a specialized DataFrame, where the elements map to a specific JVM object type, instead of to a
- * generic [[Row]] container.  Since Spark 2.0.0, DataFrame is simply a type alias of
- * `Dataset[Row]`.
+ * To efficiently support domain-specific objects, an [[Encoder]] is required. The encoder maps
+ * the domain specific type T to Spark's internal type system. For example, given a class Person
+ * with two fields, name (string) and age (int), an encoder is used to tell Spark to generate code
+ * at runtime to serialize the Person object into a binary structure. This binary structure often
+ * has much lower memory footprint as well as are optimized for efficiency in data processing
+ * (e.g. in a columnar format). To understand the internal binary representation for data, use the
+ * `schema` function.
  *
- * The following example creates a `Dataset[Row]` by pointing Spark SQL to a Parquet data set.
+ * There are typically two ways to create a Dataset. The most common way to by pointing Spark
+ * to some files on storage systems, using the `read` function available on a `SparkSession`.
  * {{{
- *   val people = sqlContext.read.parquet("...")  // in Scala
- *   Dataset<Row> people = sqlContext.read().parquet("...")  // in Java
+ *   val people = session.read.parquet("...").as[Person]  // Scala
+ *   Dataset<Person> people = session.read().parquet("...").as(Encoders.bean(Person.class)  // Java
  * }}}
  *
- * Once created, it can be manipulated using the various domain-specific-language (DSL) functions
- * defined in: [[Dataset]] (this class), [[Column]], and [[functions]].
+ * Datasets can also be created through transformations available on existing Datasets. For example,
+ * the following creates a new Dataset by applying a filter on the existing one:
+ * {{{
+ *   val names = people.map(_.name)  // in Scala; names is a Dataset[String]
+ *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING)  // in Java 8
+ * }}}
  *
- * To select a column from the data frame, use `apply` method in Scala and `col` in Java.
+ * Dataset operations can also be untyped, through the various domain-specific-language (DSL)
+ * functions defined in: [[Dataset]] (this class), [[Column]], and [[functions]]. These operations
+ * are very similar to the operations available in the data frame abstraction in R or Python.
+ *
+ * To select a column from the Dataset, use `apply` method in Scala and `col` in Java.
  * {{{
  *   val ageCol = people("age")  // in Scala
  *   Column ageCol = people.col("age")  // in Java
@@ -241,7 +253,6 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * :: Experimental ::
    * Converts this strongly typed collection of data to generic Dataframe.  In contrast to the
    * strongly typed objects that Dataset operations work on, a Dataframe returns generic [[Row]]
    * objects that allow fields to be accessed by ordinal or name.
@@ -251,7 +262,6 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  @Experimental
   def toDF(): DataFrame = new Dataset[Row](sqlContext, queryExecution, RowEncoder(schema))
 
   /**
@@ -1026,7 +1036,7 @@ class Dataset[T] private[sql](
 
   /**
    * Groups the [[Dataset]] using the specified columns, so we can run aggregation on them.  See
-   * [[GroupedData]] for all the available aggregate functions.
+   * [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * {{{
    *   // Compute the average for all numeric columns grouped by department.
@@ -1043,14 +1053,14 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def groupBy(cols: Column*): GroupedData = {
-    GroupedData(toDF(), cols.map(_.expr), GroupedData.GroupByType)
+  def groupBy(cols: Column*): RelationalGroupedDataset = {
+    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
   }
 
   /**
    * Create a multi-dimensional rollup for the current [[Dataset]] using the specified columns,
    * so we can run aggregation on them.
-   * See [[GroupedData]] for all the available aggregate functions.
+   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * {{{
    *   // Compute the average for all numeric columns rolluped by department and group.
@@ -1067,14 +1077,14 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def rollup(cols: Column*): GroupedData = {
-    GroupedData(toDF(), cols.map(_.expr), GroupedData.RollupType)
+  def rollup(cols: Column*): RelationalGroupedDataset = {
+    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.RollupType)
   }
 
   /**
    * Create a multi-dimensional cube for the current [[Dataset]] using the specified columns,
    * so we can run aggregation on them.
-   * See [[GroupedData]] for all the available aggregate functions.
+   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * {{{
    *   // Compute the average for all numeric columns cubed by department and group.
@@ -1091,11 +1101,13 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def cube(cols: Column*): GroupedData = GroupedData(toDF(), cols.map(_.expr), GroupedData.CubeType)
+  def cube(cols: Column*): RelationalGroupedDataset = {
+    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.CubeType)
+  }
 
   /**
-   * Groups the [[Dataset]] 2.0.0
-   * See [[GroupedData]] for all the available aggregate functions.
+   * Groups the [[Dataset]] using the specified columns, so we can run aggregation on them.
+   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * This is a variant of groupBy that can only group by existing columns using column names
    * (i.e. cannot construct expressions).
@@ -1114,9 +1126,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def groupBy(col1: String, cols: String*): GroupedData = {
+  def groupBy(col1: String, cols: String*): RelationalGroupedDataset = {
     val colNames: Seq[String] = col1 +: cols
-    GroupedData(toDF(), colNames.map(colName => resolve(colName)), GroupedData.GroupByType)
+    RelationalGroupedDataset(
+      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.GroupByType)
   }
 
   /**
@@ -1146,18 +1159,18 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Returns a [[GroupedDataset]] where the data is grouped by the given key `func`.
+   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
    *
    * @group typedrel
    * @since 2.0.0
    */
   @Experimental
-  def groupByKey[K: Encoder](func: T => K): GroupedDataset[K, T] = {
+  def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
     val inputPlan = logicalPlan
     val withGroupingKey = AppendColumns(func, inputPlan)
     val executed = sqlContext.executePlan(withGroupingKey)
 
-    new GroupedDataset(
+    new KeyValueGroupedDataset(
       encoderFor[K],
       encoderFor[T],
       executed,
@@ -1167,14 +1180,15 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Returns a [[GroupedDataset]] where the data is grouped by the given [[Column]] expressions.
+   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given [[Column]]
+   * expressions.
    *
    * @group typedrel
    * @since 2.0.0
    */
   @Experimental
   @scala.annotation.varargs
-  def groupByKey(cols: Column*): GroupedDataset[Row, T] = {
+  def groupByKey(cols: Column*): KeyValueGroupedDataset[Row, T] = {
     val withKeyColumns = logicalPlan.output ++ cols.map(_.expr).map(UnresolvedAlias(_))
     val withKey = Project(withKeyColumns, logicalPlan)
     val executed = sqlContext.executePlan(withKey)
@@ -1182,7 +1196,7 @@ class Dataset[T] private[sql](
     val dataAttributes = executed.analyzed.output.dropRight(cols.size)
     val keyAttributes = executed.analyzed.output.takeRight(cols.size)
 
-    new GroupedDataset(
+    new KeyValueGroupedDataset(
       RowEncoder(keyAttributes.toStructType),
       encoderFor[T],
       executed,
@@ -1193,19 +1207,19 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Java-specific)
-   * Returns a [[GroupedDataset]] where the data is grouped by the given key `func`.
+   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
    *
    * @group typedrel
    * @since 2.0.0
    */
   @Experimental
-  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): GroupedDataset[K, T] =
+  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     groupByKey(func.call(_))(encoder)
 
   /**
    * Create a multi-dimensional rollup for the current [[Dataset]] using the specified columns,
    * so we can run aggregation on them.
-   * See [[GroupedData]] for all the available aggregate functions.
+   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * This is a variant of rollup that can only group by existing columns using column names
    * (i.e. cannot construct expressions).
@@ -1225,15 +1239,16 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def rollup(col1: String, cols: String*): GroupedData = {
+  def rollup(col1: String, cols: String*): RelationalGroupedDataset = {
     val colNames: Seq[String] = col1 +: cols
-    GroupedData(toDF(), colNames.map(colName => resolve(colName)), GroupedData.RollupType)
+    RelationalGroupedDataset(
+      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.RollupType)
   }
 
   /**
    * Create a multi-dimensional cube for the current [[Dataset]] using the specified columns,
    * so we can run aggregation on them.
-   * See [[GroupedData]] for all the available aggregate functions.
+   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * This is a variant of cube that can only group by existing columns using column names
    * (i.e. cannot construct expressions).
@@ -1252,9 +1267,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def cube(col1: String, cols: String*): GroupedData = {
+  def cube(col1: String, cols: String*): RelationalGroupedDataset = {
     val colNames: Seq[String] = col1 +: cols
-    GroupedData(toDF(), colNames.map(colName => resolve(colName)), GroupedData.CubeType)
+    RelationalGroupedDataset(
+      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.CubeType)
   }
 
   /**
@@ -1314,7 +1330,8 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new [[Dataset]] by taking the first `n` rows. The difference between this function
-   * and `head` is that `head` returns an array while `limit` returns a new [[Dataset]].
+   * and `head` is that `head` is an action and returns an array (by triggering query execution)
+   * while `limit` returns a new [[Dataset]].
    *
    * @group typedrel
    * @since 2.0.0
@@ -1326,6 +1343,9 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[Dataset]] containing union of rows in this frame and another frame.
    * This is equivalent to `UNION ALL` in SQL.
+   *
+   * To do a SQL-style set union (that does deduplication of elements), use this function followed
+   * by a [[distinct]].
    *
    * @group typedrel
    * @since 2.0.0
@@ -1349,6 +1369,9 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] containing rows only in both this frame and another frame.
    * This is equivalent to `INTERSECT` in SQL.
    *
+   * Note that, equality checking is performed directly on the encoded representation of the data
+   * and thus is not affected by a custom `equals` function defined on `T`.
+   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -1359,6 +1382,9 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[Dataset]] containing rows in this frame but not in another frame.
    * This is equivalent to `EXCEPT` in SQL.
+   *
+   * Note that, equality checking is performed directly on the encoded representation of the data
+   * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
    * @since 2.0.0
@@ -1448,6 +1474,7 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * (Scala-specific) Returns a new [[Dataset]] where each row has been expanded to zero or more
    * rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL. The columns of
    * the input row are implicitly joined with each row that is output by the function.
@@ -1470,6 +1497,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
+  @Experimental
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
@@ -1489,6 +1517,7 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
    * (Scala-specific) Returns a new [[Dataset]] where a single column has been expanded to zero
    * or more rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL. All
    * columns of the input row are implicitly joined with each value that is output by the function.
@@ -1500,6 +1529,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
+  @Experimental
   def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
@@ -1770,7 +1800,7 @@ class Dataset[T] private[sql](
   /**
    * Concise syntax for chaining custom transformations.
    * {{{
-   *   def featurize(ds: Dataset[T]) = ...
+   *   def featurize(ds: Dataset[T]): Dataset[U] = ...
    *
    *   ds
    *     .transform(featurize)
@@ -2050,6 +2080,9 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[Dataset]] that contains only the unique rows from this [[Dataset]].
    * This is an alias for `dropDuplicates`.
+   *
+   * Note that, equality checking is performed directly on the encoded representation of the data
+   * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
    * @since 2.0.0
