@@ -529,7 +529,6 @@ class PersistenceTest(PySparkTestCase):
          - type
          - Param values and parents
         """
-        print "_compare_pipelines: %r" % type(m1)
         self.assertEqual(m1.uid, m2.uid)
         self.assertEqual(type(m1), type(m2))
         if isinstance(m1, JavaWrapper):
