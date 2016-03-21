@@ -50,7 +50,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   def toSQL: String = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
     val outputNames = logicalPlan.output.map(_.name)
-    val qualifiers = logicalPlan.output.flatMap(_.qualifiers).distinct
+    val qualifiers = logicalPlan.output.flatMap(_.qualifier).distinct
 
     // Keep the qualifier information by using it as sub-query name, if there is only one qualifier
     // present.
@@ -63,7 +63,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     // Canonicalizer will remove all naming information, we should add it back by adding an extra
     // Project and alias the outputs.
     val aliasedOutput = canonicalizedPlan.output.zip(outputNames).map {
-      case (attr, name) => Alias(attr.withQualifiers(Nil), name)()
+      case (attr, name) => Alias(attr.withQualifier(None), name)()
     }
     val finalPlan = Project(aliasedOutput, SubqueryAlias(finalName, canonicalizedPlan))
 
@@ -411,9 +411,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     object NormalizedAttribute extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
         case a: AttributeReference =>
-          AttributeReference(normalizedName(a), a.dataType)(exprId = a.exprId, qualifiers = Nil)
+          AttributeReference(normalizedName(a), a.dataType)(exprId = a.exprId, qualifier = None)
         case a: Alias =>
-          Alias(a.child, normalizedName(a))(exprId = a.exprId, qualifiers = Nil)
+          Alias(a.child, normalizedName(a))(exprId = a.exprId, qualifier = None)
       }
     }
 
@@ -513,10 +513,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   object ExtractSQLTable {
     def unapply(plan: LogicalPlan): Option[SQLTable] = plan match {
       case l @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
-        Some(SQLTable(database, table, l.output.map(_.withQualifiers(Nil))))
+        Some(SQLTable(database, table, l.output.map(_.withQualifier(None))))
 
       case m: MetastoreRelation =>
-        Some(SQLTable(m.databaseName, m.tableName, m.output.map(_.withQualifiers(Nil))))
+        Some(SQLTable(m.databaseName, m.tableName, m.output.map(_.withQualifier(None))))
 
       case _ => None
     }
