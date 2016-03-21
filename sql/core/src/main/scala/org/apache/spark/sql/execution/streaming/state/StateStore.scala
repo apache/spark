@@ -150,11 +150,12 @@ private[state] object StateStore extends Logging {
   /** Unload and stop all state store provider */
   def stop(): Unit = loadedProviders.synchronized {
     loadedProviders.clear()
+    _coordRef = null
     if (managementTask != null) {
       managementTask.cancel()
       managementTask = null
-      logInfo("StateStore stopped")
     }
+    logInfo("StateStore stopped")
   }
 
   /** Start the periodic maintenance task if not already started and if Spark active */
@@ -177,6 +178,7 @@ private[state] object StateStore extends Logging {
    * the active instances according to the coordinator.
    */
   private def doMaintenance(): Unit = {
+    logDebug("Doing maintenance")
     loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
       try {
         if (verifyIfStoreInstanceActive(id)) {

@@ -154,6 +154,7 @@ private[state] class HDFSBackedStateStoreProvider(
         finalizeDeltaFile(tempDeltaFileStream)
         finalDeltaFile = commitUpdates(newVersion, mapToUpdate, tempDeltaFile)
         state = COMMITTED
+        logInfo(s"Committed version $newVersion for $this")
         newVersion
       } catch {
         case NonFatal(e) =>
@@ -208,7 +209,9 @@ private[state] class HDFSBackedStateStoreProvider(
       val time = System.nanoTime()
       newMap.putAll(loadMap(version))
     }
-    new HDFSBackedStateStore(version, newMap)
+    val store = new HDFSBackedStateStore(version, newMap)
+    logInfo(s"Retrieved version $version of $this for update")
+    store
   }
 
   /** Manage backing files, including creating snapshots and cleaning up old files */
@@ -280,7 +283,7 @@ private[state] class HDFSBackedStateStoreProvider(
     } else {
       if (!fs.isDirectory(baseDir)) {
         throw new IllegalStateException(
-          s"Cannot use ${id.rootLocation} for storing state data as" +
+          s"Cannot use ${id.rootLocation} for storing state data for $this as" +
             s"$baseDir already exists and is not a directory")
       }
     }
@@ -375,6 +378,7 @@ private[state] class HDFSBackedStateStoreProvider(
     } finally {
       if (input != null) input.close()
     }
+    logInfo(s"Read delta file for version $version of $this from $fileToRead")
   }
 
   private def writeSnapshotFile(version: Long, map: MapType): Unit = {
@@ -397,6 +401,7 @@ private[state] class HDFSBackedStateStoreProvider(
     } {
       if (output != null) output.close()
     }
+    logInfo(s"Written snapshot file for version $version of $this at $fileToWrite")
   }
 
   private def readSnapshotFile(version: Long): Option[MapType] = {
@@ -438,6 +443,7 @@ private[state] class HDFSBackedStateStoreProvider(
           }
         }
       }
+      logInfo(s"Read snapshot file for version $version of $this from $fileToRead")
       Some(map)
     } finally {
       if (input != null) input.close()
@@ -488,6 +494,7 @@ private[state] class HDFSBackedStateStoreProvider(
           files.filter(_.version < earliestFileToRetain.version).foreach { f =>
             fs.delete(f.path, true)
           }
+          logInfo(s"Deleted files older than ${earliestFileToRetain.version} for $this")
         }
       }
     } catch {
@@ -514,7 +521,7 @@ private[state] class HDFSBackedStateStoreProvider(
         }
         verify(
           deltaFiles.size == version - snapshotFile.version,
-          s"Unexpected list of delta files for version $version: ${deltaFiles.mkString(",")}"
+          s"Unexpected list of delta files for version $version for $this: $deltaFiles"
         )
         deltaFiles
 
@@ -547,11 +554,13 @@ private[state] class HDFSBackedStateStoreProvider(
           case "snapshot" =>
             versionToFiles.put(version, StoreFile(version, path, isSnapshot = true))
           case _ =>
-            logWarning(s"Could not identify file $path")
+            logWarning(s"Could not identify file $path for $this")
         }
       }
     }
-    versionToFiles.values.toSeq.sortBy(_.version)
+    val storeFiles = versionToFiles.values.toSeq.sortBy(_.version)
+    logDebug(s"Current set of files for $this: $storeFiles")
+    storeFiles
   }
 
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {

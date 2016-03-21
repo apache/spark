@@ -329,15 +329,17 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
-        withCoordinatorRef(sc) { coordinator =>
+        withCoordinatorRef(sc) { coordinatorRef =>
           for (i <- 1 to 20) {
             val store = StateStore.get(storeId, keySchema, valueSchema, i - 1, new Configuration)
             update(store, "a", i)
             store.commit()
           }
 
-          // Background management should clean up and generate snapshots
-          eventually(timeout(4 seconds)) {
+          assert(coordinatorRef.getLocation(storeId).nonEmpty)
+
+          // Background maintenance should clean up and generate snapshots
+          eventually(timeout(10 seconds)) {
             // Earliest delta file should get cleaned up
             assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
 
@@ -350,8 +352,8 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
           // If driver decides to deactivate all instances of the store, then this instance
           // should be unloaded
-          coordinator.deactivateInstances(dir)
-          eventually(timeout(4 seconds)) {
+          coordinatorRef.deactivateInstances(dir)
+          eventually(timeout(10 seconds)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
@@ -360,8 +362,8 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           assert(StateStore.isLoaded(storeId))
 
           // If some other executor loads the store, then this instance should be unloaded
-          coordinator.reportActiveInstance(storeId, "other-host", "other-exec")
-          eventually(timeout(4 seconds)) {
+          coordinatorRef.reportActiveInstance(storeId, "other-host", "other-exec")
+          eventually(timeout(10 seconds)) {
             assert(!StateStore.isLoaded(storeId))
           }
 

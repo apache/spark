@@ -28,6 +28,7 @@ import org.apache.spark.util.RpcUtils
 /** Trait representing all messages to [[StateStoreCoordinator]] */
 private sealed trait StateStoreCoordinatorMessage extends Serializable
 
+/** Classes representing messages */
 private case class ReportActiveInstance(storeId: StateStoreId, host: String, executorId: String)
   extends StateStoreCoordinatorMessage
 
@@ -43,27 +44,19 @@ private case class DeactivateInstances(storeRootLocation: String)
 private object StopCoordinator
   extends StateStoreCoordinatorMessage
 
-
+/** Helper object used to create reference to [[StateStoreCoordinator]]. */
 private[sql] object StateStoreCoordinatorRef extends Logging {
 
   private val endpointName = "StateStoreCoordinator"
 
+  /**
+   * Create a reference to a [[StateStoreCoordinator]], This can be called from driver as well as
+   * executors.
+   */
   def apply(env: SparkEnv): StateStoreCoordinatorRef = synchronized {
     try {
-      val coordinator = new StateStoreCoordinator()
-      val endpoint = new RpcEndpoint {
-        override val rpcEnv: RpcEnv = env.rpcEnv
-
-        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-          case StopCoordinator =>
-            stop() // Stop before replying to ensure that endpoint name has been deregistered
-            context.reply(true)
-          case message: StateStoreCoordinatorMessage =>
-            context.reply(coordinator.process(message))
-        }
-      }
-
-      val coordinatorRef = env.rpcEnv.setupEndpoint(endpointName, endpoint)
+      val coordinator = new StateStoreCoordinator(env.rpcEnv)
+      val coordinatorRef = env.rpcEnv.setupEndpoint(endpointName, coordinator)
       logInfo("Registered StateStoreCoordinator endpoint")
       new StateStoreCoordinatorRef(coordinatorRef)
     } catch {
@@ -75,13 +68,17 @@ private[sql] object StateStoreCoordinatorRef extends Logging {
   }
 }
 
+/**
+ * Reference to a [[StateStoreCoordinator]] that can be used to coordinator instances of
+ * [[StateStore]]s across all the executors, and get their locations for job scheduling.
+ */
 private[sql] class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
 
   private[state] def reportActiveInstance(
       storeId: StateStoreId,
       host: String,
-      executorId: String): Boolean = {
-    rpcEndpointRef.askWithRetry[Boolean](ReportActiveInstance(storeId, host, executorId))
+      executorId: String): Unit = {
+    rpcEndpointRef.send(ReportActiveInstance(storeId, host, executorId))
   }
 
   /** Verify whether the given executor has the active instance of a state store */
@@ -105,34 +102,38 @@ private[sql] class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointR
 }
 
 
-/** Class for coordinating instances of [[StateStore]]s loaded in executors across the cluster */
-private class StateStoreCoordinator {
+/**
+ * Class for coordinating instances of [[StateStore]]s loaded in executors across the cluster,
+ * and get their locations for job scheduling.
+ */
+private class StateStoreCoordinator(override val rpcEnv: RpcEnv) extends RpcEndpoint {
   private val instances = new mutable.HashMap[StateStoreId, ExecutorCacheTaskLocation]
 
-  def process(message: StateStoreCoordinatorMessage): Any = {
-    message match {
-      case ReportActiveInstance(id, host, executorId) =>
-        instances.put(id, ExecutorCacheTaskLocation(host, executorId))
-        true
+  override def receive: PartialFunction[Any, Unit] = {
+    case ReportActiveInstance(id, host, executorId) =>
+      instances.put(id, ExecutorCacheTaskLocation(host, executorId))
+  }
 
-      case VerifyIfInstanceActive(id, execId) =>
-        instances.get(id) match {
-          case Some(location) => location.executorId == execId
-          case None => false
-        }
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case VerifyIfInstanceActive(id, execId) =>
+      val response = instances.get(id) match {
+        case Some(location) => location.executorId == execId
+        case None => false
+      }
+      context.reply(response)
 
-      case GetLocation(id) =>
-        instances.get(id).map(_.toString)
+    case GetLocation(id) =>
+      context.reply(instances.get(id).map(_.toString))
 
-      case DeactivateInstances(loc) =>
-        val storeIdsToRemove =
-          instances.keys.filter(_.rootLocation == loc).toSeq
-        instances --= storeIdsToRemove
-        true
+    case DeactivateInstances(loc) =>
+      val storeIdsToRemove =
+        instances.keys.filter(_.rootLocation == loc).toSeq
+      instances --= storeIdsToRemove
+      context.reply(true)
 
-      case _ =>
-        throw new IllegalArgumentException("Cannot iden")
-    }
+    case StopCoordinator =>
+      stop() // Stop before replying to ensure that endpoint name has been deregistered
+      context.reply(true)
   }
 }
 

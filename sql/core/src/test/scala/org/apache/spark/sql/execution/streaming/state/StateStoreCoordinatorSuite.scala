@@ -31,12 +31,12 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === false)
       assert(coordinatorRef.getLocation(id) === None)
 
-      assert(coordinatorRef.reportActiveInstance(id, "hostX", "exec1") === true)
+      coordinatorRef.reportActiveInstance(id, "hostX", "exec1")
       assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === true)
       assert(coordinatorRef.getLocation(id) ===
         Some(ExecutorCacheTaskLocation("hostX", "exec1").toString))
 
-      assert(coordinatorRef.reportActiveInstance(id, "hostX", "exec2") === true)
+      coordinatorRef.reportActiveInstance(id, "hostX", "exec2")
       assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === false)
       assert(coordinatorRef.verifyIfInstanceActive(id, "exec2") === true)
 
@@ -54,9 +54,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       val host = "hostX"
       val exec = "exec1"
 
-      assert(coordinatorRef.reportActiveInstance(id1, host, exec) === true)
-      assert(coordinatorRef.reportActiveInstance(id2, host, exec) === true)
-      assert(coordinatorRef.reportActiveInstance(id3, host, exec) === true)
+      coordinatorRef.reportActiveInstance(id1, host, exec)
+      coordinatorRef.reportActiveInstance(id2, host, exec)
+      coordinatorRef.reportActiveInstance(id3, host, exec)
 
       assert(coordinatorRef.verifyIfInstanceActive(id1, exec) === true)
       assert(coordinatorRef.verifyIfInstanceActive(id2, exec) === true)
@@ -80,13 +80,13 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  test("multiple references have same coordinator") {
+  test("multiple references have same underlying coordinator") {
     withCoordinatorRef(sc) { coordRef1 =>
       val coordRef2 = StateStoreCoordinatorRef(sc.env)
 
       val id = StateStoreId("x", 0, 0)
 
-      assert(coordRef1.reportActiveInstance(id, "hostX", "exec1") === true)
+      coordRef1.reportActiveInstance(id, "hostX", "exec1")
       assert(coordRef2.verifyIfInstanceActive(id, "exec1") === true)
       assert(
         coordRef2.getLocation(id) ===
