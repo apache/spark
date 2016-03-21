@@ -384,8 +384,8 @@ class Analyzer(
           case ua @ UnresolvedAlias(_: UnresolvedFunction | _: CreateArray | _: CreateStruct, _) =>
             UnresolvedAlias(child = expandStarExpression(ua.child, p.child)) :: Nil
           case a @ Alias(_: UnresolvedFunction | _: CreateArray | _: CreateStruct, _) =>
-            Alias(child = expandStarExpression(a.child, p.child), a.name)(
-              isGenerated = a.isGenerated) :: Nil
+            a.withNewChildren(expandStarExpression(a.child, p.child) :: Nil)
+              .asInstanceOf[Alias] :: Nil
           case o => o :: Nil
         }
         Project(projectList = expanded, p.child)

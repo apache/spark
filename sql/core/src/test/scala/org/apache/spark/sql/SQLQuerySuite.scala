@@ -1958,9 +1958,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
     assert(e.getMessage.contains("Invalid usage of '*' in explode/json_tuple/UDTF"))
 
-    df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
-      csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
-    }.queryExecution.assertAnalyzed()
+    checkAnswer(
+      df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      },
+      Row("1", "1,2", "1:1") ::
+        Row("1", "1,2", "1:2") ::
+        Row("2", "4", "2:4") ::
+        Row("3", "7,8,9", "3:7") ::
+        Row("3", "7,8,9", "3:8") ::
+        Row("3", "7,8,9", "3:9") :: Nil)
   }
 
   test("Star Expansion - explode alias and star") {
