@@ -732,6 +732,18 @@ class TaskInstance(Base):
             session.commit()
             session.close()
 
+    @provide_session
+    def clear_xcom_data(self, session=None):
+        """
+        Clears all XCom data from the database for the task instance
+        """
+        session.query(XCom).filter(
+            XCom.dag_id == self.dag_id,
+            XCom.task_id == self.task_id,
+            XCom.execution_date == self.execution_date
+        ).delete()
+        session.commit()
+
     @property
     def key(self):
         """
@@ -979,6 +991,7 @@ class TaskInstance(Base):
         session = settings.Session()
         self.refresh_from_db(session)
         session.commit()
+        self.clear_xcom_data()
         self.job_id = job_id
         iso = datetime.now().isoformat()
         self.hostname = socket.gethostname()
