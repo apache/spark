@@ -291,6 +291,8 @@ object FunctionRegistry {
     // grouping sets
     expression[Cube]("cube"),
     expression[Rollup]("rollup"),
+    expression[Grouping]("grouping"),
+    expression[GroupingID]("grouping_id"),
 
     // window functions
     expression[Lead]("lead"),

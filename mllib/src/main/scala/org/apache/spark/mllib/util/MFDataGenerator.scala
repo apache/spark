@@ -105,8 +105,7 @@ object MFDataGenerator {
 
     // optionally generate testing data
     if (test) {
-      val testSampSize = math.min(
-        math.round(sampSize * testSampFact), math.round(mn - sampSize)).toInt
+      val testSampSize = math.min(math.round(sampSize * testSampFact).toInt, mn - sampSize)
       val testOmega = shuffled.slice(sampSize, sampSize + testSampSize)
       val testOrdered = testOmega.sortWith(_ < _).toArray
       val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered)

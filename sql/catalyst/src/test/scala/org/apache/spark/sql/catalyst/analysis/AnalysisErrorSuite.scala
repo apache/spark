@@ -23,10 +23,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 @BeanInfo
@@ -175,6 +175,13 @@ class AnalysisErrorSuite extends AnalysisTest {
     "unresolved attributes",
     testRelation.select('abcd),
     "cannot resolve" :: "abcd" :: Nil)
+
+  errorTest(
+    "unresolved attributes with a generated name",
+    testRelation2.groupBy('a)(max('b))
+      .where(sum('b) > 0)
+      .orderBy('havingCondition.asc),
+    "cannot resolve" :: "havingCondition" :: Nil)
 
   errorTest(
     "bad casts",

@@ -14,26 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.ml.feature
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.feature.StratifiedSampling.StratifiedSamplingWriter
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, DataFrameStatFunctions}
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
  *
  * Stratified sampling on the DataFrame according to the keys in a specific label column. User
- * can set 'fraction' to set different sampling rate for each key.
+ * can set 'fraction' to assign different sampling rate for each key.
+ *
+ * @see [[DataFrameStatFunctions#sampleBy(java.lang.String, java.util.Map, long)]]
  *
  * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
  * @param fraction expected size of the sample as a fraction of the items
@@ -41,15 +42,21 @@ import org.apache.spark.util.Utils
  *  with replacement: expected number of times each element is chosen; fraction must be >= 0
  */
 @Experimental
-final class StratifiedSampling private(
+final class StratifiedSampler private (
     override val uid: String,
     val withReplacement: Boolean,
     val fraction: Map[String, Double])
   extends Transformer with HasLabelCol with HasSeed with DefaultParamsWritable {
 
+  import StratifiedSampler._
+
   @Since("2.0.0")
   def this(withReplacement: Boolean, fraction: Map[String, Double]) =
     this(Identifiable.randomUID("stratifiedSampling"), withReplacement, fraction)
+
+  @Since("2.0.0")
+  def this(withReplacement: Boolean, fraction: java.util.Map[String, Double]) =
+    this(Identifiable.randomUID("stratifiedSampling"), withReplacement, fraction.asScala.toMap)
 
   /** @group setParam */
   @Since("2.0.0")
@@ -59,17 +66,20 @@ final class StratifiedSampling private(
   @Since("2.0.0")
   def setLabel(value: String): this.type = set(labelCol, value)
 
-  setDefault(seed -> Utils.random.nextLong)
-
   @Since("2.0.0")
   override def transform(data: DataFrame): DataFrame = {
-    transformSchema(data.schema)
+    transformSchema(data.schema, logging = true)
     val schema = data.schema
-    val colId = schema.fieldIndex($(labelCol))
-    val result = data.rdd.map(r => (r.get(colId), r))
-      .sampleByKey(withReplacement, fraction.toMap, $(seed))
-      .map(_._2)
-    data.sqlContext.createDataFrame(result, schema)
+    if(withReplacement){
+      val colId = schema.fieldIndex($(labelCol))
+      val result = data.rdd.map(r => (r.get(colId), r))
+        .sampleByKey(withReplacement, fraction.toMap, $(seed))
+        .map(_._2)
+      data.sqlContext.createDataFrame(result, schema)
+    }
+    else {
+      data.stat.sampleBy($(labelCol), fraction, $(seed))
+    }
   }
 
   @Since("2.0.0")
@@ -82,19 +92,19 @@ final class StratifiedSampling private(
   override def write: MLWriter = new StratifiedSamplingWriter(this)
 
   @Since("2.0.0")
-  override def copy(extra: ParamMap): StratifiedSampling = {
-    val copied = new StratifiedSampling(uid, withReplacement, fraction)
+  override def copy(extra: ParamMap): StratifiedSampler = {
+    val copied = new StratifiedSampler(uid, withReplacement, fraction)
     copyValues(copied, extra)
   }
 }
 
 @Since("2.0.0")
-object StratifiedSampling extends DefaultParamsReadable[StratifiedSampling] {
+object StratifiedSampler extends DefaultParamsReadable[StratifiedSampler] {
 
   private case class Data(withReplacement: Boolean, fraction: Map[String, Double])
 
-  private[StratifiedSampling]
-  class StratifiedSamplingWriter(instance: StratifiedSampling) extends MLWriter {
+  private[StratifiedSampler]
+  class StratifiedSamplingWriter(instance: StratifiedSampler) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
@@ -104,26 +114,28 @@ object StratifiedSampling extends DefaultParamsReadable[StratifiedSampling] {
     }
   }
 
-  private class StratifiedSamplingReader extends MLReader[StratifiedSampling] {
+  private class StratifiedSamplingReader extends MLReader[StratifiedSampler] {
 
-    private val className = classOf[StratifiedSampling].getName
+    private val className = classOf[StratifiedSampler].getName
 
-    override def load(path: String): StratifiedSampling = {
+    override def load(path: String): StratifiedSampler = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(withReplacement: Boolean, fraction: Map[String, Double]) = sqlContext.read
+      val data = sqlContext.read
         .parquet(dataPath)
         .select("withReplacement", "fraction")
         .head()
-      val model = new StratifiedSampling(metadata.uid, withReplacement, fraction)
+      val withReplacement = data.getBoolean(0)
+      val fraction = data.getAs[Map[String, Double]](1)
+      val model = new StratifiedSampler(metadata.uid, withReplacement, fraction)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }
 
   @Since("2.0.0")
-  override def read: MLReader[StratifiedSampling] = new StratifiedSamplingReader
+  override def read: MLReader[StratifiedSampler] = new StratifiedSamplingReader
 
   @Since("2.0.0")
-  override def load(path: String): StratifiedSampling = super.load(path)
+  override def load(path: String): StratifiedSampler = super.load(path)
 }

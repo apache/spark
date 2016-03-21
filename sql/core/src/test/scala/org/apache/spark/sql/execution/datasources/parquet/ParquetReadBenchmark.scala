@@ -81,6 +81,12 @@ object ParquetReadBenchmark {
           }
         }
 
+        sqlBenchmark.addCase("SQL Parquet Vectorized") { iter =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+            sqlContext.sql("select sum(id) from tempTable").collect()
+          }
+        }
+
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
         // Driving the parquet reader directly without Spark.
         parquetReaderBenchmark.addCase("ParquetReader") { num =>
@@ -143,10 +149,11 @@ object ParquetReadBenchmark {
 
         /*
         Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-        Single Int Column Scan:            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+        SQL Single Int Column Scan:        Avg Time(ms)    Avg Rate(M/s)  Relative Rate
         -------------------------------------------------------------------------------
-        SQL Parquet Reader                       1682.6            15.58         1.00 X
-        SQL Parquet MR                           2379.6            11.02         0.71 X
+        SQL Parquet Reader                      1350.56            11.65         1.00 X
+        SQL Parquet MR                          1844.09             8.53         0.73 X
+        SQL Parquet Vectorized                  1062.04            14.81         1.27 X
         */
         sqlBenchmark.run()
 
@@ -185,6 +192,13 @@ object ParquetReadBenchmark {
           }
         }
 
+        benchmark.addCase("SQL Parquet Vectorized") { iter =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+            sqlContext.sql("select sum(c1), sum(length(c2)) from tempTable").collect
+          }
+        }
+
+
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
         benchmark.addCase("ParquetReader") { num =>
           var sum1 = 0L
@@ -202,12 +216,13 @@ object ParquetReadBenchmark {
         }
 
         /*
-          Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-          Int and String Scan:         Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-          -------------------------------------------------------------------------
-          SQL Parquet Reader                 2245.6             7.00         1.00 X
-          SQL Parquet MR                     2914.2             5.40         0.77 X
-          ParquetReader                      1544.6            10.18         1.45 X
+        Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+        Int and String Scan:               Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+        -------------------------------------------------------------------------------
+        SQL Parquet Reader                      1737.94             6.03         1.00 X
+        SQL Parquet MR                          2393.08             4.38         0.73 X
+        SQL Parquet Vectorized                  1442.99             7.27         1.20 X
+        ParquetReader                           1032.11            10.16         1.68 X
         */
         benchmark.run()
       }

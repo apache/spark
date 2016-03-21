@@ -36,8 +36,6 @@ case class LeftSemiJoinHash(
     condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
@@ -46,17 +44,15 @@ case class LeftSemiJoinHash(
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numLeftRows = longMetric("numLeftRows")
-    val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
     right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
       if (condition.isEmpty) {
-        val hashSet = buildKeyHashSet(buildIter, numRightRows)
-        hashSemiJoin(streamIter, numLeftRows, hashSet, numOutputRows)
+        val hashSet = buildKeyHashSet(buildIter)
+        hashSemiJoin(streamIter, hashSet, numOutputRows)
       } else {
-        val hashRelation = HashedRelation(buildIter, numRightRows, rightKeyGenerator)
-        hashSemiJoin(streamIter, numLeftRows, hashRelation, numOutputRows)
+        val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
+        hashSemiJoin(streamIter, hashRelation, numOutputRows)
       }
     }
   }

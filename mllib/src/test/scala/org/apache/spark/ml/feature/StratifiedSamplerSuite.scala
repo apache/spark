@@ -24,7 +24,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class StratifiedSamplingSuite
+class StratifiedSamplerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
@@ -40,12 +40,12 @@ class StratifiedSamplingSuite
       (1, "1")
     )).toDF("label", "str")
     val map = Map("1" -> 0.5, "2" -> 0.1)
-    val trans = new StratifiedSampling(false, map).setLabel("str")
+    val trans = new StratifiedSampler(false, map).setLabel("str")
     trans.transform(df).schema == df.schema
   }
 
   test("StratifiedSampling read/write") {
-    val t = new StratifiedSampling(false, Map("1" -> 0.5, "2" -> 0.1))
+    val t = new StratifiedSampler(false, Map("1" -> 0.5, "2" -> 0.1))
       .setLabel("myLabel")
     val newInstance = testDefaultReadWrite(t)
     assert(t.withReplacement == newInstance.withReplacement &&

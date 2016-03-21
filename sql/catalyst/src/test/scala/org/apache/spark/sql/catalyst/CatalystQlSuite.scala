@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CatalystQlSuite extends PlanTest {
@@ -42,6 +42,35 @@ class CatalystQlSuite extends PlanTest {
           GreaterThan(Literal(true), Literal(true)))
       ) :: Nil,
       OneRowRelation)
+    comparePlans(parsed, expected)
+  }
+
+  test("test Union Distinct operator") {
+    val parsed1 = parser.parsePlan("SELECT * FROM t0 UNION SELECT * FROM t1")
+    val parsed2 = parser.parsePlan("SELECT * FROM t0 UNION DISTINCT SELECT * FROM t1")
+    val expected =
+      Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
+        Subquery("u_1",
+          Distinct(
+            Union(
+              Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
+                UnresolvedRelation(TableIdentifier("t0"), None)),
+              Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
+                UnresolvedRelation(TableIdentifier("t1"), None))))))
+    comparePlans(parsed1, expected)
+    comparePlans(parsed2, expected)
+  }
+
+  test("test Union All operator") {
+    val parsed = parser.parsePlan("SELECT * FROM t0 UNION ALL SELECT * FROM t1")
+    val expected =
+      Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
+        Subquery("u_1",
+          Union(
+            Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
+              UnresolvedRelation(TableIdentifier("t0"), None)),
+            Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
+              UnresolvedRelation(TableIdentifier("t1"), None)))))
     comparePlans(parsed, expected)
   }
 
@@ -134,14 +163,15 @@ class CatalystQlSuite extends PlanTest {
           Literal("o") ::
           UnresolvedFunction("o", UnresolvedAttribute("bar") :: Nil, false) ::
           Nil, false)))
+
+    intercept[AnalysisException](parser.parseExpression("1 - f('o', o(bar)) hello * world"))
   }
 
   test("table identifier") {
     assert(TableIdentifier("q") === parser.parseTableIdentifier("q"))
     assert(TableIdentifier("q", Some("d")) === parser.parseTableIdentifier("d.q"))
     intercept[AnalysisException](parser.parseTableIdentifier(""))
-    // TODO parser swallows third identifier.
-    // intercept[AnalysisException](parser.parseTableIdentifier("d.q.g"))
+    intercept[AnalysisException](parser.parseTableIdentifier("d.q.g"))
   }
 
   test("parse union/except/intersect") {

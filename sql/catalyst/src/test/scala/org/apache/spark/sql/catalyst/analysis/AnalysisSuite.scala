@@ -90,7 +90,7 @@ class AnalysisSuite extends AnalysisTest {
       .where(a > "str").select(a, b, c)
       .where(b > "str").select(a, b, c)
       .sortBy(b.asc, c.desc)
-      .select(a, b).select(a)
+      .select(a)
     checkAnalysis(plan1, expected1)
 
     // Case 2: all the missing attributes are in the leaf node

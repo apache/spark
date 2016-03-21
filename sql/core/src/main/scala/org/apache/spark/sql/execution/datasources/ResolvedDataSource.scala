@@ -104,7 +104,7 @@ object ResolvedDataSource extends Logging {
           s"Data source $providerName does not support streamed reading")
     }
 
-    provider.createSource(sqlContext, options, userSpecifiedSchema)
+    provider.createSource(sqlContext, userSpecifiedSchema, providerName, options)
   }
 
   def createSink(

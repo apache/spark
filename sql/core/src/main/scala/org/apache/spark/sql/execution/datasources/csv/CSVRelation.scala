@@ -197,52 +197,48 @@ object CSVRelation extends Logging {
     } else {
       requiredFields
     }
-    if (requiredColumns.isEmpty) {
-      sqlContext.sparkContext.emptyRDD[Row]
-    } else {
-      val safeRequiredIndices = new Array[Int](safeRequiredFields.length)
-      schemaFields.zipWithIndex.filter {
-        case (field, _) => safeRequiredFields.contains(field)
-      }.foreach {
-        case (field, index) => safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
-      }
-      val rowArray = new Array[Any](safeRequiredIndices.length)
-      val requiredSize = requiredFields.length
-      tokenizedRDD.flatMap { tokens =>
-        if (params.dropMalformed && schemaFields.length != tokens.size) {
-          logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
-          None
-        } else if (params.failFast && schemaFields.length != tokens.size) {
-          throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
-            s"${tokens.mkString(params.delimiter.toString)}")
+    val safeRequiredIndices = new Array[Int](safeRequiredFields.length)
+    schemaFields.zipWithIndex.filter {
+      case (field, _) => safeRequiredFields.contains(field)
+    }.foreach {
+      case (field, index) => safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
+    }
+    val rowArray = new Array[Any](safeRequiredIndices.length)
+    val requiredSize = requiredFields.length
+    tokenizedRDD.flatMap { tokens =>
+      if (params.dropMalformed && schemaFields.length != tokens.size) {
+        logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+        None
+      } else if (params.failFast && schemaFields.length != tokens.size) {
+        throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
+          s"${tokens.mkString(params.delimiter.toString)}")
+      } else {
+        val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.size) {
+          tokens ++ new Array[String](schemaFields.length - tokens.size)
+        } else if (params.permissive && schemaFields.length < tokens.size) {
+          tokens.take(schemaFields.length)
         } else {
-          val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.size) {
-            tokens ++ new Array[String](schemaFields.length - tokens.size)
-          } else if (params.permissive && schemaFields.length < tokens.size) {
-            tokens.take(schemaFields.length)
-          } else {
-            tokens
+          tokens
+        }
+        try {
+          var index: Int = 0
+          var subIndex: Int = 0
+          while (subIndex < safeRequiredIndices.length) {
+            index = safeRequiredIndices(subIndex)
+            val field = schemaFields(index)
+            rowArray(subIndex) = CSVTypeCast.castTo(
+              indexSafeTokens(index),
+              field.dataType,
+              field.nullable,
+              params.nullValue)
+            subIndex = subIndex + 1
           }
-          try {
-            var index: Int = 0
-            var subIndex: Int = 0
-            while (subIndex < safeRequiredIndices.length) {
-              index = safeRequiredIndices(subIndex)
-              val field = schemaFields(index)
-              rowArray(subIndex) = CSVTypeCast.castTo(
-                indexSafeTokens(index),
-                field.dataType,
-                field.nullable,
-                params.nullValue)
-              subIndex = subIndex + 1
-            }
-            Some(Row.fromSeq(rowArray.take(requiredSize)))
-          } catch {
-            case NonFatal(e) if params.dropMalformed =>
-              logWarning("Parse exception. " +
-                s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
-              None
-          }
+          Some(Row.fromSeq(rowArray.take(requiredSize)))
+        } catch {
+          case NonFatal(e) if params.dropMalformed =>
+            logWarning("Parse exception. " +
+              s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+            None
         }
       }
     }

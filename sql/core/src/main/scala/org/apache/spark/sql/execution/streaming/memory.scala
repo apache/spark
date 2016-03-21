@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row, SQLContext}
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, RowEncoder}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 
 object MemoryStream {
@@ -46,13 +47,12 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   protected val logicalPlan = StreamingRelation(this)
   protected val output = logicalPlan.output
   protected val batches = new ArrayBuffer[Dataset[A]]
+
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
   protected def blockManager = SparkEnv.get.blockManager
 
   def schema: StructType = encoder.schema
-
-  def getCurrentOffset: Offset = currentOffset
 
   def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
     new Dataset(sqlContext, logicalPlan)
@@ -60,6 +60,10 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def toDF()(implicit sqlContext: SQLContext): DataFrame = {
     new DataFrame(sqlContext, logicalPlan)
+  }
+
+  def addData(data: A*): Offset = {
+    addData(data.toTraversable)
   }
 
   def addData(data: TraversableOnce[A]): Offset = {
@@ -110,6 +114,7 @@ class MemorySink(schema: StructType) extends Sink with Logging {
   }
 
   override def addBatch(nextBatch: Batch): Unit = synchronized {
+    nextBatch.data.collect()  // 'compute' the batch's data and record the batch
     batches.append(nextBatch)
   }
 
@@ -131,8 +136,13 @@ class MemorySink(schema: StructType) extends Sink with Logging {
     batches.dropRight(num)
   }
 
-  override def toString: String = synchronized {
-    batches.map(b => s"${b.end}: ${b.data.collect().mkString(" ")}").mkString("\n")
+  def toDebugString: String = synchronized {
+    batches.map { b =>
+      val dataStr = try b.data.collect().mkString(" ") catch {
+        case NonFatal(e) => "[Error converting to string]"
+      }
+      s"${b.end}: $dataStr"
+    }.mkString("\n")
   }
 }
 

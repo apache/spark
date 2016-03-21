@@ -44,8 +44,6 @@ case class BroadcastHashOuterJoin(
     right: SparkPlan) extends BinaryNode with HashOuterJoin {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   val timeout = {
@@ -66,14 +64,6 @@ case class BroadcastHashOuterJoin(
   // for the same query.
   @transient
   private lazy val broadcastFuture = {
-    val numBuildRows = joinType match {
-      case RightOuter => longMetric("numLeftRows")
-      case LeftOuter => longMetric("numRightRows")
-      case x =>
-        throw new IllegalArgumentException(
-          s"HashOuterJoin should not take $x as the JoinType")
-    }
-
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {
@@ -83,14 +73,9 @@ case class BroadcastHashOuterJoin(
         // Note that we use .execute().collect() because we don't want to convert data to Scala
         // types
         val input: Array[InternalRow] = buildPlan.execute().map { row =>
-          numBuildRows += 1
           row.copy()
         }.collect()
-        // The following line doesn't run in a job so we cannot track the metric value. However, we
-        // have already tracked it in the above lines. So here we can use
-        // `SQLMetrics.nullLongMetric` to ignore it.
-        val hashed = HashedRelation(
-          input.iterator, SQLMetrics.nullLongMetric, buildKeyGenerator, input.size)
+        val hashed = HashedRelation(input.iterator, buildKeyGenerator, input.size)
         sparkContext.broadcast(hashed)
       }
     }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
@@ -101,13 +86,6 @@ case class BroadcastHashOuterJoin(
   }
 
   override def doExecute(): RDD[InternalRow] = {
-    val numStreamedRows = joinType match {
-      case RightOuter => longMetric("numRightRows")
-      case LeftOuter => longMetric("numLeftRows")
-      case x =>
-        throw new IllegalArgumentException(
-          s"HashOuterJoin should not take $x as the JoinType")
-    }
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = Await.result(broadcastFuture, timeout)
@@ -116,18 +94,12 @@ case class BroadcastHashOuterJoin(
       val joinedRow = new JoinedRow()
       val hashTable = broadcastRelation.value
       val keyGenerator = streamedKeyGenerator
-
-      hashTable match {
-        case unsafe: UnsafeHashedRelation =>
-          TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)
-        case _ =>
-      }
+      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashTable.getMemorySize)
 
       val resultProj = resultProjection
       joinType match {
         case LeftOuter =>
           streamedIter.flatMap(currentRow => {
-            numStreamedRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
             leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey), resultProj, numOutputRows)
@@ -135,7 +107,6 @@ case class BroadcastHashOuterJoin(
 
         case RightOuter =>
           streamedIter.flatMap(currentRow => {
-            numStreamedRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
             rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow, resultProj, numOutputRows)
