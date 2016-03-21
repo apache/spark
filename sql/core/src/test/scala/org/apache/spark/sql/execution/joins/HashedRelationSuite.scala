@@ -29,42 +29,6 @@ import org.apache.spark.util.collection.CompactBuffer
 
 class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
-  // Key is simply the record itself
-  private val keyProjection = new Projection {
-    override def apply(row: InternalRow): InternalRow = row
-  }
-
-  test("GeneralHashedRelation") {
-    val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
-    val hashed = HashedRelation(data.iterator, keyProjection)
-    assert(hashed.isInstanceOf[GeneralHashedRelation])
-
-    assert(hashed.get(data(0)) === CompactBuffer[InternalRow](data(0)))
-    assert(hashed.get(data(1)) === CompactBuffer[InternalRow](data(1)))
-    assert(hashed.get(InternalRow(10)) === null)
-
-    val data2 = CompactBuffer[InternalRow](data(2))
-    data2 += data(2)
-    assert(hashed.get(data(2)) === data2)
-  }
-
-  test("UniqueKeyHashedRelation") {
-    val data = Array(InternalRow(0), InternalRow(1), InternalRow(2))
-    val hashed = HashedRelation(data.iterator, keyProjection)
-    assert(hashed.isInstanceOf[UniqueKeyHashedRelation])
-
-    assert(hashed.get(data(0)) === CompactBuffer[InternalRow](data(0)))
-    assert(hashed.get(data(1)) === CompactBuffer[InternalRow](data(1)))
-    assert(hashed.get(data(2)) === CompactBuffer[InternalRow](data(2)))
-    assert(hashed.get(InternalRow(10)) === null)
-
-    val uniqHashed = hashed.asInstanceOf[UniqueKeyHashedRelation]
-    assert(uniqHashed.getValue(data(0)) === data(0))
-    assert(uniqHashed.getValue(data(1)) === data(1))
-    assert(uniqHashed.getValue(data(2)) === data(2))
-    assert(uniqHashed.getValue(InternalRow(10)) === null)
-  }
-
   test("UnsafeHashedRelation") {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
