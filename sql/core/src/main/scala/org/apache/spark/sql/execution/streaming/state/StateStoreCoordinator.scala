@@ -127,7 +127,7 @@ private class StateStoreCoordinator(override val rpcEnv: RpcEnv) extends RpcEndp
 
     case DeactivateInstances(loc) =>
       val storeIdsToRemove =
-        instances.keys.filter(_.rootLocation == loc).toSeq
+        instances.keys.filter(_.checkpointLocation == loc).toSeq
       instances --= storeIdsToRemove
       context.reply(true)
 

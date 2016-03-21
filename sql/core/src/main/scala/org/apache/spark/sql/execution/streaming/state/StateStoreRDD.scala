@@ -32,7 +32,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 class StateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
-    storeRootLocation: String,
+    checkpointLocation: String,
     operatorId: Long,
     storeVersion: Long,
     keySchema: StructType,
@@ -47,7 +47,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val storeId = StateStoreId(storeRootLocation, operatorId, partition.index)
+    val storeId = StateStoreId(checkpointLocation, operatorId, partition.index)
     storeCoordinator.flatMap(_.getLocation(storeId)).toSeq
   }
 
@@ -55,7 +55,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     var store: StateStore = null
 
     Utils.tryWithSafeFinally {
-      val storeId = StateStoreId(storeRootLocation, operatorId, partition.index)
+      val storeId = StateStoreId(checkpointLocation, operatorId, partition.index)
       store = StateStore.get(
         storeId, keySchema, valueSchema, storeVersion, confBroadcast.value.value)
       val inputIter = dataRDD.iterator(partition, ctxt)
