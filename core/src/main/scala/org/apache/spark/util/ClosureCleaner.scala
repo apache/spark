@@ -24,7 +24,8 @@ import scala.collection.mutable.{Map, Set}
 import org.apache.xbean.asm5.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import org.apache.xbean.asm5.Opcodes._
 
-import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.internal.Logging
 
 /**
  * A cleaner that renders closures serializable if they can be done so safely.

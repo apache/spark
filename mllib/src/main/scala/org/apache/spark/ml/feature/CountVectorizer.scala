@@ -70,7 +70,6 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
     val typeCandidates = List(new ArrayType(StringType, true), new ArrayType(StringType, false))
     SchemaUtils.checkColumnTypes(schema, $(inputCol), typeCandidates)
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
@@ -207,6 +206,26 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   /** @group setParam */
   def setMinTF(value: Double): this.type = set(minTF, value)
 
+  /**
+   * Binary toggle to control the output vector values.
+   * If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful for
+   * discrete probabilistic models that model binary events rather than integer counts.
+   * Default: false
+   * @group param
+   */
+  val binary: BooleanParam =
+    new BooleanParam(this, "binary", "If True, all non zero counts are set to 1. " +
+      "This is useful for discrete probabilistic models that model binary events rather " +
+      "than integer counts")
+
+  /** @group getParam */
+  def getBinary: Boolean = $(binary)
+
+  /** @group setParam */
+  def setBinary(value: Boolean): this.type = set(binary, value)
+
+  setDefault(binary -> false)
+
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
 
@@ -228,12 +247,14 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
         }
         tokenCount += 1
       }
-      val effectiveMinTF = if (minTf >= 1.0) {
-        minTf
+      val effectiveMinTF = if (minTf >= 1.0) minTf else tokenCount * minTf
+      val effectiveCounts = if ($(binary)) {
+        termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
       } else {
-        tokenCount * minTf
+        termCounts.filter(_._2 >= effectiveMinTF).toSeq
       }
-      Vectors.sparse(dictBr.value.size, termCounts.filter(_._2 >= effectiveMinTF).toSeq)
+
+      Vectors.sparse(dictBr.value.size, effectiveCounts)
     }
     dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
   }

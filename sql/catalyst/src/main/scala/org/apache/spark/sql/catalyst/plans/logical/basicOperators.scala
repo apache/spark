@@ -298,10 +298,11 @@ case class Join(
       condition.forall(_.dataType == BooleanType)
   }
 
-  // if not a natural join, use `resolvedExceptNatural`. if it is a natural join, we still need
-  // to eliminate natural before we mark it resolved.
+  // if not a natural join, use `resolvedExceptNatural`. if it is a natural join or
+  // using join, we still need to eliminate natural or using before we mark it resolved.
   override lazy val resolved: Boolean = joinType match {
     case NaturalJoin(_) => false
+    case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
 }

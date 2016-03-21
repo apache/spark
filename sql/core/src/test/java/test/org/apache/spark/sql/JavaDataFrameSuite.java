@@ -316,19 +316,19 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testTextLoad() {
-    Dataset<Row> df1 = context.read().text(
+    Dataset<String> ds1 = context.read().text(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
-    Assert.assertEquals(4L, df1.count());
+    Assert.assertEquals(4L, ds1.count());
 
-    Dataset<Row> df2 = context.read().text(
+    Dataset<String> ds2 = context.read().text(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
       Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
-    Assert.assertEquals(5L, df2.count());
+    Assert.assertEquals(5L, ds2.count());
   }
 
   @Test
   public void testCountMinSketch() {
-    Dataset<Row> df = context.range(1000);
+    Dataset df = context.range(1000);
 
     CountMinSketch sketch1 = df.stat().countMinSketch("id", 10, 20, 42);
     Assert.assertEquals(sketch1.totalCount(), 1000);
@@ -353,7 +353,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testBloomFilter() {
-    Dataset<Row> df = context.range(1000);
+    Dataset df = context.range(1000);
 
     BloomFilter filter1 = df.stat().bloomFilter("id", 1000, 0.03);
     Assert.assertTrue(filter1.expectedFpp() - 0.03 < 1e-3);

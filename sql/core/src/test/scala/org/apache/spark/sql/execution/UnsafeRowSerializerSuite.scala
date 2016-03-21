@@ -118,7 +118,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
       val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
         taskContext,
         partitioner = Some(new HashPartitioner(10)),
-        serializer = Some(new UnsafeRowSerializer(numFields = 1)))
+        serializer = new UnsafeRowSerializer(numFields = 1))
 
       // Ensure we spilled something and have to merge them later
       assert(sorter.numSpills === 0)
@@ -153,7 +153,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
       new ShuffleDependency[Int, InternalRow, InternalRow](
         rowsRDD,
         new PartitionIdPassthrough(2),
-        Some(new UnsafeRowSerializer(2)))
+        new UnsafeRowSerializer(2))
     val shuffled = new ShuffledRowRDD(dependency)
     shuffled.count()
   }
