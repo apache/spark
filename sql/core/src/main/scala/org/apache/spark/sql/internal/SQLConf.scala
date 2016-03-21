@@ -440,6 +440,11 @@ object SQLConf {
     doc = "When true, the ordinal numbers are treated as the position in the select list. " +
           "When false, the ordinal numbers in order/sort By clause are ignored.")
 
+  val ORDER_BY_ORDINAL = booleanConf("spark.sql.orderByOrdinal",
+    defaultValue = Some(true),
+    doc = "When true, the ordinal numbers are treated as the position in the select list. " +
+          "When false, the ordinal numbers in order/sort By clause are ignored.")
+
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   //
