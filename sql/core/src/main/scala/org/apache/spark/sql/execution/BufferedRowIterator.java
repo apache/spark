@@ -52,7 +52,7 @@ public abstract class BufferedRowIterator {
    * this is a measure of how long the pipeline has been running.
    */
   public long durationMs() {
-    return (System.nanoTime() - startTimeNs) * 1000 * 1000;
+    return (System.nanoTime() - startTimeNs) / (1000 * 1000);
   }
 
   /**
