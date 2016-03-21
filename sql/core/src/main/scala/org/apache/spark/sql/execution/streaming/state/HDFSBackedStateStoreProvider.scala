@@ -206,7 +206,6 @@ private[state] class HDFSBackedStateStoreProvider(
     val newMap = new MapType()
     if (version > 0) {
       val time = System.nanoTime()
-      // newMap ++= loadMap(version)
       newMap.putAll(loadMap(version))
     }
     new HDFSBackedStateStore(version, newMap)
@@ -381,14 +380,22 @@ private[state] class HDFSBackedStateStoreProvider(
   private def writeSnapshotFile(version: Long, map: MapType): Unit = {
     val fileToWrite = snapshotFile(version)
     val ser = serializer.newInstance()
-    var outputStream: SerializationStream = null
+    var output: DataOutputStream = null
     Utils.tryWithSafeFinally {
-      outputStream = ser.serializeStream(fs.create(fileToWrite, false))
-      outputStream.writeAll(map.entrySet().iterator().asScala.map { x =>
-        (x.getKey, x.getValue)
-      })
+      output = compressStream(fs.create(fileToWrite, false))
+      val iter = map.entrySet().iterator()
+      while(iter.hasNext) {
+        val entry = iter.next()
+        val keyBytes = entry.getKey.getBytes()
+        val valueBytes = entry.getValue.getBytes()
+        output.writeInt(keyBytes.size)
+        output.write(keyBytes)
+        output.writeInt(valueBytes.size)
+        output.write(valueBytes)
+      }
+      output.writeInt(-1)
     } {
-      if (outputStream != null) outputStream.close()
+      if (output != null) output.close()
     }
   }
 
@@ -398,19 +405,42 @@ private[state] class HDFSBackedStateStoreProvider(
 
     val deser = serializer.newInstance()
     val map = new MapType()
-    var deserStream: DeserializationStream = null
+    var input: DataInputStream = null
 
     try {
-      deserStream = deser.deserializeStream(fs.open(fileToRead))
-      val iter = deserStream.asIterator.asInstanceOf[Iterator[(UnsafeRow, UnsafeRow)]]
-      while (iter.hasNext) {
-        // map += iter.next()
-        val (key, value) = iter.next()
-        map.put(key, value)
+      input = decompressStream(fs.open(fileToRead))
+      var eof = false
+
+      while (!eof) {
+        val keySize = input.readInt()
+        if (keySize == -1) {
+          eof = true
+        } else if (keySize < 0) {
+          throw new Exception(
+            s"Error reading snapshot file $fileToRead of $this: key size cannot be $keySize")
+        } else {
+          val keyRowBuffer = new Array[Byte](keySize)
+          ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
+
+          val keyRow = new UnsafeRow(keySchema.fields.length)
+          keyRow.pointTo(keyRowBuffer, keySize)
+
+          val valueSize = input.readInt()
+          if (valueSize < 0) {
+            throw new Exception(
+              s"Error reading snapshot file $fileToRead of $this: value size cannot be $valueSize")
+          } else {
+            val valueRowBuffer = new Array[Byte](valueSize)
+            ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
+            val valueRow = new UnsafeRow(valueSchema.fields.length)
+            valueRow.pointTo(valueRowBuffer, valueSize)
+            map.put(keyRow, valueRow)
+          }
+        }
       }
       Some(map)
     } finally {
-      if (deserStream != null) deserStream.close()
+      if (input != null) input.close()
     }
   }
 
@@ -429,7 +459,7 @@ private[state] class HDFSBackedStateStoreProvider(
               writeSnapshotFile(lastVersion, map)
             }
           case None =>
-          // The last map is not loaded, probably some other instance is incharge
+            // The last map is not loaded, probably some other instance is incharge
         }
 
       }

@@ -234,24 +234,27 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     updateVersionTo(6)
     require(getDataFromFiles(provider) === Set("a" -> 6), "store not updated correctly")
     provider.doMaintenance()       // should generate snapshot files
-    assert(getDataFromFiles(provider) === Set("a" -> 6), "snapshotting messed up the data")
-    assert(getDataFromFiles(provider) === Set("a" -> 6))
 
     val snapshotVersion = (0 to 6).find(version => fileExists(provider, version, isSnapshot = true))
     assert(snapshotVersion.nonEmpty, "snapshot file not generated")
+    deleteFilesEarlierThanVersion(provider, snapshotVersion.get)
+    assert(
+      getDataFromFiles(provider, snapshotVersion.get) === Set("a" -> snapshotVersion.get),
+      "snapshotting messed up the data of the snapshotted version")
+    assert(
+      getDataFromFiles(provider) === Set("a" -> 6),
+      "snapshotting messed up the data of the final version")
 
     // After version 20, snapshotting should generate newer snapshot files
     updateVersionTo(20)
     require(getDataFromFiles(provider) === Set("a" -> 20), "store not updated correctly")
     provider.doMaintenance()       // do snapshot
-    assert(getDataFromFiles(provider) === Set("a" -> 20), "snapshotting messed up the data")
-    assert(getDataFromFiles(provider) === Set("a" -> 20))
 
     val latestSnapshotVersion = (0 to 20).filter(version =>
       fileExists(provider, version, isSnapshot = true)).lastOption
     assert(latestSnapshotVersion.nonEmpty, "no snapshot file found")
     assert(latestSnapshotVersion.get > snapshotVersion.get, "newer snapshot not generated")
-
+    assert(getDataFromFiles(provider) === Set("a" -> 20), "snapshotting messed up the data")
   }
 
   test("cleaning") {
@@ -401,6 +404,19 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
     val filePath = new File(basePath.toString, fileName)
     filePath.exists
+  }
+
+  def deleteFilesEarlierThanVersion(provider: HDFSBackedStateStoreProvider, version: Long): Unit = {
+    val method = PrivateMethod[Path]('baseDir)
+    val basePath = provider invokePrivate method()
+    for (version <- 0 until version.toInt) {
+      for (isSnapshot <- Seq(false, true)) {
+        val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
+        val filePath = new File(basePath.toString, fileName)
+        if (filePath.exists) filePath.delete()
+
+      }
+    }
   }
 
   def storeLoaded(storeId: StateStoreId): Boolean = {
