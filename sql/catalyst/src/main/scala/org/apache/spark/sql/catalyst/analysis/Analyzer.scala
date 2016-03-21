@@ -641,8 +641,8 @@ class Analyzer(
               SortOrder(child.output(index - 1), direction)
             } else {
               throw new UnresolvedException(s,
-                "Order/sort By position: $index does not exist " +
-                "The Select List is indexed from 1 to ${child.output.size}")
+                s"Order/sort By position: $index does not exist " +
+                s"The Select List is indexed from 1 to ${child.output.size}")
             }
           case o => o
         }
