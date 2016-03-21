@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
@@ -31,8 +28,6 @@ import org.apache.spark.sql.hive.{ HiveContext, HiveMetastoreTypes, SQLBuilder}
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
  * depending on Hive meta-store.
  */
-// TODO: Note that this class can NOT canonicalize the view SQL string entirely, which is different
-// from Hive and may not work for some cases like create view on self join.
 private[hive] case class CreateViewAsSelect(
     tableDesc: CatalogTable,
     child: LogicalPlan,
@@ -73,15 +68,18 @@ private[hive] case class CreateViewAsSelect(
   }
 
   private def prepareTable(sqlContext: SQLContext): CatalogTable = {
-    val expandedText = if (sqlContext.conf.canonicalView) {
-      try rebuildViewQueryString(sqlContext) catch {
-        case NonFatal(e) => wrapViewTextWithSelect
-      }
+    val logicalPlan = if (tableDesc.schema.isEmpty) {
+      child
     } else {
-      wrapViewTextWithSelect
+      val projectList = childSchema.zip(tableDesc.schema).map {
+        case (attr, col) => Alias(attr, col.name)()
+      }
+      sqlContext.executePlan(Project(projectList, child)).analyzed
     }
 
-    val viewSchema = {
+    val viewText = new SQLBuilder(logicalPlan, sqlContext).toSQL
+
+    val viewSchema: Seq[CatalogColumn] = {
       if (tableDesc.schema.isEmpty) {
         childSchema.map { a =>
           CatalogColumn(a.name, HiveMetastoreTypes.toMetastoreType(a.dataType))
@@ -97,41 +95,6 @@ private[hive] case class CreateViewAsSelect(
       }
     }
 
-    tableDesc.copy(schema = viewSchema, viewText = Some(expandedText))
+    tableDesc.copy(schema = viewSchema, viewText = Some(viewText))
   }
-
-  private def wrapViewTextWithSelect: String = {
-    // When user specified column names for view, we should create a project to do the renaming.
-    // When no column name specified, we still need to create a project to declare the columns
-    // we need, to make us more robust to top level `*`s.
-    val viewOutput = {
-      val columnNames = childSchema.map(f => quote(f.name))
-      if (tableDesc.schema.isEmpty) {
-        columnNames.mkString(", ")
-      } else {
-        columnNames.zip(tableDesc.schema.map(f => quote(f.name))).map {
-          case (name, alias) => s"$name AS $alias"
-        }.mkString(", ")
-      }
-    }
-
-    val viewText = tableDesc.viewText.get
-    val viewName = quote(tableDesc.name.table)
-    s"SELECT $viewOutput FROM ($viewText) $viewName"
-  }
-
-  private def rebuildViewQueryString(sqlContext: SQLContext): String = {
-    val logicalPlan = if (tableDesc.schema.isEmpty) {
-      child
-    } else {
-      val projectList = childSchema.zip(tableDesc.schema).map {
-        case (attr, col) => Alias(attr, col.name)()
-      }
-      sqlContext.executePlan(Project(projectList, child)).analyzed
-    }
-    new SQLBuilder(logicalPlan, sqlContext).toSQL
-  }
-
-  // escape backtick with double-backtick in column name and wrap it with backtick.
-  private def quote(name: String) = s"`${name.replaceAll("`", "``")}`"
 }

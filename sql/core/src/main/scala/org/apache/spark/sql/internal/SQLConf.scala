@@ -365,21 +365,10 @@ object SQLConf {
           "unmatching partitions can be eliminated earlier.")
 
   val NATIVE_VIEW = booleanConf("spark.sql.nativeView",
-    defaultValue = Some(false),
-    doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
-          "Note that this function is experimental and should ony be used when you are using " +
-          "non-hive-compatible tables written by Spark SQL.  The SQL string used to create " +
-          "view should be fully qualified, i.e. use `tbl1`.`col1` instead of `*` whenever " +
-          "possible, or you may get wrong result.",
-    isPublic = false)
-
-  val CANONICAL_NATIVE_VIEW = booleanConf("spark.sql.nativeView.canonical",
     defaultValue = Some(true),
-    doc = "When this option and spark.sql.nativeView are both true, Spark SQL tries to handle " +
-          "CREATE VIEW statement using SQL query string generated from view definition logical " +
-          "plan.  If the logical plan doesn't have a SQL representation, we fallback to the " +
-          "original native view implementation.",
-    isPublic = false)
+    doc = "When true, CREATE VIEW statement will be handled by Spark SQL instead of Hive native " +
+          "command, using SQL query string generated from view definition logical plan.  Note " +
+          "that this feature may break in some corner cases, you can disable it to workaround.")
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
@@ -577,8 +566,6 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
-
-  def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
