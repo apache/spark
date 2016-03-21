@@ -512,35 +512,35 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Group By Ordinal - negative cases") {
     intercept[UnresolvedException[Aggregate]] {
-      sql("SELECT a, b FROM testData2 GROUP BY -1").collect()
+      sql("SELECT a, b FROM testData2 GROUP BY -1")
     }
 
     intercept[UnresolvedException[Aggregate]] {
-      sql("SELECT a, b FROM testData2 GROUP BY 3").collect()
+      sql("SELECT a, b FROM testData2 GROUP BY 3")
     }
 
     val e = intercept[UnresolvedException[Aggregate]](
-      sql("SELECT SUM(a) FROM testData2 GROUP BY 1").queryExecution.analyzed)
+      sql("SELECT SUM(a) FROM testData2 GROUP BY 1"))
     assert(e.getMessage contains
       "Invalid call to Group by position: the '1'th column in the select is an aggregate function")
 
     var ae = intercept[AnalysisException](
-      sql("SELECT a, rand(0), sum(b) FROM testData2 GROUP BY a, 2").queryExecution.analyzed)
+      sql("SELECT a, rand(0), sum(b) FROM testData2 GROUP BY a, 2"))
     assert(ae.getMessage contains
       "nondeterministic expression rand(0) should not appear in grouping expression")
 
     ae = intercept[AnalysisException](
-      sql("SELECT * FROM testData2 GROUP BY a, b, 1").queryExecution.analyzed)
+      sql("SELECT * FROM testData2 GROUP BY a, b, 1"))
     assert(ae.getMessage contains
       "Group by position: star is not allowed to use in the select list " +
         "when using ordinals in group by")
   }
 
-  test("Group By Ordinal: spark.sql.orderByOrdinal=false") {
+  test("Group By Ordinal: spark.sql.groupByOrdinal=false") {
     withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
       // If spark.sql.groupByOrdinal=false, ignore the position number.
       intercept[AnalysisException] {
-        sql("SELECT a, sum(b) FROM testData2 GROUP BY 1").collect()
+        sql("SELECT a, sum(b) FROM testData2 GROUP BY 1")
       }
       // '*' is not allowed to use in the select list when users specify ordinals in group by
       checkAnswer(
