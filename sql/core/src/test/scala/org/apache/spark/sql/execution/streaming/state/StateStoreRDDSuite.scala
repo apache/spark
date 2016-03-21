@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -39,7 +40,6 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
   private val keySchema = StructType(Seq(StructField("key", StringType, true)))
   private val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
 
-  import StateStoreCoordinatorSuite._
   import StateStoreSuite._
 
   after {
@@ -68,12 +68,12 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
         }
         val opId = 0
         val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
-          increment, path, opId, storeVersion = 0, keySchema, valueSchema)
+          increment, path, opId, storeVersion = 0, keySchema, valueSchema, None)
         assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
 
         // Generate next version of stores
         val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionWithStateStore(
-          increment, path, opId, storeVersion = 1, keySchema, valueSchema)
+          increment, path, opId, storeVersion = 1, keySchema, valueSchema, None)
         assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
 
         // Make sure the previous RDD still has the same data.
@@ -92,7 +92,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
           seq: Seq[String],
           storeVersion: Int): RDD[(String, Int)] = {
         makeRDD(sc, Seq("a")).mapPartitionWithStateStore(
-          increment, path, opId, storeVersion, keySchema, valueSchema)
+          increment, path, opId, storeVersion, keySchema, valueSchema, None)
       }
 
       // Generate RDDs and state store data
@@ -115,27 +115,27 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
       val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
 
       withSpark(new SparkContext(conf)) { sc =>
-        withCoordinatorRef(sc) { coordinatorRef =>
-          coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 0), "host1", "exec1")
-          coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 1), "host2", "exec2")
-          assert(
-            coordinatorRef.getLocation(StateStoreId(path, opId, 0)) ===
-              Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
+        implicit val sqlContext = new SQLContext(sc)
+        val coordinatorRef = sqlContext.streams.stateStoreCoordinator
+        coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 0), "host1", "exec1")
+        coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 1), "host2", "exec2")
+        assert(
+          coordinatorRef.getLocation(StateStoreId(path, opId, 0)) ===
+            Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
 
-          val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
-            increment, path, opId, storeVersion = 0, keySchema, valueSchema, Some(coordinatorRef))
-          require(rdd.partitions.length === 2)
+        val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+          increment, path, opId, storeVersion = 0, keySchema, valueSchema)
+        require(rdd.partitions.length === 2)
 
-          assert(
-            rdd.preferredLocations(rdd.partitions(0)) ===
-              Seq(ExecutorCacheTaskLocation("host1", "exec1").toString))
+        assert(
+          rdd.preferredLocations(rdd.partitions(0)) ===
+            Seq(ExecutorCacheTaskLocation("host1", "exec1").toString))
 
-          assert(
-            rdd.preferredLocations(rdd.partitions(1)) ===
-              Seq(ExecutorCacheTaskLocation("host2", "exec2").toString))
+        assert(
+          rdd.preferredLocations(rdd.partitions(1)) ===
+            Seq(ExecutorCacheTaskLocation("host2", "exec2").toString))
 
-          rdd.collect()
-        }
+        rdd.collect()
       }
     }
   }
