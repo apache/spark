@@ -749,8 +749,7 @@ private[spark] class BlockManager(
         // Put it in memory first, even if it also has useDisk set to true;
         // We will drop it to disk later if the memory store can't hold it.
         val putSucceeded = if (level.deserialized) {
-          val values = dataDeserialize(blockId, bytes)
-          memoryStore.putIteratorAsValues(blockId, values) match {
+          memoryStore.putIteratorAsValues(blockId, dataDeserialize(blockId, bytes)) match {
             case Right(_) => true
             case Left(iter) =>
               // If putting deserialized values in memory failed, we will put the bytes directly to
