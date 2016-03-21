@@ -427,8 +427,9 @@ class SessionCatalogSuite extends SparkFunSuite {
         TableIdentifier("tbl4"),
         TableIdentifier("tbl1", Some("db2")),
         TableIdentifier("tbl2", Some("db2"))))
-    assert(catalog.listTables("unknown_db").toSet ==
-      Set(TableIdentifier("tbl1"), TableIdentifier("tbl4")))
+    intercept[AnalysisException] {
+      catalog.listTables("unknown_db")
+    }
   }
 
   test("list tables with pattern") {
@@ -445,8 +446,9 @@ class SessionCatalogSuite extends SparkFunSuite {
         TableIdentifier("tbl2", Some("db2"))))
     assert(catalog.listTables("db2", "*1").toSet ==
       Set(TableIdentifier("tbl1"), TableIdentifier("tbl1", Some("db2"))))
-    assert(catalog.listTables("unknown_db", "*").toSet ==
-      Set(TableIdentifier("tbl1"), TableIdentifier("tbl4")))
+    intercept[AnalysisException] {
+      catalog.listTables("unknown_db", "*")
+    }
   }
 
   // --------------------------------------------------------------------------
