@@ -28,7 +28,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkEnv, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -254,6 +254,8 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       fileExists(provider, version, isSnapshot = true)).lastOption
     assert(latestSnapshotVersion.nonEmpty, "no snapshot file found")
     assert(latestSnapshotVersion.get > snapshotVersion.get, "newer snapshot not generated")
+
+    deleteFilesEarlierThanVersion(provider, latestSnapshotVersion.get)
     assert(getDataFromFiles(provider) === Set("a" -> 20), "snapshotting messed up the data")
   }
 
@@ -313,11 +315,12 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     }
   }
 
-  test("background management") {
+  test("maintenance") {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
       .set(StateStore.MAINTENANCE_INTERVAL_CONFIG, "10ms")
+      .set("spark.rpc.numRetries", "1")
     val opId = 0
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val storeId = StateStoreId(dir, opId, 0)
@@ -326,7 +329,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
-        withCoordinator(sc) { coordinator =>
+        withCoordinatorRef(sc) { coordinator =>
           for (i <- 1 to 20) {
             val store = StateStore.get(storeId, keySchema, valueSchema, i - 1, new Configuration)
             update(store, "a", i)
@@ -369,7 +372,8 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       }
 
       // Verify if instance is unloaded if SparkContext is stopped
-      eventually(timeout(4 seconds)) {
+      require(SparkEnv.get === null)
+      eventually(timeout(10 seconds)) {
         assert(!StateStore.isLoaded(storeId))
       }
     }

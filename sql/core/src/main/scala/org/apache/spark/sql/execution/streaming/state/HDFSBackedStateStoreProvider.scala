@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.LZ4CompressionCodec
-import org.apache.spark.serializer.{DeserializationStream, KryoSerializer, SerializationStream}
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils

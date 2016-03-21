@@ -32,7 +32,7 @@ package object state {
       storeVersion: Long,
       keySchema: StructType,
       valueSchema: StructType,
-      storeCoordinator: Option[StateStoreCoordinator] = None
+      storeCoordinator: Option[StateStoreCoordinatorRef] = None
     ): StateStoreRDD[T, U] = {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       new StateStoreRDD(

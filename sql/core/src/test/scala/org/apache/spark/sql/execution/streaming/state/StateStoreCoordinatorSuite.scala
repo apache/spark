@@ -17,104 +17,93 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.util.RpcUtils
+import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
 
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   import StateStoreCoordinatorSuite._
 
   test("report, verify, getLocation") {
-    withCoordinator(sc) { coordinator =>
+    withCoordinatorRef(sc) { coordinatorRef =>
       val id = StateStoreId("x", 0, 0)
 
-      assert(coordinator.verifyIfInstanceActive(id, "exec1") === false)
-      assert(coordinator.getLocation(id) === None)
+      assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === false)
+      assert(coordinatorRef.getLocation(id) === None)
 
-      assert(coordinator.reportActiveInstance(id, "hostX", "exec1") === true)
-      assert(coordinator.verifyIfInstanceActive(id, "exec1") === true)
-      assert(coordinator.getLocation(id) ===
+      assert(coordinatorRef.reportActiveInstance(id, "hostX", "exec1") === true)
+      assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === true)
+      assert(coordinatorRef.getLocation(id) ===
         Some(ExecutorCacheTaskLocation("hostX", "exec1").toString))
 
-      assert(coordinator.reportActiveInstance(id, "hostX", "exec2") === true)
-      assert(coordinator.verifyIfInstanceActive(id, "exec1") === false)
-      assert(coordinator.verifyIfInstanceActive(id, "exec2") === true)
+      assert(coordinatorRef.reportActiveInstance(id, "hostX", "exec2") === true)
+      assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === false)
+      assert(coordinatorRef.verifyIfInstanceActive(id, "exec2") === true)
 
       assert(
-        coordinator.getLocation(id) ===
+        coordinatorRef.getLocation(id) ===
           Some(ExecutorCacheTaskLocation("hostX", "exec2").toString))
     }
   }
 
   test("make inactive") {
-    withCoordinator(sc) { coordinator =>
+    withCoordinatorRef(sc) { coordinatorRef =>
       val id1 = StateStoreId("x", 0, 0)
       val id2 = StateStoreId("y", 1, 0)
       val id3 = StateStoreId("x", 0, 1)
       val host = "hostX"
       val exec = "exec1"
 
-      assert(coordinator.reportActiveInstance(id1, host, exec) === true)
-      assert(coordinator.reportActiveInstance(id2, host, exec) === true)
-      assert(coordinator.reportActiveInstance(id3, host, exec) === true)
+      assert(coordinatorRef.reportActiveInstance(id1, host, exec) === true)
+      assert(coordinatorRef.reportActiveInstance(id2, host, exec) === true)
+      assert(coordinatorRef.reportActiveInstance(id3, host, exec) === true)
 
-      assert(coordinator.verifyIfInstanceActive(id1, exec) === true)
-      assert(coordinator.verifyIfInstanceActive(id2, exec) === true)
-      assert(coordinator.verifyIfInstanceActive(id3, exec) === true)
+      assert(coordinatorRef.verifyIfInstanceActive(id1, exec) === true)
+      assert(coordinatorRef.verifyIfInstanceActive(id2, exec) === true)
+      assert(coordinatorRef.verifyIfInstanceActive(id3, exec) === true)
 
-      coordinator.deactivateInstances("x")
+      coordinatorRef.deactivateInstances("x")
 
-      assert(coordinator.verifyIfInstanceActive(id1, exec) === false)
-      assert(coordinator.verifyIfInstanceActive(id2, exec) === true)
-      assert(coordinator.verifyIfInstanceActive(id3, exec) === false)
+      assert(coordinatorRef.verifyIfInstanceActive(id1, exec) === false)
+      assert(coordinatorRef.verifyIfInstanceActive(id2, exec) === true)
+      assert(coordinatorRef.verifyIfInstanceActive(id3, exec) === false)
 
-      assert(coordinator.getLocation(id1) === None)
+      assert(coordinatorRef.getLocation(id1) === None)
       assert(
-        coordinator.getLocation(id2) ===
+        coordinatorRef.getLocation(id2) ===
           Some(ExecutorCacheTaskLocation(host, exec).toString))
-      assert(coordinator.getLocation(id3) === None)
+      assert(coordinatorRef.getLocation(id3) === None)
 
-      coordinator.deactivateInstances("y")
-      assert(coordinator.verifyIfInstanceActive(id2, exec) === false)
-      assert(coordinator.getLocation(id2) === None)
+      coordinatorRef.deactivateInstances("y")
+      assert(coordinatorRef.verifyIfInstanceActive(id2, exec) === false)
+      assert(coordinatorRef.getLocation(id2) === None)
     }
   }
 
-  test("communication") {
-    withCoordinator(sc) { coordinator =>
-      import StateStoreCoordinator._
+  test("multiple references have same coordinator") {
+    withCoordinatorRef(sc) { coordRef1 =>
+      val coordRef2 = StateStoreCoordinatorRef(sc.env)
+
       val id = StateStoreId("x", 0, 0)
-      val host = "hostX"
 
-      val ref = RpcUtils.makeDriverRef("StateStoreCoordinator", sc.env.conf, sc.env.rpcEnv)
-
-      assert(ask(VerifyIfInstanceActive(id, "exec1")) === Some(false))
-
-      ask(ReportActiveInstance(id, host, "exec1"))
-      assert(ask(VerifyIfInstanceActive(id, "exec1")) === Some(true))
+      assert(coordRef1.reportActiveInstance(id, "hostX", "exec1") === true)
+      assert(coordRef2.verifyIfInstanceActive(id, "exec1") === true)
       assert(
-        coordinator.getLocation(id) ===
-          Some(ExecutorCacheTaskLocation(host, "exec1").toString))
+        coordRef2.getLocation(id) ===
+          Some(ExecutorCacheTaskLocation("hostX", "exec1").toString))
 
-      ask(ReportActiveInstance(id, host, "exec2"))
-      assert(ask(VerifyIfInstanceActive(id, "exec1")) === Some(false))
-      assert(ask(VerifyIfInstanceActive(id, "exec2")) === Some(true))
-      assert(
-        coordinator.getLocation(id) ===
-          Some(ExecutorCacheTaskLocation(host, "exec2").toString))
     }
   }
 }
 
 object StateStoreCoordinatorSuite {
-  def withCoordinator(sc: SparkContext)(body: StateStoreCoordinator => Unit): Unit = {
-    var coordinator: StateStoreCoordinator = null
+  def withCoordinatorRef(sc: SparkContext)(body: StateStoreCoordinatorRef => Unit): Unit = {
+    var coordinatorRef: StateStoreCoordinatorRef = null
     try {
-      coordinator = new StateStoreCoordinator(sc.env.rpcEnv)
-      body(coordinator)
+      coordinatorRef = StateStoreCoordinatorRef(sc.env)
+      body(coordinatorRef)
     } finally {
-      if (coordinator != null) coordinator.stop()
+      if (coordinatorRef != null) coordinatorRef.stop()
     }
   }
 }

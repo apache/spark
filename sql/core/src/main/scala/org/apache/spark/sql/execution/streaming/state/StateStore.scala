@@ -114,7 +114,9 @@ private[state] object StateStore extends Logging {
 
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
   private val managementTimer = new Timer("StateStore Timer", true)
+
   @volatile private var managementTask: TimerTask = null
+  @volatile private var _coordRef: StateStoreCoordinatorRef = null
 
   /** Get or create a store associated with the id. */
   def get(
@@ -131,7 +133,7 @@ private[state] object StateStore extends Logging {
       val provider = loadedProviders.getOrElseUpdate(
         storeId,
         new HDFSBackedStateStoreProvider(storeId, keySchema, valueSchema, sparkConf, hadoopConf))
-      reportActiveInstance(storeId)
+      reportActiveStoreInstance(storeId)
       provider
     }
     storeProvider.getStore(version)
@@ -177,7 +179,7 @@ private[state] object StateStore extends Logging {
   private def doMaintenance(): Unit = {
     loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
       try {
-        if (verifyIfInstanceActive(id)) {
+        if (verifyIfStoreInstanceActive(id)) {
           provider.doMaintenance()
         } else {
           remove(id)
@@ -190,25 +192,43 @@ private[state] object StateStore extends Logging {
     }
   }
 
-  private def reportActiveInstance(storeId: StateStoreId): Unit = {
+  private def reportActiveStoreInstance(storeId: StateStoreId): Unit = {
     try {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-      StateStoreCoordinator.ask(ReportActiveInstance(storeId, host, executorId))
+      coordinatorRef.foreach(_.reportActiveInstance(storeId, host, executorId))
+      logDebug(s"Reported that the loaded instance $storeId is active")
     } catch {
       case NonFatal(e) =>
         logWarning(s"Error reporting active instance of $storeId")
     }
   }
 
-  private def verifyIfInstanceActive(storeId: StateStoreId): Boolean = {
+  private def verifyIfStoreInstanceActive(storeId: StateStoreId): Boolean = {
     try {
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-      StateStoreCoordinator.ask(VerifyIfInstanceActive(storeId, executorId)).getOrElse(false)
+      val verified =
+        coordinatorRef.map(_.verifyIfInstanceActive(storeId, executorId)).getOrElse(false)
+      logDebug(s"Verifyied whether the loaded instance $storeId is active: $verified" )
+      verified
     } catch {
       case NonFatal(e) =>
         logWarning(s"Error verifying active instance of $storeId")
         false
+    }
+  }
+
+  private def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
+    val env = SparkEnv.get
+    if (env != null) {
+      if (_coordRef == null) {
+        _coordRef = StateStoreCoordinatorRef(env)
+      }
+      logDebug(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
+      Some(_coordRef)
+    } else {
+      _coordRef = null
+      None
     }
   }
 }

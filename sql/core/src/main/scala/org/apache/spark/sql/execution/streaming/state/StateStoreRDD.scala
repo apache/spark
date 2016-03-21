@@ -37,7 +37,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     storeVersion: Long,
     keySchema: StructType,
     valueSchema: StructType,
-    @transient private val storeCoordinator: Option[StateStoreCoordinator])
+    @transient private val storeCoordinator: Option[StateStoreCoordinatorRef])
   extends RDD[U](dataRDD) {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it

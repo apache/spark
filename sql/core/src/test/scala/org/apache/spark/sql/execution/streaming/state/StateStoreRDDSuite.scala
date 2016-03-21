@@ -110,27 +110,32 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
   }
 
   test("preferred locations using StateStoreCoordinator") {
-    val opId = 0
-    val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
+    quietly {
+      val opId = 0
+      val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
 
-    withSpark(new SparkContext(conf)) { sc =>
-      withCoordinator(sc) { coordinator =>
-        coordinator.reportActiveInstance(StateStoreId(path, opId, 0), "host1", "exec1")
-        coordinator.reportActiveInstance(StateStoreId(path, opId, 1), "host2", "exec2")
+      withSpark(new SparkContext(conf)) { sc =>
+        withCoordinatorRef(sc) { coordinatorRef =>
+          coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 0), "host1", "exec1")
+          coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 1), "host2", "exec2")
+          assert(
+            coordinatorRef.getLocation(StateStoreId(path, opId, 0)) ===
+              Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
 
-        val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
-          increment, path, opId, storeVersion = 0, keySchema, valueSchema, Some(coordinator))
-        require(rdd.partitions.size === 2)
+          val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+            increment, path, opId, storeVersion = 0, keySchema, valueSchema, Some(coordinatorRef))
+          require(rdd.partitions.length === 2)
 
-        assert(
-          rdd.preferredLocations(rdd.partitions(0)) ===
-            Seq(ExecutorCacheTaskLocation("host1", "exec1").toString))
+          assert(
+            rdd.preferredLocations(rdd.partitions(0)) ===
+              Seq(ExecutorCacheTaskLocation("host1", "exec1").toString))
 
-        assert(
-          rdd.preferredLocations(rdd.partitions(1)) ===
-            Seq(ExecutorCacheTaskLocation("host2", "exec2").toString))
+          assert(
+            rdd.preferredLocations(rdd.partitions(1)) ===
+              Seq(ExecutorCacheTaskLocation("host2", "exec2").toString))
 
-        rdd.collect()
+          rdd.collect()
+        }
       }
     }
   }
