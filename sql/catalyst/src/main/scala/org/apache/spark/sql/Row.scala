@@ -402,11 +402,13 @@ trait Row extends Serializable {
               return false
             }
           case f1: Float if java.lang.Float.isNaN(f1) =>
-            if (!o2.isInstanceOf[Float] || ! java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
+            if (!(o2.isInstanceOf[Float] && java.lang.Float.isNaN(o2.asInstanceOf[Float]) ||
+              o2.isInstanceOf[Double] && java.lang.Double.isNaN(o2.asInstanceOf[Double]))) {
               return false
             }
           case d1: Double if java.lang.Double.isNaN(d1) =>
-            if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
+            if (!(o2.isInstanceOf[Float] && java.lang.Float.isNaN(o2.asInstanceOf[Float]) ||
+              o2.isInstanceOf[Double] && java.lang.Double.isNaN(o2.asInstanceOf[Double]))) {
               return false
             }
           case d1: java.math.BigDecimal if o2.isInstanceOf[java.math.BigDecimal] =>
@@ -429,7 +431,12 @@ trait Row extends Serializable {
     var h = MurmurHash3.seqSeed
     val len = length
     while (n < len) {
-      h = MurmurHash3.mix(h, apply(n).##)
+      val v = apply(n)
+      if (v.isInstanceOf[Float] && java.lang.Float.isNaN(v.asInstanceOf[Float])) {
+        h = MurmurHash3.mix(h, Double.NaN.##)
+      } else {
+        h = MurmurHash3.mix(h, v.##)
+      }
       n += 1
     }
     MurmurHash3.finalizeHash(h, n)
