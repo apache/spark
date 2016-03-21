@@ -40,6 +40,7 @@ import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
 import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 class ReceivedBlockHandlerSuite
   extends SparkFunSuite
@@ -155,7 +156,7 @@ class ReceivedBlockHandlerSuite
           val reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
           val bytes = reader.read(fileSegment)
           reader.close()
-          blockManager.dataDeserialize(generateBlockId(), bytes).toList
+          blockManager.dataDeserialize(generateBlockId(), new ChunkedByteBuffer(bytes)).toList
         }
         loggedData shouldEqual data
       }
