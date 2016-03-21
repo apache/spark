@@ -56,11 +56,13 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
 
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
- *
+   *
    * @return whether all N bytes were successfully granted.
    */
-  def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = lock.synchronized {
-    val numBytesToFree = math.max(0, numBytes - memoryFree)
+  def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = {
+    val numBytesToFree = lock.synchronized {
+      math.max(0, numBytes - memoryFree)
+    }
     acquireMemory(blockId, numBytes, numBytesToFree)
   }
 
@@ -75,21 +77,31 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
   def acquireMemory(
       blockId: BlockId,
       numBytesToAcquire: Long,
-      numBytesToFree: Long): Boolean = lock.synchronized {
+      numBytesToFree: Long): Boolean = {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
-    assert(memoryUsed <= poolSize)
-    if (numBytesToFree > 0) {
+    assert(lock.synchronized(memoryUsed <= poolSize))
+    val memoryFreedByEviction = if (numBytesToFree > 0) {
       memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree)
+    } else {
+      0
     }
-    // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
-    // back into this StorageMemoryPool in order to free memory. Therefore, these variables
-    // should have been updated.
-    val enoughMemory = numBytesToAcquire <= memoryFree
-    if (enoughMemory) {
-      _memoryUsed += numBytesToAcquire
+    if (memoryFreedByEviction > numBytesToAcquire) {
+      releaseMemory(memoryFreedByEviction - numBytesToAcquire)
     }
-    enoughMemory
+    val numBytesToAcquireAfterEviction = Math.max(0L, numBytesToAcquire - memoryFreedByEviction)
+    lock.synchronized {
+      // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
+      // back into this StorageMemoryPool in order to free memory. Therefore, these variables
+      // should have been updated.
+      val enoughMemory = numBytesToAcquireAfterEviction <= memoryFree
+      if (enoughMemory) {
+        _memoryUsed += numBytesToAcquireAfterEviction
+      } else {
+        releaseMemory(memoryFreedByEviction)
+      }
+      enoughMemory
+    }
   }
 
   def releaseMemory(size: Long): Unit = lock.synchronized {
@@ -110,17 +122,21 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
    * Try to shrink the size of this storage memory pool by `spaceToFree` bytes. Return the number
    * of bytes removed from the pool's capacity.
    */
-  def shrinkPoolToFreeSpace(spaceToFree: Long): Long = lock.synchronized {
-    // First, shrink the pool by reclaiming free memory:
-    val spaceFreedByReleasingUnusedMemory = math.min(spaceToFree, memoryFree)
-    decrementPoolSize(spaceFreedByReleasingUnusedMemory)
-    val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
+  def shrinkPoolToFreeSpace(spaceToFree: Long): Long = {
+    var spaceFreedByReleasingUnusedMemory = 0L
+    val remainingSpaceToFree = lock.synchronized {
+      // First, shrink the pool by reclaiming free memory:
+      spaceFreedByReleasingUnusedMemory = math.min(spaceToFree, memoryFree)
+      decrementPoolSize(spaceFreedByReleasingUnusedMemory)
+      spaceToFree - spaceFreedByReleasingUnusedMemory
+    }
     if (remainingSpaceToFree > 0) {
       // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
       val spaceFreedByEviction = memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree)
-      // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
-      // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.
-      decrementPoolSize(spaceFreedByEviction)
+      lock.synchronized {
+        releaseMemory(spaceFreedByEviction)
+        decrementPoolSize(spaceFreedByEviction)
+      }
       spaceFreedByReleasingUnusedMemory + spaceFreedByEviction
     } else {
       spaceFreedByReleasingUnusedMemory

@@ -1175,6 +1175,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     // Memory store should contain b2 and b3, while disk store should contain only b1
+    println("ABOUT TO CALL PROBLEMATIC PUTITERATOR")
     val result3 = memoryStore.putIterator("b3", smallIterator, memAndDisk)
     assert(result3.isRight)
     assert(!memoryStore.contains("b1"))

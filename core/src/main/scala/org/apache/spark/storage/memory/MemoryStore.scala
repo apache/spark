@@ -278,6 +278,13 @@ private[spark] class MemoryStore(
     }
   }
 
+  private[storage] def removeBlockAndKeepStorageMemory(blockId: BlockId): Long = {
+    val entry = entries.synchronized {
+      entries.remove(blockId)
+    }
+    entry.size
+  }
+
   def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
       entries.clear()
@@ -302,17 +309,24 @@ private[spark] class MemoryStore(
     *
     * @param blockId the ID of the block we are freeing space for, if any
     * @param space the size of this block
-    * @return the amount of memory (in bytes) freed by eviction
+    * @return the total size (in bytes) of the blocks evicted from the MemoryStore. This memory is
+    *         not released with the memory manager, so it's the caller's responsibility to perform
+    *         the appropriate bookkeeping calls.
     */
   private[spark] def evictBlocksToFreeSpace(blockId: Option[BlockId], space: Long): Long = {
     assert(space > 0)
+
+    var freedMemory = 0L
+    val rddToAdd = blockId.flatMap(getRddId)
+    val selectedBlocks = new ArrayBuffer[BlockId]
+
+    def blockIsEvictable(blockId: BlockId): Boolean = {
+      rddToAdd.isEmpty || rddToAdd != getRddId(blockId)
+    }
+
+    // First, determine the set of blocks to evict. This requires synchronization so that different
+    // tasks don't try to evict the same block.
     memoryManager.synchronized {
-      var freedMemory = 0L
-      val rddToAdd = blockId.flatMap(getRddId)
-      val selectedBlocks = new ArrayBuffer[BlockId]
-      def blockIsEvictable(blockId: BlockId): Boolean = {
-        rddToAdd.isEmpty || rddToAdd != getRddId(blockId)
-      }
       // This is synchronized to ensure that the set of entries is not changed
       // (because of getValue or getBytes) while traversing the iterator, as that
       // can lead to exceptions.
@@ -335,29 +349,6 @@ private[spark] class MemoryStore(
 
       if (freedMemory >= space) {
         logInfo(s"${selectedBlocks.size} blocks selected for dropping")
-        for (blockId <- selectedBlocks) {
-          val entry = entries.synchronized { entries.get(blockId) }
-          // This should never be null as only one task should be dropping
-          // blocks and removing entries. However the check is still here for
-          // future safety.
-          if (entry != null) {
-            val data = entry match {
-              case DeserializedMemoryEntry(values, _) => Left(values)
-              case SerializedMemoryEntry(buffer, _) => Right(buffer)
-            }
-            val newEffectiveStorageLevel = blockManager.dropFromMemory(blockId, () => data)
-            if (newEffectiveStorageLevel.isValid) {
-              // The block is still present in at least one store, so release the lock
-              // but don't delete the block info
-              blockManager.releaseLock(blockId)
-            } else {
-              // The block isn't present in any store, so delete the block info so that the
-              // block can be stored again
-              blockManager.blockInfoManager.removeBlock(blockId)
-            }
-          }
-        }
-        freedMemory
       } else {
         blockId.foreach { id =>
           logInfo(s"Will not store $id as it would require dropping another block " +
@@ -366,9 +357,34 @@ private[spark] class MemoryStore(
         selectedBlocks.foreach { id =>
           blockManager.releaseLock(id)
         }
-        0L
+        selectedBlocks.clear()
+        freedMemory = 0
       }
     }
+
+    // At this point, `selectedBlocks` is the (possibly-empty) set of blocks that we have chosen
+    // to evict and we hold exclusive write locks on all of those blocks. We can now drop the blocks
+    // to disk without holding the memoryManager lock because the per-block write locks ensure that
+    // threads won't compete to drop the same block.
+    for (blockId <- selectedBlocks) {
+      val entry = entries.synchronized { entries.get(blockId) }
+      val data = entry match {
+        case DeserializedMemoryEntry(values, _) => Left(values)
+        case SerializedMemoryEntry(buffer, _) => Right(buffer)
+      }
+      val newEffectiveStorageLevel = blockManager.dropFromMemory(blockId, () => data)
+      if (newEffectiveStorageLevel.isValid) {
+        // The block is still present in at least one store, so release the lock
+        // but don't delete the block info
+        blockManager.releaseLock(blockId)
+      } else {
+        // The block isn't present in any store, so delete the block info so that the
+        // block can be stored again
+        blockManager.blockInfoManager.removeBlock(blockId)
+      }
+    }
+
+    freedMemory
   }
 
   def contains(blockId: BlockId): Boolean = {

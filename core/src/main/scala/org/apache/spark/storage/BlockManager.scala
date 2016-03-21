@@ -1146,6 +1146,9 @@ private[spark] class BlockManager(
    *
    * If `data` is not put on disk, it won't be created.
    *
+   * This method does _not_ use the MemoryManager to release storage memory; that is the caller's
+   * responsibility.
+   *
    * The caller of this method must hold a write lock on the block before calling this method.
    * This method does not release the write lock.
    *
@@ -1174,9 +1177,7 @@ private[spark] class BlockManager(
     }
 
     // Actually drop from memory store
-    val droppedMemorySize = memoryStore.getSize(blockId)
-    val blockIsRemoved = memoryStore.remove(blockId)
-    assert(blockIsRemoved)
+    val droppedMemorySize = memoryStore.removeBlockAndKeepStorageMemory(blockId)
 
     val status = getCurrentBlockStatus(blockId, info)
     if (info.tellMaster) {
