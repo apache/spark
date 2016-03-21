@@ -115,20 +115,20 @@ public final class ColumnarBatch {
      * Marks this row as being filtered out. This means a subsequent iteration over the rows
      * in this batch will not include this row.
      */
-    public final void markFiltered() {
+    public void markFiltered() {
       parent.markFiltered(rowId);
     }
 
     public ColumnVector[] columns() { return columns; }
 
     @Override
-    public final int numFields() { return columns.length; }
+    public int numFields() { return columns.length; }
 
     @Override
     /**
      * Revisit this. This is expensive. This is currently only used in test paths.
      */
-    public final InternalRow copy() {
+    public InternalRow copy() {
       GenericMutableRow row = new GenericMutableRow(columns.length);
       for (int i = 0; i < numFields(); i++) {
         if (isNullAt(i)) {
@@ -163,73 +163,73 @@ public final class ColumnarBatch {
     }
 
     @Override
-    public final boolean anyNull() {
+    public boolean anyNull() {
       throw new NotImplementedException();
     }
 
     @Override
-    public final boolean isNullAt(int ordinal) { return columns[ordinal].getIsNull(rowId); }
+    public boolean isNullAt(int ordinal) { return columns[ordinal].getIsNull(rowId); }
 
     @Override
-    public final boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
+    public boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
 
     @Override
-    public final byte getByte(int ordinal) { return columns[ordinal].getByte(rowId); }
+    public byte getByte(int ordinal) { return columns[ordinal].getByte(rowId); }
 
     @Override
-    public final short getShort(int ordinal) { return columns[ordinal].getShort(rowId); }
+    public short getShort(int ordinal) { return columns[ordinal].getShort(rowId); }
 
     @Override
-    public final int getInt(int ordinal) { return columns[ordinal].getInt(rowId); }
+    public int getInt(int ordinal) { return columns[ordinal].getInt(rowId); }
 
     @Override
-    public final long getLong(int ordinal) { return columns[ordinal].getLong(rowId); }
+    public long getLong(int ordinal) { return columns[ordinal].getLong(rowId); }
 
     @Override
-    public final float getFloat(int ordinal) { return columns[ordinal].getFloat(rowId); }
+    public float getFloat(int ordinal) { return columns[ordinal].getFloat(rowId); }
 
     @Override
-    public final double getDouble(int ordinal) { return columns[ordinal].getDouble(rowId); }
+    public double getDouble(int ordinal) { return columns[ordinal].getDouble(rowId); }
 
     @Override
-    public final Decimal getDecimal(int ordinal, int precision, int scale) {
+    public Decimal getDecimal(int ordinal, int precision, int scale) {
       return columns[ordinal].getDecimal(rowId, precision, scale);
     }
 
     @Override
-    public final UTF8String getUTF8String(int ordinal) {
+    public UTF8String getUTF8String(int ordinal) {
       return columns[ordinal].getUTF8String(rowId);
     }
 
     @Override
-    public final byte[] getBinary(int ordinal) {
+    public byte[] getBinary(int ordinal) {
       return columns[ordinal].getBinary(rowId);
     }
 
     @Override
-    public final CalendarInterval getInterval(int ordinal) {
+    public CalendarInterval getInterval(int ordinal) {
       final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
       final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
       return new CalendarInterval(months, microseconds);
     }
 
     @Override
-    public final InternalRow getStruct(int ordinal, int numFields) {
+    public InternalRow getStruct(int ordinal, int numFields) {
       return columns[ordinal].getStruct(rowId);
     }
 
     @Override
-    public final ArrayData getArray(int ordinal) {
+    public ArrayData getArray(int ordinal) {
       return columns[ordinal].getArray(rowId);
     }
 
     @Override
-    public final MapData getMap(int ordinal) {
+    public MapData getMap(int ordinal) {
       throw new NotImplementedException();
     }
 
     @Override
-    public final Object get(int ordinal, DataType dataType) {
+    public Object get(int ordinal, DataType dataType) {
       throw new NotImplementedException();
     }
   }
@@ -357,7 +357,7 @@ public final class ColumnarBatch {
    * Marks this row as being filtered out. This means a subsequent iteration over the rows
    * in this batch will not include this row.
    */
-  public final void markFiltered(int rowId) {
+  public void markFiltered(int rowId) {
     assert(!filteredRows[rowId]);
     filteredRows[rowId] = true;
     ++numRowsFiltered;
@@ -367,7 +367,7 @@ public final class ColumnarBatch {
    * Marks a given column as non-nullable. Any row that has a NULL value for the corresponding
    * attribute is filtered out.
    */
-  public final void filterNullsInColumn(int ordinal) {
+  public void filterNullsInColumn(int ordinal) {
     nullFilteredColumns.add(ordinal);
   }
 
