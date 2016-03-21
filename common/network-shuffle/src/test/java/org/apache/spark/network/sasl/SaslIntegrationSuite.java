@@ -212,7 +212,8 @@ public class SaslIntegrationSuite {
       };
 
       String[] blockIds = { "shuffle_2_3_4", "shuffle_6_7_8" };
-      OneForOneBlockFetcher fetcher = new OneForOneBlockFetcher(client1, "app-2", "0", blockIds, listener);
+      OneForOneBlockFetcher fetcher =
+          new OneForOneBlockFetcher(client1, "app-2", "0", blockIds, listener);
       fetcher.start();
       blockFetchLatch.await();
       checkSecurityException(exception.get());

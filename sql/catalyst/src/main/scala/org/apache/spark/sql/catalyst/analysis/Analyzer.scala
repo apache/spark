@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -40,7 +41,8 @@ import org.apache.spark.sql.types._
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
-object SimpleAnalyzer extends SimpleAnalyzer(new SimpleCatalystConf(true))
+object SimpleAnalyzer
+  extends SimpleAnalyzer(new SimpleCatalystConf(caseSensitiveAnalysis = true))
 class SimpleAnalyzer(conf: CatalystConf)
   extends Analyzer(new SessionCatalog(new InMemoryCatalog, conf), EmptyFunctionRegistry, conf)
 
@@ -444,7 +446,7 @@ class Analyzer(
           } transformUp {
             case other => other transformExpressions {
               case a: Attribute =>
-                attributeRewrites.get(a).getOrElse(a).withQualifiers(a.qualifiers)
+                attributeRewrites.get(a).getOrElse(a).withQualifier(a.qualifier)
             }
           }
           newRight
@@ -569,7 +571,7 @@ class Analyzer(
           if n.outerPointer.isEmpty &&
              n.cls.isMemberClass &&
              !Modifier.isStatic(n.cls.getModifiers) =>
-          val outer = OuterScopes.outerScopes.get(n.cls.getDeclaringClass.getName)
+          val outer = OuterScopes.getOuterScope(n.cls)
           if (outer == null) {
             throw new AnalysisException(
               s"Unable to generate an encoder for inner class `${n.cls.getName}` without " +
@@ -598,7 +600,10 @@ class Analyzer(
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
-  private def resolveExpression(expr: Expression, plan: LogicalPlan, throws: Boolean = false) = {
+  protected[sql] def resolveExpression(
+      expr: Expression,
+      plan: LogicalPlan,
+      throws: Boolean = false) = {
     // Resolve expression in one round.
     // If throws == false or the desired attribute doesn't exist
     // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
@@ -620,13 +625,36 @@ class Analyzer(
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
+   *
+   * This rule also resolves the position number in sort references. This support is introduced
+   * in Spark 2.0. Before Spark 2.0, the integers in Order By has no effect on output sorting.
+   * - When the sort references are not integer but foldable expressions, ignore them.
+   * - When spark.sql.orderByOrdinal is set to false, ignore the position numbers too.
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case s: Sort if !s.child.resolved => s
+      // Replace the index with the related attribute for ORDER BY
+      // which is a 1-base position of the projection list.
+      case s @ Sort(orders, global, child)
+          if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+        val newOrders = orders map {
+          case s @ SortOrder(IntegerIndex(index), direction) =>
+            if (index > 0 && index <= child.output.size) {
+              SortOrder(child.output(index - 1), direction)
+            } else {
+              throw new UnresolvedException(s,
+                s"Order/sort By position: $index does not exist " +
+                s"The Select List is indexed from 1 to ${child.output.size}")
+            }
+          case o => o
+        }
+        Sort(newOrders, global, child)
+
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
+      case s @ Sort(order, _, child) if !s.resolved =>
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
@@ -1439,8 +1467,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
   def trimNonTopLevelAliases(e: Expression): Expression = e match {
     case a: Alias =>
-      Alias(trimAliases(a.child), a.name)(
-        a.exprId, a.qualifiers, a.explicitMetadata, a.isGenerated)
+      a.withNewChildren(trimAliases(a.child) :: Nil)
     case other => trimAliases(other)
   }
 
