@@ -164,28 +164,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("SPARK-8930: explode should fail with a meaningful message if it takes a star") {
-    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
-    val e = intercept[AnalysisException] {
-      df.explode($"*") { case Row(prefix: String, csv: String) =>
-        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
-      }.queryExecution.assertAnalyzed()
-    }
-    assert(e.getMessage.contains("Invalid usage of '*' in explode/json_tuple/UDTF"))
-
-    df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
-      csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
-    }.queryExecution.assertAnalyzed()
-  }
-
-  test("explode alias and star") {
-    val df = Seq((Array("a"), 1)).toDF("a", "b")
-
-    checkAnswer(
-      df.select(explode($"a").as("a"), $"*"),
-      Row("a", Seq("a"), 1) :: Nil)
-  }
-
   test("sort after generate with join=true") {
     val df = Seq((Array("a"), 1)).toDF("a", "b")
 
