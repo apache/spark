@@ -964,15 +964,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("SPARK-13764 Parse modes in JSON data source") {
-    val schemaOne = StructType(
-      StructField("a", StringType, true) ::
-        StructField("b", StringType, true) ::
-        StructField("c", StringType, true) :: Nil)
-
-    val schemaTwo = StructType(
+  test("Corrupt records: FAILFAST mode") {
+    val schema = StructType(
         StructField("a", StringType, true) :: Nil)
-
     // `FAILFAST` mode should throw an exception for corrupt records.
     val exceptionOne = intercept[SparkException] {
       sqlContext.read
@@ -981,17 +975,25 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .collect()
     }
     assert(exceptionOne.getMessage.contains("Malformed line in FAILFAST mode: {"))
+
     val exceptionTwo = intercept[SparkException] {
       sqlContext.read
         .option("mode", "FAILFAST")
-        .schema(schemaTwo)
+        .schema(schema)
         .json(corruptRecords)
         .collect()
     }
     assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode: {"))
+  }
 
+  test("Corrupt records: DROPMALFORMED mode") {
+    val schemaOne = StructType(
+      StructField("a", StringType, true) ::
+        StructField("b", StringType, true) ::
+        StructField("c", StringType, true) :: Nil)
+    val schemaTwo = StructType(
+      StructField("a", StringType, true) :: Nil)
     // `DROPMALFORMED` mode should skip corrupt records
-    // For `PERMISSIVE` mode, it is tested in "Corrupt records" test.
     val jsonDFOne = sqlContext.read
       .option("mode", "DROPMALFORMED")
       .json(corruptRecords)
@@ -1011,7 +1013,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(jsonDFTwo.schema === schemaTwo)
   }
 
-  test("Corrupt records") {
+  test("Corrupt records: PERMISSIVE mode") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       withTempTable("jsonTable") {
