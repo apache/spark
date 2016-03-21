@@ -192,7 +192,7 @@ private[sql] object SQLMetrics {
   def createTimingMetric(sc: SparkContext, name: String): LongSQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
     // duration(min, med, max):
-    // 1s (800msMB, 1s, 2s)
+    // 5s (800ms, 1s, 2s)
     createLongMetric(sc, s"$name total (min, med, max)", StatisticsTimingSQLMetricParam)
   }
 
