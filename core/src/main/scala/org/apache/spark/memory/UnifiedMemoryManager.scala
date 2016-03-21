@@ -131,26 +131,28 @@ private[spark] class UnifiedMemoryManager private[memory] (
     }
   }
 
-  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
-    assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
-    assert(numBytes >= 0)
-    if (numBytes > maxStorageMemory) {
-      // Fail fast if the block simply won't fit
-      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
-        s"memory limit ($maxStorageMemory bytes)")
-      return false
-    }
-    if (numBytes > storageMemoryPool.memoryFree) {
-      // There is not enough free memory in the storage pool, so try to borrow free memory from
-      // the execution pool.
-      val memoryBorrowedFromExecution = Math.min(onHeapExecutionMemoryPool.memoryFree, numBytes)
-      onHeapExecutionMemoryPool.decrementPoolSize(memoryBorrowedFromExecution)
-      storageMemoryPool.incrementPoolSize(memoryBorrowedFromExecution)
+  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = {
+    synchronized {
+      assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
+      assert(numBytes >= 0)
+      if (numBytes > maxStorageMemory) {
+        // Fail fast if the block simply won't fit
+        logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
+          s"memory limit ($maxStorageMemory bytes)")
+        return false
+      }
+      if (numBytes > storageMemoryPool.memoryFree) {
+        // There is not enough free memory in the storage pool, so try to borrow free memory from
+        // the execution pool.
+        val memoryBorrowedFromExecution = Math.min(onHeapExecutionMemoryPool.memoryFree, numBytes)
+        onHeapExecutionMemoryPool.decrementPoolSize(memoryBorrowedFromExecution)
+        storageMemoryPool.incrementPoolSize(memoryBorrowedFromExecution)
+      }
     }
     storageMemoryPool.acquireMemory(blockId, numBytes)
   }
 
-  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
+  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = {
     acquireStorageMemory(blockId, numBytes)
   }
 }
