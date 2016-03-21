@@ -22,6 +22,7 @@ import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
@@ -196,7 +197,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString)
-      val deserialized = blockManager.dataDeserialize[Int](blockId, bytes.nioByteBuffer()).toList
+      val deserialized = blockManager.dataDeserialize[Int](blockId,
+        new ChunkedByteBuffer(bytes.nioByteBuffer())).toList
       assert(deserialized === (1 to 100).toList)
     }
   }
