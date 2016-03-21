@@ -144,7 +144,7 @@ class MLWritable(object):
 
 
 @inherit_doc
-class JavaMLWritable(object):
+class JavaMLWritable(MLWritable):
     """
     (Private) Mixin for ML instances that provide :py:class:`JavaMLWriter`.
     """
@@ -152,10 +152,6 @@ class JavaMLWritable(object):
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
         return JavaMLWriter(self)
-
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
 
 
 @inherit_doc
@@ -178,7 +174,7 @@ class MLReader(object):
 
 
 @inherit_doc
-class JavaMLReader(object):
+class JavaMLReader(MLReader):
     """
     (Private) Specialization of :py:class:`MLReader` for :py:class:`JavaWrapper` types
     """

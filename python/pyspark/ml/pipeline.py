@@ -24,7 +24,7 @@ from pyspark import SparkContext
 from pyspark import since
 from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader, MLWritable, JavaMLReadable, MLReadable
+from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader, MLReadable, MLWritable
 from pyspark.ml.wrapper import JavaWrapper
 from pyspark.mllib.common import inherit_doc
 

@@ -415,7 +415,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
 
 
 @inherit_doc
-class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
+                         JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -481,7 +482,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
 
 
 @inherit_doc
-class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, JavaMLReadable, JavaMLWritable):
+class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, JavaMLReadable,
+                JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1056,7 +1058,8 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
 
 
 @inherit_doc
-class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
+                          JavaMLWritable):
     """
     .. note:: Experimental
 

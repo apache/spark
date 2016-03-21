@@ -113,8 +113,7 @@ class JavaWrapper(Params):
         Given a Java object, create and return a Python wrapper of it.
         Used for ML persistence.
 
-        For meta-algorithms, this method should be overridden as a classmethod.
-        See Pipeline or PipelineModel for examples.
+        Meta-algorithms such as Pipeline should override this method as a classmethod.
         """
         def __get_class(clazz):
             """
