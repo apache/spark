@@ -689,7 +689,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       offset += keyLength;
       Platform.copyMemory(valueBase, valueOffset, base, offset, valueLength);
 
-      // --- Update bookkeeping data structures -----------------------------------------------------
+      // --- Update bookkeeping data structures ----------------------------------------------------
       offset = currentPage.getBaseOffset();
       Platform.putInt(base, offset, Platform.getInt(base, offset) + 1);
       pageCursor += recordLength;
