@@ -198,7 +198,7 @@ private[ml] object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val firstTree = new DecisionTreeRegressor()
+    val firstTree = new DecisionTreeRegressor().setSeed(seed)
     val firstTreeModel = firstTree.train(input, treeStrategy)
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel

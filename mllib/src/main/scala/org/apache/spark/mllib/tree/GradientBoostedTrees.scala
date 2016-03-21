@@ -49,8 +49,13 @@ import org.apache.spark.storage.StorageLevel
  * @param boostingStrategy Parameters for the gradient boosting algorithm.
  */
 @Since("1.2.0")
-class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: BoostingStrategy)
+class GradientBoostedTrees @Since("2.0.0") (
+      private val boostingStrategy: BoostingStrategy,
+      seed: Int)
   extends Serializable with Logging {
+
+  @Since("1.2.0")
+  def this(boostingStrategy: BoostingStrategy) = this(boostingStrategy, 0)
 
   /**
    * Method to train a gradient boosting model
@@ -63,11 +68,12 @@ class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: Boosti
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case Regression =>
-        GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false)
+        GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false, seed)
       case Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
-        GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false)
+        GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false,
+          seed)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -99,7 +105,7 @@ class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: Boosti
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case Regression =>
-        GradientBoostedTrees.boost(input, validationInput, boostingStrategy, validate = true)
+        GradientBoostedTrees.boost(input, validationInput, boostingStrategy, validate = true, seed)
       case Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(
@@ -107,7 +113,7 @@ class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: Boosti
         val remappedValidationInput = validationInput.map(
           x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedValidationInput, boostingStrategy,
-          validate = true)
+          validate = true, seed)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -134,13 +140,33 @@ object GradientBoostedTrees extends Logging {
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
    * @param boostingStrategy Configuration options for the boosting algorithm.
+   * @param seed Random seed.
    * @return GradientBoostedTreesModel that can be used for prediction.
    */
+  @Since("2.0.0")
+  def train(
+      input: RDD[LabeledPoint],
+      boostingStrategy: BoostingStrategy,
+      seed: Int): GradientBoostedTreesModel = {
+    new GradientBoostedTrees(boostingStrategy, seed).run(input)
+  }
+
+  /**
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees$#train]]
+   */
+  @Since("2.0.0")
+  def train(
+      input: JavaRDD[LabeledPoint],
+      boostingStrategy: BoostingStrategy,
+      seed: Int): GradientBoostedTreesModel = {
+    train(input.rdd, boostingStrategy, seed)
+  }
+
   @Since("1.2.0")
   def train(
       input: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
-    new GradientBoostedTrees(boostingStrategy).run(input)
+    train(input, boostingStrategy, 0)
   }
 
   /**
@@ -165,7 +191,8 @@ object GradientBoostedTrees extends Logging {
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy,
-      validate: Boolean): GradientBoostedTreesModel = {
+      validate: Boolean,
+      seed: Int): GradientBoostedTreesModel = {
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
@@ -207,7 +234,7 @@ object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val firstTreeModel = new DecisionTree(treeStrategy).run(input)
+    val firstTreeModel = new DecisionTree(treeStrategy, seed).run(input)
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = firstTreeWeight
@@ -238,7 +265,7 @@ object GradientBoostedTrees extends Logging {
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
-      val model = new DecisionTree(treeStrategy).run(data)
+      val model = new DecisionTree(treeStrategy, seed + m).run(data)
       timer.stop(s"building tree $m")
       // Update partial model
       baseLearners(m) = model

@@ -97,7 +97,6 @@ final class GBTClassifier @Since("1.4.0") (
 
   @Since("1.4.0")
   override def setSeed(value: Long): this.type = {
-    logWarning("The 'seed' parameter is currently ignored by Gradient Boosting.")
     super.setSeed(value)
   }
 

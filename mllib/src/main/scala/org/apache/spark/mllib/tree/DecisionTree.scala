@@ -45,8 +45,11 @@ import org.apache.spark.util.random.XORShiftRandom
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
  */
 @Since("1.0.0")
-class DecisionTree @Since("1.0.0") (private val strategy: Strategy)
+class DecisionTree @Since("2.0.0") (private val strategy: Strategy, private val seed: Int)
   extends Serializable with Logging {
+
+  @Since("1.0.0")
+  def this(strategy: Strategy) = this(strategy, 0)
 
   strategy.assertValid()
 
@@ -59,7 +62,7 @@ class DecisionTree @Since("1.0.0") (private val strategy: Strategy)
   @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
     // Note: random seed will not be used since numTrees = 1.
-    val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = 0)
+    val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = seed.toInt)
     val rfModel = rf.run(input)
     rfModel.trees(0)
   }
