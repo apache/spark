@@ -1381,7 +1381,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
     val df2 = df.filter($"i" > 0)
 
-    intercept[AnalysisException](df.join(df2, (df("i") + 1) === df2("i")))
+    val err = intercept[AnalysisException](df.join(df2, (df("i") + 1) === df2("i")))
+    assert(err.message.contains("please eliminate ambiguity from the inputs first"))
 
     val namedDf = df.as("x")
     val namedDf2 = df2.as("y")

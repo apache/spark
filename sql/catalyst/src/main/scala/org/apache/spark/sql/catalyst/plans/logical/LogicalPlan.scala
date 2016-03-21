@@ -257,9 +257,17 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
       // More than one match.
       case ambiguousReferences =>
-        val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
-        throw new AnalysisException(
-          s"Reference '$name' is ambiguous, could be: $referenceNames.")
+        val qualifiers = ambiguousReferences.flatMap(_._1.qualifiers)
+        if (qualifiers.nonEmpty && qualifiers.distinct.length == qualifiers.length) {
+          throw new AnalysisException(s"Reference '$name' is ambiguous, please add a qualifier " +
+            s"to distinguish it, e.g. '${qualifiers.head}.$name', available qualifiers: " +
+            qualifiers.mkString(", "))
+        } else {
+          val qualifiedNames = ambiguousReferences.map(_._1.qualifiedName).mkString(", ")
+          throw new AnalysisException(
+            s"Input Attributes $qualifiedNames are ambiguous, please eliminate ambiguity " +
+            "from the inputs first, e.g. alias the left and right plan before join them.")
+        }
     }
   }
 }
