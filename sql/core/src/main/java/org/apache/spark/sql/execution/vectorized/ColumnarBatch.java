@@ -168,7 +168,7 @@ public final class ColumnarBatch {
     }
 
     @Override
-    public boolean isNullAt(int ordinal) { return columns[ordinal].getIsNull(rowId); }
+    public boolean isNullAt(int ordinal) { return columns[ordinal].isNullAt(rowId); }
 
     @Override
     public boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
@@ -295,7 +295,7 @@ public final class ColumnarBatch {
     for (int ordinal : nullFilteredColumns) {
       if (columns[ordinal].numNulls != 0) {
         for (int rowId = 0; rowId < numRows; rowId++) {
-          if (!filteredRows[rowId] && columns[ordinal].getIsNull(rowId)) {
+          if (!filteredRows[rowId] && columns[ordinal].isNullAt(rowId)) {
             filteredRows[rowId] = true;
             ++numRowsFiltered;
           }
