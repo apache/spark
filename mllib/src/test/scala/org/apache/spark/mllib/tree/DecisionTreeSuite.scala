@@ -122,10 +122,8 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
-    val stats = rootNode.stats.get
-    assert(stats.gain === Double.MinValue)
-    assert(stats.leftImpurity === -1)
-    assert(stats.rightImpurity === -1)
+    assert(rootNode.impurity === 0)
+    assert(rootNode.stats.isEmpty)
   }
 
   test("Binary classification stump with fixed label 1 for Gini") {
@@ -140,10 +138,8 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
-    val stats = rootNode.stats.get
-    assert(stats.gain === Double.MinValue)
-    assert(stats.leftImpurity === -1)
-    assert(stats.rightImpurity === -1)
+    assert(rootNode.impurity === 0)
+    assert(rootNode.stats.isEmpty)
     assert(rootNode.predict.predict === 1)
   }
 
@@ -159,10 +155,8 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
-    val stats = rootNode.stats.get
-    assert(stats.gain === Double.MinValue)
-    assert(stats.leftImpurity === -1)
-    assert(stats.rightImpurity === -1)
+    assert(rootNode.impurity === 0)
+    assert(rootNode.stats.isEmpty)
     assert(rootNode.predict.predict === 0)
   }
 
@@ -178,10 +172,8 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
-    val stats = rootNode.stats.get
-    assert(stats.gain === Double.MinValue)
-    assert(stats.leftImpurity === -1)
-    assert(stats.rightImpurity === -1)
+    assert(rootNode.impurity === 0)
+    assert(rootNode.stats.isEmpty)
     assert(rootNode.predict.predict === 1)
   }
 
@@ -363,8 +355,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     // test when no valid split can be found
     val rootNode = model.topNode
 
-    val gain = rootNode.stats.get
-    assert(gain == InformationGainStats.invalidInformationGainStats)
+    assert(rootNode.stats.isEmpty)
   }
 
   test("do not choose split that does not satisfy min instance per node requirements") {
@@ -408,10 +399,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     // test when no valid split can be found
-    val rootNode = model.topNode
-
-    val gain = rootNode.stats.get
-    assert(gain == InformationGainStats.invalidInformationGainStats)
+    assert(model.topNode.stats.isEmpty)
   }
 
   /////////////////////////////////////////////////////////////////////////////

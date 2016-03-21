@@ -136,8 +136,7 @@ final class LeafNode private[ml] (
 
   override private[ml] def toOld(id: Int): OldNode = {
     new OldNode(id, new OldPredict(prediction, prob = impurityStats.prob(prediction)),
-      impurity, isLeaf = true, None, None, None,
-      Some(OldInformationGainStats.invalidInformationGainStats))
+      impurity, isLeaf = true, None, None, None, None)
   }
 
   override private[ml] def maxSplitFeatureIndex(): Int = -1
