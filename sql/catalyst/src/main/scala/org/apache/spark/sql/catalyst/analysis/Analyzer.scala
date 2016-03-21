@@ -600,7 +600,10 @@ class Analyzer(
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
-  private def resolveExpression(expr: Expression, plan: LogicalPlan, throws: Boolean = false) = {
+  protected[sql] def resolveExpression(
+      expr: Expression,
+      plan: LogicalPlan,
+      throws: Boolean = false) = {
     // Resolve expression in one round.
     // If throws == false or the desired attribute doesn't exist
     // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.

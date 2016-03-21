@@ -110,7 +110,12 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override def dataType: DataType = childSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
-  override def toString: String = s"$child.${name.getOrElse(childSchema(ordinal).name)}"
+
+  override def toString: String = {
+    val fieldName = if (resolved) childSchema(ordinal).name else s"_$ordinal"
+    s"$child.${name.getOrElse(fieldName)}"
+  }
+
   override def sql: String =
     child.sql + s".${quoteIdentifier(name.getOrElse(childSchema(ordinal).name))}"
 
