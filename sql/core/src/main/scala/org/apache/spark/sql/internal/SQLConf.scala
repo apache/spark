@@ -435,6 +435,11 @@ object SQLConf {
     defaultValue = Some(true),
     doc = "When false, we will treat bucketed table as normal table.")
 
+  val ORDER_BY_ORDINAL = booleanConf("spark.sql.orderByOrdinal",
+    defaultValue = Some(true),
+    doc = "When true, the ordinal numbers are treated as the position in the select list. " +
+          "When false, the ordinal numbers in order/sort By clause are ignored.")
+
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   //
@@ -633,6 +638,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def supportQuotedId: Boolean = getConf(PARSER_SUPPORT_QUOTEDID)
 
   def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
+
+  override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   /** ********************** SQLConf functionality methods ************ */
 

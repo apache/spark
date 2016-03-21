@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 trait AnalysisTest extends PlanTest {
 
   val (caseSensitiveAnalyzer, caseInsensitiveAnalyzer) = {
-    val caseSensitiveConf = new SimpleCatalystConf(true)
-    val caseInsensitiveConf = new SimpleCatalystConf(false)
+    val caseSensitiveConf = new SimpleCatalystConf(caseSensitiveAnalysis = true)
+    val caseInsensitiveConf = new SimpleCatalystConf(caseSensitiveAnalysis = false)
 
     val caseSensitiveCatalog = new SimpleCatalog(caseSensitiveConf)
     val caseInsensitiveCatalog = new SimpleCatalog(caseInsensitiveConf)

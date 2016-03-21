@@ -21,6 +21,8 @@ import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
@@ -2153,6 +2155,47 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.select(hash($"i", $"j")),
         sql("SELECT hash(i, j) from tbl")
       )
+    }
+  }
+
+  test("order by ordinal number") {
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC"),
+      sql("SELECT * FROM testData2 ORDER BY a DESC"))
+    // If the position is not an integer, ignore it.
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 + 0 DESC, b ASC"),
+      sql("SELECT * FROM testData2 ORDER BY b ASC"))
+
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
+      sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 SORT BY 1 DESC, 2"),
+      sql("SELECT * FROM testData2 SORT BY a DESC, b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 ASC, b ASC"),
+      Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
+  }
+
+  test("order by ordinal number - negative cases") {
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 0")
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY -1 DESC, b ASC")
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 3 DESC, b ASC")
+    }
+  }
+
+  test("order by ordinal number with conf spark.sql.orderByOrdinal=false") {
+    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
+      // If spark.sql.orderByOrdinal=false, ignore the position number.
+      checkAnswer(
+        sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
+        sql("SELECT * FROM testData2 ORDER BY b ASC"))
     }
   }
 
