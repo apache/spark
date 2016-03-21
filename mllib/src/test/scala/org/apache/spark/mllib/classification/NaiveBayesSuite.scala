@@ -108,8 +108,6 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     try {
       for (i <- modelIndex) {
         assert(math.exp(piData(i._2)) ~== math.exp(model.pi(i._1)) absTol 0.05)
-      }
-      for (i <- modelIndex) {
         for (j <- thetaData(i._2).indices) {
           assert(math.exp(thetaData(i._2)(j)) ~== math.exp(model.theta(i._1)(j)) absTol 0.05)
         }
@@ -117,13 +115,13 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     } catch {
       case e: TestFailedException =>
         def arr2str(a: Array[Double]): String = a.mkString("[", ", ", "]")
-        val msg = "\nvalidateModelFit:\n" +
+        def msg(orig: String): String = orig + "\nvalidateModelFit:\n" +
           " piData: " + arr2str(piData) + "\n" +
           " thetaData: " + thetaData.map(arr2str).mkString("\n") + "\n" +
           " model.labels: " + arr2str(model.labels) + "\n" +
           " model.pi: " + arr2str(model.pi) + "\n" +
           " model.theta: " + model.theta.map(arr2str).mkString("\n")
-        throw e.modifyMessage(origMsg => origMsg.map(_ + msg))
+        throw e.modifyMessage(_.map(msg))
     }
   }
 
