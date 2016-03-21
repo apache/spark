@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
@@ -71,9 +72,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("Read/write binary data") {
-    withOrcFile(BinaryData("test".getBytes("utf8")) :: Nil) { file =>
+    withOrcFile(BinaryData("test".getBytes(StandardCharsets.UTF_8)) :: Nil) { file =>
       val bytes = read.orc(file).head().getAs[Array[Byte]](0)
-      assert(new String(bytes, "utf8") === "test")
+      assert(new String(bytes, StandardCharsets.UTF_8) === "test")
     }
   }
 
@@ -221,7 +222,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    catalog.unregisterTable(TableIdentifier("tmp"))
+    sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
   }
 
   test("overwriting") {
@@ -231,7 +232,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    catalog.unregisterTable(TableIdentifier("tmp"))
+    sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
   }
 
   test("self-join") {
@@ -348,7 +349,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  ignore("SPARK-10623 Enable ORC PPD") {
+  test("SPARK-10623 Enable ORC PPD") {
     withTempPath { dir =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         import testImplicits._
@@ -363,7 +364,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           val nullValue: Option[String] = None
           (maybeInt, nullValue)
         }
-        createDataFrame(data).toDF("a", "b").write.orc(path)
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a", "b").repartition(10).write.orc(path)
         val df = sqlContext.read.orc(path)
 
         def checkPredicate(pred: Column, answer: Seq[Row]): Unit = {

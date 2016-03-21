@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
+import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
@@ -114,59 +115,23 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
+  override lazy val canonicalized: LogicalPlan = EliminateSubqueryAliases(this)
+
   /**
-   * Returns true when the given logical plan will return the same results as this logical plan.
-   *
-   * Since its likely undecidable to generally determine if two given plans will produce the same
-   * results, it is okay for this function to return false, even if the results are actually
-   * the same.  Such behavior will not affect correctness, only the application of performance
-   * enhancements like caching.  However, it is not acceptable to return true if the results could
-   * possibly be different.
-   *
-   * By default this function performs a modified version of equality that is tolerant of cosmetic
-   * differences like attribute naming and or expression id differences.  Logical operators that
-   * can do better should override this function.
+   * Resolves a given schema to concrete [[Attribute]] references in this query plan. This function
+   * should only be called on analyzed plans since it will throw [[AnalysisException]] for
+   * unresolved [[Attribute]]s.
    */
-  def sameResult(plan: LogicalPlan): Boolean = {
-    val cleanLeft = EliminateSubqueryAliases(this)
-    val cleanRight = EliminateSubqueryAliases(plan)
-
-    cleanLeft.getClass == cleanRight.getClass &&
-      cleanLeft.children.size == cleanRight.children.size && {
-      logDebug(
-        s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
-      cleanRight.cleanArgs == cleanLeft.cleanArgs
-    } &&
-    (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
-  }
-
-  /** Args that have cleaned such that differences in expression id should not affect equality */
-  protected lazy val cleanArgs: Seq[Any] = {
-    val input = children.flatMap(_.output)
-    def cleanExpression(e: Expression) = e match {
-      case a: Alias =>
-        // As the root of the expression, Alias will always take an arbitrary exprId, we need
-        // to erase that for equality testing.
-        val cleanedExprId =
-          Alias(a.child, a.name)(ExprId(-1), a.qualifiers, isGenerated = a.isGenerated)
-        BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
-      case other => BindReferences.bindReference(other, input, allowFailures = true)
+  def resolve(schema: StructType, resolver: Resolver): Seq[Attribute] = {
+    schema.map { field =>
+      resolveQuoted(field.name, resolver).map {
+        case a: AttributeReference => a
+        case other => sys.error(s"can not handle nested schema yet...  plan $this")
+      }.getOrElse {
+        throw new AnalysisException(
+          s"Unable to resolve ${field.name} given [${output.map(_.name).mkString(", ")}]")
+      }
     }
-
-    productIterator.map {
-      // Children are checked using sameResult above.
-      case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => cleanExpression(e)
-      case s: Option[_] => s.map {
-        case e: Expression => cleanExpression(e)
-        case other => other
-      }
-      case s: Seq[_] => s.map {
-        case e: Expression => cleanExpression(e)
-        case other => other
-      }
-      case other => other
-    }.toSeq
   }
 
   /**

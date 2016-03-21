@@ -25,7 +25,8 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._

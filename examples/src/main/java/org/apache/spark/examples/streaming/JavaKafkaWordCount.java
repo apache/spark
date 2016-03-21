@@ -69,7 +69,7 @@ public final class JavaKafkaWordCount {
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, new Duration(2000));
 
     int numThreads = Integer.parseInt(args[3]);
-    Map<String, Integer> topicMap = new HashMap<String, Integer>();
+    Map<String, Integer> topicMap = new HashMap<>();
     String[] topics = args[2].split(",");
     for (String topic: topics) {
       topicMap.put(topic, numThreads);
@@ -96,7 +96,7 @@ public final class JavaKafkaWordCount {
       new PairFunction<String, String, Integer>() {
         @Override
         public Tuple2<String, Integer> call(String s) {
-          return new Tuple2<String, Integer>(s, 1);
+          return new Tuple2<>(s, 1);
         }
       }).reduceByKey(new Function2<Integer, Integer, Integer>() {
         @Override

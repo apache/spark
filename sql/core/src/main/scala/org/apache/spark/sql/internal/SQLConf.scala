@@ -24,7 +24,7 @@ import scala.collection.immutable
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
@@ -441,7 +441,7 @@ object SQLConf {
   // NOTE:
   //
   //  1. Instead of SQLConf, this option *must be set in Hadoop Configuration*.
-  //  2. This option can be overriden by "spark.sql.parquet.output.committer.class".
+  //  2. This option can be overridden by "spark.sql.parquet.output.committer.class".
   val OUTPUT_COMMITTER_CLASS =
     stringConf("spark.sql.sources.outputCommitterClass", isPublic = false)
 
@@ -504,6 +504,15 @@ object SQLConf {
       " method",
     isPublic = false)
 
+  val FILES_MAX_PARTITION_BYTES = longConf("spark.sql.files.maxPartitionBytes",
+    defaultValue = Some(128 * 1024 * 1024), // parquet.block.size
+    doc = "The maximum number of bytes to pack into a single partition when reading files.",
+    isPublic = true)
+
+  val EXCHANGE_REUSE_ENABLED = booleanConf("spark.sql.exchange.reuse",
+    defaultValue = Some(true),
+    doc = "When true, the planner will try to find out duplicated exchanges and re-use them",
+    isPublic = false)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -534,6 +543,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   /** ************************ Spark SQL Params/Hints ******************* */
 
+  def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
+
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
@@ -563,6 +574,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
 
@@ -599,7 +612,7 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
-  def bucketingEnabled(): Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+  def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.

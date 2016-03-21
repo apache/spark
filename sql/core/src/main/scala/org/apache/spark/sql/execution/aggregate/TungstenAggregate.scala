@@ -46,6 +46,10 @@ case class TungstenAggregate(
 
   require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
 
+  override lazy val allAttributes: Seq[Attribute] =
+    child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
+      aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -135,7 +139,7 @@ case class TungstenAggregate(
     }
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     if (groupingExpressions.isEmpty) {
       doConsumeWithoutKeys(ctx, input)
     } else {
@@ -460,6 +464,10 @@ case class TungstenAggregate(
     val bufferTerm = ctx.freshName("aggBuffer")
     val outputCode = generateResultCode(ctx, keyTerm, bufferTerm, thisPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
+
+    // The child could change `copyResult` to true, but we had already consumed all the rows,
+    // so `copyResult` should be reset to `false`.
+    ctx.copyResult = false
 
     s"""
      if (!$initAgg) {

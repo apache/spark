@@ -20,8 +20,8 @@ package org.apache.spark.deploy.worker.ui
 import java.io.File
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.RpcUtils

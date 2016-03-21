@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -25,7 +26,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -57,7 +58,7 @@ public class JavaBucketizerSuite {
     StructType schema = new StructType(new StructField[] {
       new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
     });
-    DataFrame dataset = jsql.createDataFrame(
+    Dataset<Row> dataset = jsql.createDataFrame(
       Arrays.asList(
         RowFactory.create(-0.5),
         RowFactory.create(-0.3),
@@ -70,7 +71,7 @@ public class JavaBucketizerSuite {
       .setOutputCol("result")
       .setSplits(splits);
 
-    Row[] result = bucketizer.transform(dataset).select("result").collect();
+    List<Row> result = bucketizer.transform(dataset).select("result").collectAsList();
 
     for (Row r : result) {
       double index = r.getDouble(0);

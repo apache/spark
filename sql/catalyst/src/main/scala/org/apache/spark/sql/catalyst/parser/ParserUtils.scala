@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types._
@@ -29,6 +30,7 @@ import org.apache.spark.sql.types._
 object ParserUtils {
 
   object Token {
+    // Match on (text, children)
     def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
       CurrentOrigin.setPosition(node.line, node.positionInLine)
       node.pattern
@@ -160,7 +162,14 @@ object ParserUtils {
   }
 
   /**
-   * Throw an exception because we cannot parse the given node.
+   * Throw an exception because we cannot parse the given node for some unexpected reason.
+   */
+  def parseFailed(msg: String, node: ASTNode): Nothing = {
+    throw new AnalysisException(s"$msg: '${node.source}")
+  }
+
+  /**
+   * Throw an exception because there are no rules to parse the node.
    */
   def noParseRule(msg: String, node: ASTNode): Nothing = {
     throw new NotImplementedError(

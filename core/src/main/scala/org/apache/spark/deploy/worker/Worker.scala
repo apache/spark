@@ -29,12 +29,13 @@ import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Random, Success}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -373,6 +374,11 @@ private[deploy] class Worker(
             }
           }, CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
         }
+
+        val execs = executors.values.map { e =>
+          new ExecutorDescription(e.appId, e.execId, e.cores, e.state)
+        }
+        masterRef.send(WorkerLatestState(workerId, execs.toList, drivers.keys.toSeq))
 
       case RegisterWorkerFailed(message) =>
         if (!registered) {

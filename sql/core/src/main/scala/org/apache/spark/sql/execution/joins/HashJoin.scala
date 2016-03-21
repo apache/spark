@@ -46,8 +46,8 @@ trait HashJoin {
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
-      case FullOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
+      case LeftSemi =>
+        left.output
       case x =>
         throw new IllegalArgumentException(s"HashJoin should not take $x as the JoinType")
     }
@@ -104,7 +104,7 @@ trait HashJoin {
     keyExpr :: Nil
   }
 
-  protected val canJoinKeyFitWithinLong: Boolean = {
+  protected lazy val canJoinKeyFitWithinLong: Boolean = {
     val sameTypes = buildKeys.map(_.dataType) == streamedKeys.map(_.dataType)
     val key = rewriteKeyExpr(buildKeys)
     sameTypes && key.length == 1 && key.head.dataType.isInstanceOf[LongType]
@@ -257,5 +257,22 @@ trait HashJoin {
       }
     }
     ret.iterator
+  }
+
+  protected def hashSemiJoin(
+    streamIter: Iterator[InternalRow],
+    hashedRelation: HashedRelation,
+    numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+    val joinKeys = streamSideKeyGenerator
+    val joinedRow = new JoinedRow
+    streamIter.filter { current =>
+      val key = joinKeys(current)
+      lazy val rowBuffer = hashedRelation.get(key)
+      val r = !key.anyNull && rowBuffer != null && (condition.isEmpty || rowBuffer.exists {
+        (row: InternalRow) => boundCondition(joinedRow(current, row))
+      })
+      if (r) numOutputRows += 1
+      r
+    }
   }
 }

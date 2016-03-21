@@ -31,8 +31,8 @@ import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, Outp
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
-import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -111,7 +111,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister {
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      inputFiles: Array[FileStatus],
+      inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
     val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
@@ -161,7 +161,14 @@ private[orc] class OrcOutputWriter(
     val taskAttemptId = context.getTaskAttemptID
     val partition = taskAttemptId.getTaskID.getId
     val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString.orc"
+    val compressionExtension = {
+      val name = conf.get(OrcTableProperties.COMPRESSION.getPropName)
+      OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
+    }
+    // It has the `.orc` extension at the end because (de)compression tools
+    // such as gunzip would not be able to decompress this as the compression
+    // is not applied on this whole file but on each "stream" in ORC format.
+    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString$compressionExtension.orc"
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),
@@ -214,7 +221,7 @@ private[orc] case class OrcTableScan(
     @transient sqlContext: SQLContext,
     attributes: Seq[Attribute],
     filters: Array[Filter],
-    @transient inputPaths: Array[FileStatus])
+    @transient inputPaths: Seq[FileStatus])
   extends Logging
   with HiveInspectors {
 
@@ -328,5 +335,13 @@ private[orc] object OrcRelation {
     "snappy" -> CompressionKind.SNAPPY,
     "zlib" -> CompressionKind.ZLIB,
     "lzo" -> CompressionKind.LZO)
+
+  // The extensions for ORC compression codecs
+  val extensionsForCompressionCodecNames = Map(
+    CompressionKind.NONE.name -> "",
+    CompressionKind.SNAPPY.name -> ".snappy",
+    CompressionKind.ZLIB.name -> ".zlib",
+    CompressionKind.LZO.name -> ".lzo"
+  )
 }
 

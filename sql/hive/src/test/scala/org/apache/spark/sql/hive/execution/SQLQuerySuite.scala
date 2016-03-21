@@ -264,6 +264,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(
       sql("SELECT ints FROM nestedArray LATERAL VIEW explode(a.b) a AS ints"),
       Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    checkAnswer(
+      sql("SELECT `ints` FROM nestedArray LATERAL VIEW explode(a.b) `a` AS `ints`"),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    checkAnswer(
+      sql("SELECT `a`.`ints` FROM nestedArray LATERAL VIEW explode(a.b) `a` AS `ints`"),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT `weird``tab`.`weird``col`
+          |FROM nestedArray
+          |LATERAL VIEW explode(a.b) `weird``tab` AS `weird``col`
+        """.stripMargin),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
   test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
@@ -275,7 +292,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("CTAS without serde") {
     def checkRelation(tableName: String, isDataSourceParquet: Boolean): Unit = {
-      val relation = EliminateSubqueryAliases(catalog.lookupRelation(TableIdentifier(tableName)))
+      val relation = EliminateSubqueryAliases(
+        sessionState.catalog.lookupRelation(TableIdentifier(tableName)))
       relation match {
         case LogicalRelation(r: HadoopFsRelation, _, _) =>
           if (!isDataSourceParquet) {
@@ -703,7 +721,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     (1 to 100).par.map { i =>
       val tableName = s"SPARK_6618_table_$i"
       sql(s"CREATE TABLE $tableName (col1 string)")
-      catalog.lookupRelation(TableIdentifier(tableName))
+      sessionState.catalog.lookupRelation(TableIdentifier(tableName))
       table(tableName)
       tables()
       sql(s"DROP TABLE $tableName")
@@ -1407,7 +1425,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("run sql directly on files") {
-    val df = sqlContext.range(100)
+    val df = sqlContext.range(100).toDF()
     withTempPath(f => {
       df.write.parquet(f.getCanonicalPath)
       checkAnswer(sql(s"select id from parquet.`${f.getCanonicalPath}`"),
@@ -1564,7 +1582,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         withView("v") {
           sql("CREATE VIEW v AS SELECT * FROM add_col")
           sqlContext.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("add_col")
-          checkAnswer(sql("SELECT * FROM v"), sqlContext.range(10))
+          checkAnswer(sql("SELECT * FROM v"), sqlContext.range(10).toDF())
         }
       }
     }
@@ -1758,5 +1776,34 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         |SELECT json_tuple(json, 'f1', 'f2'), 3.14, str
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json, 'hello' as str) test
       """.stripMargin), Row("value1", "12", BigDecimal("3.14"), "hello"))
+  }
+
+  test("multi-insert with lateral view") {
+    withTempTable("t1") {
+      sqlContext.range(10)
+        .select(array($"id", $"id" + 1).as("arr"), $"id")
+        .registerTempTable("source")
+      withTable("dest1", "dest2") {
+        sql("CREATE TABLE dest1 (i INT)")
+        sql("CREATE TABLE dest2 (i INT)")
+        sql(
+          """
+            |FROM source
+            |INSERT OVERWRITE TABLE dest1
+            |SELECT id
+            |WHERE id > 3
+            |INSERT OVERWRITE TABLE dest2
+            |select col LATERAL VIEW EXPLODE(arr) exp AS col
+            |WHERE col > 3
+          """.stripMargin)
+
+        checkAnswer(
+          sqlContext.table("dest1"),
+          sql("SELECT id FROM source WHERE id > 3"))
+        checkAnswer(
+          sqlContext.table("dest2"),
+          sql("SELECT col FROM source LATERAL VIEW EXPLODE(arr) exp AS col WHERE col > 3"))
+      }
+    }
   }
 }

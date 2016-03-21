@@ -189,6 +189,10 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(bins.length === 2)
     assert(splits(0).length === 3)
     assert(bins(0).length === 0)
+    assert(metadata.numSplits(0) === 3)
+    assert(metadata.numBins(0) === 3)
+    assert(metadata.numSplits(1) === 3)
+    assert(metadata.numBins(1) === 3)
 
     // Expecting 2^2 - 1 = 3 bins/splits
     assert(splits(0)(0).feature === 0)
@@ -1075,7 +1079,7 @@ object DecisionTreeSuite extends SparkFunSuite {
     assert(a.isLeaf === b.isLeaf)
     assert(a.split === b.split)
     (a.stats, b.stats) match {
-      // TODO: Check other fields besides the infomation gain.
+      // TODO: Check other fields besides the information gain.
       case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
       case (None, None) =>
       case _ => throw new AssertionError(

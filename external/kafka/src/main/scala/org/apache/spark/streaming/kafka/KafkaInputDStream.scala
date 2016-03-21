@@ -26,7 +26,7 @@ import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._

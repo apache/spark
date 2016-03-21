@@ -138,7 +138,16 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Partitions the output by the given columns on the file system. If specified, the output is
-   * laid out on the file system similar to Hive's partitioning scheme.
+   * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
+   * partition a dataset by year and then month, the directory layout would look like:
+   *
+   *   - year=2016/month=01/
+   *   - year=2016/month=02/
+   *
+   * Partitioning is one of the most widely used techniques to optimize physical data layout.
+   * It provides a coarse-grained index for skipping unnecessary data reads when queries have
+   * predicates on the partitioned columns. In order for partitioning to work well, the number
+   * of distinct values in each column should typically be less than tens of thousands.
    *
    * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
    *
@@ -206,7 +215,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Specifies the name of the [[ContinuousQuery]] that can be started with `stream()`.
+   * Specifies the name of the [[ContinuousQuery]] that can be started with `startStream()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 2.0.0
@@ -223,8 +232,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def stream(path: String): ContinuousQuery = {
-    option("path", path).stream()
+  def startStream(path: String): ContinuousQuery = {
+    option("path", path).startStream()
   }
 
   /**
@@ -234,7 +243,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def stream(): ContinuousQuery = {
+  def startStream(): ContinuousQuery = {
     val dataSource =
       DataSource(
         df.sqlContext,
@@ -242,7 +251,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         options = extraOptions.toMap,
         partitionColumns = normalizedParCols.getOrElse(Nil))
 
-    df.sqlContext.continuousQueryManager.startQuery(
+    df.sqlContext.sessionState.continuousQueryManager.startQuery(
       extraOptions.getOrElse("queryName", StreamExecution.nextName), df, dataSource.createSink())
   }
 
@@ -255,7 +264,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    insertInto(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
+    insertInto(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
@@ -323,7 +332,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   private def normalize(columnName: String, columnType: String): String = {
     val validColumnNames = df.logicalPlan.output.map(_.name)
-    validColumnNames.find(df.sqlContext.analyzer.resolver(_, columnName))
+    validColumnNames.find(df.sqlContext.sessionState.analyzer.resolver(_, columnName))
       .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
         s"existing columns (${validColumnNames.mkString(", ")})"))
   }
@@ -354,11 +363,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
+    saveAsTable(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    val tableExists = df.sqlContext.catalog.tableExists(tableIdent)
+    val tableExists = df.sqlContext.sessionState.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>

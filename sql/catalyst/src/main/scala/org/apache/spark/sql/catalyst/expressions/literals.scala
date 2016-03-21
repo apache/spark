@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.json4s.JsonAST._
@@ -109,7 +110,7 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case StringType => Literal("")
-    case BinaryType => Literal("".getBytes)
+    case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
@@ -203,7 +204,7 @@ case class Literal protected (value: Any, dataType: DataType)
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].genCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}f"
@@ -212,7 +213,7 @@ case class Literal protected (value: Any, dataType: DataType)
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].genCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}D"
@@ -232,7 +233,7 @@ case class Literal protected (value: Any, dataType: DataType)
           ""
         // eval() version may be faster for non-primitive types
         case other =>
-          super.genCode(ctx, ev)
+          super[CodegenFallback].genCode(ctx, ev)
       }
     }
   }

@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.HashSet
 
-import org.apache.spark.{Accumulator, AccumulatorParam, Logging}
+import org.apache.spark.{Accumulator, AccumulatorParam}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -136,7 +137,7 @@ package object debug {
       child.asInstanceOf[CodegenSupport].produce(ctx, this)
     }
 
-    override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
       consume(ctx, input)
     }
   }
