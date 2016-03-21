@@ -71,10 +71,7 @@ if you may.
 
 Committers:
 
-* [@mistercrunch](https://github.com/mistercrunch) ([Airbnb](http://airbnb.io/))
-* [@r39132](https://github.com/r39132) ([Agari](https://github.com/agaridata))
-* [@criccomini](https://github.com/criccomini) ([WePay](http://www.wepay.com))
-* [@bolkedebruin](https://github.com/bolkedebruin) ([ING](http://www.ing.com/))
+* Refer to [Committers](https://github.com/airbnb/airflow/wiki/Committers)
 
 Currently **officially** using Airflow:
 
