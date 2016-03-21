@@ -34,15 +34,6 @@ import org.apache.spark.sql.hive.execution.HiveScriptIOSchema
 import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
 
 /**
- * A place holder for generated SQL for subquery expression.
- */
-case class SubqueryHolder(query: String) extends LeafExpression with Unevaluable {
-  override def dataType: DataType = NullType
-  override def nullable: Boolean = true
-  override def sql: String = s"($query)"
-}
-
-/**
  * A builder class used to convert a resolved logical plan into a SQL query string.  Note that not
  * all resolved logical plan are convertible.  They either don't have corresponding SQL
  * representations (e.g. logical plans that operate on local Scala collections), or are simply not
@@ -529,5 +520,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
       case _ => None
     }
+  }
+
+  /**
+   * A place holder for generated SQL for subquery expression.
+   */
+  case class SubqueryHolder(query: String) extends LeafExpression with Unevaluable {
+    override def dataType: DataType = NullType
+    override def nullable: Boolean = true
+    override def sql: String = s"($query)"
   }
 }
