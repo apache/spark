@@ -24,6 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -200,5 +201,17 @@ object Unions {
         case other => collectUnionChildren(plans, children :+ other)
       }
     }
+  }
+}
+
+/**
+ * Extractor for retrieving Int value.
+ */
+object IntegerIndex {
+  def unapply(a: Any): Option[Int] = a match {
+    case Literal(a: Int, IntegerType) => Some(a)
+    // When resolving ordinal in Sort, negative values are extracted for issuing error messages.
+    case UnaryMinus(IntegerLiteral(v)) => Some(-v)
+    case _ => None
   }
 }
