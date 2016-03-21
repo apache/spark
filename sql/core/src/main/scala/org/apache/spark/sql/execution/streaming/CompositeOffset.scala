@@ -60,12 +60,9 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
    * This method is typically used to associate a serialized offset with actual sources (which
    * cannot be serialized).
    */
-  def toStreamProgress(
-      sources: Seq[Source],
-      dest: StreamProgress = new StreamProgress): StreamProgress = {
+  def toStreamProgress(sources: Seq[Source]): StreamProgress = {
     assert(sources.size == offsets.size)
-    sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }.foreach(dest.update)
-    dest
+    new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
   }
 }
 

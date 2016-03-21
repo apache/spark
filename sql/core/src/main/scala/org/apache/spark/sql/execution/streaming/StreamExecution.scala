@@ -59,13 +59,13 @@ class StreamExecution(
    * Tracks how much data we have processed and committed to the sink or state store from each
    * input source.
    */
-  private[sql] val committedOffsets = new StreamProgress
+  private[sql] var committedOffsets = new StreamProgress
 
   /**
    * Tracks the offsets that are available to be processed, but have not yet be committed to the
    * sink.
    */
-  private val availableOffsets = new StreamProgress
+  private var availableOffsets = new StreamProgress
 
   /** The current batchId or -1 if execution has not yet been initialized. */
   private var currentBatchId: Long = -1
@@ -186,12 +186,12 @@ class StreamExecution(
       case Some((batchId, nextOffsets)) =>
         logInfo(s"Resuming continuous query, starting with batch $batchId")
         currentBatchId = batchId + 1
-        nextOffsets.toStreamProgress(sources, availableOffsets)
+        availableOffsets = nextOffsets.toStreamProgress(sources)
         logDebug(s"Found possibly uncommitted offsets $availableOffsets")
 
         offsetLog.get(batchId - 1).foreach {
           case lastOffsets =>
-            lastOffsets.toStreamProgress(sources, committedOffsets)
+            committedOffsets = lastOffsets.toStreamProgress(sources)
             logDebug(s"Resuming with committed offsets: $committedOffsets")
         }
 
@@ -223,14 +223,13 @@ class StreamExecution(
    * finished and thus this method should only be called when all currently available data
    * has been written to the sink.
    */
-  private def commitAndConstructNextBatch(): Boolean = committedOffsets.synchronized {
+  private def commitAndConstructNextBatch(): Boolean = {
     // Update committed offsets.
-    availableOffsets.foreach(committedOffsets.update)
+    committedOffsets ++= availableOffsets
 
     // Check to see what new data is available.
-    uniqueSources.foreach { source =>
-      source.getOffset.foreach(availableOffsets.update(source, _))
-    }
+    val newData = uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+    availableOffsets ++= newData
 
     if (dataAvailable) {
       logInfo(s"Commiting offsets for batch $currentBatchId.")
@@ -326,9 +325,7 @@ class StreamExecution(
    * least the given `Offset`. This method is indented for use primarily when writing tests.
    */
   def awaitOffset(source: Source, newOffset: Offset): Unit = {
-    def notDone = committedOffsets.synchronized {
-      !committedOffsets.contains(source) || committedOffsets(source) < newOffset
-    }
+    def notDone = !committedOffsets.contains(source) || committedOffsets(source) < newOffset
 
     while (notDone) {
       logInfo(s"Waiting until $newOffset at $source")
