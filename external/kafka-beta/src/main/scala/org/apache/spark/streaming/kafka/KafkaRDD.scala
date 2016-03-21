@@ -17,10 +17,10 @@
 
 package org.apache.spark.streaming.kafka
 
+import java.{ util => ju }
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
-
-import java.{ util => ju }
 
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
@@ -34,7 +34,8 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
  * A batch-oriented interface for consuming from Kafka.
  * Starting and ending offsets are specified in advance,
  * so that you can control exactly-once semantics.
- * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+ * @param kafkaParams Kafka
+ * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
  * configuration parameters</a>. Requires "bootstrap.servers" to be set
  * with Kafka broker(s) specified in host1:port1,host2:port2 form.
  * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD

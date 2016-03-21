@@ -17,13 +17,14 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.annotation.tailrec
-import scala.collection.mutable
-import scala.reflect.ClassTag
-
 import java.{ util => ju }
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
+
+import scala.annotation.tailrec
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
@@ -33,8 +34,6 @@ import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
-
-import scala.collection.JavaConverters._
 
 /**
  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
@@ -56,7 +55,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     preferredHosts: ju.Map[TopicPartition, String],
     executorKafkaParams: ju.Map[String, Object],
     driverConsumer: () => Consumer[K, V]
-  ) extends InputDStream[ConsumerRecord[K,V]](_ssc) with Logging {
+  ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging {
 
   @transient private var kc: Consumer[K, V] = null
   def consumer(): Consumer[K, V] = this.synchronized {
@@ -307,7 +306,7 @@ object DirectKafkaInputDStream extends Logging {
       ssc: StreamingContext,
       preferredHosts: ju.Map[TopicPartition, String],
       executorKafkaParams: ju.Map[String, Object],
-      driverConsumer: () => Consumer[K,V]
+      driverConsumer: () => Consumer[K, V]
     ): DirectKafkaInputDStream[K, V] = {
     val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
     val ekp = new ju.HashMap[String, Object](executorKafkaParams)
