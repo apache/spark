@@ -278,6 +278,14 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
   def refreshTable(name: TableIdentifier): Unit = { /* no-op */ }
 
   /**
+   * Drop all existing temporary tables.
+   * For testing only.
+   */
+  def clearTempTables(): Unit = {
+    tempTables.clear()
+  }
+
+  /**
    * Return a temporary table exactly as it was stored.
    * For testing only.
    */

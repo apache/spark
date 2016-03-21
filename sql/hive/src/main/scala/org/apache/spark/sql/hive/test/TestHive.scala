@@ -478,6 +478,7 @@ class TestHiveContext private[hive](
 
       cacheManager.clearCache()
       loadedTables.clear()
+      sessionState.catalog.clearTempTables()
       sessionState.catalog.invalidateCache()
       metadataHive.reset()
 
