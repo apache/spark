@@ -60,8 +60,8 @@ private[sql] object StateStoreCoordinatorRef extends Logging {
       logInfo("Registered StateStoreCoordinator endpoint")
       new StateStoreCoordinatorRef(coordinatorRef)
     } catch {
-      case e: Exception =>
-        logDebug("Retrieving exitsing StateStoreCoordinator endpoint")
+      case e: IllegalArgumentException =>
+        logDebug("Retrieving existing StateStoreCoordinator endpoint")
         val rpcEndpointRef = RpcUtils.makeDriverRef(endpointName, env.conf, env.rpcEnv)
         new StateStoreCoordinatorRef(rpcEndpointRef)
     }

@@ -83,19 +83,23 @@ trait StateStore {
   def hasCommitted: Boolean
 }
 
-
+/** Trait representing a provider of a specific version of a [[StateStore]]. */
 trait StateStoreProvider {
 
   /** Get the store with the existing version. */
   def getStore(version: Long): StateStore
 
-  /** Optional method for providers to allow for background management */
+  /** Optional method for providers to allow for background maintenance */
   def doMaintenance(): Unit = { }
 }
 
+/** Trait representing updates made to a [[StateStore]]. */
 sealed trait StoreUpdate
+
 case class ValueAdded(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
+
 case class ValueUpdated(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
+
 case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
 
 
@@ -113,9 +117,9 @@ private[state] object StateStore extends Logging {
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
 
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
-  private val managementTimer = new Timer("StateStore Timer", true)
+  private val maintenanceTimer = new Timer("StateStore Timer", true)
 
-  @volatile private var managementTask: TimerTask = null
+  @volatile private var maintenanceTask: TimerTask = null
   @volatile private var _coordRef: StateStoreCoordinatorRef = null
 
   /** Get or create a store associated with the id. */
@@ -151,9 +155,9 @@ private[state] object StateStore extends Logging {
   def stop(): Unit = loadedProviders.synchronized {
     loadedProviders.clear()
     _coordRef = null
-    if (managementTask != null) {
-      managementTask.cancel()
-      managementTask = null
+    if (maintenanceTask != null) {
+      maintenanceTask.cancel()
+      maintenanceTask = null
     }
     logInfo("StateStore stopped")
   }
@@ -161,20 +165,20 @@ private[state] object StateStore extends Logging {
   /** Start the periodic maintenance task if not already started and if Spark active */
   private def startMaintenanceIfNeeded(): Unit = loadedProviders.synchronized {
     val env = SparkEnv.get
-    if (managementTask == null && env != null) {
-      managementTask = new TimerTask {
+    if (maintenanceTask == null && env != null) {
+      maintenanceTask = new TimerTask {
         override def run(): Unit = { doMaintenance() }
       }
       val periodMs = env.conf.getTimeAsMs(
         MAINTENANCE_INTERVAL_CONFIG,
         s"${MAINTENANCE_INTERVAL_DEFAULT_SECS}s")
-      managementTimer.schedule(managementTask, periodMs, periodMs)
+      maintenanceTimer.schedule(maintenanceTask, periodMs, periodMs)
       logInfo("StateStore maintenance timer started")
     }
   }
 
   /**
-   * Execute background management task in all the loaded store providers if they are still
+   * Execute background maintenance task in all the loaded store providers if they are still
    * the active instances according to the coordinator.
    */
   private def doMaintenance(): Unit = {

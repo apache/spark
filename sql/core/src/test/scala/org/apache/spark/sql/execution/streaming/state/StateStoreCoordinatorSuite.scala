@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 
@@ -32,17 +35,23 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       assert(coordinatorRef.getLocation(id) === None)
 
       coordinatorRef.reportActiveInstance(id, "hostX", "exec1")
-      assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === true)
-      assert(coordinatorRef.getLocation(id) ===
-        Some(ExecutorCacheTaskLocation("hostX", "exec1").toString))
+      eventually(timeout(5 seconds)) {
+        assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === true)
+        assert(
+          coordinatorRef.getLocation(id) ===
+            Some(ExecutorCacheTaskLocation("hostX", "exec1").toString))
+      }
 
       coordinatorRef.reportActiveInstance(id, "hostX", "exec2")
-      assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === false)
-      assert(coordinatorRef.verifyIfInstanceActive(id, "exec2") === true)
 
-      assert(
-        coordinatorRef.getLocation(id) ===
-          Some(ExecutorCacheTaskLocation("hostX", "exec2").toString))
+      eventually(timeout(5 seconds)) {
+        assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === false)
+        assert(coordinatorRef.verifyIfInstanceActive(id, "exec2") === true)
+
+        assert(
+          coordinatorRef.getLocation(id) ===
+            Some(ExecutorCacheTaskLocation("hostX", "exec2").toString))
+      }
     }
   }
 
@@ -58,9 +67,12 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       coordinatorRef.reportActiveInstance(id2, host, exec)
       coordinatorRef.reportActiveInstance(id3, host, exec)
 
-      assert(coordinatorRef.verifyIfInstanceActive(id1, exec) === true)
-      assert(coordinatorRef.verifyIfInstanceActive(id2, exec) === true)
-      assert(coordinatorRef.verifyIfInstanceActive(id3, exec) === true)
+      eventually(timeout(5 seconds)) {
+        assert(coordinatorRef.verifyIfInstanceActive(id1, exec) === true)
+        assert(coordinatorRef.verifyIfInstanceActive(id2, exec) === true)
+        assert(coordinatorRef.verifyIfInstanceActive(id3, exec) === true)
+
+      }
 
       coordinatorRef.deactivateInstances("x")
 
@@ -87,11 +99,13 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       val id = StateStoreId("x", 0, 0)
 
       coordRef1.reportActiveInstance(id, "hostX", "exec1")
-      assert(coordRef2.verifyIfInstanceActive(id, "exec1") === true)
-      assert(
-        coordRef2.getLocation(id) ===
-          Some(ExecutorCacheTaskLocation("hostX", "exec1").toString))
 
+      eventually(timeout(5 seconds)) {
+        assert(coordRef2.verifyIfInstanceActive(id, "exec1") === true)
+        assert(
+          coordRef2.getLocation(id) ===
+            Some(ExecutorCacheTaskLocation("hostX", "exec1").toString))
+      }
     }
   }
 }

@@ -214,7 +214,7 @@ private[state] class HDFSBackedStateStoreProvider(
     store
   }
 
-  /** Manage backing files, including creating snapshots and cleaning up old files */
+  /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
     try {
       doSnapshot()
@@ -564,12 +564,12 @@ private[state] class HDFSBackedStateStoreProvider(
   }
 
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
-    val compressed = new LZ4CompressionCodec(new SparkConf).compressedOutputStream(outputStream)
+    val compressed = new LZ4CompressionCodec(sparkConf).compressedOutputStream(outputStream)
     new DataOutputStream(compressed)
   }
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
-    val compressed = new LZ4CompressionCodec(new SparkConf).compressedInputStream(inputStream)
+    val compressed = new LZ4CompressionCodec(sparkConf).compressedInputStream(inputStream)
     new DataInputStream(compressed)
   }
 

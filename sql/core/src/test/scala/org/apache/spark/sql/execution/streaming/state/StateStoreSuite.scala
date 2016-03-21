@@ -279,6 +279,39 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(getDataFromFiles(provider, 19) === Set("a" -> 19))
   }
 
+
+  test("corrupted file handling") {
+    val provider = newStoreProvider(maxDeltaChainForSnapshots = 5)
+    for (i <- 1 to 6) {
+      val store = provider.getStore(i - 1)
+      update(store, "a", i)
+      store.commit()
+      provider.doMaintenance() // do cleanup
+    }
+    val snapshotVersion = (0 to 10).find( version =>
+      fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
+
+    // Corrupt snapshot file and verify that it throws error
+    assert(getDataFromFiles(provider, snapshotVersion) === Set("a" -> snapshotVersion))
+    corruptFile(provider, snapshotVersion, isSnapshot = true)
+    intercept[Exception] {
+      getDataFromFiles(provider, snapshotVersion)
+    }
+
+    // Corrupt delta file and verify that it throws error
+    assert(getDataFromFiles(provider, snapshotVersion - 1) === Set("a" -> (snapshotVersion - 1)))
+    corruptFile(provider, snapshotVersion - 1, isSnapshot = false)
+    intercept[Exception] {
+      getDataFromFiles(provider, snapshotVersion - 1)
+    }
+
+    // Delete delta file and verify that it throws error
+    deleteFilesEarlierThanVersion(provider, snapshotVersion)
+    intercept[Exception] {
+      getDataFromFiles(provider, snapshotVersion - 1)
+    }
+  }
+
   test("StateStore.get") {
     quietly {
       val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
@@ -335,8 +368,9 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
             update(store, "a", i)
             store.commit()
           }
-
-          assert(coordinatorRef.getLocation(storeId).nonEmpty)
+          eventually(timeout(10 seconds)) {
+            assert(coordinatorRef.getLocation(storeId).nonEmpty, "active instance was not reported")
+          }
 
           // Background maintenance should clean up and generate snapshots
           eventually(timeout(10 seconds)) {
@@ -420,9 +454,20 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
         val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
         val filePath = new File(basePath.toString, fileName)
         if (filePath.exists) filePath.delete()
-
       }
     }
+  }
+
+  def corruptFile(
+    provider: HDFSBackedStateStoreProvider,
+    version: Long,
+    isSnapshot: Boolean): Unit = {
+    val method = PrivateMethod[Path]('baseDir)
+    val basePath = provider invokePrivate method()
+    val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
+    val filePath = new File(basePath.toString, fileName)
+    filePath.delete()
+    filePath.createNewFile()
   }
 
   def storeLoaded(storeId: StateStoreId): Boolean = {
