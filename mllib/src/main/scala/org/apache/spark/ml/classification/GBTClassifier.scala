@@ -158,7 +158,8 @@ final class GBTClassifier @Since("1.4.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
-    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy)
+    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
+      $(seed))
     new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 
