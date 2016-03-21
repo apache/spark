@@ -342,6 +342,8 @@ private[sql] class DefaultSource
       sqlContext.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key).toBoolean
 
     (file: PartitionedFile) => {
+      assert(file.partitionValues.numFields == partitionSchema.size)
+
       val fileSplit =
         new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
 

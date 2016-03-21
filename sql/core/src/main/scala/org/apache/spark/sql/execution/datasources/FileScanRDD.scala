@@ -53,7 +53,7 @@ class FileScanRDD(
     extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-    new Iterator[Object] {
+    val iterator = new Iterator[Object] with AutoCloseable {
       private[this] val files = split.asInstanceOf[FilePartition].files.toIterator
       private[this] var currentIterator: Iterator[Object] = null
 
@@ -74,10 +74,15 @@ class FileScanRDD(
         }
       }
 
-      def close() = {
+      override def close() = {
         SqlNewHadoopRDDState.unsetInputFileName()
       }
-    }.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
+    }
+
+    // Register an on-task-completion callback to close the input stream.
+    context.addTaskCompletionListener(context => iterator.close())
+
+    iterator.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
   }
 
   override protected def getPartitions: Array[Partition] = filePartitions.toArray
