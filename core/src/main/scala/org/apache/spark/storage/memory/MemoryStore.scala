@@ -194,11 +194,8 @@ private[spark] class MemoryStore(
       }
       val size = entry.size
       def transferUnrollToStorage(amount: Long): Unit = {
-        // Synchronize so that transfer is atomic
         memoryManager.synchronized {
-          releaseUnrollMemoryForThisTask(amount)
-          val success = memoryManager.acquireStorageMemory(blockId, amount)
-          assert(success, "transferring unroll memory to storage memory failed")
+          unrollMemoryMap(currentTaskAttemptId()) -= amount
         }
       }
       // Acquire storage memory if necessary to store this block in memory.
@@ -402,14 +399,14 @@ private[spark] class MemoryStore(
    * @return whether the request is granted.
    */
   def reserveUnrollMemoryForThisTask(blockId: BlockId, memory: Long): Boolean = {
-    memoryManager.synchronized {
-      val success = memoryManager.acquireUnrollMemory(blockId, memory)
-      if (success) {
-        val taskAttemptId = currentTaskAttemptId()
+    val success = memoryManager.acquireUnrollMemory(blockId, memory)
+    if (success) {
+      val taskAttemptId = currentTaskAttemptId()
+      memoryManager.synchronized {
         unrollMemoryMap(taskAttemptId) = unrollMemoryMap.getOrElse(taskAttemptId, 0L) + memory
       }
-      success
     }
+    success
   }
 
   /**
