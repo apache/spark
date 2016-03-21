@@ -68,15 +68,17 @@ case class ShuffledHashJoin(
     )
 
     val copiedIter = iter.map { row =>
-      // It's hard to guess what's exactly memory will be used, we have a raft guess here.
+      // It's hard to guess what's exactly memory will be used, we have a rough guess here.
       // TODO: use BytesToBytesMap instead of HashMap for memory efficiency
+      // Each pair in HashMap will have two UnsafeRows, one CompactBuffer, maybe 10+ pointers
       val needed = 150 + row.getSizeInBytes
       if (needed > acquired - used) {
         val got = memoryManager.acquireExecutionMemory(
           Math.max(memoryManager.pageSizeBytes(), needed), MemoryMode.ON_HEAP, null)
         if (got < needed) {
           throw new SparkException("Can't acquire enough memory to build hash map in shuffled" +
-            "hash join, please use sort merge join by set spark.sql.join.preferSortMergeJoin=true")
+            "hash join, please use sort merge join by setting " +
+            "spark.sql.join.preferSortMergeJoin=true")
         }
         acquired += got
       }
