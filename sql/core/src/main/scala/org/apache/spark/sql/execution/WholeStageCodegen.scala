@@ -19,16 +19,17 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
 import org.apache.spark.sql.execution.metric.LongSQLMetricValue
+import org.apache.spark.sql.internal.SQLConf
 
 /**
   * An interface for those physical operators that support codegen.
@@ -378,10 +379,15 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
       input: Seq[ExprCode],
       row: String = null): String = {
 
+    val doCopy = if (ctx.copyResult) {
+      ".copy()"
+    } else {
+      ""
+    }
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         |append($row.copy());
+         |append($row$doCopy);
        """.stripMargin.trim
     } else {
       assert(input != null)
@@ -396,7 +402,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
         s"""
            |$evaluateInputs
            |${code.code.trim}
-           |append(${code.value}.copy());
+           |append(${code.value}$doCopy);
          """.stripMargin.trim
       } else {
         // There is no columns
@@ -427,7 +433,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
 /**
   * Find the chained plans that support codegen, collapse them together as WholeStageCodegen.
   */
-private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Rule[SparkPlan] {
+case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def supportCodegen(e: Expression): Boolean = e match {
     case e: LeafExpression => true
@@ -450,7 +456,7 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
    * Inserts a InputAdapter on top of those that do not support codegen.
    */
   private def insertInputAdapter(plan: SparkPlan): SparkPlan = plan match {
-    case j @ SortMergeJoin(_, _, _, left, right) =>
+    case j @ SortMergeJoin(_, _, _, _, left, right) if j.supportCodegen =>
       // The children of SortMergeJoin should do codegen separately.
       j.copy(left = InputAdapter(insertWholeStageCodegen(left)),
         right = InputAdapter(insertWholeStageCodegen(right)))
@@ -472,7 +478,7 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (sqlContext.conf.wholeStageEnabled) {
+    if (conf.wholeStageEnabled) {
       insertWholeStageCodegen(plan)
     } else {
       plan

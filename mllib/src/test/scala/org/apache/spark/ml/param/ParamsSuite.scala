@@ -268,15 +268,10 @@ class ParamsSuite extends SparkFunSuite {
       solver.getParam("abc")
     }
 
-    intercept[IllegalArgumentException] {
-      solver.validateParams()
-    }
-    solver.copy(ParamMap(inputCol -> "input")).validateParams()
     solver.setInputCol("input")
     assert(solver.isSet(inputCol))
     assert(solver.isDefined(inputCol))
     assert(solver.getInputCol === "input")
-    solver.validateParams()
     intercept[IllegalArgumentException] {
       ParamMap(maxIter -> -10)
     }

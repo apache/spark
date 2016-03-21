@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.vectorized
 
+import java.nio.charset.StandardCharsets
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
@@ -329,18 +331,21 @@ class ColumnarBatchSuite extends SparkFunSuite {
       var idx = 0
 
       val values = ("Hello" :: "abc" :: Nil).toArray
-      column.putByteArray(idx, values(0).getBytes, 0, values(0).getBytes().length)
+      column.putByteArray(idx, values(0).getBytes(StandardCharsets.UTF_8),
+        0, values(0).getBytes(StandardCharsets.UTF_8).length)
       reference += values(0)
       idx += 1
       assert(column.arrayData().elementsAppended == 5)
 
-      column.putByteArray(idx, values(1).getBytes, 0, values(1).getBytes().length)
+      column.putByteArray(idx, values(1).getBytes(StandardCharsets.UTF_8),
+        0, values(1).getBytes(StandardCharsets.UTF_8).length)
       reference += values(1)
       idx += 1
       assert(column.arrayData().elementsAppended == 8)
 
       // Just put llo
-      val offset = column.putByteArray(idx, values(0).getBytes, 2, values(0).getBytes().length - 2)
+      val offset = column.putByteArray(idx, values(0).getBytes(StandardCharsets.UTF_8),
+        2, values(0).getBytes(StandardCharsets.UTF_8).length - 2)
       reference += "llo"
       idx += 1
       assert(column.arrayData().elementsAppended == 11)
@@ -353,7 +358,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       // Put a long string
       val s = "abcdefghijklmnopqrstuvwxyz"
-      column.putByteArray(idx, (s + s).getBytes)
+      column.putByteArray(idx, (s + s).getBytes(StandardCharsets.UTF_8))
       reference += (s + s)
       idx += 1
       assert(column.arrayData().elementsAppended == 11 + (s + s).length)
@@ -473,7 +478,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       batch.column(0).putInt(0, 1)
       batch.column(1).putDouble(0, 1.1)
       batch.column(2).putNull(0)
-      batch.column(3).putByteArray(0, "Hello".getBytes)
+      batch.column(3).putByteArray(0, "Hello".getBytes(StandardCharsets.UTF_8))
       batch.setNumRows(1)
 
       // Verify the results of the row.
@@ -519,17 +524,17 @@ class ColumnarBatchSuite extends SparkFunSuite {
       batch.column(0).putNull(0)
       batch.column(1).putDouble(0, 2.2)
       batch.column(2).putInt(0, 2)
-      batch.column(3).putByteArray(0, "abc".getBytes)
+      batch.column(3).putByteArray(0, "abc".getBytes(StandardCharsets.UTF_8))
 
       batch.column(0).putInt(1, 3)
       batch.column(1).putNull(1)
       batch.column(2).putInt(1, 3)
-      batch.column(3).putByteArray(1, "".getBytes)
+      batch.column(3).putByteArray(1, "".getBytes(StandardCharsets.UTF_8))
 
       batch.column(0).putInt(2, 4)
       batch.column(1).putDouble(2, 4.4)
       batch.column(2).putInt(2, 4)
-      batch.column(3).putByteArray(2, "world".getBytes)
+      batch.column(3).putByteArray(2, "world".getBytes(StandardCharsets.UTF_8))
       batch.setNumRows(3)
 
       def rowEquals(x: InternalRow, y: Row): Unit = {
@@ -721,5 +726,34 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
   test("Random nested schema") {
     testRandomRows(false, 30)
+  }
+
+  test("null filtered columns") {
+    val NUM_ROWS = 10
+    val schema = new StructType()
+      .add("key", IntegerType, nullable = false)
+      .add("value", StringType, nullable = true)
+    for (numNulls <- List(0, NUM_ROWS / 2, NUM_ROWS)) {
+      val rows = mutable.ArrayBuffer.empty[Row]
+      for (i <- 0 until NUM_ROWS) {
+        val row = if (i < numNulls) Row.fromSeq(Seq(i, null)) else Row.fromSeq(Seq(i, i.toString))
+        rows += row
+      }
+      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+        val batch = ColumnVectorUtils.toBatch(schema, memMode, rows.iterator.asJava)
+        batch.filterNullsInColumn(1)
+        batch.setNumRows(NUM_ROWS)
+        assert(batch.numRows() == NUM_ROWS)
+        val it = batch.rowIterator()
+        // Top numNulls rows should be filtered
+        var k = numNulls
+        while (it.hasNext) {
+          assert(it.next().getInt(0) == k)
+          k += 1
+        }
+        assert(k == NUM_ROWS)
+        batch.close()
+      }}
+    }
   }
 }

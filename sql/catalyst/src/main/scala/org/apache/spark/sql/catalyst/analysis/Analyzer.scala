@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatal
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -40,7 +41,10 @@ import org.apache.spark.sql.types._
  * references.
  */
 object SimpleAnalyzer
-  extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(true))
+  extends Analyzer(
+    EmptyCatalog,
+    EmptyFunctionRegistry,
+    new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
@@ -87,7 +91,7 @@ class Analyzer(
       ResolveSubquery ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
-      ResolveNaturalJoin ::
+      ResolveNaturalAndUsingJoin ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -596,7 +600,10 @@ class Analyzer(
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
-  private def resolveExpression(expr: Expression, plan: LogicalPlan, throws: Boolean = false) = {
+  protected[sql] def resolveExpression(
+      expr: Expression,
+      plan: LogicalPlan,
+      throws: Boolean = false) = {
     // Resolve expression in one round.
     // If throws == false or the desired attribute doesn't exist
     // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
@@ -618,13 +625,36 @@ class Analyzer(
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
+   *
+   * This rule also resolves the position number in sort references. This support is introduced
+   * in Spark 2.0. Before Spark 2.0, the integers in Order By has no effect on output sorting.
+   * - When the sort references are not integer but foldable expressions, ignore them.
+   * - When spark.sql.orderByOrdinal is set to false, ignore the position numbers too.
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case s: Sort if !s.child.resolved => s
+      // Replace the index with the related attribute for ORDER BY
+      // which is a 1-base position of the projection list.
+      case s @ Sort(orders, global, child)
+          if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+        val newOrders = orders map {
+          case s @ SortOrder(IntegerIndex(index), direction) =>
+            if (index > 0 && index <= child.output.size) {
+              SortOrder(child.output(index - 1), direction)
+            } else {
+              throw new UnresolvedException(s,
+                s"Order/sort By position: $index does not exist " +
+                s"The Select List is indexed from 1 to ${child.output.size}")
+            }
+          case o => o
+        }
+        Sort(newOrders, global, child)
+
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
+      case s @ Sort(order, _, child) if !s.resolved =>
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
@@ -1329,48 +1359,69 @@ class Analyzer(
   }
 
   /**
-   * Removes natural joins by calculating output columns based on output from two sides,
-   * Then apply a Project on a normal Join to eliminate natural join.
+   * Removes natural or using joins by calculating output columns based on output from two sides,
+   * Then apply a Project on a normal Join to eliminate natural or using join.
    */
-  object ResolveNaturalJoin extends Rule[LogicalPlan] {
+  object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case j @ Join(left, right, UsingJoin(joinType, usingCols), condition)
+          if left.resolved && right.resolved && j.duplicateResolved =>
+        // Resolve the column names referenced in using clause from both the legs of join.
+        val lCols = usingCols.flatMap(col => left.resolveQuoted(col.name, resolver))
+        val rCols = usingCols.flatMap(col => right.resolveQuoted(col.name, resolver))
+        if ((lCols.length == usingCols.length) && (rCols.length == usingCols.length)) {
+          val joinNames = lCols.map(exp => exp.name)
+          commonNaturalJoinProcessing(left, right, joinType, joinNames, None)
+        } else {
+          j
+        }
       case j @ Join(left, right, NaturalJoin(joinType), condition) if j.resolvedExceptNatural =>
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
-        val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
-        val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
-        val joinPairs = leftKeys.zip(rightKeys)
-
-        // Add joinPairs to joinConditions
-        val newCondition = (condition ++ joinPairs.map {
-          case (l, r) => EqualTo(l, r)
-        }).reduceOption(And)
-
-        // columns not in joinPairs
-        val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
-        val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
-
-        // the output list looks like: join keys, columns from left, columns from right
-        val projectList = joinType match {
-          case LeftOuter =>
-            leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
-          case RightOuter =>
-            rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
-          case FullOuter =>
-            // in full outer join, joinCols should be non-null if there is.
-            val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
-            joinedCols ++
-              lUniqueOutput.map(_.withNullability(true)) ++
-              rUniqueOutput.map(_.withNullability(true))
-          case Inner =>
-            rightKeys ++ lUniqueOutput ++ rUniqueOutput
-          case _ =>
-            sys.error("Unsupported natural join type " + joinType)
-        }
-        // use Project to trim unnecessary fields
-        Project(projectList, Join(left, right, joinType, newCondition))
+        commonNaturalJoinProcessing(left, right, joinType, joinNames, condition)
     }
   }
+
+  private def commonNaturalJoinProcessing(
+     left: LogicalPlan,
+     right: LogicalPlan,
+     joinType: JoinType,
+     joinNames: Seq[String],
+     condition: Option[Expression]) = {
+    val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
+    val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
+    val joinPairs = leftKeys.zip(rightKeys)
+
+    val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
+
+    // columns not in joinPairs
+    val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
+    val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
+
+    // the output list looks like: join keys, columns from left, columns from right
+    val projectList = joinType match {
+      case LeftOuter =>
+        leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
+      case LeftSemi =>
+        leftKeys ++ lUniqueOutput
+      case RightOuter =>
+        rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
+      case FullOuter =>
+        // in full outer join, joinCols should be non-null if there is.
+        val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
+        joinedCols ++
+          lUniqueOutput.map(_.withNullability(true)) ++
+          rUniqueOutput.map(_.withNullability(true))
+      case Inner =>
+        leftKeys ++ lUniqueOutput ++ rUniqueOutput
+      case _ =>
+        sys.error("Unsupported natural join type " + joinType)
+    }
+    // use Project to trim unnecessary fields
+    Project(projectList, Join(left, right, joinType, newCondition))
+  }
+
+
 }
 
 /**

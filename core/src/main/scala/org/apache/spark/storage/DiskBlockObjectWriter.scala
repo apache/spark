@@ -20,8 +20,8 @@ package org.apache.spark.storage
 import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
 import java.nio.channels.FileChannel
 
-import org.apache.spark.Logging
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance}
 import org.apache.spark.util.Utils
 

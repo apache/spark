@@ -23,6 +23,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.ref.WeakReference
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 

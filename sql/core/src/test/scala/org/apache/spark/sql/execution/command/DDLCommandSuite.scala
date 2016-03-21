@@ -48,26 +48,26 @@ class DDLCommandSuite extends PlanTest {
     val sql1 =
       """
        |CREATE TEMPORARY FUNCTION helloworld as
-       |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar',
-       |FILE 'path/to/file'
+       |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+       |JAR '/path/to/jar2'
      """.stripMargin
     val sql2 =
       """
         |CREATE FUNCTION hello.world as
         |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
-        |FILE 'path/to/file'
+        |FILE '/path/to/file'
       """.stripMargin
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
     val expected1 = CreateFunction(
       "helloworld",
       "com.matthewrathbone.example.SimpleUDFExample",
-      Map("jar" -> "/path/to/jar", "file" -> "path/to/file"),
+      Seq(("jar", "/path/to/jar1"), ("jar", "/path/to/jar2")),
       isTemp = true)(sql1)
     val expected2 = CreateFunction(
       "hello.world",
       "com.matthewrathbone.example.SimpleUDFExample",
-      Map("archive" -> "/path/to/archive", "file" -> "path/to/file"),
+      Seq(("archive", "/path/to/archive"), ("file", "/path/to/file")),
       isTemp = false)(sql2)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)

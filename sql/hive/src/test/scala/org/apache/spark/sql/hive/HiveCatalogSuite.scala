@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.hive.client.{HiveClient, IsolatedClientLoader}
 import org.apache.spark.util.Utils
-
 
 /**
  * Test suite for the [[HiveCatalog]].
@@ -32,18 +33,17 @@ class HiveCatalogSuite extends CatalogTestCases {
   private val client: HiveClient = {
     IsolatedClientLoader.forVersion(
       hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
-      hadoopVersion = VersionInfo.getVersion).createClient()
+      hadoopVersion = VersionInfo.getVersion,
+      sparkConf = new SparkConf(),
+      hadoopConf = new Configuration()).createClient()
   }
 
-  protected override val tableInputFormat: String =
-    "org.apache.hadoop.mapred.SequenceFileInputFormat"
-  protected override val tableOutputFormat: String =
-    "org.apache.hadoop.mapred.SequenceFileOutputFormat"
-
-  protected override def newUriForDatabase(): String = Utils.createTempDir().getAbsolutePath
+  protected override val utils: CatalogTestUtils = new CatalogTestUtils {
+    override val tableInputFormat: String = "org.apache.hadoop.mapred.SequenceFileInputFormat"
+    override val tableOutputFormat: String = "org.apache.hadoop.mapred.SequenceFileOutputFormat"
+    override def newEmptyCatalog(): ExternalCatalog = new HiveCatalog(client)
+  }
 
   protected override def resetState(): Unit = client.reset()
-
-  protected override def newEmptyCatalog(): ExternalCatalog = new HiveCatalog(client)
 
 }

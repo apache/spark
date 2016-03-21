@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.util.control.NonFatal
 
@@ -127,29 +128,11 @@ abstract class HiveComparisonTest
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
     val digest = java.security.MessageDigest.getInstance("MD5")
-    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes("utf-8"))
+    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes(StandardCharsets.UTF_8))
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 
-  /** Used for testing [[SQLBuilder]] */
-  private var numConvertibleQueries: Int = 0
-  private var numTotalQueries: Int = 0
-
   override protected def afterAll(): Unit = {
-    logInfo({
-      val percentage = if (numTotalQueries > 0) {
-        numConvertibleQueries.toDouble / numTotalQueries * 100
-      } else {
-        0D
-      }
-
-      s"""SQLBuiler statistics:
-         |- Total query number:                $numTotalQueries
-         |- Number of convertible queries:     $numConvertibleQueries
-         |- Percentage of convertible queries: $percentage%
-       """.stripMargin
-    })
-
     try {
       TestHive.reset()
     } finally {
@@ -411,32 +394,38 @@ abstract class HiveComparisonTest
               if (containsCommands) {
                 originalQuery
               } else {
-                numTotalQueries += 1
+                val convertedSQL = try {
+                  new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
+                } catch {
+                  case NonFatal(e) => fail(
+                    s"""Cannot convert the following HiveQL query plan back to SQL query string:
+                        |
+                        |# Original HiveQL query string:
+                        |$queryString
+                        |
+                        |# Resolved query plan:
+                        |${originalQuery.analyzed.treeString}
+                     """.stripMargin, e)
+                }
+
                 try {
-                  val sql = new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
-                  numConvertibleQueries += 1
-                  logInfo(
-                    s"""
-                      |### Running SQL generation round-trip test {{{
-                      |${originalQuery.analyzed.treeString}
-                      |Original SQL:
-                      |$queryString
-                      |
-                      |Generated SQL:
-                      |$sql
-                      |}}}
-                   """.stripMargin.trim)
-                  new TestHive.QueryExecution(sql)
-                } catch { case NonFatal(e) =>
-                  logInfo(
-                    s"""
-                       |### Cannot convert the following logical plan back to SQL {{{
-                       |${originalQuery.analyzed.treeString}
-                       |Original SQL:
-                       |$queryString
-                       |}}}
-                   """.stripMargin.trim)
-                  originalQuery
+                  val queryExecution = new TestHive.QueryExecution(convertedSQL)
+                  // Trigger the analysis of this converted SQL query.
+                  queryExecution.analyzed
+                  queryExecution
+                } catch {
+                  case NonFatal(e) => fail(
+                    s"""Failed to analyze the converted SQL string:
+                        |
+                        |# Original HiveQL query string:
+                        |$queryString
+                        |
+                        |# Resolved query plan:
+                        |${originalQuery.analyzed.treeString}
+                        |
+                        |# Converted SQL query string:
+                        |$convertedSQL
+                     """.stripMargin, e)
                 }
               }
             }

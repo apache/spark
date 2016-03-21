@@ -19,17 +19,17 @@ package org.apache.spark.ml.classification
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.{DecisionTreeModel, GBTParams, TreeClassifierParams,
   TreeEnsembleModel}
+import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.loss.{LogLoss => OldLogLoss, Loss => OldLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
@@ -158,9 +158,8 @@ final class GBTClassifier @Since("1.4.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
-    val oldGBT = new OldGBT(boostingStrategy)
-    val oldModel = oldGBT.run(oldDataset)
-    GBTClassificationModel.fromOld(oldModel, this, categoricalFeatures, numFeatures)
+    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy)
+    new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 
   @Since("1.4.1")

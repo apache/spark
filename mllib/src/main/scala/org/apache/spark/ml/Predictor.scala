@@ -46,7 +46,6 @@ private[ml] trait PredictorParams extends Params
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    validateParams()
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {

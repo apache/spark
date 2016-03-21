@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
@@ -55,7 +55,7 @@ case class CreateDatabase(
 case class CreateFunction(
     functionName: String,
     alias: String,
-    resourcesMap: Map[String, String],
+    resources: Seq[(String, String)],
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 

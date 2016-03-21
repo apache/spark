@@ -109,13 +109,13 @@ public class JavaApplySchemaSuite implements Serializable {
 
     Dataset<Row> df = sqlContext.createDataFrame(rowRDD, schema);
     df.registerTempTable("people");
-    Row[] actual = sqlContext.sql("SELECT * FROM people").collectRows();
+    List<Row> actual = sqlContext.sql("SELECT * FROM people").collectAsList();
 
     List<Row> expected = new ArrayList<>(2);
     expected.add(RowFactory.create("Michael", 29));
     expected.add(RowFactory.create("Yin", 28));
 
-    Assert.assertEquals(expected, Arrays.asList(actual));
+    Assert.assertEquals(expected, actual);
   }
 
   @Test
@@ -145,12 +145,13 @@ public class JavaApplySchemaSuite implements Serializable {
 
     Dataset<Row> df = sqlContext.createDataFrame(rowRDD, schema);
     df.registerTempTable("people");
-    List<String> actual = sqlContext.sql("SELECT * FROM people").toJavaRDD().map(new Function<Row, String>() {
-      @Override
-      public String call(Row row) {
-        return row.getString(0) + "_" + row.get(1);
-      }
-    }).collect();
+    List<String> actual = sqlContext.sql("SELECT * FROM people").toJavaRDD()
+      .map(new Function<Row, String>() {
+        @Override
+        public String call(Row row) {
+          return row.getString(0) + "_" + row.get(1);
+        }
+      }).collect();
 
     List<String> expected = new ArrayList<>(2);
     expected.add("Michael_29");
