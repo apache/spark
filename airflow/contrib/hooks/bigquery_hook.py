@@ -97,6 +97,7 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook):
         else:
             return gbq_parse_data(schema, [])
 
+
 class BigQueryPandasConnector(GbqConnector):
     """
     This connector behaves identically to GbqConnector (from Pandas), except
@@ -110,6 +111,7 @@ class BigQueryPandasConnector(GbqConnector):
         self.project_id = project_id
         self.reauth = reauth
         self.service = service
+
 
 class BigQueryConnection(object):
     """
@@ -135,7 +137,8 @@ class BigQueryConnection(object):
         return BigQueryCursor(*self._args, **self._kwargs)
 
     def rollback(self):
-        raise NotImplemented("BigQueryConnection does not have transactions")
+        raise NotImplementedError(
+            "BigQueryConnection does not have transactions")
 
 
 class BigQueryBaseCursor(object):
@@ -183,7 +186,7 @@ class BigQueryBaseCursor(object):
         if destination_dataset_table:
             assert '.' in destination_dataset_table, (
                 'Expected destination_dataset_table in the format of '
-                '<dataset>.<table>. Got: {}'.format(destination_dataset_table)
+                '<dataset>.<table>. Got: {}').format(destination_dataset_table)
             destination_dataset, destination_table = \
                 destination_dataset_table.split('.', 1)
             configuration['query'].update({
@@ -203,7 +206,7 @@ class BigQueryBaseCursor(object):
 
         return self.run_with_configuration(configuration)
 
-    def run_extract(
+    def run_extract(  # noqa
             self, source_project_dataset_table, destination_cloud_storage_uris,
             compression='NONE', export_format='CSV', field_delimiter=',',
             print_header=True):
@@ -215,7 +218,8 @@ class BigQueryBaseCursor(object):
 
         For more details about these parameters.
 
-        :param source_project_dataset_table: The dotted <dataset>.<table> BigQuery table to use as the source data.
+        :param source_project_dataset_table: The dotted <dataset>.<table>
+            BigQuery table to use as the source data.
         :type source_project_dataset_table: string
         :param destination_cloud_storage_uris: The destination Google Cloud
             Storage URI (e.g. gs://some-bucket/some-file.txt). Follows
@@ -231,7 +235,9 @@ class BigQueryBaseCursor(object):
         :param print_header: Whether to print a header for a CSV file extract.
         :type print_header: boolean
         """
-        source_project, source_dataset, source_table = self._split_project_dataset_table_input('source_project_dataset_table', source_project_dataset_table)
+        source_project, source_dataset, source_table = \
+            self._split_project_dataset_table_input(
+                'source_project_dataset_table', source_project_dataset_table)
         configuration = {
             'extract': {
                 'sourceTable': {
@@ -267,10 +273,12 @@ class BigQueryBaseCursor(object):
 
         For more details about these parameters.
 
-        :param source_project_dataset_tables: One or more dotted (<project>.)<dataset>.<table>
+        :param source_project_dataset_tables: One or more dotted
+            (<project>.)<dataset>.<table>
             BigQuery tables to use as the source data. Use a list if there are
             multiple source tables.
-            If <project> is not included, project will be the project defined in the connection json.
+            If <project> is not included, project will be the project defined
+            in the connection json.
         :type source_project_dataset_tables: list|string
         :param destination_project_dataset_table: The destination BigQuery
             table. Format is: <project>.<dataset>.<table>
@@ -280,21 +288,29 @@ class BigQueryBaseCursor(object):
         :param create_disposition: The create disposition if the table doesn't exist.
         :type create_disposition: string
         """
-        source_project_dataset_tables = [source_project_dataset_tables] if not isinstance(source_project_dataset_tables, list) else source_project_dataset_tables
+        source_project_dataset_tables = (
+            [source_project_dataset_tables]
+            if not isinstance(source_project_dataset_tables, list)
+            else source_project_dataset_tables)
 
         source_project_dataset_tables_fixup = []
         for source_project_dataset_table in source_project_dataset_tables:
-            source_project, source_dataset, source_table = self._split_project_dataset_table_input('source_project_dataset_table', source_project_dataset_table)
+            source_project, source_dataset, source_table = \
+                self._split_project_dataset_table_input(
+                    'source_project_dataset_table', source_project_dataset_table)
             source_project_dataset_tables_fixup.append({
                     'projectId': source_project,
                     'datasetId': source_dataset,
                     'tableId': source_table
                 })
 
-        assert 3 == len(destination_project_dataset_table.split('.')), \
-            'Expected destination_project_dataset_table in the format of <project>.<dataset>.<table>. Got: {}'.format(destination_project_dataset_table)
+        assert 3 == len(destination_project_dataset_table.split('.')), (
+            'Expected destination_project_dataset_table in the format of '
+            '<project>.<dataset>.<table>. '
+            'Got: {}').format(destination_project_dataset_table)
 
-        destination_project, destination_dataset, destination_table = destination_project_dataset_table.split('.', 2)
+        destination_project, destination_dataset, destination_table = \
+            destination_project_dataset_table.split('.', 2)
         configuration = {
             'copy': {
                 'createDisposition': create_disposition,
@@ -326,8 +342,10 @@ class BigQueryBaseCursor(object):
 
         For more details about these parameters.
 
-        :param destination_project_dataset_table: The dotted (<project>.)<dataset>.<table> BigQuery table to load data into.
-            If <project> is not included, project will be the project defined in the connection json.
+        :param destination_project_dataset_table:
+            The dotted (<project>.)<dataset>.<table> BigQuery table to load data into.
+            If <project> is not included, project will be the project defined in
+            the connection json.
         :type destination_project_dataset_table: string
         :param schema_fields: The schema field list as defined here:
             https://cloud.google.com/bigquery/docs/reference/v2/jobs#configuration.load
@@ -347,7 +365,9 @@ class BigQueryBaseCursor(object):
         :param field_delimiter: The delimiter to use when loading from a CSV.
         :type field_delimiter: string
         """
-        destination_project, destination_dataset, destination_table = self._split_project_dataset_table_input('destination_project_dataset_table', destination_project_dataset_table)
+        destination_project, destination_dataset, destination_table = \
+            self._split_project_dataset_table_input(
+                'destination_project_dataset_table', destination_project_dataset_table)
 
         configuration = {
             'load': {
@@ -382,8 +402,9 @@ class BigQueryBaseCursor(object):
         :return: (project, dataset, table) tuple
         """
         table_split = project_dataset_table.split('.')
-        assert len(table_split) == 2 or len(table_split) == 3, \
-            'Expected {var} in the format of (<project.)<dataset>.<table>, got {input}'.format(var=var_name, input=project_dataset_table)
+        assert len(table_split) == 2 or len(table_split) == 3, (
+            'Expected {var} in the format of (<project.)<dataset>.<table>, '
+            'got {input}').format(var=var_name, input=project_dataset_table)
 
         if len(table_split) == 2:
             logging.info('project not included in {var}: {input}; using project "{project}"'.format(var=var_name, input=project_dataset_table, project=self.project_id))
@@ -426,7 +447,8 @@ class BigQueryBaseCursor(object):
 
         # Check if job had errors.
         if 'errorResult' in job['status']:
-            raise Exception('BigQuery job failed. Final error was: %s', job['status']['errorResult'])
+            raise Exception(
+                'BigQuery job failed. Final error was: %s', job['status']['errorResult'])
 
         return job_id
 
@@ -453,7 +475,8 @@ class BigQueryBaseCursor(object):
         :param dataset_id: the dataset ID of the requested table.
         :param table_id: the table ID of the requested table.
         :param max_results: the maximum results to return.
-        :param page_token: page token, returned from a previous call, identifying the result set.
+        :param page_token: page token, returned from a previous call,
+            identifying the result set.
         :param start_index: zero based index of the starting row to read.
         :return: map containing the requested rows.
         """
@@ -464,9 +487,13 @@ class BigQueryBaseCursor(object):
             optional_params['pageToken'] = page_token
         if start_index:
             optional_params['startIndex'] = start_index
-        return self.service.tabledata() \
-            .list(projectId=self.project_id, datasetId=dataset_id, tableId=table_id, **optional_params) \
+        return (
+            self.service.tabledata()
+            .list(
+                projectId=self.project_id, datasetId=dataset_id,
+                tableId=table_id, **optional_params)
             .execute()
+        )
 
 
 class BigQueryCursor(BigQueryBaseCursor):
@@ -542,7 +569,14 @@ class BigQueryCursor(BigQueryBaseCursor):
             if self.all_pages_loaded:
                 return None
 
-            query_results = self.service.jobs().getQueryResults(projectId=self.project_id, jobId=self.job_id, pageToken=self.page_token).execute()
+            query_results = (
+                self.service.jobs()
+                .getQueryResults(
+                    projectId=self.project_id,
+                    jobId=self.job_id,
+                    pageToken=self.page_token)
+                .execute()
+            )
 
             if 'rows' in query_results and query_results['rows']:
                 self.page_token = query_results.get('pageToken')
@@ -551,7 +585,10 @@ class BigQueryCursor(BigQueryBaseCursor):
                 rows = query_results['rows']
 
                 for dict_row in rows:
-                    typed_row = [_bq_cast(vs['v'], col_types[idx]) for idx, vs in enumerate(dict_row['f'])]
+                    typed_row = ([
+                        _bq_cast(vs['v'], col_types[idx])
+                        for idx, vs in enumerate(dict_row['f'])
+                    ])
                     self.buffer.append(typed_row)
 
                 if not self.page_token:
@@ -620,6 +657,7 @@ class BigQueryCursor(BigQueryBaseCursor):
         """ Does nothing by default """
         pass
 
+
 def _bind_parameters(operation, parameters):
     """ Helper method that binds parameters to a SQL query. """
     # inspired by MySQL Python Connector (conversion.py)
@@ -633,6 +671,7 @@ def _bind_parameters(operation, parameters):
             string_parameters[name] = str(value)
     return operation % string_parameters
 
+
 def _escape(s):
     """ Helper method that escapes parameters to a SQL query. """
     e = s
@@ -642,6 +681,7 @@ def _escape(s):
     e = e.replace("'", "\\'")
     e = e.replace('"', '\\"')
     return e
+
 
 def _bq_cast(string_field, bq_type):
     """
