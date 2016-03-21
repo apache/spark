@@ -19,9 +19,11 @@ package org.apache.spark.sql.hive.client
 
 import java.io.File
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
@@ -63,10 +65,24 @@ class VersionsSuite extends SparkFunSuite with Logging {
       hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
       hadoopVersion = VersionInfo.getVersion,
       sparkConf = sparkConf,
+      hadoopConf = new Configuration(),
       config = buildConf(),
       ivyPath = ivyPath).createClient()
     val db = new CatalogDatabase("default", "desc", "loc", Map())
     badClient.createDatabase(db, ignoreIfExists = true)
+  }
+
+  test("hadoop configuration preserved") {
+    val hadoopConf = new Configuration();
+    hadoopConf.set("test", "success")
+    val client = IsolatedClientLoader.forVersion(
+      hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
+      hadoopVersion = VersionInfo.getVersion,
+      sparkConf = sparkConf,
+      hadoopConf = hadoopConf,
+      config = buildConf(),
+      ivyPath = ivyPath).createClient()
+    assert("success" === client.getConf("test", null))
   }
 
   private def getNestedMessages(e: Throwable): String = {
@@ -98,6 +114,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           hiveMetastoreVersion = "13",
           hadoopVersion = VersionInfo.getVersion,
           sparkConf = sparkConf,
+          hadoopConf = new Configuration(),
           config = buildConf(),
           ivyPath = ivyPath).createClient()
       }
@@ -118,6 +135,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           hiveMetastoreVersion = version,
           hadoopVersion = VersionInfo.getVersion,
           sparkConf = sparkConf,
+          hadoopConf = new Configuration(),
           config = buildConf(),
           ivyPath = ivyPath).createClient()
     }

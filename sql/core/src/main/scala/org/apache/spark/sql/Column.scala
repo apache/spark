@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._

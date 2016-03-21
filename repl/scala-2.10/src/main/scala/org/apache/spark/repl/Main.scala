@@ -17,9 +17,7 @@
 
 package org.apache.spark.repl
 
-import scala.collection.mutable.Set
-
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 object Main extends Logging {
 
