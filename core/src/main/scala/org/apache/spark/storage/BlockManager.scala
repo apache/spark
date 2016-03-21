@@ -1154,13 +1154,14 @@ private[spark] class BlockManager(
   def dropFromMemory(
       blockId: BlockId,
       data: () => Either[Array[Any], ChunkedByteBuffer]): StorageLevel = {
+    require(
+      memoryStore.contains(blockId),
+      s"Block $blockId could not be dropped from memory as it does not exist")
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfoManager.assertBlockIsLockedForWriting(blockId)
-    var blockIsUpdated = false
-    val level = info.level
 
     // Drop to disk, if storage level requires
-    if (level.useDisk && !diskStore.contains(blockId)) {
+    if (info.level.useDisk && !diskStore.contains(blockId)) {
       logInfo(s"Writing block $blockId to disk")
       data() match {
         case Left(elements) =>
@@ -1170,27 +1171,19 @@ private[spark] class BlockManager(
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes)
       }
-      blockIsUpdated = true
     }
 
     // Actually drop from memory store
-    val droppedMemorySize =
-      if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
+    val droppedMemorySize = memoryStore.getSize(blockId)
     val blockIsRemoved = memoryStore.remove(blockId)
-    if (blockIsRemoved) {
-      blockIsUpdated = true
-    } else {
-      logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
-    }
+    assert(blockIsRemoved)
 
     val status = getCurrentBlockStatus(blockId, info)
     if (info.tellMaster) {
       reportBlockStatus(blockId, info, status, droppedMemorySize)
     }
-    if (blockIsUpdated) {
-      Option(TaskContext.get()).foreach { c =>
-        c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
-      }
+    Option(TaskContext.get()).foreach { c =>
+      c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
     }
     status.storageLevel
   }
