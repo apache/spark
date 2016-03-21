@@ -30,7 +30,6 @@ import scala.util.Random
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
-
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
@@ -84,7 +83,7 @@ class DirectKafkaStreamSuite
     }
   }
 
-  def getKafkaParams(extra: (String, Object)*) = {
+  def getKafkaParams(extra: (String, Object)*): JHashMap[String, Object] = {
     val kp = new JHashMap[String, Object]()
     kp.put("bootstrap.servers", kafkaTestUtils.brokerAddress)
     kp.put("key.deserializer", classOf[StringDeserializer])
@@ -195,7 +194,9 @@ class DirectKafkaStreamSuite
     }
 
     val collectedData = new ConcurrentLinkedQueue[String]()
-    stream.map { _.value }.foreachRDD { rdd => collectedData.addAll(Arrays.asList(rdd.collect(): _*)) }
+    stream.map { _.value }.foreachRDD { rdd =>
+      collectedData.addAll(Arrays.asList(rdd.collect(): _*))
+    }
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
@@ -288,7 +289,7 @@ class DirectKafkaStreamSuite
     ssc.checkpoint(testDir.getAbsolutePath)
 
     // This is to collect the raw data received from Kafka
-    kafkaStream.foreachRDD { (rdd: RDD[ConsumerRecord[String,String]], time: Time) =>
+    kafkaStream.foreachRDD { (rdd: RDD[ConsumerRecord[String, String]], time: Time) =>
       val data = rdd.map { _.value }.collect()
       DirectKafkaStreamSuite.collectedData.addAll(Arrays.asList(data: _*))
     }
@@ -377,7 +378,7 @@ class DirectKafkaStreamSuite
         kafkaStream.commitAsync(offsets, new OffsetCommitCallback() {
           def onComplete(m: JMap[TopicPartition, OffsetAndMetadata], e: Exception) {
             if (null != e) {
-              System.err.println(e)
+              logError("commit failed", e)
             } else {
               committed.putAll(m)
             }
@@ -498,7 +499,7 @@ class DirectKafkaStreamSuite
         val consumer = new KafkaConsumer[String, String](kafkaParams)
         consumer.subscribe(Arrays.asList(topic))
         consumer
-      }){
+      }) {
         override protected[streaming] val rateController =
           Some(new DirectKafkaRateController(id, estimator))
       }.map(r => (r.key, r.value))
@@ -563,7 +564,7 @@ class DirectKafkaStreamSuite
       consumer.assign(Arrays.asList(tps: _*))
       tps.foreach(tp => consumer.seek(tp, 0))
       consumer
-    }){
+    }) {
       override protected[streaming] val rateController = mockRateController
     }
     // manual start necessary because we arent consuming the stream, just checking its state
