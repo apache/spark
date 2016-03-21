@@ -423,7 +423,9 @@ public class ExternalShuffleBlockResolver {
     public final int major;
     public final int minor;
 
-    @JsonCreator public StoreVersion(@JsonProperty("major") int major, @JsonProperty("minor") int minor) {
+    @JsonCreator public StoreVersion(
+      @JsonProperty("major") int major,
+      @JsonProperty("minor") int minor) {
       this.major = major;
       this.minor = minor;
     }

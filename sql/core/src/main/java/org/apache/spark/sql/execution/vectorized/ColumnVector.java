@@ -94,7 +94,7 @@ public abstract class ColumnVector {
     }
 
     @Override
-    public final int numElements() { return length; }
+    public int numElements() { return length; }
 
     @Override
     public ArrayData copy() {
@@ -175,10 +175,10 @@ public abstract class ColumnVector {
     }
 
     @Override
-    public final boolean isNullAt(int ordinal) { return data.getIsNull(offset + ordinal); }
+    public boolean isNullAt(int ordinal) { return data.getIsNull(offset + ordinal); }
 
     @Override
-    public final boolean getBoolean(int ordinal) {
+    public boolean getBoolean(int ordinal) {
       throw new NotImplementedException();
     }
 

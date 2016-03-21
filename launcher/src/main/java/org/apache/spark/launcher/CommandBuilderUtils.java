@@ -32,7 +32,7 @@ class CommandBuilderUtils {
   static final String ENV_SPARK_HOME = "SPARK_HOME";
 
   /** The set of known JVM vendors. */
-  static enum JavaVendor {
+  enum JavaVendor {
     Oracle, IBM, OpenJDK, Unknown
   };
 

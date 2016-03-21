@@ -155,9 +155,11 @@ public final class JavaRecoverableNetworkWordCount {
       @Override
       public void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
         // Get or register the blacklist Broadcast
-        final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
+        final Broadcast<List<String>> blacklist =
+            JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
         // Get or register the droppedWordsCounter Accumulator
-        final Accumulator<Integer> droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
+        final Accumulator<Integer> droppedWordsCounter =
+            JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
         // Use blacklist to drop words and use droppedWordsCounter to count them
         String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
           @Override
@@ -210,7 +212,8 @@ public final class JavaRecoverableNetworkWordCount {
       }
     };
 
-    JavaStreamingContext ssc = JavaStreamingContext.getOrCreate(checkpointDirectory, createContextFunc);
+    JavaStreamingContext ssc =
+      JavaStreamingContext.getOrCreate(checkpointDirectory, createContextFunc);
     ssc.start();
     ssc.awaitTermination();
   }

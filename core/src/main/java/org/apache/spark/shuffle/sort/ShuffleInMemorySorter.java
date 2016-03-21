@@ -51,7 +51,7 @@ final class ShuffleInMemorySorter {
    */
   private int pos = 0;
 
-  public ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize) {
+  ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize) {
     this.consumer = consumer;
     assert (initialSize > 0);
     this.array = consumer.allocateArray(initialSize);
@@ -122,7 +122,7 @@ final class ShuffleInMemorySorter {
     final PackedRecordPointer packedRecordPointer = new PackedRecordPointer();
     private int position = 0;
 
-    public ShuffleSorterIterator(int numRecords, LongArray pointerArray) {
+    ShuffleSorterIterator(int numRecords, LongArray pointerArray) {
       this.numRecords = numRecords;
       this.pointerArray = pointerArray;
     }

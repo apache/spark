@@ -432,7 +432,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private boolean loaded = false;
     private int numRecords = 0;
 
-    public SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
+    SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
       this.upstream = inMemIterator;
       this.numRecords = inMemIterator.getNumRecords();
     }
@@ -567,7 +567,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private UnsafeSorterIterator current;
     private int numRecords;
 
-    public ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
+    ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
       assert iterators.size() > 0;
       this.numRecords = 0;
       for (UnsafeSorterIterator iter: iterators) {

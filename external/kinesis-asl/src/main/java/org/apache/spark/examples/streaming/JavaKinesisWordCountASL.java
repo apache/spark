@@ -140,7 +140,8 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     for (int i = 0; i < numStreams; i++) {
       streamsList.add(
           KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
-              InitialPositionInStream.LATEST, kinesisCheckpointInterval, StorageLevel.MEMORY_AND_DISK_2())
+              InitialPositionInStream.LATEST, kinesisCheckpointInterval,
+              StorageLevel.MEMORY_AND_DISK_2())
       );
     }
 
@@ -167,7 +168,7 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
         new PairFunction<String, String, Integer>() {
           @Override
           public Tuple2<String, Integer> call(String s) {
-            return new Tuple2<String, Integer>(s, 1);
+            return new Tuple2<>(s, 1);
           }
         }
     ).reduceByKey(

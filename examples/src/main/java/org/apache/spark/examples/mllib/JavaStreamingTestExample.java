@@ -18,7 +18,6 @@
 package org.apache.spark.examples.mllib;
 
 
-import org.apache.spark.Accumulator;
 import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;

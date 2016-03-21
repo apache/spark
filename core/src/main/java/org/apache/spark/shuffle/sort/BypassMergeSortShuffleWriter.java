@@ -98,7 +98,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    */
   private boolean stopping = false;
 
-  public BypassMergeSortShuffleWriter(
+  BypassMergeSortShuffleWriter(
       BlockManager blockManager,
       IndexShuffleBlockResolver shuffleBlockResolver,
       BypassMergeSortShuffleHandle<K, V> handle,

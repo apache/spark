@@ -52,16 +52,16 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final long valuesNativeAddress() {
+  public long valuesNativeAddress() {
     throw new RuntimeException("Cannot get native address for on heap column");
   }
   @Override
-  public final long nullsNativeAddress() {
+  public long nullsNativeAddress() {
     throw new RuntimeException("Cannot get native address for on heap column");
   }
 
   @Override
-  public final void close() {
+  public void close() {
   }
 
   //
@@ -69,19 +69,19 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putNotNull(int rowId) {
+  public void putNotNull(int rowId) {
     nulls[rowId] = (byte)0;
   }
 
   @Override
-  public final void putNull(int rowId) {
+  public void putNull(int rowId) {
     nulls[rowId] = (byte)1;
     ++numNulls;
     anyNullsSet = true;
   }
 
   @Override
-  public final void putNulls(int rowId, int count) {
+  public void putNulls(int rowId, int count) {
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)1;
     }
@@ -90,7 +90,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final void putNotNulls(int rowId, int count) {
+  public void putNotNulls(int rowId, int count) {
     if (!anyNullsSet) return;
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
@@ -98,7 +98,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final boolean getIsNull(int rowId) {
+  public boolean getIsNull(int rowId) {
     return nulls[rowId] == 1;
   }
 
@@ -107,12 +107,12 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putBoolean(int rowId, boolean value) {
+  public void putBoolean(int rowId, boolean value) {
     byteData[rowId] = (byte)((value) ? 1 : 0);
   }
 
   @Override
-  public final void putBooleans(int rowId, int count, boolean value) {
+  public void putBooleans(int rowId, int count, boolean value) {
     byte v = (byte)((value) ? 1 : 0);
     for (int i = 0; i < count; ++i) {
       byteData[i + rowId] = v;
@@ -120,7 +120,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final boolean getBoolean(int rowId) {
+  public boolean getBoolean(int rowId) {
     return byteData[rowId] == 1;
   }
 
@@ -131,24 +131,24 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putByte(int rowId, byte value) {
+  public void putByte(int rowId, byte value) {
     byteData[rowId] = value;
   }
 
   @Override
-  public final void putBytes(int rowId, int count, byte value) {
+  public void putBytes(int rowId, int count, byte value) {
     for (int i = 0; i < count; ++i) {
       byteData[i + rowId] = value;
     }
   }
 
   @Override
-  public final void putBytes(int rowId, int count, byte[] src, int srcIndex) {
+  public void putBytes(int rowId, int count, byte[] src, int srcIndex) {
     System.arraycopy(src, srcIndex, byteData, rowId, count);
   }
 
   @Override
-  public final byte getByte(int rowId) {
+  public byte getByte(int rowId) {
     if (dictionary == null) {
       return byteData[rowId];
     } else {
@@ -161,24 +161,24 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putShort(int rowId, short value) {
+  public void putShort(int rowId, short value) {
     shortData[rowId] = value;
   }
 
   @Override
-  public final void putShorts(int rowId, int count, short value) {
+  public void putShorts(int rowId, int count, short value) {
     for (int i = 0; i < count; ++i) {
       shortData[i + rowId] = value;
     }
   }
 
   @Override
-  public final void putShorts(int rowId, int count, short[] src, int srcIndex) {
+  public void putShorts(int rowId, int count, short[] src, int srcIndex) {
     System.arraycopy(src, srcIndex, shortData, rowId, count);
   }
 
   @Override
-  public final short getShort(int rowId) {
+  public short getShort(int rowId) {
     if (dictionary == null) {
       return shortData[rowId];
     } else {
@@ -192,24 +192,24 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putInt(int rowId, int value) {
+  public void putInt(int rowId, int value) {
     intData[rowId] = value;
   }
 
   @Override
-  public final void putInts(int rowId, int count, int value) {
+  public void putInts(int rowId, int count, int value) {
     for (int i = 0; i < count; ++i) {
       intData[i + rowId] = value;
     }
   }
 
   @Override
-  public final void putInts(int rowId, int count, int[] src, int srcIndex) {
+  public void putInts(int rowId, int count, int[] src, int srcIndex) {
     System.arraycopy(src, srcIndex, intData, rowId, count);
   }
 
   @Override
-  public final void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+  public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
     for (int i = 0; i < count; ++i) {
       intData[i + rowId] = Platform.getInt(src, srcOffset);;
@@ -219,7 +219,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final int getInt(int rowId) {
+  public int getInt(int rowId) {
     if (dictionary == null) {
       return intData[rowId];
     } else {
@@ -232,24 +232,24 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putLong(int rowId, long value) {
+  public void putLong(int rowId, long value) {
     longData[rowId] = value;
   }
 
   @Override
-  public final void putLongs(int rowId, int count, long value) {
+  public void putLongs(int rowId, int count, long value) {
     for (int i = 0; i < count; ++i) {
       longData[i + rowId] = value;
     }
   }
 
   @Override
-  public final void putLongs(int rowId, int count, long[] src, int srcIndex) {
+  public void putLongs(int rowId, int count, long[] src, int srcIndex) {
     System.arraycopy(src, srcIndex, longData, rowId, count);
   }
 
   @Override
-  public final void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+  public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
     for (int i = 0; i < count; ++i) {
       longData[i + rowId] = Platform.getLong(src, srcOffset);
@@ -259,7 +259,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final long getLong(int rowId) {
+  public long getLong(int rowId) {
     if (dictionary == null) {
       return longData[rowId];
     } else {
@@ -272,26 +272,26 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putFloat(int rowId, float value) { floatData[rowId] = value; }
+  public void putFloat(int rowId, float value) { floatData[rowId] = value; }
 
   @Override
-  public final void putFloats(int rowId, int count, float value) {
+  public void putFloats(int rowId, int count, float value) {
     Arrays.fill(floatData, rowId, rowId + count, value);
   }
 
   @Override
-  public final void putFloats(int rowId, int count, float[] src, int srcIndex) {
+  public void putFloats(int rowId, int count, float[] src, int srcIndex) {
     System.arraycopy(src, srcIndex, floatData, rowId, count);
   }
 
   @Override
-  public final void putFloats(int rowId, int count, byte[] src, int srcIndex) {
+  public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
         floatData, Platform.DOUBLE_ARRAY_OFFSET + rowId * 4, count * 4);
   }
 
   @Override
-  public final float getFloat(int rowId) {
+  public float getFloat(int rowId) {
     if (dictionary == null) {
       return floatData[rowId];
     } else {
@@ -304,28 +304,28 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putDouble(int rowId, double value) {
+  public void putDouble(int rowId, double value) {
     doubleData[rowId] = value;
   }
 
   @Override
-  public final void putDoubles(int rowId, int count, double value) {
+  public void putDoubles(int rowId, int count, double value) {
     Arrays.fill(doubleData, rowId, rowId + count, value);
   }
 
   @Override
-  public final void putDoubles(int rowId, int count, double[] src, int srcIndex) {
+  public void putDoubles(int rowId, int count, double[] src, int srcIndex) {
     System.arraycopy(src, srcIndex, doubleData, rowId, count);
   }
 
   @Override
-  public final void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
+  public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
         Platform.DOUBLE_ARRAY_OFFSET + rowId * 8, count * 8);
   }
 
   @Override
-  public final double getDouble(int rowId) {
+  public double getDouble(int rowId) {
     if (dictionary == null) {
       return doubleData[rowId];
     } else {
@@ -338,22 +338,22 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final int getArrayLength(int rowId) {
+  public int getArrayLength(int rowId) {
     return arrayLengths[rowId];
   }
   @Override
-  public final int getArrayOffset(int rowId) {
+  public int getArrayOffset(int rowId) {
     return arrayOffsets[rowId];
   }
 
   @Override
-  public final void putArray(int rowId, int offset, int length) {
+  public void putArray(int rowId, int offset, int length) {
     arrayOffsets[rowId] = offset;
     arrayLengths[rowId] = length;
   }
 
   @Override
-  public final void loadBytes(ColumnVector.Array array) {
+  public void loadBytes(ColumnVector.Array array) {
     array.byteArray = byteData;
     array.byteArrayOffset = array.offset;
   }
@@ -363,7 +363,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   //
 
   @Override
-  public final int putByteArray(int rowId, byte[] value, int offset, int length) {
+  public int putByteArray(int rowId, byte[] value, int offset, int length) {
     int result = arrayData().appendBytes(length, value, offset);
     arrayOffsets[rowId] = result;
     arrayLengths[rowId] = length;
@@ -371,12 +371,12 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final void reserve(int requiredCapacity) {
+  public void reserve(int requiredCapacity) {
     if (requiredCapacity > capacity) reserveInternal(requiredCapacity * 2);
   }
 
   // Spilt this function out since it is the slow path.
-  private final void reserveInternal(int newCapacity) {
+  private void reserveInternal(int newCapacity) {
     if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
