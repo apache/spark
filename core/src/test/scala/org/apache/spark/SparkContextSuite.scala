@@ -18,12 +18,12 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-import com.google.common.base.Charsets._
 import com.google.common.io.Files
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
@@ -115,8 +115,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     val absolutePath2 = file2.getAbsolutePath
 
     try {
-      Files.write("somewords1", file1, UTF_8)
-      Files.write("somewords2", file2, UTF_8)
+      Files.write("somewords1", file1, StandardCharsets.UTF_8)
+      Files.write("somewords2", file2, StandardCharsets.UTF_8)
       val length1 = file1.length()
       val length2 = file2.length()
 
@@ -243,11 +243,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
     try {
       // Create 5 text files.
-      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1, UTF_8)
-      Files.write("someline1 in file2\nsomeline2 in file2", file2, UTF_8)
-      Files.write("someline1 in file3", file3, UTF_8)
-      Files.write("someline1 in file4\nsomeline2 in file4", file4, UTF_8)
-      Files.write("someline1 in file2\nsomeline2 in file5", file5, UTF_8)
+      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1,
+        StandardCharsets.UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file2", file2, StandardCharsets.UTF_8)
+      Files.write("someline1 in file3", file3, StandardCharsets.UTF_8)
+      Files.write("someline1 in file4\nsomeline2 in file4", file4, StandardCharsets.UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file5", file5, StandardCharsets.UTF_8)
 
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 

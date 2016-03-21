@@ -149,7 +149,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    * by MapReduce.
    */
   public static List<String> listDirectory(File path) throws IOException {
-    List<String> result = new ArrayList<String>();
+    List<String> result = new ArrayList<>();
     if (path.isDirectory()) {
       for (File f: path.listFiles()) {
         result.addAll(listDirectory(f));

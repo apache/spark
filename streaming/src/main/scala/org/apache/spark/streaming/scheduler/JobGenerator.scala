@@ -19,7 +19,8 @@ package org.apache.spark.streaming.scheduler
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer

@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
 

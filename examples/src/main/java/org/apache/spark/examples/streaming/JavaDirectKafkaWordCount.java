@@ -40,7 +40,8 @@ import org.apache.spark.streaming.Durations;
  *   <topics> is a list of one or more kafka topics to consume from
  *
  * Example:
- *    $ bin/run-example streaming.JavaDirectKafkaWordCount broker1-host:port,broker2-host:port topic1,topic2
+ *    $ bin/run-example streaming.JavaDirectKafkaWordCount broker1-host:port,broker2-host:port \
+ *      topic1,topic2
  */
 
 public final class JavaDirectKafkaWordCount {
@@ -63,8 +64,8 @@ public final class JavaDirectKafkaWordCount {
     SparkConf sparkConf = new SparkConf().setAppName("JavaDirectKafkaWordCount");
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.seconds(2));
 
-    HashSet<String> topicsSet = new HashSet<String>(Arrays.asList(topics.split(",")));
-    HashMap<String, String> kafkaParams = new HashMap<String, String>();
+    HashSet<String> topicsSet = new HashSet<>(Arrays.asList(topics.split(",")));
+    HashMap<String, String> kafkaParams = new HashMap<>();
     kafkaParams.put("metadata.broker.list", brokers);
 
     // Create direct kafka stream with brokers and topics
@@ -95,7 +96,7 @@ public final class JavaDirectKafkaWordCount {
       new PairFunction<String, String, Integer>() {
         @Override
         public Tuple2<String, Integer> call(String s) {
-          return new Tuple2<String, Integer>(s, 1);
+          return new Tuple2<>(s, 1);
         }
       }).reduceByKey(
         new Function2<Integer, Integer, Integer>() {

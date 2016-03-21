@@ -23,12 +23,13 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
-import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -125,16 +126,14 @@ private[spark] class AppClient(
       registerMasterFutures.set(tryRegisterAllMasters())
       registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
-          Utils.tryOrExit {
-            if (registered.get) {
-              registerMasterFutures.get.foreach(_.cancel(true))
-              registerMasterThreadPool.shutdownNow()
-            } else if (nthRetry >= REGISTRATION_RETRIES) {
-              markDead("All masters are unresponsive! Giving up.")
-            } else {
-              registerMasterFutures.get.foreach(_.cancel(true))
-              registerWithMaster(nthRetry + 1)
-            }
+          if (registered.get) {
+            registerMasterFutures.get.foreach(_.cancel(true))
+            registerMasterThreadPool.shutdownNow()
+          } else if (nthRetry >= REGISTRATION_RETRIES) {
+            markDead("All masters are unresponsive! Giving up.")
+          } else {
+            registerMasterFutures.get.foreach(_.cancel(true))
+            registerWithMaster(nthRetry + 1)
           }
         }
       }, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))

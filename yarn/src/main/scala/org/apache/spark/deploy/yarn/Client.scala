@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream, I
   OutputStreamWriter}
 import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -29,7 +30,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.base.Objects
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -49,9 +49,10 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.util.Utils
@@ -89,7 +90,7 @@ private[spark] class Client(
       }
     }
   }
-  private val fireAndForget = isClusterMode && sparkConf.get(WAIT_FOR_APP_COMPLETION)
+  private val fireAndForget = isClusterMode && !sparkConf.get(WAIT_FOR_APP_COMPLETION)
 
   private var appId: ApplicationId = null
 
@@ -423,7 +424,63 @@ private[spark] class Client(
     }
 
     /**
-     * Copy the given main resource to the distributed cache if the scheme is not "local".
+     * Add Spark to the cache. There are two settings that control what files to add to the cache:
+     * - if a Spark archive is defined, use the archive. The archive is expected to contain
+     *   jar files at its root directory.
+     * - if a list of jars is provided, filter the non-local ones, resolve globs, and
+     *   add the found files to the cache.
+     *
+     * Note that the archive cannot be a "local" URI. If none of the above settings are found,
+     * then upload all files found in $SPARK_HOME/jars.
+     *
+     * TODO: currently the code looks in $SPARK_HOME/lib while the work to replace assemblies
+     * with a directory full of jars is ongoing.
+     */
+    val sparkArchive = sparkConf.get(SPARK_ARCHIVE)
+    if (sparkArchive.isDefined) {
+      val archive = sparkArchive.get
+      require(!isLocalUri(archive), s"${SPARK_ARCHIVE.key} cannot be a local URI.")
+      distribute(Utils.resolveURI(archive).toString,
+        resType = LocalResourceType.ARCHIVE,
+        destName = Some(LOCALIZED_LIB_DIR))
+    } else {
+      sparkConf.get(SPARK_JARS) match {
+        case Some(jars) =>
+          // Break the list of jars to upload, and resolve globs.
+          val localJars = new ArrayBuffer[String]()
+          jars.foreach { jar =>
+            if (!isLocalUri(jar)) {
+              val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
+              val pathFs = FileSystem.get(path.toUri(), hadoopConf)
+              pathFs.globStatus(path).filter(_.isFile()).foreach { entry =>
+                distribute(entry.getPath().toUri().toString(),
+                  targetDir = Some(LOCALIZED_LIB_DIR))
+              }
+            } else {
+              localJars += jar
+            }
+          }
+
+          // Propagate the local URIs to the containers using the configuration.
+          sparkConf.set(SPARK_JARS, localJars)
+
+        case None =>
+          // No configuration, so fall back to uploading local jar files.
+          logWarning(s"Neither ${SPARK_JARS.key} nor ${SPARK_ARCHIVE.key} is set, falling back " +
+            "to uploading libraries under SPARK_HOME.")
+          val jarsDir = new File(sparkConf.getenv("SPARK_HOME"), "lib")
+          if (jarsDir.isDirectory()) {
+            jarsDir.listFiles().foreach { f =>
+              if (f.isFile() && f.getName().toLowerCase().endsWith(".jar")) {
+                distribute(f.getAbsolutePath(), targetDir = Some(LOCALIZED_LIB_DIR))
+              }
+            }
+          }
+      }
+    }
+
+    /**
+     * Copy a few resources to the distributed cache if their scheme is not "local".
      * Otherwise, set the corresponding key in our SparkConf to handle it downstream.
      * Each resource is represented by a 3-tuple of:
      *   (1) destination resource name,
@@ -431,8 +488,7 @@ private[spark] class Client(
      *   (3) Spark property key to set if the scheme is not local
      */
     List(
-      (SPARK_JAR_NAME, sparkJar(sparkConf), SPARK_JAR.key),
-      (APP_JAR_NAME, args.userJar, APP_JAR.key),
+      (APP_JAR_NAME, args.userJar, APP_JAR),
       ("log4j.properties", oldLog4jConf.orNull, null)
     ).foreach { case (destName, path, confKey) =>
       if (path != null && !path.trim().isEmpty()) {
@@ -564,7 +620,7 @@ private[spark] class Client(
       val props = new Properties()
       sparkConf.getAll.foreach { case (k, v) => props.setProperty(k, v) }
       confStream.putNextEntry(new ZipEntry(SPARK_CONF_FILE))
-      val writer = new OutputStreamWriter(confStream, UTF_8)
+      val writer = new OutputStreamWriter(confStream, StandardCharsets.UTF_8)
       props.store(writer, "Spark configuration.")
       writer.flush()
       confStream.closeEntry()
@@ -690,6 +746,9 @@ private[spark] class Client(
         }
         env("SPARK_JAVA_OPTS") = value
       }
+      // propagate PYSPARK_DRIVER_PYTHON and PYSPARK_PYTHON to driver in cluster mode
+      sys.env.get("PYSPARK_DRIVER_PYTHON").foreach(env("PYSPARK_DRIVER_PYTHON") = _)
+      sys.env.get("PYSPARK_PYTHON").foreach(env("PYSPARK_PYTHON") = _)
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
@@ -1032,9 +1091,9 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           "pyspark.zip not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.9.1-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.9.2-src.zip")
         require(py4jFile.exists(),
-          "py4j-0.9.1-src.zip not found; cannot run pyspark application in YARN mode.")
+          "py4j-0.9.2-src.zip not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
       }
   }
@@ -1062,8 +1121,7 @@ object Client extends Logging {
     new Client(args, sparkConf).run()
   }
 
-  // Alias for the Spark assembly jar and the user jar
-  val SPARK_JAR_NAME: String = "__spark__.jar"
+  // Alias for the user jar
   val APP_JAR_NAME: String = "__app__.jar"
 
   // URI scheme that identifies local resources
@@ -1072,8 +1130,6 @@ object Client extends Logging {
   // Staging directory for any temporary jars or files
   val SPARK_STAGING: String = ".sparkStaging"
 
-  // Location of any user-defined Spark jars
-  val ENV_SPARK_JAR = "SPARK_JAR"
 
   // Staging directory is private! -> rwx--------
   val STAGING_DIR_PERMISSION: FsPermission =
@@ -1095,28 +1151,8 @@ object Client extends Logging {
   // Subdirectory where the user's python files (not archives) will be placed.
   val LOCALIZED_PYTHON_DIR = "__pyfiles__"
 
-  /**
-   * Find the user-defined Spark jar if configured, or return the jar containing this
-   * class if not.
-   *
-   * This method first looks in the SparkConf object for the spark.yarn.jar key, and in the
-   * user environment if that is not found (for backwards compatibility).
-   */
-  private def sparkJar(conf: SparkConf): String = {
-    conf.get(SPARK_JAR).getOrElse(
-      if (System.getenv(ENV_SPARK_JAR) != null) {
-        logWarning(
-          s"$ENV_SPARK_JAR detected in the system environment. This variable has been deprecated " +
-            s"in favor of the ${SPARK_JAR.key} configuration variable.")
-        System.getenv(ENV_SPARK_JAR)
-      } else {
-        SparkContext.jarOfClass(this.getClass).getOrElse(throw new SparkException("Could not "
-          + "find jar containing Spark classes. The jar can be defined using the "
-          + s"${SPARK_JAR.key} configuration option. If testing Spark, either set that option "
-          + "or make sure SPARK_PREPEND_CLASSES is not set."))
-      }
-    )
-  }
+  // Subdirectory where Spark libraries will be placed.
+  val LOCALIZED_LIB_DIR = "__spark_libs__"
 
   /**
    * Return the path to the given application's staging directory.
@@ -1236,7 +1272,18 @@ object Client extends Logging {
         addFileToClasspath(sparkConf, conf, x, null, env)
       }
     }
-    addFileToClasspath(sparkConf, conf, new URI(sparkJar(sparkConf)), SPARK_JAR_NAME, env)
+
+    // Add the Spark jars to the classpath, depending on how they were distributed.
+    addClasspathEntry(buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
+      LOCALIZED_LIB_DIR, "*"), env)
+    if (!sparkConf.get(SPARK_ARCHIVE).isDefined) {
+      sparkConf.get(SPARK_JARS).foreach { jars =>
+        jars.filter(isLocalUri).foreach { jar =>
+          addClasspathEntry(getClusterPath(sparkConf, jar), env)
+        }
+      }
+    }
+
     populateHadoopClasspath(conf, env)
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
@@ -1390,6 +1437,11 @@ object Client extends Logging {
    */
   def buildPath(components: String*): String = {
     components.mkString(Path.SEPARATOR)
+  }
+
+  /** Returns whether the URI is a "local:" URI. */
+  def isLocalUri(uri: String): Boolean = {
+    uri.startsWith(s"$LOCAL_SCHEME:")
   }
 
 }

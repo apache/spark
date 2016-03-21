@@ -29,7 +29,8 @@ import scala.reflect.ClassTag
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}

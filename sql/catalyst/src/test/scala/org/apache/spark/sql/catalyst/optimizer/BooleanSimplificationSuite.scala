@@ -36,7 +36,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
-        SimplifyFilters) :: Nil
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
@@ -110,7 +110,10 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   }
 
   private val caseInsensitiveAnalyzer =
-    new Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(false))
+    new Analyzer(
+      EmptyCatalog,
+      EmptyFunctionRegistry,
+      new SimpleCatalystConf(caseSensitiveAnalysis = false))
 
   test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
     val plan = caseInsensitiveAnalyzer.execute(

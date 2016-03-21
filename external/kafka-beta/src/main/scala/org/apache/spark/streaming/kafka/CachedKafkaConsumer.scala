@@ -22,7 +22,9 @@ import java.{ util => ju }
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord, KafkaConsumer }
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.{ Logging, SparkConf }
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
+
 
 /** Consumer of single topicpartition, intended for cached reuse.
   * Underlying consumer is not threadsafe, so neither is this,

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 
-import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubqueryAliases}
+import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -42,7 +42,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
       EliminateSubqueryAliases,
-      ComputeCurrentTime) ::
+      ComputeCurrentTime,
+      DistinctAggregationRewriter) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -70,6 +71,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughAggregate,
       LimitPushDown,
       ColumnPruning,
+      InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -77,7 +79,6 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       CombineLimits,
       CombineUnions,
       // Constant folding and strength reduction
-      NullFiltering,
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
@@ -85,7 +86,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyConditionals,
       RemoveDispensableExpressions,
-      SimplifyFilters,
+      PruneFilters,
+      EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       EliminateSerialization) ::
@@ -314,21 +316,17 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
  *   - LeftSemiJoin
  */
 object ColumnPruning extends Rule[LogicalPlan] {
-  def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
+  private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
     output1.size == output2.size &&
       output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Prunes the unused columns from project list of Project/Aggregate/Window/Expand
+    // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
     case p @ Project(_, a: Aggregate) if (a.outputSet -- p.references).nonEmpty =>
       p.copy(
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
-    case p @ Project(_, w: Window) if (w.outputSet -- p.references).nonEmpty =>
-      p.copy(child = w.copy(
-        projectList = w.projectList.filter(p.references.contains),
-        windowExpressions = w.windowExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if (e.outputSet -- a.references).nonEmpty =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
@@ -342,11 +340,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case mp @ MapPartitions(_, _, _, child) if (child.outputSet -- mp.references).nonEmpty =>
       mp.copy(child = prunedChild(child, mp.references))
 
-    // Prunes the unused columns from child of Aggregate/Window/Expand/Generate
+    // Prunes the unused columns from child of Aggregate/Expand/Generate
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = prunedChild(child, a.references))
-    case w @ Window(_, _, _, _, child) if (child.outputSet -- w.references).nonEmpty =>
-      w.copy(child = prunedChild(child, w.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
     case g: Generate if !g.join && (g.child.outputSet -- g.references).nonEmpty =>
@@ -380,11 +376,19 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
-    // Can't prune the columns on LeafNode
-    case p @ Project(_, l: LeafNode) => p
+    // Prune unnecessary window expressions
+    case p @ Project(_, w: Window) if (w.windowOutputSet -- p.references).nonEmpty =>
+      p.copy(child = w.copy(
+        windowExpressions = w.windowExpressions.filter(p.references.contains)))
+
+    // Eliminate no-op Window
+    case w: Window if w.windowExpressions.isEmpty => w.child
 
     // Eliminate no-op Projects
     case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
+
+    // Can't prune the columns on LeafNode
+    case p @ Project(_, l: LeafNode) => p
 
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
@@ -595,50 +599,40 @@ object NullPropagation extends Rule[LogicalPlan] {
 }
 
 /**
- * Attempts to eliminate reading (unnecessary) NULL values if they are not required for correctness
- * by inserting isNotNull filters in the query plan. These filters are currently inserted beneath
- * existing Filters and Join operators and are inferred based on their data constraints.
+ * Generate a list of additional filters from an operator's existing constraint but remove those
+ * that are either already part of the operator's condition or are part of the operator's child
+ * constraints. These filters are currently inserted to the existing conditions in the Filter
+ * operators and on either side of Join operators.
  *
  * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
  * LeftSemi joins.
  */
-object NullFiltering extends Rule[LogicalPlan] with PredicateHelper {
+object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
-      // We generate a list of additional isNotNull filters from the operator's existing constraints
-      // but remove those that are either already part of the filter condition or are part of the
-      // operator's child constraints.
-      val newIsNotNullConstraints = filter.constraints.filter(_.isInstanceOf[IsNotNull]) --
+      val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
-      if (newIsNotNullConstraints.nonEmpty) {
-        Filter(And(newIsNotNullConstraints.reduce(And), condition), child)
+      if (newFilters.nonEmpty) {
+        Filter(And(newFilters.reduce(And), condition), child)
       } else {
         filter
       }
 
-    case join @ Join(left, right, joinType, condition) =>
-      val leftIsNotNullConstraints = join.constraints
-        .filter(_.isInstanceOf[IsNotNull])
-        .filter(_.references.subsetOf(left.outputSet)) -- left.constraints
-      val rightIsNotNullConstraints =
-        join.constraints
-          .filter(_.isInstanceOf[IsNotNull])
-          .filter(_.references.subsetOf(right.outputSet)) -- right.constraints
-      val newLeftChild = if (leftIsNotNullConstraints.nonEmpty) {
-        Filter(leftIsNotNullConstraints.reduce(And), left)
-      } else {
-        left
+    case join @ Join(left, right, joinType, conditionOpt) =>
+      // Only consider constraints that can be pushed down completely to either the left or the
+      // right child
+      val constraints = join.constraints.filter { c =>
+        c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)}
+      // Remove those constraints that are already enforced by either the left or the right child
+      val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
+      val newConditionOpt = conditionOpt match {
+        case Some(condition) =>
+          val newFilters = additionalConstraints -- splitConjunctivePredicates(condition)
+          if (newFilters.nonEmpty) Option(And(newFilters.reduce(And), condition)) else None
+        case None =>
+          additionalConstraints.reduceOption(And)
       }
-      val newRightChild = if (rightIsNotNullConstraints.nonEmpty) {
-        Filter(rightIsNotNullConstraints.reduce(And), right)
-      } else {
-        right
-      }
-      if (newLeftChild != left || newRightChild != right) {
-        Join(newLeftChild, newRightChild, joinType, condition)
-      } else {
-        join
-      }
+      if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
   }
 }
 
@@ -816,21 +810,40 @@ object CombineUnions extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines two adjacent [[Filter]] operators into one, merging the
- * conditions into one conjunctive predicate.
+ * Combines two adjacent [[Filter]] operators into one, merging the non-redundant conditions into
+ * one conjunctive predicate.
  */
-object CombineFilters extends Rule[LogicalPlan] {
+object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case ff @ Filter(fc, nf @ Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
+    case ff @ Filter(fc, nf @ Filter(nc, grandChild)) =>
+      (ExpressionSet(splitConjunctivePredicates(fc)) --
+        ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
+        case Some(ac) =>
+          Filter(And(ac, nc), grandChild)
+        case None =>
+          nf
+      }
   }
 }
 
 /**
- * Removes filters that can be evaluated trivially.  This is done either by eliding the filter for
- * cases where it will always evaluate to `true`, or substituting a dummy empty relation when the
- * filter will always evaluate to `false`.
+ * Removes no-op SortOrder from Sort
  */
-object SimplifyFilters extends Rule[LogicalPlan] {
+object EliminateSorts  extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
+      val newOrders = orders.filterNot(_.child.foldable)
+      if (newOrders.isEmpty) child else s.copy(order = newOrders)
+  }
+}
+
+/**
+ * Removes filters that can be evaluated trivially.  This can be done through the following ways:
+ * 1) by eliding the filter for cases where it will always evaluate to `true`.
+ * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
+ * 3) by eliminating the always-true conditions given the constraints on the child's output.
+ */
+object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // If the filter condition always evaluate to true, remove the filter.
     case Filter(Literal(true, BooleanType), child) => child
@@ -838,6 +851,21 @@ object SimplifyFilters extends Rule[LogicalPlan] {
     // replace the input with an empty relation.
     case Filter(Literal(null, _), child) => LocalRelation(child.output, data = Seq.empty)
     case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
+    // If any deterministic condition is guaranteed to be true given the constraints on the child's
+    // output, remove the condition
+    case f @ Filter(fc, p: LogicalPlan) =>
+      val (prunedPredicates, remainingPredicates) =
+        splitConjunctivePredicates(fc).partition { cond =>
+          cond.deterministic && p.constraints.contains(cond)
+        }
+      if (prunedPredicates.isEmpty) {
+        f
+      } else if (remainingPredicates.isEmpty) {
+        p
+      } else {
+        val newCond = remainingPredicates.reduce(And)
+        Filter(newCond, p)
+      }
   }
 }
 
@@ -1117,6 +1145,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
         case FullOuter => f // DO Nothing for Full Outer Join
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
+        case UsingJoin(_, _) => sys.error("Untransformed Using join node")
       }
 
     // push down the join filter into sub query scanning if applicable
@@ -1152,6 +1181,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           Join(newLeft, newRight, LeftOuter, newJoinCond)
         case FullOuter => f
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
+        case UsingJoin(_, _) => sys.error("Untransformed Using join node")
       }
   }
 }

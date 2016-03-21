@@ -22,7 +22,7 @@ import java.io.IOException
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
@@ -244,8 +244,7 @@ private[ml] object RandomForest extends Logging {
       if (unorderedFeatures.contains(featureIndex)) {
         // Unordered feature
         val featureValue = treePoint.binnedFeatures(featureIndex)
-        val (leftNodeFeatureOffset, rightNodeFeatureOffset) =
-          agg.getLeftRightFeatureOffsets(featureIndexIdx)
+        val leftNodeFeatureOffset = agg.getFeatureOffset(featureIndexIdx)
         // Update the left or right bin for each split.
         val numSplits = agg.metadata.numSplits(featureIndex)
         val featureSplits = splits(featureIndex)
@@ -253,8 +252,6 @@ private[ml] object RandomForest extends Logging {
         while (splitIndex < numSplits) {
           if (featureSplits(splitIndex).shouldGoLeft(featureValue, featureSplits)) {
             agg.featureUpdate(leftNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
-          } else {
-            agg.featureUpdate(rightNodeFeatureOffset, splitIndex, treePoint.label, instanceWeight)
           }
           splitIndex += 1
         }
@@ -394,6 +391,7 @@ private[ml] object RandomForest extends Logging {
           mixedBinSeqOp(agg(aggNodeIndex), baggedPoint.datum, splits,
             metadata.unorderedFeatures, instanceWeight, featuresForNode)
         }
+        agg(aggNodeIndex).updateParent(baggedPoint.datum.label, instanceWeight)
       }
     }
 
@@ -479,8 +477,8 @@ private[ml] object RandomForest extends Logging {
         // Construct a nodeStatsAggregators array to hold node aggregate stats,
         // each node will have a nodeStatsAggregator
         val nodeStatsAggregators = Array.tabulate(numNodes) { nodeIndex =>
-          val featuresForNode = nodeToFeaturesBc.value.flatMap { nodeToFeatures =>
-            Some(nodeToFeatures(nodeIndex))
+          val featuresForNode = nodeToFeaturesBc.value.map { nodeToFeatures =>
+            nodeToFeatures(nodeIndex)
           }
           new DTStatsAggregator(metadata, featuresForNode)
         }
@@ -658,7 +656,7 @@ private[ml] object RandomForest extends Logging {
 
     // Calculate InformationGain and ImpurityStats if current node is top node
     val level = LearningNode.indexToLevel(node.id)
-    var gainAndImpurityStats: ImpurityStats = if (level ==0) {
+    var gainAndImpurityStats: ImpurityStats = if (level == 0) {
       null
     } else {
       node.stats
@@ -697,13 +695,12 @@ private[ml] object RandomForest extends Logging {
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
-          val (leftChildOffset, rightChildOffset) =
-            binAggregates.getLeftRightFeatureOffsets(featureIndexIdx)
+          val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
             Range(0, numSplits).map { splitIndex =>
               val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
-              val rightChildStats =
-                binAggregates.getImpurityCalculator(rightChildOffset, splitIndex)
+              val rightChildStats = binAggregates.getParentImpurityCalculator()
+                .subtract(leftChildStats)
               gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
                 leftChildStats, rightChildStats, binAggregates.metadata)
               (splitIndex, gainAndImpurityStats)
@@ -830,8 +827,8 @@ private[ml] object RandomForest extends Logging {
     val numFeatures = metadata.numFeatures
 
     // Sample the input only if there are continuous features.
-    val hasContinuousFeatures = Range(0, numFeatures).exists(metadata.isContinuous)
-    val sampledInput = if (hasContinuousFeatures) {
+    val continuousFeatures = Range(0, numFeatures).filter(metadata.isContinuous)
+    val sampledInput = if (continuousFeatures.nonEmpty) {
       // Calculate the number of samples for approximate quantile calculation.
       val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
       val fraction = if (requiredSamples < metadata.numExamples) {
@@ -840,58 +837,57 @@ private[ml] object RandomForest extends Logging {
         1.0
       }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
-      input.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt()).collect()
+      input.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt())
     } else {
-      new Array[LabeledPoint](0)
+      input.sparkContext.emptyRDD[LabeledPoint]
     }
 
-    val splits = new Array[Array[Split]](numFeatures)
+    findSplitsBinsBySorting(sampledInput, metadata, continuousFeatures)
+  }
 
-    // Find all splits.
-    // Iterate over all features.
-    var featureIndex = 0
-    while (featureIndex < numFeatures) {
-      if (metadata.isContinuous(featureIndex)) {
-        val featureSamples = sampledInput.map(_.features(featureIndex))
-        val featureSplits = findSplitsForContinuousFeature(featureSamples, metadata, featureIndex)
+  private def findSplitsBinsBySorting(
+      input: RDD[LabeledPoint],
+      metadata: DecisionTreeMetadata,
+      continuousFeatures: IndexedSeq[Int]): Array[Array[Split]] = {
 
-        val numSplits = featureSplits.length
-        logDebug(s"featureIndex = $featureIndex, numSplits = $numSplits")
-        splits(featureIndex) = new Array[Split](numSplits)
+    val continuousSplits: scala.collection.Map[Int, Array[Split]] = {
+      // reduce the parallelism for split computations when there are less
+      // continuous features than input partitions. this prevents tasks from
+      // being spun up that will definitely do no work.
+      val numPartitions = math.min(continuousFeatures.length, input.partitions.length)
 
-        var splitIndex = 0
-        while (splitIndex < numSplits) {
-          val threshold = featureSplits(splitIndex)
-          splits(featureIndex)(splitIndex) = new ContinuousSplit(featureIndex, threshold)
-          splitIndex += 1
+      input
+        .flatMap(point => continuousFeatures.map(idx => (idx, point.features(idx))))
+        .groupByKey(numPartitions)
+        .map { case (idx, samples) =>
+          val thresholds = findSplitsForContinuousFeature(samples, metadata, idx)
+          val splits: Array[Split] = thresholds.map(thresh => new ContinuousSplit(idx, thresh))
+          logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
+          (idx, splits)
+        }.collectAsMap()
+    }
+
+    val numFeatures = metadata.numFeatures
+    val splits: Array[Array[Split]] = Array.tabulate(numFeatures) {
+      case i if metadata.isContinuous(i) =>
+        val split = continuousSplits(i)
+        metadata.setNumSplits(i, split.length)
+        split
+
+      case i if metadata.isCategorical(i) && metadata.isUnordered(i) =>
+        // Unordered features
+        // 2^(maxFeatureValue - 1) - 1 combinations
+        val featureArity = metadata.featureArity(i)
+        Array.tabulate[Split](metadata.numSplits(i)) { splitIndex =>
+          val categories = extractMultiClassCategories(splitIndex + 1, featureArity)
+          new CategoricalSplit(i, categories.toArray, featureArity)
         }
-      } else {
-        // Categorical feature
-        if (metadata.isUnordered(featureIndex)) {
-          val numSplits = metadata.numSplits(featureIndex)
-          val featureArity = metadata.featureArity(featureIndex)
-          // TODO: Use an implicit representation mapping each category to a subset of indices.
-          //       I.e., track indices such that we can calculate the set of bins for which
-          //       feature value x splits to the left.
-          // Unordered features
-          // 2^(maxFeatureValue - 1) - 1 combinations
-          splits(featureIndex) = new Array[Split](numSplits)
-          var splitIndex = 0
-          while (splitIndex < numSplits) {
-            val categories: List[Double] =
-              extractMultiClassCategories(splitIndex + 1, featureArity)
-            splits(featureIndex)(splitIndex) =
-              new CategoricalSplit(featureIndex, categories.toArray, featureArity)
-            splitIndex += 1
-          }
-        } else {
-          // Ordered features
-          //   Bins correspond to feature values, so we do not need to compute splits or bins
-          //   beforehand.  Splits are constructed as needed during training.
-          splits(featureIndex) = new Array[Split](0)
-        }
-      }
-      featureIndex += 1
+
+      case i if metadata.isCategorical(i) =>
+        // Ordered features
+        //   Bins correspond to feature values, so we do not need to compute splits or bins
+        //   beforehand.  Splits are constructed as needed during training.
+        Array.empty[Split]
     }
     splits
   }
@@ -933,7 +929,7 @@ private[ml] object RandomForest extends Logging {
    * @return array of splits
    */
   private[tree] def findSplitsForContinuousFeature(
-      featureSamples: Array[Double],
+      featureSamples: Iterable[Double],
       metadata: DecisionTreeMetadata,
       featureIndex: Int): Array[Double] = {
     require(metadata.isContinuous(featureIndex),
@@ -943,8 +939,9 @@ private[ml] object RandomForest extends Logging {
       val numSplits = metadata.numSplits(featureIndex)
 
       // get count for each distinct value
-      val valueCountMap = featureSamples.foldLeft(Map.empty[Double, Int]) { (m, x) =>
-        m + ((x, m.getOrElse(x, 0) + 1))
+      val (valueCountMap, numSamples) = featureSamples.foldLeft((Map.empty[Double, Int], 0)) {
+        case ((m, cnt), x) =>
+          (m + ((x, m.getOrElse(x, 0) + 1)), cnt + 1)
       }
       // sort distinct values
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
@@ -955,7 +952,7 @@ private[ml] object RandomForest extends Logging {
         valueCounts.map(_._1)
       } else {
         // stride between splits
-        val stride: Double = featureSamples.length.toDouble / (numSplits + 1)
+        val stride: Double = numSamples.toDouble / (numSplits + 1)
         logDebug("stride = " + stride)
 
         // iterate `valueCount` to find splits
@@ -991,8 +988,6 @@ private[ml] object RandomForest extends Logging {
     assert(splits.length > 0,
       s"DecisionTree could not handle feature $featureIndex since it had only 1 unique value." +
         "  Please remove this feature and then try again.")
-    // set number of splits accordingly
-    metadata.setNumSplits(featureIndex, splits.length)
 
     splits
   }
@@ -1089,12 +1084,9 @@ private[ml] object RandomForest extends Logging {
    *  - Average over trees:
    *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree based on total number of training instances used
-   *       to build tree.
+   *     - Normalize importances for tree to sum to 1.
    *  - Normalize feature importance vector to sum to 1.
    *
-   * Note: This should not be used with Gradient-Boosted Trees.  It only makes sense for
-   *       independently trained trees.
    * @param trees  Unweighted forest of trees
    * @param numFeatures  Number of features in model (even if not all are explicitly used by
    *                     the model).
@@ -1128,11 +1120,32 @@ private[ml] object RandomForest extends Logging {
       maxFeatureIndex + 1
     }
     if (d == 0) {
-      assert(totalImportances.size == 0, s"Unknown error in computing RandomForest feature" +
-        s" importance: No splits in forest, but some non-zero importances.")
+      assert(totalImportances.size == 0, s"Unknown error in computing feature" +
+        s" importance: No splits found, but some non-zero importances.")
     }
     val (indices, values) = totalImportances.iterator.toSeq.sortBy(_._1).unzip
     Vectors.sparse(d, indices.toArray, values.toArray)
+  }
+
+  /**
+   * Given a Decision Tree model, compute the importance of each feature.
+   * This generalizes the idea of "Gini" importance to other losses,
+   * following the explanation of Gini importance from "Random Forests" documentation
+   * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+   *
+   * This feature importance is calculated as follows:
+   *  - importance(feature j) = sum (over nodes which split on feature j) of the gain,
+   *    where gain is scaled by the number of instances passing through node
+   *  - Normalize importances for tree to sum to 1.
+   *
+   * @param tree  Decision tree to compute importances for.
+   * @param numFeatures  Number of features in model (even if not all are explicitly used by
+   *                     the model).
+   *                     If -1, then numFeatures is set based on the max feature index in all trees.
+   * @return  Feature importance values, of length numFeatures.
+   */
+  private[ml] def featureImportances(tree: DecisionTreeModel, numFeatures: Int): Vector = {
+    featureImportances(Array(tree), numFeatures)
   }
 
   /**
