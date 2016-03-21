@@ -1934,50 +1934,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("Star Expansion - CreateStruct and CreateArray") {
-    val structDf = testData2.select("a", "b").as("record")
-    // CreateStruct and CreateArray in aggregateExpressions
-    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).first() == Row(3, Row(3, 1)))
-    assert(structDf.groupBy($"a").agg(min(array($"record.*"))).first() == Row(3, Seq(3, 1)))
-
-    // CreateStruct and CreateArray in project list (unresolved alias)
-    assert(structDf.select(struct($"record.*")).first() == Row(Row(1, 1)))
-    assert(structDf.select(array($"record.*")).first().getAs[Seq[Int]](0) === Seq(1, 1))
-
-    // CreateStruct and CreateArray in project list (alias)
-    assert(structDf.select(struct($"record.*").as("a")).first() == Row(Row(1, 1)))
-    assert(structDf.select(array($"record.*").as("a")).first().getAs[Seq[Int]](0) === Seq(1, 1))
-  }
-
-  test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
-    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
-    val e = intercept[AnalysisException] {
-      df.explode($"*") { case Row(prefix: String, csv: String) =>
-        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
-      }.queryExecution.assertAnalyzed()
-    }
-    assert(e.getMessage.contains("Invalid usage of '*' in explode/json_tuple/UDTF"))
-
-    checkAnswer(
-      df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
-        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
-      },
-      Row("1", "1,2", "1:1") ::
-        Row("1", "1,2", "1:2") ::
-        Row("2", "4", "2:4") ::
-        Row("3", "7,8,9", "3:7") ::
-        Row("3", "7,8,9", "3:8") ::
-        Row("3", "7,8,9", "3:9") :: Nil)
-  }
-
-  test("Star Expansion - explode alias and star") {
-    val df = Seq((Array("a"), 1)).toDF("a", "b")
-
-    checkAnswer(
-      df.select(explode($"a").as("a"), $"*"),
-      Row("a", Seq("a"), 1) :: Nil)
-  }
-
   test("Common subexpression elimination") {
     // TODO: support subexpression elimination in whole stage codegen
     withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
