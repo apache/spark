@@ -49,10 +49,7 @@ private[stat] object AndersonDarlingTest extends Logging {
 
   /**
    * AndersonDarlingTheoreticalDist is a trait that every distribution used in an AD test must
-   * extend. The rationale for this is that the AD test has distribution-dependent critical values,
-   * and by requiring extension of this trait we guarantee that future additional distributions
-   * make sure to add the appropriate critical values (CVs) (or at least acknowledge
-   * that they should be added)
+   * extend. Extensions should add distribution-dependent critical values (CVs).
    */
   sealed trait AndersonDarlingTheoreticalDist extends Serializable {
     // parameters used to initialized the distribution
@@ -168,9 +165,8 @@ private[stat] object AndersonDarlingTest extends Logging {
   /**
    * Perform a one sample Anderson-Darling test
    * @param data data to test for a given distribution
-   * @param distName name of theoretical distribution: currently supports normal,
-   *            exponential, gumbel, logistic, weibull as
-   *            ['norm', 'exp', 'gumbel', 'logistic', 'weibull']
+   * @param distName name of theoretical distribution: currently supports normal, exponential,
+   *                 gumbel, logistic, weibull as ['norm', 'exp', 'gumbel', 'logistic', 'weibull']
    * @param params variable-length argument providing parameters for given distribution. When none
    *               are provided, default parameters appropriate to each distribution are chosen. In
    *               either case, critical values reflect adjustments that assume the parameters were
@@ -182,44 +178,13 @@ private[stat] object AndersonDarlingTest extends Logging {
     : AndersonDarlingTestResult = {
     val n = data.count()
     val dist = initDist(distName, params)
-    val localData = data.sortBy(x => x).mapPartitions(calcPartAD(_, dist, n)).collect()
-    val s = localData.foldLeft((0.0, 0.0)) { case ((prevStat, prevCt), (rawStat, adj, ct)) =>
-      val adjVal = 2 * prevCt * adj
-      val adjustedStat = rawStat + adjVal
-      val cumCt = prevCt + ct
-      (prevStat + adjustedStat, cumCt)
-    }._1
-    val ADStat = -1 * n - s / n
+    val interRDD = data.sortBy(x => x).zipWithIndex().map { case(v, i) =>
+      val c = dist.cdf(v)
+      (2 * i + 1) * math.log(c) + (2 * n - 2 * i - 1) * math.log(1 - c)
+    }
+    val ADStat = - n - interRDD.sum() / n
     val criticalVals = dist.getCriticalValues(n)
     new AndersonDarlingTestResult(ADStat, criticalVals, NullHypothesis.OneSample.toString)
-  }
-
-
-  /**
-   * Calculate a partition's contribution to the Anderson-Darling statistic.
-   * In each partition we calculate 2 values, an unadjusted value that is contributed to the AD
-   * statistic directly, a value that must be adjusted by the number of values in the prior
-   * partitions, and a count of the elements in that partition
-   * @param part a partition of the data sample to be analyzed
-   * @param dist a theoretical distribution that extends the AndersonDarlingTheoreticalDist trait,
-   *             used to calculate CDF values and critical values
-   * @param n the total size of the data sample
-   * @return The first element corresponds to the position-independent contribution to the
-   *         statistic, the second is the value that must be scaled by the number of elements in
-   *         prior partitions, and the third is the number of elements in this partition
-   */
-  private def calcPartAD(part: Iterator[Double], dist: AndersonDarlingTheoreticalDist, n: Double)
-    : Iterator[(Double, Double, Double)] = {
-    val initAcc = (0.0, 0.0, 0.0)
-    val pResult = part.zipWithIndex.foldLeft(initAcc) { case ((prevS, prevC, prevCt), (v, i)) =>
-      val y = dist.cdf(v)
-      val a = math.log(y)
-      val b = math.log(1 - y)
-      val unAdjusted = a * (2 * i + 1) + b * (2 * n - 2 * i - 1)
-      val adjConstant = a - b
-      (prevS + unAdjusted, prevC + adjConstant, prevCt + 1)
-    }
-    Array(pResult).iterator
   }
 
   /**
@@ -232,19 +197,19 @@ private[stat] object AndersonDarlingTest extends Logging {
   private def initDist(distName: String, params: Seq[Double]): AndersonDarlingTheoreticalDist = {
     distName match {
       case "norm" =>
-        val checkedParams = validateParams(distName, params, 2, Seq(0.0, 1.0))
+        val checkedParams = getParams(distName, params, 2, Seq(0.0, 1.0))
         new AndersonDarlingNormal(checkedParams)
       case "exp" =>
-        val checkedParams = validateParams(distName, params, 1, Seq(1.0))
+        val checkedParams = getParams(distName, params, 1, Seq(1.0))
         new AndersonDarlingExponential(checkedParams)
       case "gumbel" =>
-        val checkedParams = validateParams(distName, params, 2, Seq(0.0, 1.0))
+        val checkedParams = getParams(distName, params, 2, Seq(0.0, 1.0))
         new AndersonDarlingGumbel(checkedParams)
       case "logistic" =>
-        val checkedParams = validateParams(distName, params, 2, Seq(0.0, 1.0))
+        val checkedParams = getParams(distName, params, 2, Seq(0.0, 1.0))
         new AndersonDarlingLogistic(checkedParams)
       case "weibull" =>
-        val checkedParams = validateParams(distName, params, 2, Seq(0.0, 1.0))
+        val checkedParams = getParams(distName, params, 2, Seq(0.0, 1.0))
         new AndersonDarlingWeibull(checkedParams)
       case _ => throw new IllegalArgumentException(
         s"Anderson-Darling does not currently support $distName distribution" +
@@ -261,7 +226,7 @@ private[stat] object AndersonDarlingTest extends Logging {
    * @param defParams default alternative for the parameter in case `params` is empty
    * @return parameters that will be used to initialize the distribution
    */
-  private def validateParams(
+  private def getParams(
       distName: String,
       params: Seq[Double],
       reqLen: Int,
