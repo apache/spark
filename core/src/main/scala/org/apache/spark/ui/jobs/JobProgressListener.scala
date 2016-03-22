@@ -307,9 +307,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     stageData.description = Option(stageSubmitted.properties).flatMap {
       p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
     }
-    stageData.descriptionPlain = Option(stageSubmitted.properties).flatMap {
-      p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION_PLAIN))
-    }
 
     val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashMap[Int, StageInfo])
     stages(stage.stageId) = stage

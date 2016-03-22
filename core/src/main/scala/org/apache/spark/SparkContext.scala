@@ -626,10 +626,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
   }
 
-  def setJobDescriptionPlain(value: String) {
-    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION_PLAIN, value)
-  }
-
   /**
    * Assigns a group ID to all the jobs started by this thread until the group ID is set to a
    * different value or cleared.
@@ -667,7 +663,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Clear the current thread's job group ID and its description. */
   def clearJobGroup() {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
-    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION_PLAIN, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
     setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, null)
   }
@@ -2213,7 +2208,6 @@ object SparkContext extends Logging {
   }
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
-  private[spark] val SPARK_JOB_DESCRIPTION_PLAIN = "spark.job.descriptionPlain"
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"

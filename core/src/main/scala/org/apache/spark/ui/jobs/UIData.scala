@@ -89,12 +89,7 @@ private[spark] object UIData {
     var diskBytesSpilled: Long = _
 
     var schedulingPool: String = ""
-    // This will be used when:
-    // (1) we display text tables
-    // (2) we display the event line if descriptionPlain is not specifically defined
     var description: Option[String] = None
-    // This will be used when we display the event line
-    var descriptionPlain: Option[String] = None
 
     var accumulables = new HashMap[Long, AccumulableInfo]
     var taskData = new HashMap[Long, TaskUIData]
