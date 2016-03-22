@@ -552,5 +552,9 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Round(Literal.create(null, dataType),
         Literal.create(null, IntegerType)), null)
     }
+
+    checkEvaluation(Round(-3.5, 0), -4.0)
+    checkEvaluation(Round(-0.35, 1), -0.4)
+    checkEvaluation(Round(-35, -1), -40)
   }
 }
