@@ -2653,7 +2653,7 @@ setMethod("sort_array",
 #' irisDF <- createDataFrame(sqlContext, iris)
 #' 
 #' # Compute histogram statistics
-#' histData <- histogram(df, "colname"Sepal_Length", nbins=12)
+#' histData <- histogram(df, "colname"Sepal_Length", nbins = 12)
 #'
 #' # Once SparkR has computed the histogram statistics, it would be very easy to
 #' # render the histogram using R's visualization packages such as ggplot2.
@@ -2661,7 +2661,7 @@ setMethod("sort_array",
 #' } 
 setMethod("histogram",
           signature(df = "DataFrame"),
-          function(df, colname, nbins=10) {
+          function(df, colname, nbins = 10) {
             # Validate nbins
             if (nbins < 2) {
               stop("The number of bins must be a positive integer number greater than 1.")
@@ -2679,7 +2679,7 @@ setMethod("histogram",
             df <- na.omit(df[, colname])
 
             # TODO: This will be when improved SPARK-9325 or SPARK-13436 are fixed
-            x <- eval(parse(text=paste0("df$", colname)))
+            x <- eval(parse(text = paste0("df$", colname)))
 
             stats <- collect(describe(df[, colname]))
             min <- as.numeric(stats[4,2])
@@ -2706,8 +2706,8 @@ setMethod("histogram",
             names(histStats) <- c("bins", "counts")
 
             # Fill bins with zero counts
-            y <- data.frame("bins"=seq(0, nbins - 1))
-            histStats <- merge(histStats, y, all.x=T, all.y=T)
+            y <- data.frame("bins" = seq(0, nbins - 1))
+            histStats <- merge(histStats, y, all.x = T, all.y = T)
             histStats[is.na(histStats$count), 2] <- 0
 
             # Compute centroids

@@ -1902,9 +1902,9 @@ test_that("Histogram", {
   # Basic histogram test
   expect_equal(
     all(histogram(irisDF, "Petal_Width", 8) ==
-        data.frame(bins=seq(0, 7),
-                   counts=c(48, 2, 7, 21, 24, 19, 15, 14),
-                   centroids=seq(0,7) * 0.3 + 0.25)),
+        data.frame(bins = seq(0, 7),
+                   counts = c(48, 2, 7, 21, 24, 19, 15, 14),
+                   centroids = seq(0,7) * 0.3 + 0.25)),
         TRUE)
 
   # Missing nbins
@@ -1915,7 +1915,7 @@ test_that("Histogram", {
                "Specified colname does not belong to the given DataFrame.")
 
   # Invalid nbins
-  expect_error(histogram(irisDF, "Petal_Width", nbins=0),
+  expect_error(histogram(irisDF, "Petal_Width", nbins = 0),
                "The number of bins must be a positive integer number greater than 1.")
 
   # Test against R's hist
@@ -1923,7 +1923,7 @@ test_that("Histogram", {
                    histogram(irisDF, "Sepal_Width", 12)$counts), T)
 
   # Test when there are zero counts
-  df <- as.DataFrame(sqlContext, data.frame(x=c(1,2,3,4,100)))
+  df <- as.DataFrame(sqlContext, data.frame(x = c(1,2,3,4,100)))
   expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
 })
 unlink(parquetPath)
