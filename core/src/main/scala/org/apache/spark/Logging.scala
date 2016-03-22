@@ -21,19 +21,15 @@ import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
-import org.apache.spark.annotation.Private
 import org.apache.spark.util.Utils
 
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
  * logging messages at different levels using methods that only evaluate parameters lazily if the
  * log level is enabled.
- *
- * NOTE: DO NOT USE this class outside of Spark. It is intended as an internal utility.
- *       This will likely be changed or removed in future releases.
  */
-@Private
-trait Logging {
+private[spark] trait Logging {
+
   // Make the log field transient so that objects with Logging can
   // be serialized and used on another machine
   @transient private var log_ : Logger = null
@@ -47,7 +43,7 @@ trait Logging {
   // Method to get or create the logger for this object
   protected def log: Logger = {
     if (log_ == null) {
-      initializeIfNecessary()
+      initializeLogIfNecessary(false)
       log_ = LoggerFactory.getLogger(logName)
     }
     log_
@@ -99,17 +95,17 @@ trait Logging {
     log.isTraceEnabled
   }
 
-  private def initializeIfNecessary() {
+  protected def initializeLogIfNecessary(isInterpreter: Boolean): Unit = {
     if (!Logging.initialized) {
       Logging.initLock.synchronized {
         if (!Logging.initialized) {
-          initializeLogging()
+          initializeLogging(isInterpreter)
         }
       }
     }
   }
 
-  private def initializeLogging() {
+  private def initializeLogging(isInterpreter: Boolean): Unit = {
     // Don't use a logger in here, as this is itself occurring during initialization of a logger
     // If Log4j 1.2 is being used, but is not initialized, load a default properties file
     val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
@@ -131,11 +127,11 @@ trait Logging {
         }
       }
 
-      if (Utils.isInInterpreter) {
+      if (isInterpreter) {
         // Use the repl's main class to define the default log level when running the shell,
         // overriding the root logger's config if they're different.
         val rootLogger = LogManager.getRootLogger()
-        val replLogger = LogManager.getLogger("org.apache.spark.repl.Main")
+        val replLogger = LogManager.getLogger(logName)
         val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
         if (replLevel != rootLogger.getEffectiveLevel()) {
           System.err.printf("Setting default log level to \"%s\".\n", replLevel)

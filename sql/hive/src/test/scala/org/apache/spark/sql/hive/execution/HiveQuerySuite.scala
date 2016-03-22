@@ -123,60 +123,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertBroadcastNestedLoopJoin(spark_10484_4)
   }
 
-  createQueryTest("SPARK-8976 Wrong Result for Rollup #1",
-    """
-      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH ROLLUP
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for Rollup #2",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM src group by key%5, key-5
-      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for Rollup #3",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
-      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for CUBE #1",
-    """
-      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH CUBE
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for CUBE #2",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
-      WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for GroupingSet",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
-      GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
   createQueryTest("insert table with generator with column name",
     """
       |  CREATE TABLE gen_tmp (key Int);
@@ -656,7 +602,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |select * where key = 4
     """.stripMargin)
 
-  // test get_json_object again Hive, because the HiveCompatabilitySuite cannot handle result
+  // test get_json_object again Hive, because the HiveCompatibilitySuite cannot handle result
   // with newline in it.
   createQueryTest("get_json_object #1",
     "SELECT get_json_object(src_json.json, '$') FROM src_json")
@@ -718,11 +664,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
+      .rdd
       .map { case Row(i: Int) => i }
       .collect()
       .toSet
 
     val expected = sql("SELECT key FROM src")
+      .rdd
       .map { case Row(i: Int) => i }
       .collect()
       .toSet
@@ -770,14 +718,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
-      .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
+      .zipWithIndex.map {case ((value, attr), key) => HavingRow(key, value, attr)}
     TestHive.sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
     val results =
       sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
-      .map(x => Pair(x.getString(0), x.getInt(1)))
+      .map(x => (x.getString(0), x.getInt(1)))
 
-    assert(results === Array(Pair("foo", 4)))
+    assert(results === Array(("foo", 4)))
     TestHive.reset()
   }
 

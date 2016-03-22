@@ -37,6 +37,8 @@ import org.apache.spark.util.Utils
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
  * @param code The sequence of statements required to evaluate the expression.
+ *             It should be empty string, if `isNull` and `value` are already existed, or no code
+ *             needed to evaluate them (literals).
  * @param isNull A term that holds a boolean value representing whether the expression evaluated
  *                 to null.
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
@@ -124,7 +126,7 @@ class CodegenContext {
    * For expressions that appear more than once, generate additional code to prevent
    * recomputing the value.
    *
-   * For example, consider two exprsesion generated from this SQL statement:
+   * For example, consider two expression generated from this SQL statement:
    *  SELECT (col1 + col2), (col1 + col2) / col3.
    *
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
@@ -138,7 +140,7 @@ class CodegenContext {
   // Foreach expression that is participating in subexpression elimination, the state to use.
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
-  // The collection of sub-exression result resetting methods that need to be called on each row.
+  // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   def declareAddedFunctions(): String = {
@@ -156,7 +158,11 @@ class CodegenContext {
   /** The variable name of the input row in generated code. */
   final var INPUT_ROW = "i"
 
-  private val curId = new java.util.concurrent.atomic.AtomicInteger()
+  /**
+    * The map from a variable name to it's next ID.
+    */
+  private val freshNameIds = new mutable.HashMap[String, Int]
+  freshNameIds += INPUT_ROW -> 1
 
   /**
     * A prefix used to generate fresh name.
@@ -164,16 +170,21 @@ class CodegenContext {
   var freshNamePrefix = ""
 
   /**
-   * Returns a term name that is unique within this instance of a `CodeGenerator`.
-   *
-   * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
-   * function.)
+   * Returns a term name that is unique within this instance of a `CodegenContext`.
    */
-  def freshName(name: String): String = {
-    if (freshNamePrefix == "") {
-      s"$name${curId.getAndIncrement}"
+  def freshName(name: String): String = synchronized {
+    val fullName = if (freshNamePrefix == "") {
+      name
     } else {
-      s"${freshNamePrefix}_$name${curId.getAndIncrement}"
+      s"${freshNamePrefix}_$name"
+    }
+    if (freshNameIds.contains(fullName)) {
+      val id = freshNameIds(fullName)
+      freshNameIds(fullName) = id + 1
+      s"$fullName$id"
+    } else {
+      freshNameIds += fullName -> 1
+      fullName
     }
   }
 
@@ -402,15 +413,35 @@ class CodegenContext {
   }
 
   /**
-    * Generates code for greater of two expressions.
-    *
-    * @param dataType data type of the expressions
-    * @param c1 name of the variable of expression 1's output
-    * @param c2 name of the variable of expression 2's output
-    */
+   * Generates code for greater of two expressions.
+   *
+   * @param dataType data type of the expressions
+   * @param c1 name of the variable of expression 1's output
+   * @param c2 name of the variable of expression 2's output
+   */
   def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
     case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
     case _ => s"(${genComp(dataType, c1, c2)}) > 0"
+  }
+
+  /**
+   * Generates code to do null safe execution, i.e. only execute the code when the input is not
+   * null by adding null check if necessary.
+   *
+   * @param nullable used to decide whether we should add null check or not.
+   * @param isNull the code to check if the input is null.
+   * @param execute the code that should only be executed when the input is not null.
+   */
+  def nullSafeExec(nullable: Boolean, isNull: String)(execute: String): String = {
+    if (nullable) {
+      s"""
+        if (!$isNull) {
+          $execute
+        }
+      """
+    } else {
+      "\n" + execute
+    }
   }
 
   /**

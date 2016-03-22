@@ -81,14 +81,14 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, Unsaf
  * of specialized classes: [[RowBoundOrdering]] & [[RangeBoundOrdering]].
  */
 case class Window(
-    projectList: Seq[Attribute],
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
   extends UnaryNode {
 
-  override def output: Seq[Attribute] = projectList ++ windowExpression.map(_.toAttribute)
+  override def output: Seq[Attribute] =
+    child.output ++ windowExpression.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (partitionSpec.isEmpty) {
@@ -198,7 +198,8 @@ case class Window(
           functions,
           ordinal,
           child.output,
-          (expressions, schema) => newMutableProjection(expressions, schema))
+          (expressions, schema) =>
+            newMutableProjection(expressions, schema, subexpressionEliminationEnabled))
 
         // Create the factory
         val factory = key match {
@@ -210,7 +211,8 @@ case class Window(
                 ordinal,
                 functions,
                 child.output,
-                (expressions, schema) => newMutableProjection(expressions, schema),
+                (expressions, schema) =>
+                  newMutableProjection(expressions, schema, subexpressionEliminationEnabled),
                 offset)
 
           // Growing Frame.
@@ -273,7 +275,7 @@ case class Window(
     val unboundToRefMap = expressions.zip(references).toMap
     val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
     UnsafeProjection.create(
-      projectList ++ patchedWindowExpression,
+      child.output ++ patchedWindowExpression,
       child.output)
   }
 

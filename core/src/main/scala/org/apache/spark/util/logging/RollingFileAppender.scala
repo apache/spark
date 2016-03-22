@@ -117,7 +117,7 @@ private[spark] class RollingFileAppender(
         }
       }).sorted
       val filesToBeDeleted = rolledoverFiles.take(
-        math.max(0, rolledoverFiles.size - maxRetainedFiles))
+        math.max(0, rolledoverFiles.length - maxRetainedFiles))
       filesToBeDeleted.foreach { file =>
         logInfo(s"Deleting file executor log file ${file.getAbsolutePath}")
         file.delete()

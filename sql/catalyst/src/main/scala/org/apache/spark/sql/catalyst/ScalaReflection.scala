@@ -29,11 +29,13 @@ import org.apache.spark.util.Utils
  */
 object ScalaReflection extends ScalaReflection {
   val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
-  // Since we are creating a runtime mirror usign the class loader of current thread,
+  // Since we are creating a runtime mirror using the class loader of current thread,
   // we need to use def at here. So, every time we call mirror, it is using the
   // class loader of the current thread.
-  override def mirror: universe.Mirror =
+  // SPARK-13640: Synchronize this because universe.runtimeMirror is not thread-safe in Scala 2.10.
+  override def mirror: universe.Mirror = ScalaReflectionLock.synchronized {
     universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
+  }
 
   import universe._
 
@@ -249,6 +251,8 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
+
+        // TODO: add runtime null check for primitive array
         val primitiveMethod = elementType match {
           case t if t <:< definitions.IntTpe => Some("toIntArray")
           case t if t <:< definitions.LongTpe => Some("toLongArray")
@@ -276,22 +280,29 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
-        val arrayData =
-          Invoke(
-            MapObjects(
-              p => constructorFor(elementType, Some(p), newTypePath),
-              getPath,
-              schemaFor(elementType).dataType),
-            "array",
-            ObjectType(classOf[Array[Any]]))
+
+        val mapFunction: Expression => Expression = p => {
+          val converter = constructorFor(elementType, Some(p), newTypePath)
+          if (nullable) {
+            converter
+          } else {
+            AssertNotNull(converter, newTypePath)
+          }
+        }
+
+        val array = Invoke(
+          MapObjects(mapFunction, getPath, dataType),
+          "array",
+          ObjectType(classOf[Array[Any]]))
 
         StaticInvoke(
           scala.collection.mutable.WrappedArray.getClass,
           ObjectType(classOf[Seq[_]]),
           "make",
-          arrayData :: Nil)
+          array :: Nil)
 
       case t if t <:< localTypeOf[Map[_, _]] =>
         // TODO: add walked type path for map
@@ -343,7 +354,7 @@ object ScalaReflection extends ScalaReflection {
               newTypePath)
 
             if (!nullable) {
-              AssertNotNull(constructor, t.toString, fieldName, fieldType.toString)
+              AssertNotNull(constructor, newTypePath)
             } else {
               constructor
             }
@@ -656,7 +667,8 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
-  def localTypeOf[T: TypeTag]: `Type` = {
+  // SPARK-13640: Synchronize this because TypeTag.tpe is not thread-safe in Scala 2.10.
+  def localTypeOf[T: TypeTag]: `Type` = ScalaReflectionLock.synchronized {
     val tag = implicitly[TypeTag[T]]
     tag.in(mirror).tpe.normalize
   }

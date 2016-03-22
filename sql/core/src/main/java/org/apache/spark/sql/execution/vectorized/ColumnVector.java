@@ -16,6 +16,13 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
+import org.apache.commons.lang.NotImplementedException;
+import org.apache.parquet.column.Dictionary;
+import org.apache.parquet.io.api.Binary;
+
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
@@ -23,8 +30,6 @@ import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
-
-import org.apache.commons.lang.NotImplementedException;
 
 /**
  * This class represents a column of values and provides the main APIs to access the data
@@ -102,16 +107,34 @@ public abstract class ColumnVector {
       DataType dt = data.dataType();
       Object[] list = new Object[length];
 
-      if (dt instanceof ByteType) {
+      if (dt instanceof BooleanType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getBoolean(offset + i);
+          }
+        }
+      } else if (dt instanceof ByteType) {
         for (int i = 0; i < length; i++) {
           if (!data.getIsNull(offset + i)) {
             list[i] = data.getByte(offset + i);
+          }
+        }
+      } else if (dt instanceof ShortType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getShort(offset + i);
           }
         }
       } else if (dt instanceof IntegerType) {
         for (int i = 0; i < length; i++) {
           if (!data.getIsNull(offset + i)) {
             list[i] = data.getInt(offset + i);
+          }
+        }
+      } else if (dt instanceof FloatType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getFloat(offset + i);
           }
         }
       } else if (dt instanceof DoubleType) {
@@ -126,10 +149,23 @@ public abstract class ColumnVector {
             list[i] = data.getLong(offset + i);
           }
         }
+      } else if (dt instanceof DecimalType) {
+        DecimalType decType = (DecimalType)dt;
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = getDecimal(i, decType.precision(), decType.scale());
+          }
+        }
       } else if (dt instanceof StringType) {
         for (int i = 0; i < length; i++) {
           if (!data.getIsNull(offset + i)) {
-            list[i] = ColumnVectorUtils.toString(data.getByteArray(offset + i));
+            list[i] = getUTF8String(i).toString();
+          }
+        }
+      } else if (dt instanceof CalendarIntervalType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = getInterval(i);
           }
         }
       } else {
@@ -170,28 +206,29 @@ public abstract class ColumnVector {
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
-      throw new NotImplementedException();
+      return data.getDecimal(offset + ordinal, precision, scale);
     }
 
     @Override
     public UTF8String getUTF8String(int ordinal) {
-      Array child = data.getByteArray(offset + ordinal);
-      return UTF8String.fromBytes(child.byteArray, child.byteArrayOffset, child.length);
+      return data.getUTF8String(offset + ordinal);
     }
 
     @Override
     public byte[] getBinary(int ordinal) {
-      throw new NotImplementedException();
+      return data.getBinary(offset + ordinal);
     }
 
     @Override
     public CalendarInterval getInterval(int ordinal) {
-      throw new NotImplementedException();
+      int month = data.getChildColumn(0).getInt(offset + ordinal);
+      long microseconds = data.getChildColumn(1).getLong(offset + ordinal);
+      return new CalendarInterval(month, microseconds);
     }
 
     @Override
     public InternalRow getStruct(int ordinal, int numFields) {
-      throw new NotImplementedException();
+      return data.getStruct(offset + ordinal);
     }
 
     @Override
@@ -282,6 +319,21 @@ public abstract class ColumnVector {
   /**
    * Sets the value at rowId to `value`.
    */
+  public abstract void putBoolean(int rowId, boolean value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to value.
+   */
+  public abstract void putBooleans(int rowId, int count, boolean value);
+
+  /**
+   * Returns the value for rowId.
+   */
+  public abstract boolean getBoolean(int rowId);
+
+  /**
+   * Sets the value at rowId to `value`.
+   */
   public abstract void putByte(int rowId, byte value);
 
   /**
@@ -298,6 +350,26 @@ public abstract class ColumnVector {
    * Returns the value for rowId.
    */
   public abstract byte getByte(int rowId);
+
+  /**
+   * Sets the value at rowId to `value`.
+   */
+  public abstract void putShort(int rowId, short value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to value.
+   */
+  public abstract void putShorts(int rowId, int count, short value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   */
+  public abstract void putShorts(int rowId, int count, short[] src, int srcIndex);
+
+  /**
+   * Returns the value for rowId.
+   */
+  public abstract short getShort(int rowId);
 
   /**
    * Sets the value at rowId to `value`.
@@ -354,6 +426,33 @@ public abstract class ColumnVector {
   /**
    * Sets the value at rowId to `value`.
    */
+  public abstract void putFloat(int rowId, float value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to value.
+   */
+  public abstract void putFloats(int rowId, int count, float value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * src should contain `count` doubles written as ieee format.
+   */
+  public abstract void putFloats(int rowId, int count, float[] src, int srcIndex);
+
+  /**
+   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
+   * The data in src must be ieee formatted floats.
+   */
+  public abstract void putFloats(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
+   * Returns the value for rowId.
+   */
+  public abstract float getFloat(int rowId);
+
+  /**
+   * Sets the value at rowId to `value`.
+   */
   public abstract void putDouble(int rowId, double value);
 
   /**
@@ -369,7 +468,7 @@ public abstract class ColumnVector {
 
   /**
    * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
-   * The data in src must be ieee formated doubles.
+   * The data in src must be ieee formatted doubles.
    */
   public abstract void putDoubles(int rowId, int count, byte[] src, int srcIndex);
 
@@ -426,10 +525,55 @@ public abstract class ColumnVector {
   /**
    * Returns the value for rowId.
    */
-  public final Array getByteArray(int rowId) {
+  private Array getByteArray(int rowId) {
     Array array = getArray(rowId);
     array.data.loadBytes(array);
     return array;
+  }
+
+  /**
+   * Returns the decimal for rowId.
+   */
+  public final Decimal getDecimal(int rowId, int precision, int scale) {
+    if (precision <= Decimal.MAX_INT_DIGITS()) {
+      return Decimal.createUnsafe(getInt(rowId), precision, scale);
+    } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      return Decimal.createUnsafe(getLong(rowId), precision, scale);
+    } else {
+      // TODO: best perf?
+      byte[] bytes = getBinary(rowId);
+      BigInteger bigInteger = new BigInteger(bytes);
+      BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+      return Decimal.apply(javaDecimal, precision, scale);
+    }
+  }
+
+  /**
+   * Returns the UTF8String for rowId.
+   */
+  public final UTF8String getUTF8String(int rowId) {
+    if (dictionary == null) {
+      ColumnVector.Array a = getByteArray(rowId);
+      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
+    } else {
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      return UTF8String.fromBytes(v.getBytes());
+    }
+  }
+
+  /**
+   * Returns the byte array for rowId.
+   */
+  public final byte[] getBinary(int rowId) {
+    if (dictionary == null) {
+      ColumnVector.Array array = getByteArray(rowId);
+      byte[] bytes = new byte[array.length];
+      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
+      return bytes;
+    } else {
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      return v.getBytes();
+    }
   }
 
   /**
@@ -469,6 +613,20 @@ public abstract class ColumnVector {
     return result;
   }
 
+  public final int appendBoolean(boolean v) {
+    reserve(elementsAppended + 1);
+    putBoolean(elementsAppended, v);
+    return elementsAppended++;
+  }
+
+  public final int appendBooleans(int count, boolean v) {
+    reserve(elementsAppended + count);
+    int result = elementsAppended;
+    putBooleans(elementsAppended, count, v);
+    elementsAppended += count;
+    return result;
+  }
+
   public final int appendByte(byte v) {
     reserve(elementsAppended + 1);
     putByte(elementsAppended, v);
@@ -487,6 +645,28 @@ public abstract class ColumnVector {
     reserve(elementsAppended + length);
     int result = elementsAppended;
     putBytes(elementsAppended, length, src, offset);
+    elementsAppended += length;
+    return result;
+  }
+
+  public final int appendShort(short v) {
+    reserve(elementsAppended + 1);
+    putShort(elementsAppended, v);
+    return elementsAppended++;
+  }
+
+  public final int appendShorts(int count, short v) {
+    reserve(elementsAppended + count);
+    int result = elementsAppended;
+    putShorts(elementsAppended, count, v);
+    elementsAppended += count;
+    return result;
+  }
+
+  public final int appendShorts(int length, short[] src, int offset) {
+    reserve(elementsAppended + length);
+    int result = elementsAppended;
+    putShorts(elementsAppended, length, src, offset);
     elementsAppended += length;
     return result;
   }
@@ -532,6 +712,20 @@ public abstract class ColumnVector {
     int result = elementsAppended;
     putLongs(elementsAppended, length, src, offset);
     elementsAppended += length;
+    return result;
+  }
+
+  public final int appendFloat(float v) {
+    reserve(elementsAppended + 1);
+    putFloat(elementsAppended, v);
+    return elementsAppended++;
+  }
+
+  public final int appendFloats(int count, float v) {
+    reserve(elementsAppended + count);
+    int result = elementsAppended;
+    putFloats(elementsAppended, count, v);
+    elementsAppended += count;
     return result;
   }
 
@@ -605,7 +799,12 @@ public abstract class ColumnVector {
   /**
    * Returns the elements appended.
    */
-  public int getElementsAppended() { return elementsAppended; }
+  public final int getElementsAppended() { return elementsAppended; }
+
+  /**
+   * Returns true if this column is an array.
+   */
+  public final boolean isArray() { return resultArray != null; }
 
   /**
    * Maximum number of rows that can be stored in this column.
@@ -654,6 +853,39 @@ public abstract class ColumnVector {
   protected final ColumnarBatch.Row resultStruct;
 
   /**
+   * The Dictionary for this column.
+   *
+   * If it's not null, will be used to decode the value in getXXX().
+   */
+  protected Dictionary dictionary;
+
+  /**
+   * Reusable column for ids of dictionary.
+   */
+  protected ColumnVector dictionaryIds;
+
+  /**
+   * Update the dictionary.
+   */
+  public void setDictionary(Dictionary dictionary) {
+    this.dictionary = dictionary;
+  }
+
+  /**
+   * Reserve a integer column for ids of dictionary.
+   */
+  public ColumnVector reserveDictionaryIds(int capacity) {
+    if (dictionaryIds == null) {
+      dictionaryIds = allocate(capacity, DataTypes.IntegerType,
+        this instanceof OnHeapColumnVector ? MemoryMode.ON_HEAP : MemoryMode.OFF_HEAP);
+    } else {
+      dictionaryIds.reset();
+      dictionaryIds.reserve(capacity);
+    }
+    return dictionaryIds;
+  }
+
+  /**
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
@@ -661,7 +893,8 @@ public abstract class ColumnVector {
     this.capacity = capacity;
     this.type = type;
 
-    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType) {
+    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
+        || DecimalType.isByteArrayDecimalType(type)) {
       DataType childType;
       int childCapacity = capacity;
       if (type instanceof ArrayType) {
@@ -680,6 +913,13 @@ public abstract class ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = ColumnVector.allocate(capacity, st.fields()[i].dataType(), memMode);
       }
+      this.resultArray = null;
+      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+    } else if (type instanceof CalendarIntervalType) {
+      // Two columns. Months as int. Microseconds as Long.
+      this.childColumns = new ColumnVector[2];
+      this.childColumns[0] = ColumnVector.allocate(capacity, DataTypes.IntegerType, memMode);
+      this.childColumns[1] = ColumnVector.allocate(capacity, DataTypes.LongType, memMode);
       this.resultArray = null;
       this.resultStruct = new ColumnarBatch.Row(this.childColumns);
     } else {

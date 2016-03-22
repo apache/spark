@@ -27,7 +27,6 @@ import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
@@ -178,7 +177,7 @@ case class InsertIntoHiveTable(
       // loadPartition call orders directories created on the iteration order of the this map
       val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
       table.hiveQlTable.getPartCols.asScala.foreach { entry =>
-        orderedPartitionSpec.put(entry.getName, partitionSpec.get(entry.getName).getOrElse(""))
+        orderedPartitionSpec.put(entry.getName, partitionSpec.getOrElse(entry.getName, ""))
       }
 
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
@@ -205,7 +204,7 @@ case class InsertIntoHiveTable(
         val oldPart =
           catalog.client.getPartitionOption(
             catalog.client.getTable(table.databaseName, table.tableName),
-            partitionSpec.asJava)
+            partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
             catalog.client.loadPartition(

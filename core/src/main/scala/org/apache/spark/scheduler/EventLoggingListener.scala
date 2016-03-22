@@ -19,11 +19,11 @@ package org.apache.spark.scheduler
 
 import java.io._
 import java.net.URI
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.base.Charsets
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -224,6 +224,13 @@ private[spark] class EventLoggingListener(
       }
     }
     fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
+    // touch file to ensure modtime is current across those filesystems where rename()
+    // does not set it, -and which support setTimes(); it's a no-op on most object stores
+    try {
+      fileSystem.setTimes(target, System.currentTimeMillis(), -1)
+    } catch {
+      case e: Exception => logDebug(s"failed to set time of $target", e)
+    }
   }
 
 }
@@ -232,8 +239,6 @@ private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
-  val SPARK_VERSION_KEY = "SPARK_VERSION"
-  val COMPRESSION_CODEC_KEY = "COMPRESSION_CODEC"
 
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
@@ -249,7 +254,7 @@ private[spark] object EventLoggingListener extends Logging {
   def initEventLog(logStream: OutputStream): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
     val metadataJson = compact(JsonProtocol.logStartToJson(metadata)) + "\n"
-    logStream.write(metadataJson.getBytes(Charsets.UTF_8))
+    logStream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
   }
 
   /**

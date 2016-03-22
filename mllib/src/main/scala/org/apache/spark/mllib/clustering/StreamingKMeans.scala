@@ -183,7 +183,7 @@ class StreamingKMeans @Since("1.2.0") (
   }
 
   /**
-   * Set the decay factor directly (for forgetful algorithms).
+   * Set the forgetfulness of the previous centroids.
    */
   @Since("1.2.0")
   def setDecayFactor(a: Double): this.type = {
@@ -192,7 +192,9 @@ class StreamingKMeans @Since("1.2.0") (
   }
 
   /**
-   * Set the half life and time unit ("batches" or "points") for forgetful algorithms.
+   * Set the half life and time unit ("batches" or "points"). If points, then the decay factor
+   * is raised to the power of number of new points and if batches, then decay factor will be
+   * used as is.
    */
   @Since("1.2.0")
   def setHalfLife(halfLife: Double, timeUnit: String): this.type = {

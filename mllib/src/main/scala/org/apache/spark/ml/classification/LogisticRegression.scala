@@ -263,10 +263,11 @@ class LogisticRegression @Since("1.2.0") (
   protected[spark] def train(dataset: DataFrame, handlePersistence: Boolean):
       LogisticRegressionModel = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
-      case Row(label: Double, weight: Double, features: Vector) =>
-        Instance(label, weight, features)
-    }
+    val instances: RDD[Instance] =
+      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
+        case Row(label: Double, weight: Double, features: Vector) =>
+          Instance(label, weight, features)
+      }
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -332,12 +333,13 @@ class LogisticRegression @Since("1.2.0") (
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
         } else {
+          val standardizationParam = $(standardization)
           def regParamL1Fun = (index: Int) => {
             // Remove the L1 penalization on the intercept
             if (index == numFeatures) {
               0.0
             } else {
-              if ($(standardization)) {
+              if (standardizationParam) {
                 regParamL1
               } else {
                 // If `standardization` is false, we still standardize the data
@@ -789,6 +791,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
 /**
  * :: Experimental ::
  * Logistic regression training results.
+ *
  * @param predictions dataframe outputted by the model's `transform` method.
  * @param probabilityCol field in "predictions" which gives the calibrated probability of
  *                       each instance as a vector.
@@ -812,6 +815,7 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
 /**
  * :: Experimental ::
  * Binary Logistic regression results for a given model.
+ *
  * @param predictions dataframe outputted by the model's `transform` method.
  * @param probabilityCol field in "predictions" which gives the calibrated probability of
  *                       each instance.
@@ -836,7 +840,7 @@ class BinaryLogisticRegressionSummary private[classification] (
   // TODO: Allow the user to vary the number of bins using a setBins method in
   // BinaryClassificationMetrics. For now the default is set to 100.
   @transient private val binaryMetrics = new BinaryClassificationMetrics(
-    predictions.select(probabilityCol, labelCol).map {
+    predictions.select(probabilityCol, labelCol).rdd.map {
       case Row(score: Vector, label: Double) => (score(1), label)
     }, 100
   )

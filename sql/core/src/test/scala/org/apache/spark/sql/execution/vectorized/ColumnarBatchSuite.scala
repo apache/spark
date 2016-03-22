@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.vectorized
 
+import java.nio.charset.StandardCharsets
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
@@ -27,6 +29,7 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class ColumnarBatchSuite extends SparkFunSuite {
   test("Null Apis") {
@@ -328,18 +331,21 @@ class ColumnarBatchSuite extends SparkFunSuite {
       var idx = 0
 
       val values = ("Hello" :: "abc" :: Nil).toArray
-      column.putByteArray(idx, values(0).getBytes, 0, values(0).getBytes().length)
+      column.putByteArray(idx, values(0).getBytes(StandardCharsets.UTF_8),
+        0, values(0).getBytes(StandardCharsets.UTF_8).length)
       reference += values(0)
       idx += 1
       assert(column.arrayData().elementsAppended == 5)
 
-      column.putByteArray(idx, values(1).getBytes, 0, values(1).getBytes().length)
+      column.putByteArray(idx, values(1).getBytes(StandardCharsets.UTF_8),
+        0, values(1).getBytes(StandardCharsets.UTF_8).length)
       reference += values(1)
       idx += 1
       assert(column.arrayData().elementsAppended == 8)
 
       // Just put llo
-      val offset = column.putByteArray(idx, values(0).getBytes, 2, values(0).getBytes().length - 2)
+      val offset = column.putByteArray(idx, values(0).getBytes(StandardCharsets.UTF_8),
+        2, values(0).getBytes(StandardCharsets.UTF_8).length - 2)
       reference += "llo"
       idx += 1
       assert(column.arrayData().elementsAppended == 11)
@@ -352,14 +358,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       // Put a long string
       val s = "abcdefghijklmnopqrstuvwxyz"
-      column.putByteArray(idx, (s + s).getBytes)
+      column.putByteArray(idx, (s + s).getBytes(StandardCharsets.UTF_8))
       reference += (s + s)
       idx += 1
       assert(column.arrayData().elementsAppended == 11 + (s + s).length)
 
       reference.zipWithIndex.foreach { v =>
         assert(v._1.length == column.getArrayLength(v._2), "MemoryMode=" + memMode)
-        assert(v._1 == ColumnVectorUtils.toString(column.getByteArray(v._2)),
+        assert(v._1 == column.getUTF8String(v._2).toString,
           "MemoryMode" + memMode)
       }
 
@@ -472,7 +478,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       batch.column(0).putInt(0, 1)
       batch.column(1).putDouble(0, 1.1)
       batch.column(2).putNull(0)
-      batch.column(3).putByteArray(0, "Hello".getBytes)
+      batch.column(3).putByteArray(0, "Hello".getBytes(StandardCharsets.UTF_8))
       batch.setNumRows(1)
 
       // Verify the results of the row.
@@ -487,7 +493,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(batch.column(1).getDouble(0) == 1.1)
       assert(batch.column(1).getIsNull(0) == false)
       assert(batch.column(2).getIsNull(0) == true)
-      assert(ColumnVectorUtils.toString(batch.column(3).getByteArray(0)) == "Hello")
+      assert(batch.column(3).getUTF8String(0).toString == "Hello")
 
       // Verify the iterator works correctly.
       val it = batch.rowIterator()
@@ -498,7 +504,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(row.getDouble(1) == 1.1)
       assert(row.isNullAt(1) == false)
       assert(row.isNullAt(2) == true)
-      assert(ColumnVectorUtils.toString(batch.column(3).getByteArray(0)) == "Hello")
+      assert(batch.column(3).getUTF8String(0).toString == "Hello")
       assert(it.hasNext == false)
       assert(it.hasNext == false)
 
@@ -518,17 +524,17 @@ class ColumnarBatchSuite extends SparkFunSuite {
       batch.column(0).putNull(0)
       batch.column(1).putDouble(0, 2.2)
       batch.column(2).putInt(0, 2)
-      batch.column(3).putByteArray(0, "abc".getBytes)
+      batch.column(3).putByteArray(0, "abc".getBytes(StandardCharsets.UTF_8))
 
       batch.column(0).putInt(1, 3)
       batch.column(1).putNull(1)
       batch.column(2).putInt(1, 3)
-      batch.column(3).putByteArray(1, "".getBytes)
+      batch.column(3).putByteArray(1, "".getBytes(StandardCharsets.UTF_8))
 
       batch.column(0).putInt(2, 4)
       batch.column(1).putDouble(2, 4.4)
       batch.column(2).putInt(2, 4)
-      batch.column(3).putByteArray(2, "world".getBytes)
+      batch.column(3).putByteArray(2, "world".getBytes(StandardCharsets.UTF_8))
       batch.setNumRows(3)
 
       def rowEquals(x: InternalRow, y: Row): Unit = {
@@ -571,7 +577,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
-
   private def doubleEquals(d1: Double, d2: Double): Boolean = {
     if (d1.isNaN && d2.isNaN) {
       true
@@ -585,13 +590,23 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(r1.isNullAt(v._2) == r2.isNullAt(v._2), "Seed = " + seed)
       if (!r1.isNullAt(v._2)) {
         v._1.dataType match {
+          case BooleanType => assert(r1.getBoolean(v._2) == r2.getBoolean(v._2), "Seed = " + seed)
           case ByteType => assert(r1.getByte(v._2) == r2.getByte(v._2), "Seed = " + seed)
+          case ShortType => assert(r1.getShort(v._2) == r2.getShort(v._2), "Seed = " + seed)
           case IntegerType => assert(r1.getInt(v._2) == r2.getInt(v._2), "Seed = " + seed)
           case LongType => assert(r1.getLong(v._2) == r2.getLong(v._2), "Seed = " + seed)
+          case FloatType => assert(doubleEquals(r1.getFloat(v._2), r2.getFloat(v._2)),
+            "Seed = " + seed)
           case DoubleType => assert(doubleEquals(r1.getDouble(v._2), r2.getDouble(v._2)),
             "Seed = " + seed)
+          case t: DecimalType =>
+            val d1 = r1.getDecimal(v._2, t.precision, t.scale).toBigDecimal
+            val d2 = r2.getDecimal(v._2)
+            assert(d1.compare(d2) == 0, "Seed = " + seed)
           case StringType =>
             assert(r1.getString(v._2) == r2.getString(v._2), "Seed = " + seed)
+          case CalendarIntervalType =>
+            assert(r1.getInterval(v._2) === r2.get(v._2).asInstanceOf[CalendarInterval])
           case ArrayType(childType, n) =>
             val a1 = r1.getArray(v._2).array
             val a2 = r2.getList(v._2).toArray
@@ -605,6 +620,27 @@ class ColumnarBatchSuite extends SparkFunSuite {
                   i += 1
                 }
               }
+              case FloatType => {
+                var i = 0
+                while (i < a1.length) {
+                  assert(doubleEquals(a1(i).asInstanceOf[Float], a2(i).asInstanceOf[Float]),
+                    "Seed = " + seed)
+                  i += 1
+                }
+              }
+
+              case t: DecimalType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val d1 = a1(i).asInstanceOf[Decimal].toBigDecimal
+                    val d2 = a2(i).asInstanceOf[java.math.BigDecimal]
+                    assert(d1.compare(d2) == 0, "Seed = " + seed)
+                  }
+                  i += 1
+                }
+
               case _ => assert(a1 === a2, "Seed = " + seed)
             }
           case StructType(childFields) =>
@@ -644,10 +680,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
    * results.
    */
   def testRandomRows(flatSchema: Boolean, numFields: Int) {
-    // TODO: add remaining types. Figure out why StringType doesn't work on jenkins.
-    val types = Array(ByteType, IntegerType, LongType, DoubleType)
+    // TODO: Figure out why StringType doesn't work on jenkins.
+    val types = Array(
+      BooleanType, ByteType, FloatType, DoubleType,
+      IntegerType, LongType, ShortType, DecimalType.IntDecimal, new DecimalType(30, 10),
+      CalendarIntervalType)
     val seed = System.nanoTime()
-    val NUM_ROWS = 500
+    val NUM_ROWS = 200
     val NUM_ITERS = 1000
     val random = new Random(seed)
     var i = 0
@@ -682,7 +721,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Random flat schema") {
-    testRandomRows(true, 10)
+    testRandomRows(true, 15)
   }
 
   test("Random nested schema") {

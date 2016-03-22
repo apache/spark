@@ -109,7 +109,8 @@ class Params(Identifiable):
         """
         if self._params is None:
             self._params = list(filter(lambda attr: isinstance(attr, Param),
-                                       [getattr(self, x) for x in dir(self) if x != "params"]))
+                                       [getattr(self, x) for x in dir(self) if x != "params" and
+                                        not isinstance(getattr(type(self), x, None), property)]))
         return self._params
 
     @since("1.4.0")
@@ -179,8 +180,11 @@ class Params(Identifiable):
         Tests whether this instance contains a param with a given
         (string) name.
         """
-        param = self._resolveParam(paramName)
-        return param in self.params
+        if isinstance(paramName, str):
+            p = getattr(self, paramName, None)
+            return isinstance(p, Param)
+        else:
+            raise TypeError("hasParam(): paramName must be a string")
 
     @since("1.4.0")
     def getOrDefault(self, param):

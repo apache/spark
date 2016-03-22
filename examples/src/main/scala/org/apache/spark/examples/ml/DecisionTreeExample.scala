@@ -310,8 +310,8 @@ object DecisionTreeExample {
       data: DataFrame,
       labelColName: String): Unit = {
     val fullPredictions = model.transform(data).cache()
-    val predictions = fullPredictions.select("prediction").map(_.getDouble(0))
-    val labels = fullPredictions.select(labelColName).map(_.getDouble(0))
+    val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
+    val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
     // Print number of classes for reference
     val numClasses = MetadataUtils.getNumClasses(fullPredictions.schema(labelColName)) match {
       case Some(n) => n
@@ -335,8 +335,8 @@ object DecisionTreeExample {
       data: DataFrame,
       labelColName: String): Unit = {
     val fullPredictions = model.transform(data).cache()
-    val predictions = fullPredictions.select("prediction").map(_.getDouble(0))
-    val labels = fullPredictions.select(labelColName).map(_.getDouble(0))
+    val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
+    val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
     val RMSE = new RegressionMetrics(predictions.zip(labels)).rootMeanSquaredError
     println(s"  Root mean squared error (RMSE): $RMSE")
   }

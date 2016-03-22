@@ -22,7 +22,6 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
-import org.apache.spark.util.SerializableConfiguration
 
 /**
  * An implementation of checkpointing that writes the RDD data to reliable storage.

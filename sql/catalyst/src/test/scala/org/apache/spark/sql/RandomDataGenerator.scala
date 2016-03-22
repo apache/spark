@@ -47,9 +47,9 @@ object RandomDataGenerator {
    */
   private val PROBABILITY_OF_NULL: Float = 0.1f
 
-  private val MAX_STR_LEN: Int = 1024
-  private val MAX_ARR_SIZE: Int = 128
-  private val MAX_MAP_SIZE: Int = 128
+  final val MAX_STR_LEN: Int = 1024
+  final val MAX_ARR_SIZE: Int = 128
+  final val MAX_MAP_SIZE: Int = 128
 
   /**
    * Helper function for constructing a biased random number generator which returns "interesting"
@@ -148,7 +148,7 @@ object RandomDataGenerator {
             // for "0001-01-01 00:00:00.000000". We need to find a
             // number that is greater or equals to this number as a valid timestamp value.
             while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the the number of milliseconds since
+              // 253402329599999L is the number of milliseconds since
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }
@@ -163,7 +163,7 @@ object RandomDataGenerator {
             // for "0001-01-01 00:00:00.000000". We need to find a
             // number that is greater or equals to this number as a valid timestamp value.
             while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the the number of milliseconds since
+              // 253402329599999L is the number of milliseconds since
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }
@@ -208,7 +208,17 @@ object RandomDataGenerator {
             forType(valueType, nullable = valueContainsNull, rand)
         ) yield {
           () => {
-            Seq.fill(rand.nextInt(MAX_MAP_SIZE))((keyGenerator(), valueGenerator())).toMap
+            val length = rand.nextInt(MAX_MAP_SIZE)
+            val keys = scala.collection.mutable.HashSet(Seq.fill(length)(keyGenerator()): _*)
+            // In case the number of different keys is not enough, set a max iteration to avoid
+            // infinite loop.
+            var count = 0
+            while (keys.size < length && count < MAX_MAP_SIZE) {
+              keys += keyGenerator()
+              count += 1
+            }
+            val values = Seq.fill(keys.size)(valueGenerator())
+            keys.zip(values).toMap
           }
         }
       }

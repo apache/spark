@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.worker.ui
 
 import java.io.File
-import java.net.URI
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -30,7 +29,7 @@ import org.apache.spark.util.logging.RollingFileAppender
 
 private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
   private val worker = parent.worker
-  private val workDir = parent.workDir
+  private val workDir = new File(parent.workDir.toURI.normalize().getPath)
   private val supportedLogTypes = Set("stderr", "stdout")
 
   def renderLog(request: HttpServletRequest): String = {
@@ -138,7 +137,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     }
 
     // Verify that the normalized path of the log directory is in the working directory
-    val normalizedUri = new URI(logDirectory).normalize()
+    val normalizedUri = new File(logDirectory).toURI.normalize()
     val normalizedLogDir = new File(normalizedUri.getPath)
     if (!Utils.isInDirectory(workDir, normalizedLogDir)) {
       return ("Error: invalid log directory " + logDirectory, 0, 0, 0)

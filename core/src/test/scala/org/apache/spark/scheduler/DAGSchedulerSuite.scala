@@ -31,7 +31,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{CallSite, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -134,6 +134,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     val successfulStages = new HashSet[Int]
     val failedStages = new ArrayBuffer[Int]
     val stageByOrderOfExecution = new ArrayBuffer[Int]
+    val endedTasks = new HashSet[Long]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
       submittedStageInfos += stageSubmitted.stageInfo
@@ -147,6 +148,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       } else {
         failedStages += stageInfo.stageId
       }
+    }
+
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+      endedTasks += taskEnd.taskInfo.taskId
     }
   }
 
@@ -195,6 +200,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     sparkListener.submittedStageInfos.clear()
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
+    sparkListener.endedTasks.clear()
     failure = null
     sc.addSparkListener(sparkListener)
     taskSets.clear()
@@ -663,7 +669,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = parts)
     completeNextResultStageWithSuccess(1, 1)
 
-    // Confirm job finished succesfully
+    // Confirm job finished successfully
     sc.listenerBus.waitUntilEmpty(1000)
     assert(ended === true)
     assert(results === (0 until parts).map { idx => idx -> 42 }.toMap)
@@ -980,6 +986,52 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
     // The FetchFailed from the original reduce stage should be ignored.
     assert(countSubmittedMapStageAttempts() === 2)
+  }
+
+  test("task events always posted in speculation / when stage is killed") {
+    val baseRdd = new MyRDD(sc, 4, Nil)
+    val finalRdd = new MyRDD(sc, 4, List(new OneToOneDependency(baseRdd)))
+    submit(finalRdd, Array(0, 1, 2, 3))
+
+    // complete two tasks
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(0), Success, 42,
+      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(0)))
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(1), Success, 42,
+      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(1)))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    // verify stage exists
+    assert(scheduler.stageIdToStage.contains(0))
+    assert(sparkListener.endedTasks.size == 2)
+
+    // finish other 2 tasks
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(2), Success, 42,
+      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(2)))
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(3), Success, 42,
+      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(3)))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.endedTasks.size == 4)
+
+    // verify the stage is done
+    assert(!scheduler.stageIdToStage.contains(0))
+
+    // Stage should be complete. Finish one other Successful task to simulate what can happen
+    // with a speculative task and make sure the event is sent out
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(3), Success, 42,
+      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(5)))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.endedTasks.size == 5)
+
+    // make sure non successful tasks also send out event
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(3), UnknownReason, 42,
+      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(6)))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.endedTasks.size == 6)
   }
 
   test("ignore late map task completions") {
@@ -1665,7 +1717,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     }
 
     // Does not include message, ONLY stack trace.
-    val stackTraceString = e.getStackTraceString
+    val stackTraceString = Utils.exceptionString(e)
 
     // should actually include the RDD operation that invoked the method:
     assert(stackTraceString.contains("org.apache.spark.rdd.RDD.count"))
@@ -1940,6 +1992,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   // OutputCommitCoordinator requires the task info itself to not be null.
   private def createFakeTaskInfo(): TaskInfo = {
     val info = new TaskInfo(0, 0, 0, 0L, "", "", TaskLocality.ANY, false)
+    info.finishTime = 1  // to prevent spurious errors in JobProgressListener
+    info
+  }
+
+  private def createFakeTaskInfoWithId(taskId: Long): TaskInfo = {
+    val info = new TaskInfo(taskId, 0, 0, 0L, "", "", TaskLocality.ANY, false)
     info.finishTime = 1  // to prevent spurious errors in JobProgressListener
     info
   }

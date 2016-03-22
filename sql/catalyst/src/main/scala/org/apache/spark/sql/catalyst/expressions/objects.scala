@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.annotation.tailrec
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -46,7 +47,7 @@ case class StaticInvoke(
     dataType: DataType,
     functionName: String,
     arguments: Seq[Expression] = Nil,
-    propagateNull: Boolean = true) extends Expression {
+    propagateNull: Boolean = true) extends Expression with NonSQLExpression {
 
   val objectName = staticObject.getName.stripSuffix("$")
 
@@ -108,7 +109,7 @@ case class Invoke(
     targetObject: Expression,
     functionName: String,
     dataType: DataType,
-    arguments: Seq[Expression] = Nil) extends Expression {
+    arguments: Seq[Expression] = Nil) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = true
   override def children: Seq[Expression] = arguments.+:(targetObject)
@@ -204,7 +205,7 @@ case class NewInstance(
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[Literal]) extends Expression {
+    outerPointer: Option[Literal]) extends Expression with NonSQLExpression {
   private val className = cls.getName
 
   override def nullable: Boolean = propagateNull
@@ -268,7 +269,7 @@ case class NewInstance(
  */
 case class UnwrapOption(
     dataType: DataType,
-    child: Expression) extends UnaryExpression with ExpectsInputTypes {
+    child: Expression) extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
 
   override def nullable: Boolean = true
 
@@ -298,7 +299,7 @@ case class UnwrapOption(
  * @param optType The type of this option.
  */
 case class WrapOption(child: Expression, optType: DataType)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
 
@@ -328,7 +329,7 @@ case class WrapOption(child: Expression, optType: DataType)
  * manually, but will instead be passed into the provided lambda function.
  */
 case class LambdaVariable(value: String, isNull: String, dataType: DataType) extends LeafExpression
-  with Unevaluable {
+  with Unevaluable with NonSQLExpression {
 
   override def nullable: Boolean = true
 
@@ -363,13 +364,14 @@ object MapObjects {
  *                used as input for the `lambdaFunction`. It also carries the element type info.
  * @param lambdaFunction A function that take the `loopVar` as input, and used as lambda function
  *                       to handle collection elements.
- * @param inputData An expression that when evaluted returns a collection object.
+ * @param inputData An expression that when evaluated returns a collection object.
  */
-case class MapObjects(
+case class MapObjects private(
     loopVar: LambdaVariable,
     lambdaFunction: Expression,
-    inputData: Expression) extends Expression {
+    inputData: Expression) extends Expression with NonSQLExpression {
 
+  @tailrec
   private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
     case NullType =>
       val nullTypeClassName = NullType.getClass.getName + ".MODULE$"
@@ -386,6 +388,8 @@ case class MapObjects(
     case a: ArrayType => (i: String) => s".getArray($i)"
     case _: MapType => (i: String) => s".getMap($i)"
     case udt: UserDefinedType[_] => itemAccessorMethod(udt.sqlType)
+    case DecimalType.Fixed(p, s) => (i: String) => s".getDecimal($i, $p, $s)"
+    case DateType => (i: String) => s".getInt($i)"
   }
 
   private lazy val (lengthFunction, itemAccessor, primitiveElement) = inputData.dataType match {
@@ -483,7 +487,9 @@ case class MapObjects(
  *
  * @param children A list of expression to use as content of the external row.
  */
-case class CreateExternalRow(children: Seq[Expression]) extends Expression {
+case class CreateExternalRow(children: Seq[Expression], schema: StructType)
+  extends Expression with NonSQLExpression {
+
   override def dataType: DataType = ObjectType(classOf[Row])
 
   override def nullable: Boolean = false
@@ -492,8 +498,9 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression {
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val rowClass = classOf[GenericRow].getName
+    val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
+    val schemaField = ctx.addReferenceObj("schema", schema)
     s"""
       boolean ${ev.isNull} = false;
       final Object[] $values = new Object[${children.size}];
@@ -508,7 +515,7 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression {
           }
          """
       }.mkString("\n") +
-      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values);"
+      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);"
   }
 }
 
@@ -516,7 +523,8 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression {
  * Serializes an input object using a generic serializer (Kryo or Java).
  * @param kryo if true, use Kryo. Otherwise, use Java.
  */
-case class EncodeUsingSerializer(child: Expression, kryo: Boolean) extends UnaryExpression {
+case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
+  extends UnaryExpression with NonSQLExpression {
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
@@ -558,7 +566,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean) extends Unary
  * @param kryo if true, use Kryo. Otherwise, use Java.
  */
 case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
-  extends UnaryExpression {
+  extends UnaryExpression with NonSQLExpression {
 
   override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     // Code to initialize the serializer.
@@ -596,7 +604,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
  * Initialize a Java Bean instance by setting its field values via setters.
  */
 case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Expression])
-  extends Expression {
+  extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = beanInstance.nullable
   override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
@@ -637,9 +645,8 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
  * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.
  */
-case class AssertNotNull(
-    child: Expression, parentType: String, fieldName: String, fieldType: String)
-  extends UnaryExpression {
+case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
+  extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
 
@@ -651,6 +658,14 @@ case class AssertNotNull(
   override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val childGen = child.gen(ctx)
 
+    val errMsg = "Null value appeared in non-nullable field:" +
+      walkedTypePath.mkString("\n", "\n", "\n") +
+      "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
+      "please try to use scala.Option[_] or other nullable types " +
+      "(e.g. java.lang.Integer instead of int/scala.Int)."
+    val idx = ctx.references.length
+    ctx.references += errMsg
+
     ev.isNull = "false"
     ev.value = childGen.value
 
@@ -658,12 +673,7 @@ case class AssertNotNull(
       ${childGen.code}
 
       if (${childGen.isNull}) {
-        throw new RuntimeException(
-          "Null value appeared in non-nullable field $parentType.$fieldName of type $fieldType. " +
-          "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
-          "please try to use scala.Option[_] or other nullable types " +
-          "(e.g. java.lang.Integer instead of int/scala.Int)."
-        );
+        throw new RuntimeException((String) references[$idx]);
       }
      """
   }

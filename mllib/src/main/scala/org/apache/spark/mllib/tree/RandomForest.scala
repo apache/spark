@@ -53,12 +53,12 @@ import org.apache.spark.util.random.SamplingUtils
  *     random forests]]
  *
  * @param strategy The configuration parameters for the random forest algorithm which specify
- *                 the type of algorithm (classification, regression, etc.), feature type
+ *                 the type of random forest (classification or regression), feature type
  *                 (continuous, categorical), depth of the tree, quantile calculation strategy,
  *                 etc.
  * @param numTrees If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
  * @param featureSubsetStrategy Number of features to consider for splits at each node.
- *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
+ *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
  *                              If "auto" is set, this parameter is set based on numTrees:
  *                                if numTrees == 1, set to "all";
  *                                if numTrees > 1 (forest) set to "sqrt" for classification and
@@ -121,8 +121,9 @@ private class RandomForest (
 
   /**
    * Method to train a decision tree model over an RDD
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
-   * @return a random forest model that can be used for prediction
+   *
+   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @return RandomForestModel that can be used for prediction.
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
 
@@ -269,12 +270,12 @@ object RandomForest extends Serializable with Logging {
    * @param strategy Parameters for training each tree in the forest.
    * @param numTrees Number of trees in the random forest.
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
-   *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
+   *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
    *                                if numTrees > 1 (forest) set to "sqrt".
-   * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return a random forest model that can be used for prediction
+   * @param seed Random seed for bootstrapping and choosing feature subsets.
+   * @return RandomForestModel that can be used for prediction.
    */
   @Since("1.2.0")
   def trainClassifier(
@@ -294,25 +295,25 @@ object RandomForest extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels should take values {0, 1, ..., numClasses-1}.
-   * @param numClasses number of classes for classification.
-   * @param categoricalFeaturesInfo Map storing arity of categorical features.
-   *                                E.g., an entry (n -> k) indicates that feature n is categorical
-   *                                with k categories indexed from 0: {0, 1, ..., k-1}.
+   * @param numClasses Number of classes for classification.
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   *                                indicates that feature n is categorical with k categories
+   *                                indexed from 0: {0, 1, ..., k-1}.
    * @param numTrees Number of trees in the random forest.
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
-   *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
+   *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
    *                                if numTrees > 1 (forest) set to "sqrt".
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "gini" (recommended) or "entropy".
-   * @param maxDepth Maximum depth of the tree.
-   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   *                  (suggested value: 4)
-   * @param maxBins maximum number of bins used for splitting features
-   *                 (suggested value: 100)
-   * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return a random forest model  that can be used for prediction
+   * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node, depth 1 means
+   *                 1 internal node + 2 leaf nodes).
+   *                 (suggested value: 4)
+   * @param maxBins Maximum number of bins used for splitting features
+   *                (suggested value: 100)
+   * @param seed Random seed for bootstrapping and choosing feature subsets.
+   * @return RandomForestModel that can be used for prediction.
    */
   @Since("1.2.0")
   def trainClassifier(
@@ -358,12 +359,12 @@ object RandomForest extends Serializable with Logging {
    * @param strategy Parameters for training each tree in the forest.
    * @param numTrees Number of trees in the random forest.
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
-   *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
+   *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
    *                                if numTrees > 1 (forest) set to "onethird".
-   * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return a random forest model that can be used for prediction
+   * @param seed Random seed for bootstrapping and choosing feature subsets.
+   * @return RandomForestModel that can be used for prediction.
    */
   @Since("1.2.0")
   def trainRegressor(
@@ -383,24 +384,24 @@ object RandomForest extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels are real numbers.
-   * @param categoricalFeaturesInfo Map storing arity of categorical features.
-   *                                E.g., an entry (n -> k) indicates that feature n is categorical
-   *                                with k categories indexed from 0: {0, 1, ..., k-1}.
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   *                                indicates that feature n is categorical with k categories
+   *                                indexed from 0: {0, 1, ..., k-1}.
    * @param numTrees Number of trees in the random forest.
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
-   *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
+   *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
    *                                if numTrees > 1 (forest) set to "onethird".
    * @param impurity Criterion used for information gain calculation.
-   *                 Supported values: "variance".
-   * @param maxDepth Maximum depth of the tree.
-   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   *                  (suggested value: 4)
-   * @param maxBins maximum number of bins used for splitting features
-   *                 (suggested value: 100)
-   * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return a random forest model that can be used for prediction
+   *                 The only supported value for regression is "variance".
+   * @param maxDepth Maximum depth of the tree. (e.g., depth 0 means 1 leaf node, depth 1 means
+   *                 1 internal node + 2 leaf nodes).
+   *                 (suggested value: 4)
+   * @param maxBins Maximum number of bins used for splitting features.
+   *                (suggested value: 100)
+   * @param seed Random seed for bootstrapping and choosing feature subsets.
+   * @return RandomForestModel that can be used for prediction.
    */
   @Since("1.2.0")
   def trainRegressor(
