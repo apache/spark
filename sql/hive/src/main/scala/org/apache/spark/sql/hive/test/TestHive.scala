@@ -499,10 +499,7 @@ class TestHiveContext private[hive](
       // Lots of tests fail if we do not change the partition whitelist from the default.
       runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
-      TestHiveContext.hiveClientConfigurations(hiveconf, warehousePath, scratchDirPath)
-        .foreach { case (k, v) => metadataHive.runSqlHive(s"SET $k=$v") }
       defaultOverrides()
-
       sessionState.catalog.setCurrentDatabase("default")
     } catch {
       case e: Exception =>
