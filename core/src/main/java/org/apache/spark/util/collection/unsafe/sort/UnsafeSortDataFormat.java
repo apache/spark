@@ -47,7 +47,8 @@ final class UnsafeSortDataFormat extends SortDataFormat<RecordPointerAndKeyPrefi
   }
 
   @Override
-  public RecordPointerAndKeyPrefix getKey(LongArray data, int pos, RecordPointerAndKeyPrefix reuse) {
+  public RecordPointerAndKeyPrefix getKey(LongArray data, int pos,
+                                          RecordPointerAndKeyPrefix reuse) {
     reuse.recordPointer = data.get(pos * 2);
     reuse.keyPrefix = data.get(pos * 2 + 1);
     return reuse;
