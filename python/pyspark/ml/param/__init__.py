@@ -37,7 +37,7 @@ class Param(object):
     """
     A param with self-contained documentation.
 
-    Note: `expectedType` is deprecated and will be removed in 2.1 Use typeConverter instead,
+    Note: `expectedType` is deprecated and will be removed in 2.1. Use typeConverter instead,
           as a keyword argument.
 
     .. versionadded:: 1.3.0
@@ -51,8 +51,8 @@ class Param(object):
         self.doc = str(doc)
         self.expectedType = expectedType
         if expectedType is not None:
-            warnings.warn("expectedType is deprecated and will be removed in 2.1.0, " +
-                          "use typeConverter instead, as a keyword argument.")
+            warnings.warn("expectedType is deprecated and will be removed in 2.1. " +
+                          "Use typeConverter instead, as a keyword argument.")
         self.typeConverter = TypeConverters.identity if typeConverter is None else typeConverter
 
     def _copy_new_parent(self, parent):
