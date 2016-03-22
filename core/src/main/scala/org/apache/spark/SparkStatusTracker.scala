@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.apache.spark.scheduler.TaskSchedulerImpl
+
 /**
  * Low-level status reporting APIs for monitoring job and stage progress.
  *
@@ -103,5 +105,26 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
           data.numFailedTasks)
       }
     }
+  }
+
+  def getExecutors(): Array[String] = {
+    sc.getExecutorStorageStatus.map { status =>
+      status.blockManagerId.hostPort
+    }
+  }
+
+  def getCacheSizeByExecutors(): Map[String, Long] = {
+    sc.getExecutorStorageStatus.map { status =>
+      status.blockManagerId.hostPort -> status.memUsed
+    }.toMap
+  }
+
+  def getRunningTasksByExecutors(): Map[String, Int] = {
+    val executorIdToRunningTasks: Map[String, Int] =
+      sc.taskScheduler.asInstanceOf[TaskSchedulerImpl].runningTasksByExecutors()
+    sc.getExecutorStorageStatus.map { status =>
+      val bmId = status.blockManagerId
+      bmId.hostPort -> executorIdToRunningTasks.getOrElse(bmId.executorId, 0)
+    }.toMap
   }
 }
