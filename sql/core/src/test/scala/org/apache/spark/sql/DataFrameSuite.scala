@@ -1397,4 +1397,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
   }
+
+  test("SPARK-13774: Check error message for non existent path without globbed paths") {
+    val e = intercept[AnalysisException] (sqlContext.read.format("csv").
+      load("/xyz/file2", "/xyz/file21", "/abc/files555", "a")).getMessage()
+    assert(e.startsWith("Path does not exist"))
+   }
+
+  test("SPARK-13774: Check error message for not existent globbed paths") {
+    val e = intercept[AnalysisException] (sqlContext.read.format("text").
+      load( "/xyz/*")).getMessage()
+    assert(e.startsWith("Path does not exist"))
+
+    val e1 = intercept[AnalysisException] (sqlContext.read.json("/mnt/*/*-xyz.json").rdd).
+      getMessage()
+    assert(e1.startsWith("Path does not exist"))
+  }
 }
