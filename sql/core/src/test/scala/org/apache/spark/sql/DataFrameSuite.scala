@@ -612,7 +612,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = """+---------------------+
-                                   ||_1                   |
+                                   ||value                |
                                    |+---------------------+
                                    ||1                    |
                                    ||111111111111111111111|
@@ -620,7 +620,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                                    |""".stripMargin
     assert(df.showString(10, false) === expectedAnswerForFalse)
     val expectedAnswerForTrue = """+--------------------+
-                                  ||                  _1|
+                                  ||               value|
                                   |+--------------------+
                                   ||                   1|
                                   ||11111111111111111...|

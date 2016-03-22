@@ -30,7 +30,8 @@ import org.apache.spark.sql.types._
  * sorted by a reference implementation ([[ReferenceSort]]).
  */
 class SortSuite extends SparkPlanTest with SharedSQLContext {
-  import testImplicits.localSeqToDataFrameHolder
+  import testImplicits.newProductEncoder
+  import testImplicits.localSeqToDatasetHolder
 
   test("basic sorting using ExternalSort") {
 

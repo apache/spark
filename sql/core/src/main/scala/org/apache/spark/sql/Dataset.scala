@@ -2196,14 +2196,12 @@ class Dataset[T] private[sql](
   def write: DataFrameWriter = new DataFrameWriter(toDF())
 
   /**
-   * Returns the content of the [[Dataset]] as a [[Dataset]] of JSON strings.
-   *
-   * @group basic
-   * @since 1.6.0
+   * Returns the content of the [[Dataset]] as a Dataset of JSON strings.
+   * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
-    val rdd = queryExecution.toRdd.mapPartitions { iter =>
+    val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
@@ -2225,8 +2223,8 @@ class Dataset[T] private[sql](
         }
       }
     }
-    import sqlContext.implicits._
-    rdd.toDS
+    import sqlContext.implicits.newStringEncoder
+    sqlContext.createDataset(rdd)
   }
 
   /**
