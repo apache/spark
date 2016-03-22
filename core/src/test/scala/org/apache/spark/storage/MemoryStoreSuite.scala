@@ -183,9 +183,9 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     def putIterator[T](
-      blockId: BlockId,
-      iter: Iterator[T],
-      classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
+        blockId: BlockId,
+        iter: Iterator[T],
+        classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
       assert(blockInfoManager.lockNewBlockForWriting(
         blockId,
         new BlockInfo(StorageLevel.MEMORY_ONLY, classTag, tellMaster = false)))

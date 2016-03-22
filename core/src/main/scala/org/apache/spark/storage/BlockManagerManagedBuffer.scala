@@ -29,7 +29,7 @@ import org.apache.spark.util.io.ChunkedByteBuffer
  * to the network layer's notion of retain / release counts.
  */
 private[storage] class BlockManagerManagedBuffer(
-  blockInfoManager: BlockInfoManager,
+    blockInfoManager: BlockInfoManager,
     blockId: BlockId,
     chunkedBuffer: ChunkedByteBuffer) extends NettyManagedBuffer(chunkedBuffer.toNetty) {
 

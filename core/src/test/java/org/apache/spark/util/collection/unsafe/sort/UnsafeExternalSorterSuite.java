@@ -61,7 +61,7 @@ public class UnsafeExternalSorterSuite {
     new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final SerializerManager serializerManager =
-      new SerializerManager(new JavaSerializer(new SparkConf()), new SparkConf());
+    new SerializerManager(new JavaSerializer(new SparkConf()), new SparkConf());
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = new PrefixComparator() {
     @Override
