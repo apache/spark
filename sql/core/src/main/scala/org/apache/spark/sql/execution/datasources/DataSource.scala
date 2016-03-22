@@ -205,7 +205,16 @@ case class DataSource(
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          SparkHadoopUtil.get.globPathIfNecessary(qualified)
+          val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
+
+          if (globPath.isEmpty) {
+            throw new AnalysisException(s"Path does not exist: $qualified")
+          }
+          // Sufficient to check head of the globPath seq for non-glob scenario
+          if (!fs.exists(globPath.head)) {
+            throw new AnalysisException(s"Path does not exist: ${globPath.head}")
+          }
+          globPath
         }.toArray
 
         // If they gave a schema, then we try and figure out the types of the partition columns
