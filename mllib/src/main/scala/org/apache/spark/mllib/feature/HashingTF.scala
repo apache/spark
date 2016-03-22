@@ -44,8 +44,8 @@ class HashingTF(val numFeatures: Int) extends Serializable {
   def this() = this(1 << 20)
 
   /**
-   * Sets the binary toggle param. If true, term frequency vector will be binary such that non-zero
-   * term counts will be set to 1 (default: false)
+   * If true, term frequency vector will be binary such that non-zero term counts will be set to 1
+   * (default: false)
    */
   @Since("2.0.0")
   def setBinary(value: Boolean): this.type = {
