@@ -19,7 +19,6 @@ package org.apache.spark.unsafe.map;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -42,7 +41,9 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.serializer.JavaSerializer;
 import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -51,7 +52,6 @@ import org.apache.spark.util.Utils;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.mockito.AdditionalAnswers.returnsSecondArg;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
@@ -64,6 +64,8 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private TestMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;
+  private SerializerManager serializerManager =
+      new SerializerManager(new JavaSerializer(new SparkConf()), new SparkConf());
   private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
@@ -85,7 +87,9 @@ public abstract class AbstractBytesToBytesMapSuite {
       new TestMemoryManager(
         new SparkConf()
           .set("spark.memory.offHeap.enabled", "" + useOffHeapMemoryAllocator())
-          .set("spark.memory.offHeap.size", "256mb"));
+          .set("spark.memory.offHeap.size", "256mb")
+          .set("spark.shuffle.spill.compress", "false")
+          .set("spark.shuffle.compress", "false"));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
 
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
@@ -124,8 +128,6 @@ public abstract class AbstractBytesToBytesMapSuite {
         );
       }
     });
-    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
-      .then(returnsSecondArg());
   }
 
   @After
@@ -546,8 +548,8 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void spillInIterator() throws IOException {
-    BytesToBytesMap map =
-        new BytesToBytesMap(taskMemoryManager, blockManager, 1, 0.75, 1024, false);
+    BytesToBytesMap map = new BytesToBytesMap(
+      taskMemoryManager, blockManager, serializerManager, 1, 0.75, 1024, false);
     try {
       int i;
       for (i = 0; i < 1024; i++) {

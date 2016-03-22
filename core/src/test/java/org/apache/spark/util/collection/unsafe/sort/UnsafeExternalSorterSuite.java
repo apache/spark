@@ -19,7 +19,6 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -43,14 +42,15 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.serializer.JavaSerializer;
 import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.Assert.*;
-import static org.mockito.AdditionalAnswers.returnsSecondArg;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
@@ -60,6 +60,8 @@ public class UnsafeExternalSorterSuite {
   final TestMemoryManager memoryManager =
     new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
+  final SerializerManager serializerManager =
+      new SerializerManager(new JavaSerializer(new SparkConf()), new SparkConf());
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = new PrefixComparator() {
     @Override
@@ -135,8 +137,6 @@ public class UnsafeExternalSorterSuite {
         );
       }
     });
-    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
-      .then(returnsSecondArg());
   }
 
   @After
@@ -172,6 +172,7 @@ public class UnsafeExternalSorterSuite {
     return UnsafeExternalSorter.create(
       taskMemoryManager,
       blockManager,
+      serializerManager,
       taskContext,
       recordComparator,
       prefixComparator,
@@ -374,6 +375,7 @@ public class UnsafeExternalSorterSuite {
     final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
       taskMemoryManager,
       blockManager,
+      serializerManager,
       taskContext,
       null,
       null,
@@ -408,6 +410,7 @@ public class UnsafeExternalSorterSuite {
     final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
       taskMemoryManager,
       blockManager,
+      serializerManager,
       taskContext,
       recordComparator,
       prefixComparator,
