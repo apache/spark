@@ -396,12 +396,18 @@ class Analyzer(
         Project(projectList = expanded, p.child)
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        val expanded = a.aggregateExpressions.flatMap {
-          case s: Star => s.expand(a.child, resolver)
-          case o if containsStar(o :: Nil) => expandStarExpression(o, a.child) :: Nil
-          case o => o :: Nil
-        }.map(_.asInstanceOf[NamedExpression])
-        a.copy(aggregateExpressions = expanded)
+        if (conf.groupByOrdinal && a.groupingExpressions.exists(IntegerIndex.unapply(_).nonEmpty)) {
+          failAnalysis(
+            "Group by position: star is not allowed to use in the select list " +
+              "when using ordinals in group by")
+        } else {
+          val expanded = a.aggregateExpressions.flatMap {
+            case s: Star => s.expand(a.child, resolver)
+            case o if containsStar(o :: Nil) => expandStarExpression(o, a.child) :: Nil
+            case o => o :: Nil
+          }.map(_.asInstanceOf[NamedExpression])
+          a.copy(aggregateExpressions = expanded)
+        }
       // If the script transformation input contains Stars, expand it.
       case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(
@@ -670,10 +676,10 @@ class Analyzer(
         val newGroups = groups.map {
           case IntegerIndex(index) if index > 0 && index <= aggs.size =>
             aggs(index - 1) match {
-              case Alias(c, _) if c.isInstanceOf[AggregateExpression] =>
+              case e if ResolveAggregateFunctions.containsAggregate(e) =>
                 throw new UnresolvedException(a,
-                  s"Group by position: the '$index'th column in the select is an aggregate " +
-                  s"function: ${c.sql}. Aggregate functions are not allowed in GROUP BY")
+                  s"Group by position: the '$index'th column in the select contains an " +
+                  s"aggregate function: ${e.sql}. Aggregate functions are not allowed in GROUP BY")
               // Group by clause is unable to use the alias defined in aggregateExpressions
               case Alias(c, _) => c
               case o => o

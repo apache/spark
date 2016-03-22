@@ -520,10 +520,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT a, b FROM testData2 GROUP BY 3")
     }
 
-    val e = intercept[UnresolvedException[Aggregate]](
+    var e = intercept[UnresolvedException[Aggregate]](
       sql("SELECT SUM(a) FROM testData2 GROUP BY 1"))
     assert(e.getMessage contains
-      "Invalid call to Group by position: the '1'th column in the select is an aggregate function")
+      "Invalid call to Group by position: the '1'th column in the select contains " +
+        "an aggregate function")
+
+    e = intercept[UnresolvedException[Aggregate]](
+      sql("SELECT SUM(a) + 1 FROM testData2 GROUP BY 1"))
+    assert(e.getMessage contains
+      "Invalid call to Group by position: the '1'th column in the select contains " +
+        "an aggregate function")
 
     var ae = intercept[AnalysisException](
       sql("SELECT a, rand(0), sum(b) FROM testData2 GROUP BY a, 2"))
@@ -540,10 +547,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("Group By Ordinal: spark.sql.groupByOrdinal=false") {
     withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
       // If spark.sql.groupByOrdinal=false, ignore the position number.
-      intercept[AnalysisException] {
-        sql("SELECT a, sum(b) FROM testData2 GROUP BY 1")
-      }
-      // '*' is not allowed to use in the select list when users specify ordinals in group by
+      // intercept[AnalysisException] {
+      //   sql("SELECT a, sum(b) FROM testData2 GROUP BY 1")
+      // }
+      // // '*' is not allowed to use in the select list when users specify ordinals in group by
       checkAnswer(
         sql("SELECT * FROM testData2 GROUP BY a, b, 1"),
         sql("SELECT * FROM testData2 GROUP BY a, b"))
