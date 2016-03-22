@@ -103,7 +103,16 @@ case class Generate(
 
 case class Filter(condition: Expression, child: LogicalPlan)
   extends UnaryNode with PredicateHelper {
-  override def output: Seq[Attribute] = child.output
+
+  private def notNulls =
+    constructIsNotNullConstraints(splitConjunctivePredicates(condition).toSet)
+      .filter(x => x.isInstanceOf[IsNotNull] && x.references.nonEmpty)
+      .filter(_.references.subsetOf(child.outputSet))
+      .flatMap(_.references.map(_.exprId))
+
+  override def output: Seq[Attribute] = child.output.map { o =>
+    if (notNulls.contains(o.exprId)) o.withNullability(false) else o
+  }
 
   override def maxRows: Option[Long] = child.maxRows
 
@@ -250,18 +259,50 @@ case class Join(
     condition: Option[Expression])
   extends BinaryNode with PredicateHelper {
 
+  private lazy val notNullsFromCondition: Set[Expression] =
+    constructIsNotNullConstraints(condition.toSet.flatMap(splitConjunctivePredicates))
+      .filter(_.references.nonEmpty)
+
+  private lazy val leftNotNulls = {
+    val constraints = joinType match {
+      case Inner | LeftSemi => left.constraints.union(notNullsFromCondition)
+      case _ => left.constraints
+    }
+    constraints.filter(_.isInstanceOf[IsNotNull])
+      .filter(_.references.subsetOf(left.outputSet))
+      .flatMap(_.references.map(_.exprId))
+  }
+
+  private lazy val notNullLeftOutput = left.output.map { o =>
+    if (leftNotNulls.contains(o.exprId)) o.withNullability(false) else o
+  }
+
+  private lazy val rightNotNulls = {
+    val constraints = joinType match {
+      case Inner => right.constraints.union(notNullsFromCondition)
+      case _ => right.constraints
+    }
+    constraints.filter(_.isInstanceOf[IsNotNull])
+      .filter(_.references.subsetOf(right.outputSet))
+      .flatMap(_.references.map(_.exprId))
+  }
+
+  private lazy val notNullRightOutput = right.output.map { o =>
+    if (rightNotNulls.contains(o.exprId)) o.withNullability(false) else o
+  }
+
   override def output: Seq[Attribute] = {
     joinType match {
       case LeftSemi =>
-        left.output
+        notNullLeftOutput
       case LeftOuter =>
-        left.output ++ right.output.map(_.withNullability(true))
+        notNullLeftOutput ++ right.output.map(_.withNullability(true))
       case RightOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output
+        left.output.map(_.withNullability(true)) ++ notNullRightOutput
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case _ =>
-        left.output ++ right.output
+        notNullLeftOutput ++ notNullRightOutput
     }
   }
 

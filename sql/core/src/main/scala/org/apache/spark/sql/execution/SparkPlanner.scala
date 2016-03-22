@@ -65,8 +65,9 @@ class SparkPlanner(
       prunePushedDownFilters: Seq[Expression] => Seq[Expression],
       scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
-    val projectSet = AttributeSet(projectList.flatMap(_.references))
-    val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
+    val projectSet = AttributeSet(projectList.flatMap(_.references).map(_.withNullability(true)))
+    val filterSet =
+      AttributeSet(filterPredicates.flatMap(_.references).map(_.withNullability(true)))
     val filterCondition: Option[Expression] =
       prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
 
