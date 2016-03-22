@@ -320,6 +320,9 @@ private[spark] class MemoryStore(
       reserveAdditionalMemoryIfNecessary()
     }
 
+    // Make sure that we have enough memory to store the block. By this point, it is possible that
+    // the block's actual memory usage has exceeded the unroll memory by a small amount, so we
+    // perform one final call to attempt to allocate additional memory if necessary.
     if (keepUnrolling) {
       serializationStream.close()
       reserveAdditionalMemoryIfNecessary()
