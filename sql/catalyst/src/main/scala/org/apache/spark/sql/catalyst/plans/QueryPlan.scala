@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.Casts
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -294,7 +293,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       // As the root of the expression, Alias will always take an arbitrary exprId, we need
       // to erase that for equality testing.
       val cleanedExprId =
-        Alias(a.child, a.name)(ExprId(-1), a.qualifiers, isGenerated = a.isGenerated)
+        Alias(a.child, a.name)(ExprId(-1), a.qualifier, isGenerated = a.isGenerated)
       BindReferences.bindReference(cleanedExprId, allAttributes, allowFailures = true)
     case other =>
       BindReferences.bindReference(other, allAttributes, allowFailures = true)

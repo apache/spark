@@ -64,7 +64,7 @@ public class TransportClientFactory implements Closeable {
     TransportClient[] clients;
     Object[] locks;
 
-    public ClientPool(int size) {
+    ClientPool(int size) {
       clients = new TransportClient[size];
       locks = new Object[size];
       for (int i = 0; i < size; i++) {
