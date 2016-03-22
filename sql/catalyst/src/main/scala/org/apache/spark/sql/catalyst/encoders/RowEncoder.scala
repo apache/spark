@@ -95,7 +95,7 @@ object RowEncoder {
           classOf[GenericArrayData],
           inputObject :: Nil,
           dataType = t)
-      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeFor(et))
+      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeForInput(et))
     }
 
     case t @ MapType(kt, vt, valueNullable) =>
@@ -129,7 +129,7 @@ object RowEncoder {
           Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
           Literal.create(null, f.dataType),
           extractorsFor(
-            Invoke(inputObject, method, externalDataTypeFor(f.dataType), Literal(i) :: Nil),
+            Invoke(inputObject, method, externalDataTypeForInput(f.dataType), Literal(i) :: Nil),
             f.dataType))
       }
       If(IsNull(inputObject),
@@ -137,7 +137,7 @@ object RowEncoder {
         CreateStruct(convertedFields))
   }
 
-  private def externalDataTypeFor(dt: DataType): DataType = dt match {
+  private def externalDataTypeForInput(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
     case CalendarIntervalType => dt
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
@@ -145,6 +145,20 @@ object RowEncoder {
     // In order to support both Decimal and java BigDecimal in external row, we make this
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
+    case StringType => ObjectType(classOf[java.lang.String])
+    case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
+    case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
+    case _: StructType => ObjectType(classOf[Row])
+    case udt: UserDefinedType[_] => ObjectType(udt.userClass)
+    case _: NullType => ObjectType(classOf[java.lang.Object])
+  }
+
+  private def externalDataTypeFor(dt: DataType): DataType = dt match {
+    case _ if ScalaReflection.isNativeType(dt) => dt
+    case CalendarIntervalType => dt
+    case TimestampType => ObjectType(classOf[java.sql.Timestamp])
+    case DateType => ObjectType(classOf[java.sql.Date])
+    case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
