@@ -23,7 +23,7 @@ import collection.immutable.ListMap
 import org.apache.commons.math3.distribution.{ExponentialDistribution, GumbelDistribution,
   LogisticDistribution, NormalDistribution, WeibullDistribution}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 
 /**
