@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 
 import org.scalatest.Assertions
 import org.scalatest.concurrent.{Eventually, Timeouts}
+import org.scalatest.concurrent.Eventually.timeout
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
@@ -67,7 +68,14 @@ trait StreamTest extends QueryTest with Timeouts {
 
   implicit class RichContinuousQuery(cq: ContinuousQuery) {
     def stopQuietly(): Unit = quietly {
-      cq.stop()
+      try {
+        failAfter(10.seconds) {
+          cq.stop()
+        }
+      } catch {
+        case e: TestFailedDueToTimeoutException =>
+          logError(e.getMessage(), e)
+      }
     }
   }
 
