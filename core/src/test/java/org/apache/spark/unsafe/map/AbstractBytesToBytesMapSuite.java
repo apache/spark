@@ -584,6 +584,38 @@ public abstract class AbstractBytesToBytesMapSuite {
   }
 
   @Test
+  public void multpleValuesForSameKey() {
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, 1, 0.75, 1024, false);
+    try {
+      int i;
+      for (i = 0; i < 1024; i++) {
+        final long[] arr = new long[]{i};
+        map.append(arr, Platform.LONG_ARRAY_OFFSET, 8, arr, Platform.LONG_ARRAY_OFFSET, 8);
+      }
+      for (i = 0; i < 1024; i++) {
+        final long[] arr = new long[]{i};
+        map.append(arr, Platform.LONG_ARRAY_OFFSET, 8, arr, Platform.LONG_ARRAY_OFFSET, 8);
+      }
+      for (i = 0; i < 1024; i++) {
+        final long[] arr = new long[]{i};
+        final BytesToBytesMap.Location loc = map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8);
+        assert loc.isDefined();
+        assert loc.next();
+        assert !loc.next();
+      }
+      BytesToBytesMap.MapIterator iter = map.iterator();
+      for (i = 0; i < 2048; i++) {
+        assert iter.hasNext();
+        final BytesToBytesMap.Location loc = iter.next();
+        assert loc.isDefined();
+      }
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
   public void initialCapacityBoundsChecking() {
     try {
       new BytesToBytesMap(taskMemoryManager, 0, PAGE_SIZE_BYTES);

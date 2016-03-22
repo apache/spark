@@ -250,8 +250,7 @@ private[joins] class UnsafeHashedRelation(
       }
       in.readFully(valuesBuffer, 0, valuesSize)
 
-      val hash = Murmur3_x86_32.hashUnsafeWords(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize, 42)
-      val putSuceeded = binaryMap.append(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize, hash,
+      val putSuceeded = binaryMap.append(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize,
        valuesBuffer, Platform.BYTE_ARRAY_OFFSET, valuesSize)
       if (!putSuceeded) {
         binaryMap.free()
@@ -320,13 +319,12 @@ private[joins] object UnsafeHashedRelation {
       numFields = row.numFields()
       val key = keyGenerator(row)
       if (!key.anyNull) {
-        val hash = key.hashCode()
         if (allUnique) {
-          val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, hash)
+          val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
           allUnique = !loc.isDefined
         }
         val success = binaryMap.append(
-          key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, hash,
+          key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
           row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
         if (!success) {
           binaryMap.free()

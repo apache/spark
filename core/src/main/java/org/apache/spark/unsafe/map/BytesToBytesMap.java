@@ -482,9 +482,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Append a pair of key-value at the end, there could other pairs with the same keys.
    */
-  public boolean append(Object keyBase, long keyOffset, int keyLength, int hash,
+  public boolean append(Object keyBase, long keyOffset, int keyLength,
                         Object valueBase, long valueOffset, int valueLength) {
     assert(longArray != null);
+    int hash = Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42);
     int pos = hash & mask;
     int step = 1;
     while (longArray.get(pos * 2) != 0) {
