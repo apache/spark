@@ -772,6 +772,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "window_with_the_same_window_with_agg_functions")
   }
 
+  test("window with exclude clause") {
+    checkHiveQl(
+      """
+        |SELECT key, value,
+        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key exclude current row) AS max
+        |FROM parquet_t1 GROUP BY key, value
+      """.stripMargin)
+  }
+
   test("window with the same window specification with aggregate") {
     checkSQL(
       """

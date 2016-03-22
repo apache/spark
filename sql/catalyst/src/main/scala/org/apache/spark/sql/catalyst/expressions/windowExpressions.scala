@@ -41,7 +41,8 @@ case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     frameSpecification: WindowFrame,
-    excludeSpec: ExcludeClause = null) extends Expression with WindowSpec with Unevaluable {
+    excludeSpec: ExcludeClause = ExcludeClause.defaultExclude)
+  extends Expression with WindowSpec with Unevaluable {
 
   def validate: Option[String] = frameSpecification match {
     case UnspecifiedFrame =>
@@ -93,7 +94,7 @@ case class WindowSpecDefinition(
       "ORDER BY " + orderSpec.map(_.sql).mkString(", ") + " "
     }
 
-    s"($partition$order${frameSpecification.toString})"
+    s"($partition$order${frameSpecification.toString}${excludeSpec.toString})"
   }
 }
 
@@ -305,7 +306,7 @@ case class ExcludeClause (
     case ExcludeCurrentRow => s"EXCLUDE CURRENT ROW"
     case ExcludeGroup => s"EXCLUDE GROUP"
     case ExcludeTies => s"EXCLUDE TIES"
-    case ExcludeNoOthers => s"EXCLUDDE NO OTHERS"
+    case ExcludeNoOthers => s"EXCLUDE NO OTHERS"
   }
 }
 object ExcludeClause {

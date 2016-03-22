@@ -95,7 +95,7 @@ class SQLBuilder private (
       }
 
       val generatedSQL = toSQL(replaced)
-      logDebug(
+      println(
         s"""Built SQL query string successfully from given logical plan:
            |
            |# Original logical plan:
@@ -107,7 +107,7 @@ class SQLBuilder private (
          """.stripMargin)
       generatedSQL
     } catch { case NonFatal(e) =>
-      logDebug(
+      println(
         s"""Failed to build SQL query string from given logical plan:
            |
            |# Original logical plan:

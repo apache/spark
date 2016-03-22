@@ -325,8 +325,6 @@ class Analyzer(
               e
             case e if isPartOfAggregation(e) => e
             case e: GroupingID =>
-              print("e.groupByExprs: "+e.groupByExprs.mkString(",")+"\n")
-              print("x.groupByExprs: "+x.groupByExprs.mkString(",")+"\n")
               if (e.groupByExprs.isEmpty || e.groupByExprs == x.groupByExprs) {
                 gid
               } else {
