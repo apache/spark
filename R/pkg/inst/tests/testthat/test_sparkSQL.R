@@ -1899,24 +1899,16 @@ test_that("Method str()", {
 
 test_that("Histogram", {
 
-  suppressWarnings({
-    # If ggplot2 is not installed, install it
-    if (!("ggplot2" %in% installed.packages()[, 1])) {
-      install.packages("ggplot2", repos = "http://cran.us.r-project.org")
-    }
-    library(ggplot2)
-  })
-
   # Basic histogram test
   expect_equal(
-    all(histogram(irisDF, "Petal_Width", 8)$data ==
+    all(histogram(irisDF, "Petal_Width", 8) ==
         data.frame(bins=seq(0, 7),
                    counts=c(48, 2, 7, 21, 24, 19, 15, 14),
                    centroids=seq(0,7) * 0.3 + 0.25)),
         TRUE)
 
   # Missing nbins
-  expect_equal(length(histogram(irisDF, "Petal_Width")$data$counts), 10)
+  expect_equal(length(histogram(irisDF, "Petal_Width")$counts), 10)
 
   # Wrong colname
   expect_error(histogram(irisDF, "xxx"),
@@ -1928,11 +1920,11 @@ test_that("Histogram", {
 
   # Test against R's hist
   expect_equal(all(hist(iris$Sepal.Width)$counts ==
-                   histogram(irisDF, "Sepal_Width", 12)$data$counts), T)
+                   histogram(irisDF, "Sepal_Width", 12)$counts), T)
 
   # Test when there are zero counts
   df <- as.DataFrame(sqlContext, data.frame(x=c(1,2,3,4,100)))
-  expect_equal(histogram(df, "x")$data$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
+  expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
 })
 unlink(parquetPath)
 unlink(jsonPath)
