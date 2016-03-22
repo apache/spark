@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.annotation.tailrec
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 private[streaming]
 class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
-import org.apache.spark.sql.execution.metric.LongSQLMetricValue
+import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -264,6 +264,10 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
   override def treeChildren: Seq[SparkPlan] = Nil
 }
 
+object WholeStageCodegen {
+  val PIPELINE_DURATION_METRIC = "duration"
+}
+
 /**
   * WholeStageCodegen compile a subtree of plans that support codegen together into single Java
   * function.
@@ -300,6 +304,10 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override private[sql] lazy val metrics = Map(
+    "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
+      WholeStageCodegen.PIPELINE_DURATION_METRIC))
 
   override def doExecute(): RDD[InternalRow] = {
     val ctx = new CodegenContext
@@ -339,6 +347,8 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
     logDebug(s"${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
 
+    val durationMs = longMetric("pipelineTime")
+
     val rdds = child.asInstanceOf[CodegenSupport].upstreams()
     assert(rdds.size <= 2, "Up to two upstream RDDs can be supported")
     if (rdds.length == 1) {
@@ -347,7 +357,11 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(Array(iter))
         new Iterator[InternalRow] {
-          override def hasNext: Boolean = buffer.hasNext
+          override def hasNext: Boolean = {
+            val v = buffer.hasNext
+            if (!v) durationMs += buffer.durationMs()
+            v
+          }
           override def next: InternalRow = buffer.next()
         }
       }
@@ -358,7 +372,11 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(Array(leftIter, rightIter))
         new Iterator[InternalRow] {
-          override def hasNext: Boolean = buffer.hasNext
+          override def hasNext: Boolean = {
+            val v = buffer.hasNext
+            if (!v) durationMs += buffer.durationMs()
+            v
+          }
           override def next: InternalRow = buffer.next()
         }
       }
@@ -379,10 +397,15 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
       input: Seq[ExprCode],
       row: String = null): String = {
 
+    val doCopy = if (ctx.copyResult) {
+      ".copy()"
+    } else {
+      ""
+    }
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         |append($row.copy());
+         |append($row$doCopy);
        """.stripMargin.trim
     } else {
       assert(input != null)
@@ -397,7 +420,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
         s"""
            |$evaluateInputs
            |${code.code.trim}
-           |append(${code.value}.copy());
+           |append(${code.value}$doCopy);
          """.stripMargin.trim
       } else {
         // There is no columns

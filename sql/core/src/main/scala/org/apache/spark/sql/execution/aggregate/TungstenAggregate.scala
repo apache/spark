@@ -465,6 +465,10 @@ case class TungstenAggregate(
     val outputCode = generateResultCode(ctx, keyTerm, bufferTerm, thisPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
+    // The child could change `copyResult` to true, but we had already consumed all the rows,
+    // so `copyResult` should be reset to `false`.
+    ctx.copyResult = false
+
     s"""
      if (!$initAgg) {
        $initAgg = true;

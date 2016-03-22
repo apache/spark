@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -65,7 +66,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { parser =>
         parser.nextToken()
-        JacksonParser.convertField(factory, parser, dataType)
+        JacksonParser.convertRootField(factory, parser, dataType)
       }
     }
 
@@ -963,7 +964,56 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("Corrupt records") {
+  test("Corrupt records: FAILFAST mode") {
+    val schema = StructType(
+        StructField("a", StringType, true) :: Nil)
+    // `FAILFAST` mode should throw an exception for corrupt records.
+    val exceptionOne = intercept[SparkException] {
+      sqlContext.read
+        .option("mode", "FAILFAST")
+        .json(corruptRecords)
+        .collect()
+    }
+    assert(exceptionOne.getMessage.contains("Malformed line in FAILFAST mode: {"))
+
+    val exceptionTwo = intercept[SparkException] {
+      sqlContext.read
+        .option("mode", "FAILFAST")
+        .schema(schema)
+        .json(corruptRecords)
+        .collect()
+    }
+    assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode: {"))
+  }
+
+  test("Corrupt records: DROPMALFORMED mode") {
+    val schemaOne = StructType(
+      StructField("a", StringType, true) ::
+        StructField("b", StringType, true) ::
+        StructField("c", StringType, true) :: Nil)
+    val schemaTwo = StructType(
+      StructField("a", StringType, true) :: Nil)
+    // `DROPMALFORMED` mode should skip corrupt records
+    val jsonDFOne = sqlContext.read
+      .option("mode", "DROPMALFORMED")
+      .json(corruptRecords)
+    checkAnswer(
+      jsonDFOne,
+      Row("str_a_4", "str_b_4", "str_c_4") :: Nil
+    )
+    assert(jsonDFOne.schema === schemaOne)
+
+    val jsonDFTwo = sqlContext.read
+      .option("mode", "DROPMALFORMED")
+      .schema(schemaTwo)
+      .json(corruptRecords)
+    checkAnswer(
+      jsonDFTwo,
+      Row("str_a_4") :: Nil)
+    assert(jsonDFTwo.schema === schemaTwo)
+  }
+
+  test("Corrupt records: PERMISSIVE mode") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       withTempTable("jsonTable") {
@@ -1423,6 +1473,23 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           )
         }
       }
+    }
+  }
+
+  test("Parse JSON rows having an array type and a struct type in the same field.") {
+    withTempDir { dir =>
+      val dir = Utils.createTempDir()
+      dir.delete()
+      val path = dir.getCanonicalPath
+      arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+
+      val schema =
+        StructType(
+          StructField("a", StructType(
+            StructField("b", StringType) :: Nil
+          )) :: Nil)
+      val jsonDF = sqlContext.read.schema(schema).json(path)
+      assert(jsonDF.count() == 2)
     }
   }
 

@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.impl
+package org.apache.spark.ml.tree.impl
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.tree._
@@ -154,4 +153,36 @@ private[ml] object TreeTests extends SparkFunSuite {
     new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
     new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0))
   ))
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   *
+   * This set of Params is for all Decision Tree-based models.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "checkpointInterval" -> 7,
+    "seed" -> 543L,
+    "maxDepth" -> 2,
+    "maxBins" -> 20,
+    "minInstancesPerNode" -> 2,
+    "minInfoGain" -> 1e-14,
+    "maxMemoryInMB" -> 257,
+    "cacheNodeIds" -> true
+  )
+
+  /** Data for tree read/write tests which produces a non-trivial tree. */
+  def getTreeReadWriteData(sc: SparkContext): RDD[LabeledPoint] = {
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0, 2.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0, 1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0, 2.0)))
+    sc.parallelize(arr)
+  }
 }

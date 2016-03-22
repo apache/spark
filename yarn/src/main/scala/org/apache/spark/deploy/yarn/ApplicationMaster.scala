@@ -33,6 +33,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
@@ -73,7 +74,10 @@ private[spark] class ApplicationMaster(
       } else {
         sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)
       }
-    val defaultMaxNumExecutorFailures = math.max(3, 2 * effectiveNumExecutors)
+    // By default, effectiveNumExecutors is Int.MaxValue if dynamic allocation is enabled. We need
+    // avoid the integer overflow here.
+    val defaultMaxNumExecutorFailures = math.max(3,
+      if (effectiveNumExecutors > Int.MaxValue / 2) Int.MaxValue else (2 * effectiveNumExecutors))
 
     sparkConf.get(MAX_EXECUTOR_FAILURES).getOrElse(defaultMaxNumExecutorFailures)
   }
@@ -133,12 +137,9 @@ private[spark] class ApplicationMaster(
         System.setProperty("spark.master", "yarn")
         System.setProperty("spark.submit.deployMode", "cluster")
 
-        // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
+        // Set this internal configuration if it is running on cluster mode, this
+        // configuration will be checked in SparkContext to avoid misuse of yarn cluster mode.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
-
-        // Propagate the attempt if, so that in case of event logging,
-        // different attempt's logs gets created in different directory
-        System.setProperty("spark.yarn.app.attemptId", appAttemptId.getAttemptId().toString())
       }
 
       logInfo("ApplicationAttemptId: " + appAttemptId)

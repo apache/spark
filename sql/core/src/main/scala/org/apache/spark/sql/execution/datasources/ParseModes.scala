@@ -15,21 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.execution.datasources
 
-/**
- * Identifies a `table` in `database`.  If `database` is not defined, the current database is used.
- */
-private[sql] case class TableIdentifier(table: String, database: Option[String]) {
-  def this(table: String) = this(table, None)
+private[datasources] object ParseModes {
+  val PERMISSIVE_MODE = "PERMISSIVE"
+  val DROP_MALFORMED_MODE = "DROPMALFORMED"
+  val FAIL_FAST_MODE = "FAILFAST"
 
-  override def toString: String = quotedString
+  val DEFAULT = PERMISSIVE_MODE
 
-  def quotedString: String = database.map(db => s"`$db`.`$table`").getOrElse(s"`$table`")
+  def isValidMode(mode: String): Boolean = {
+    mode.toUpperCase match {
+      case PERMISSIVE_MODE | DROP_MALFORMED_MODE | FAIL_FAST_MODE => true
+      case _ => false
+    }
+  }
 
-  def unquotedString: String = database.map(db => s"$db.$table").getOrElse(table)
-}
-
-private[sql] object TableIdentifier {
-  def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)
+  def isDropMalformedMode(mode: String): Boolean = mode.toUpperCase == DROP_MALFORMED_MODE
+  def isFailFastMode(mode: String): Boolean = mode.toUpperCase == FAIL_FAST_MODE
+  def isPermissiveMode(mode: String): Boolean = if (isValidMode(mode))  {
+    mode.toUpperCase == PERMISSIVE_MODE
+  } else {
+    true // We default to permissive is the mode string is not valid
+  }
 }

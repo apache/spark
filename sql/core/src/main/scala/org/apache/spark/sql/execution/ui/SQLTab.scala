@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.ui
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[sql] class SQLTab(val listener: SQLListener, sparkUI: SparkUI)

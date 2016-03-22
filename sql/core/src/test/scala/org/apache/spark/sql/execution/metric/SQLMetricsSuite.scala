@@ -128,8 +128,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
     // TODO: update metrics in generated operators
-    val df = sqlContext.range(10).filter('id < 5)
-    testSparkPlanMetrics(df, 1, Map.empty)
+    val ds = sqlContext.range(10).filter('id < 5)
+    testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
   }
 
   test("TungstenAggregate metrics") {
@@ -157,8 +157,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   test("Sort metrics") {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
-    val df = sqlContext.range(10).sort('id)
-    testSparkPlanMetrics(df, 2, Map.empty)
+    val ds = sqlContext.range(10).sort('id)
+    testSparkPlanMetrics(ds.toDF(), 2, Map.empty)
   }
 
   test("SortMergeJoin metrics") {
@@ -263,30 +263,18 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
-  test("LeftSemiJoinHash metrics") {
+  test("ShuffledHashJoin metrics") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
       // Assume the execution plan is
-      // ... -> LeftSemiJoinHash(nodeId = 0)
+      // ... -> ShuffledHashJoin(nodeId = 0)
       val df = df1.join(df2, $"key" === $"key2", "leftsemi")
       testSparkPlanMetrics(df, 1, Map(
-        0L -> ("LeftSemiJoinHash", Map(
+        0L -> ("ShuffledHashJoin", Map(
           "number of output rows" -> 2L)))
       )
     }
-  }
-
-  test("LeftSemiJoinBNL metrics") {
-    val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
-    // Assume the execution plan is
-    // ... -> LeftSemiJoinBNL(nodeId = 0)
-    val df = df1.join(df2, $"key" < $"key2", "leftsemi")
-    testSparkPlanMetrics(df, 2, Map(
-      0L -> ("LeftSemiJoinBNL", Map(
-        "number of output rows" -> 2L)))
-    )
   }
 
   test("CartesianProduct metrics") {
@@ -321,7 +309,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
       // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
       // However, we still can check the value.
-      assert(metricValues.values.toSeq === Seq("2"))
+      assert(metricValues.values.toSeq.exists(_ === "2"))
     }
   }
 
