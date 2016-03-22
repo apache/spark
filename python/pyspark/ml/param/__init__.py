@@ -104,9 +104,10 @@ class TypeConverters(object):
         return vtype in [list, np.ndarray, tuple, xrange, array.array] or isinstance(value, Vector)
 
     @staticmethod
-    def _is_string(value):
+    def _can_convert_to_string(value):
         vtype = type(value)
-        return isinstance(value, basestring) or vtype in [np.unicode_, np.string_, np.str_]
+        is_string = isinstance(value, basestring) or vtype in [np.unicode_, np.string_, np.str_]
+        return is_string and all(ord(c) < 128 for c in value)  # safe unicode to str
 
     @staticmethod
     def identity(value):
@@ -158,7 +159,7 @@ class TypeConverters(object):
         """
         if TypeConverters._can_convert_to_list(value):
             value = TypeConverters.toList(value)
-            if all(map(lambda v: TypeConverters._is_string(v), value)):
+            if all(map(lambda v: TypeConverters._can_convert_to_string(v), value)):
                 return [str(v) for v in value]
         raise TypeError("Could not convert %s to list of strings" % value)
 
@@ -200,10 +201,10 @@ class TypeConverters(object):
         """
         Convert a value to a string, if possible.
         """
-        if TypeConverters._is_string(value):
+        if TypeConverters._can_convert_to_string(value):
             return str(value)
         else:
-            raise TypeError("Could not convert %s to string" % value)
+            raise TypeError("Could not convert value of type %s to string" % type(value).__name__)
 
     @staticmethod
     def toBoolean(value):
