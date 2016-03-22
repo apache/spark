@@ -35,7 +35,7 @@ private[spark] object StopWords {
   def readStopWords(language: String): Array[String] = {
     require(supportedLanguages.contains(language), s"$language is not in language list")
     val is = getClass.getResourceAsStream(s"/org/apache/spark/ml/feature/stopwords/$language.txt")
-    scala.io.Source.fromInputStream(is).getLines().toArray
+    scala.io.Source.fromInputStream(is)(scala.io.Codec.UTF8).getLines().toArray
   }
 
   /** Supported languages list must be lowercase */

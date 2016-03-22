@@ -62,7 +62,7 @@ class StopWordsRemoverSuite
       .setStopWords(stopWords)
     val dataSet = sqlContext.createDataFrame(Seq(
       (Seq("test", "test"), Seq()),
-      (Seq("a", "b", "c", "d"), Seq("b", "c")),
+      (Seq("a", "b", "c", "d"), Seq("b", "c", "d")),
       (Seq("a", "the", "an"), Seq()),
       (Seq("A", "The", "AN"), Seq()),
       (Seq(null), Seq(null)),
