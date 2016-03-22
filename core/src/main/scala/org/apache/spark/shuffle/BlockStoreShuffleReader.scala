@@ -19,7 +19,7 @@ package org.apache.spark.shuffle
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.serializer.{SerializerManager, Serializer}
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
