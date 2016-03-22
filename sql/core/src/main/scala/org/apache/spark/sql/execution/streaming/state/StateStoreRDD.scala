@@ -37,6 +37,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     storeVersion: Long,
     keySchema: StructType,
     valueSchema: StructType,
+    storeConf: StateStoreConf,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef])
   extends RDD[U](dataRDD) {
 
@@ -57,7 +58,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     Utils.tryWithSafeFinally {
       val storeId = StateStoreId(checkpointLocation, operatorId, partition.index)
       store = StateStore.get(
-        storeId, keySchema, valueSchema, storeVersion, confBroadcast.value.value)
+        storeId, keySchema, valueSchema, storeVersion, storeConf, confBroadcast.value.value)
       val inputIter = dataRDD.iterator(partition, ctxt)
       val outputIter = storeUpdateFunction(store, inputIter)
       assert(store.hasCommitted)

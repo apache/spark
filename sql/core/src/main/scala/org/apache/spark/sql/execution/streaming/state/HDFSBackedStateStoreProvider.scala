@@ -28,10 +28,9 @@ import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.LZ4CompressionCodec
-import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -68,11 +67,9 @@ private[state] class HDFSBackedStateStoreProvider(
     val id: StateStoreId,
     keySchema: StructType,
     valueSchema: StructType,
-    sparkConf: SparkConf,
+    storeConf: StateStoreConf,
     hadoopConf: Configuration
   ) extends StateStoreProvider with Logging {
-
-  import HDFSBackedStateStoreProvider._
 
   type MapType = java.util.HashMap[UnsafeRow, UnsafeRow]
 
@@ -238,10 +235,7 @@ private[state] class HDFSBackedStateStoreProvider(
   private val baseDir =
     new Path(id.checkpointLocation, s"${id.operatorId}/${id.partitionId.toString}")
   private val fs = baseDir.getFileSystem(hadoopConf)
-  private val minBatchesToRetain = sparkConf.getInt(
-    MIN_BATCHES_TO_RETAIN_CONF, MIN_BATCHES_TO_RETAIN_DEFAULT)
-  private val maxDeltaChainForSnapshots = sparkConf.getInt(
-    MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF, MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT)
+  private val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
   initialize()
 
@@ -462,7 +456,7 @@ private[state] class HDFSBackedStateStoreProvider(
           filesForVersion(files, lastVersion).filter(_.isSnapshot == false)
         synchronized { loadedMaps.get(lastVersion) } match {
           case Some(map) =>
-            if (deltaFilesForLastVersion.size > maxDeltaChainForSnapshots) {
+            if (deltaFilesForLastVersion.size > storeConf.maxDeltaChainForSnapshots) {
               writeSnapshotFile(lastVersion, map)
             }
           case None =>
@@ -485,7 +479,7 @@ private[state] class HDFSBackedStateStoreProvider(
     try {
       val files = fetchFiles()
       if (files.nonEmpty) {
-        val earliestVersionToRetain = files.last.version - minBatchesToRetain
+        val earliestVersionToRetain = files.last.version - storeConf.minBatchesToRetain
         if (earliestVersionToRetain > 0) {
           val earliestFileToRetain = filesForVersion(files, earliestVersionToRetain).head
           synchronized {
@@ -590,9 +584,5 @@ private[state] class HDFSBackedStateStoreProvider(
 }
 
 private[state] object HDFSBackedStateStoreProvider {
-  val MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF = "spark.sql.streaming.stateStore.maxDeltaChain"
-  val MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT = 10
 
-  val MIN_BATCHES_TO_RETAIN_CONF = "spark.sql.streaming.stateStore.minBatchesToRetain"
-  val MIN_BATCHES_TO_RETAIN_DEFAULT = 2
 }

@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
@@ -128,14 +128,14 @@ private[state] object StateStore extends Logging {
       keySchema: StructType,
       valueSchema: StructType,
       version: Long,
+      storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStore = {
     require(version >= 0)
     val storeProvider = loadedProviders.synchronized {
       startMaintenanceIfNeeded()
-      val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
       val provider = loadedProviders.getOrElseUpdate(
         storeId,
-        new HDFSBackedStateStoreProvider(storeId, keySchema, valueSchema, sparkConf, hadoopConf))
+        new HDFSBackedStateStoreProvider(storeId, keySchema, valueSchema, storeConf, hadoopConf))
       reportActiveStoreInstance(storeId)
       provider
     }

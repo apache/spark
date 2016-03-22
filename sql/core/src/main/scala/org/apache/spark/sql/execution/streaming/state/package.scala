@@ -36,6 +36,7 @@ package object state {
         keySchema: StructType,
         valueSchema: StructType
       )(implicit sqlContext: SQLContext): StateStoreRDD[T, U] = {
+
       mapPartitionWithStateStore(
         storeUpdateFunction,
         checkpointLocation,
@@ -43,6 +44,7 @@ package object state {
         storeVersion,
         keySchema,
         valueSchema,
+        new StateStoreConf(sqlContext.conf),
         Some(sqlContext.streams.stateStoreCoordinator))
     }
 
@@ -54,7 +56,8 @@ package object state {
         storeVersion: Long,
         keySchema: StructType,
         valueSchema: StructType,
-        storeCoordinator: Option[StateStoreCoordinatorRef] = None
+        storeConf: StateStoreConf,
+        storeCoordinator: Option[StateStoreCoordinatorRef]
       ): StateStoreRDD[T, U] = {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       new StateStoreRDD(
@@ -65,6 +68,7 @@ package object state {
         storeVersion,
         keySchema,
         valueSchema,
+        storeConf,
         storeCoordinator)
     }
   }

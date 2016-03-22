@@ -32,6 +32,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -39,7 +40,6 @@ import org.apache.spark.util.Utils
 class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester {
   type MapType = mutable.HashMap[UnsafeRow, UnsafeRow]
 
-  import HDFSBackedStateStoreProvider._
   import StateStoreCoordinatorSuite._
   import StateStoreSuite._
 
@@ -99,7 +99,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
     // New updates to the reloaded store with new version, and does not change old version
     val reloadedProvider = new HDFSBackedStateStoreProvider(
-      store.id, keySchema, valueSchema, new SparkConf, new Configuration)
+      store.id, keySchema, valueSchema, StateStoreConf.empty, new Configuration)
     val reloadedStore = reloadedProvider.getStore(1)
     update(reloadedStore, "c", 4)
     assert(reloadedStore.commit() === 2)
@@ -316,31 +316,34 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     quietly {
       val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
       val storeId = StateStoreId(dir, 0, 0)
+      val storeConf = StateStoreConf.empty
+      val hadoopConf = new Configuration()
+
 
       // Verify that trying to get incorrect versions throw errors
       intercept[IllegalArgumentException] {
-        StateStore.get(storeId, keySchema, valueSchema, -1, new Configuration)
+        StateStore.get(storeId, keySchema, valueSchema, -1, storeConf, hadoopConf)
       }
       assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
 
       intercept[IllegalStateException] {
-        StateStore.get(storeId, keySchema, valueSchema, 1, new Configuration)
+        StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf)
       }
 
       // Increase version of the store
-      val store0 = StateStore.get(storeId, keySchema, valueSchema, 0, new Configuration)
+      val store0 = StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf)
       assert(store0.version === 0)
       update(store0, "a", 1)
       store0.commit()
 
-      assert(StateStore.get(storeId, keySchema, valueSchema, 1, new Configuration).version == 1)
-      assert(StateStore.get(storeId, keySchema, valueSchema, 0, new Configuration).version == 0)
+      assert(StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf).version == 1)
+      assert(StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf).version == 0)
 
       // Verify that you can remove the store and still reload and use it
       StateStore.remove(storeId)
       assert(!StateStore.isLoaded(storeId))
 
-      val store1 = StateStore.get(storeId, keySchema, valueSchema, 1, new Configuration)
+      val store1 = StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf)
       assert(StateStore.isLoaded(storeId))
       update(store1, "a", 2)
       assert(store1.commit() === 2)
@@ -357,14 +360,17 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val opId = 0
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val storeId = StateStoreId(dir, opId, 0)
+    val storeConf = StateStoreConf.empty
+    val hadoopConf = new Configuration()
     val provider = new HDFSBackedStateStoreProvider(
-      storeId, keySchema, valueSchema, conf, new Configuration)
+      storeId, keySchema, valueSchema, storeConf, hadoopConf)
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           for (i <- 1 to 20) {
-            val store = StateStore.get(storeId, keySchema, valueSchema, i - 1, new Configuration)
+            val store = StateStore.get(
+              storeId, keySchema, valueSchema, i - 1, storeConf, hadoopConf)
             update(store, "a", i)
             store.commit()
           }
@@ -392,7 +398,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, keySchema, valueSchema, 20, new Configuration)
+          StateStore.get(storeId, keySchema, valueSchema, 20, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
 
           // If some other executor loads the store, then this instance should be unloaded
@@ -402,7 +408,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, keySchema, valueSchema, 20, new Configuration)
+          StateStore.get(storeId, keySchema, valueSchema, 20, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
         }
       }
@@ -419,7 +425,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       provider: HDFSBackedStateStoreProvider,
     version: Int = -1): Set[(String, Int)] = {
     val reloadedProvider = new HDFSBackedStateStoreProvider(
-      provider.id, keySchema, valueSchema, new SparkConf, new Configuration)
+      provider.id, keySchema, valueSchema, StateStoreConf.empty, new Configuration)
     if (version < 0) {
       reloadedProvider.latestIterator().map(rowsToStringInt).toSet
     } else {
@@ -484,16 +490,18 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   def newStoreProvider(
       opId: Long = Random.nextLong,
       partition: Int = 0,
-      maxDeltaChainForSnapshots: Int = MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT
+      maxDeltaChainForSnapshots: Int = StateStoreConf.MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT
     ): HDFSBackedStateStoreProvider = {
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
-    val sparkConf = new SparkConf()
-      .set(MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF, maxDeltaChainForSnapshots.toString)
+    val sqlConf = new SQLConf()
+    sqlConf.setConfString(
+      StateStoreConf.MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF,
+      maxDeltaChainForSnapshots.toString)
     new HDFSBackedStateStoreProvider(
       StateStoreId(dir, opId, partition),
       keySchema,
       valueSchema,
-      sparkConf,
+      new StateStoreConf(sqlConf),
       new Configuration())
   }
 
