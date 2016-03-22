@@ -232,11 +232,11 @@ class StreamExecution(
     availableOffsets ++= newData
 
     if (dataAvailable) {
-      logInfo(s"Commiting offsets for batch $currentBatchId.")
       assert(
         offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
-        "Concurrent update to the log.  Multiple streaming jobs detected.")
+        s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
       currentBatchId += 1
+      logInfo(s"Committed offsets for batch $currentBatchId.")
       true
     } else {
       false

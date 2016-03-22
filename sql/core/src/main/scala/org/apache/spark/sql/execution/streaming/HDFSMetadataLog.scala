@@ -116,7 +116,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
         try {
           // Try to commit the batch
           // It will fail if there is an existing file (someone has committed the batch)
-          logInfo(s"Attempting to write log ${batchFile(batchId)}")
+          logDebug(s"Attempting to write log #${batchFile(batchId)}")
           fc.rename(tempPath, batchFile(batchId), Options.Rename.NONE)
           return
         } catch {
