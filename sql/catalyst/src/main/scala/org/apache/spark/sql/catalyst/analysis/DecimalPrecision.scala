@@ -61,8 +61,6 @@ import org.apache.spark.sql.types._
 object DecimalPrecision extends Rule[LogicalPlan] {
   import scala.math.{max, min}
 
-  private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
-
   // Returns the wider decimal type that's wider than both of them
   def widerDecimalType(d1: DecimalType, d2: DecimalType): DecimalType = {
     widerDecimalType(d1.precision, d1.scale, d2.precision, d2.scale)
@@ -241,19 +239,46 @@ object DecimalPrecision extends Rule[LogicalPlan] {
    */
   private val nondecimalAndDecimal: PartialFunction[Expression, Expression] = {
     // Promote integers inside a binary expression with fixed-precision decimals to decimals,
-    // and fixed-precision decimals in an expression with floats / doubles to doubles
+    // and fixed-precision decimals in an expression with floats / doubles to floats / doubles
     case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
       (left.dataType, right.dataType) match {
         case (t: IntegralType, DecimalType.Fixed(p, s)) =>
           b.makeCopy(Array(Cast(left, DecimalType.forType(t)), right))
         case (DecimalType.Fixed(p, s), t: IntegralType) =>
           b.makeCopy(Array(left, Cast(right, DecimalType.forType(t))))
-        case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
+
+        case (t, DecimalType.Fixed(p, s)) if t == FloatType =>
+          right match {
+            case l: Literal => {
+              val value = l.value.asInstanceOf[Decimal].toDouble
+              if (value > Float.MaxValue || value < Float.MinValue) {
+                b.makeCopy(Array(left, Cast(right, DoubleType)))
+              } else {
+                b.makeCopy(Array(left, Cast(right, FloatType)))
+              }
+            }
+            case _ => b.makeCopy(Array(left, Cast(right, DoubleType)))
+          }
+
+        case (DecimalType.Fixed(p, s), t) if t == FloatType =>
+          left match {
+            case l: Literal => {
+              val value = l.value.asInstanceOf[Decimal].toDouble
+              if (value > Float.MaxValue || value < Float.MinValue) {
+                b.makeCopy(Array(Cast(left, DoubleType), right))
+              } else {
+                b.makeCopy(Array(Cast(left, FloatType), right))
+              }
+            }
+            case _ => b.makeCopy(Array(Cast(left, DoubleType), right))
+          }
+
+        case (t, DecimalType.Fixed(p, s)) if t == DoubleType =>
           b.makeCopy(Array(left, Cast(right, DoubleType)))
-        case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
+        case (DecimalType.Fixed(p, s), t) if t == DoubleType =>
           b.makeCopy(Array(Cast(left, DoubleType), right))
-        case _ =>
-          b
+
+        case _ => b
       }
   }
 }
