@@ -311,7 +311,6 @@ private[spark] class MemoryStore(
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
         }
-        unrollMemoryUsedByThisBlock += amountToRequest
       }
     }
 
