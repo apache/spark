@@ -262,6 +262,11 @@ public class VectorizedColumnReader {
             Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
             column.putLong(i, CatalystRowConverter.binaryToUnscaledLong(v));
           }
+        } else if (DecimalType.isByteArrayDecimalType(column.dataType())) {
+          for (int i = rowId; i < rowId + num; ++i) {
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+            column.putByteArray(i, v.getBytes());
+          }
         } else {
           throw new NotImplementedException();
         }
@@ -364,6 +369,14 @@ public class VectorizedColumnReader {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
               CatalystRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
+        } else {
+          column.putNull(rowId + i);
+        }
+      }
+    } else if (DecimalType.isByteArrayDecimalType(column.dataType())) {
+      for (int i = 0; i < num; i++) {
+        if (defColumn.readInteger() == maxDefLevel) {
+          column.putByteArray(rowId + i, data.readBinary(arrayLen).getBytes());
         } else {
           column.putNull(rowId + i);
         }
