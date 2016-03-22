@@ -19,7 +19,7 @@ package org.apache.spark.shuffle
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{SerializerManager, Serializer}
 import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
@@ -33,6 +33,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
     startPartition: Int,
     endPartition: Int,
     context: TaskContext,
+    serializerManager: SerializerManager = SparkEnv.get.serializerManager,
     blockManager: BlockManager = SparkEnv.get.blockManager,
     mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
   extends ShuffleReader[K, C] with Logging {
@@ -52,7 +53,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
     // Wrap the streams for compression based on configuration
     val wrappedStreams = blockFetcherItr.map { case (blockId, inputStream) =>
-      blockManager.wrapForCompression(blockId, inputStream)
+      serializerManager.wrapForCompression(blockId, inputStream)
     }
 
     val serializerInstance = dep.serializer.newInstance()

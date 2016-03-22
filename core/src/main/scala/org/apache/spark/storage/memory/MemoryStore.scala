@@ -26,6 +26,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryManager
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, BlockInfoManager, BlockManager, StorageLevel}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
@@ -51,6 +52,7 @@ private case class SerializedMemoryEntry[T](
 private[spark] class MemoryStore(
     conf: SparkConf,
     blockInfoManager: BlockInfoManager,
+    serializerManager: SerializerManager,
     blockManager: BlockManager,
     memoryManager: MemoryManager)
   extends Logging {
@@ -202,7 +204,7 @@ private[spark] class MemoryStore(
       val entry = if (level.deserialized) {
         new DeserializedMemoryEntry[T](arrayValues, SizeEstimator.estimate(arrayValues), classTag)
       } else {
-        val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)(classTag)
+        val bytes = serializerManager.dataSerialize(blockId, arrayValues.iterator)(classTag)
         new SerializedMemoryEntry[T](bytes, bytes.size, classTag)
       }
       val size = entry.size
