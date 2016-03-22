@@ -1221,7 +1221,7 @@ object EliminateDistinct extends Rule[LogicalPlan] {
   private def isDistinct(plan: LogicalPlan): Boolean = plan match {
     // Distinct(left) or Aggregate(left.output, left.output, _) always returns distinct results
     case _: Distinct => true
-    case Aggregate(grouping, aggs, _) if grouping == aggs => true
+    case Aggregate(grouping, aggs, _) if grouping.nonEmpty && grouping == aggs => true
     // BinaryNode:
     case p @ Join(_, _, LeftSemi, _) => isDistinct(p.left)
     case p: Intersect => isDistinct(p.left)
