@@ -50,6 +50,7 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
 
     @volatile
     var continue = true
+    @volatile
     var stream: ContinuousQuery = null
 
     val writer = new Thread("stream writer") {
