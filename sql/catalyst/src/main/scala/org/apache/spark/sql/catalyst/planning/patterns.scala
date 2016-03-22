@@ -212,15 +212,12 @@ object Casts {
     case _ => None
   }
 
+  @tailrec
   private def collectCasts(e: Expression): Option[Attribute] = {
-    if (e.isInstanceOf[Cast]) {
-      collectCasts(e.children(0))
-    } else {
-      if (e.isInstanceOf[Attribute]) {
-        Some(e.asInstanceOf[Attribute])
-      } else {
-        None
-      }
+    e match {
+      case e: Cast => collectCasts(e.child)
+      case e: Attribute => Some(e)
+      case _ => None
     }
   }
 }

@@ -37,13 +37,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       .union(constructIsNotNullConstraints(constraints))
       .filter(constraint =>
         constraint.references.nonEmpty && constraint.references.subsetOf(outputSet))
-      .map(_.transform {
-        case n @ IsNotNull(c) =>
-          c match {
-            case Casts(a) if outputSet.contains(a) => IsNotNull(a)
-            case _ => n
-          }
-      })
   }
 
   /**
@@ -69,7 +62,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         Set(IsNotNull(l), IsNotNull(r))
       case _ =>
         Set.empty[Expression]
-    }.foldLeft(Set.empty[Expression])(_ union _.toSet)
+    }.foldLeft(Set.empty[Expression])(_ union _.toSet).map(_.transform {
+      case IsNotNull(Casts(a)) => IsNotNull(a)
+    })
   }
 
   /**
