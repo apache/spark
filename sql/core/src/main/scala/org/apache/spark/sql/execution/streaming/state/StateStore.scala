@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.util.{Timer, TimerTask}
 
 import scala.collection.mutable
@@ -28,6 +29,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
 
 
 /** Unique identifier for a [[StateStore]] */
@@ -117,8 +119,10 @@ private[state] object StateStore extends Logging {
 
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
   private val maintenanceTimer = new Timer("StateStore Timer", true)
+  private val maintenanceTaskExecutor =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("state-store-maintenance-task")
 
-  @volatile private var maintenanceTask: TimerTask = null
+  @volatile private var maintenanceTask: ScheduledFuture[_] = null
   @volatile private var _coordRef: StateStoreCoordinatorRef = null
 
   /** Get or create a store associated with the id. */
@@ -156,7 +160,7 @@ private[state] object StateStore extends Logging {
     loadedProviders.clear()
     _coordRef = null
     if (maintenanceTask != null) {
-      maintenanceTask.cancel()
+      maintenanceTask.cancel(false)
       maintenanceTask = null
     }
     logInfo("StateStore stopped")
@@ -166,14 +170,14 @@ private[state] object StateStore extends Logging {
   private def startMaintenanceIfNeeded(): Unit = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (maintenanceTask == null && env != null) {
-      maintenanceTask = new TimerTask {
+      val periodMs = env.conf.getTimeAsMs(
+        MAINTENANCE_INTERVAL_CONFIG, s"${MAINTENANCE_INTERVAL_DEFAULT_SECS}s")
+      val runnable = new Runnable {
         override def run(): Unit = { doMaintenance() }
       }
-      val periodMs = env.conf.getTimeAsMs(
-        MAINTENANCE_INTERVAL_CONFIG,
-        s"${MAINTENANCE_INTERVAL_DEFAULT_SECS}s")
-      maintenanceTimer.schedule(maintenanceTask, periodMs, periodMs)
-      logInfo("StateStore maintenance timer started")
+      maintenanceTask = maintenanceTaskExecutor.scheduleAtFixedRate(
+        runnable, periodMs, periodMs, TimeUnit.MILLISECONDS)
+      logInfo("State Store maintenance task started")
     }
   }
 
