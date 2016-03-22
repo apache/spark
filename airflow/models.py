@@ -958,6 +958,7 @@ class TaskInstance(Base):
 
         return open_slots <= 0
 
+    @provide_session
     def run(
             self,
             verbose=True,
@@ -966,7 +967,8 @@ class TaskInstance(Base):
             mark_success=False,  # Don't run the task, act as if it succeeded
             test_mode=False,  # Doesn't record success or failure in the DB
             job_id=None,
-            pool=None,):
+            pool=None,
+            session=None):
         """
         Runs the task instance.
         """
@@ -974,9 +976,7 @@ class TaskInstance(Base):
         self.pool = pool or task.pool
         self.test_mode = test_mode
         self.force = force
-        session = settings.Session()
-        self.refresh_from_db(session)
-        session.commit()
+        self.refresh_from_db()
         self.clear_xcom_data()
         self.job_id = job_id
         iso = datetime.now().isoformat()
@@ -991,7 +991,7 @@ class TaskInstance(Base):
                 " on {self.end_date}".format(**locals())
             )
         elif not ignore_dependencies and \
-                not self.are_dependencies_met(session, verbose=True):
+                not self.are_dependencies_met(session=session, verbose=True):
             logging.warning("Dependencies not met yet")
         elif self.state == State.UP_FOR_RETRY and \
                 not self.ready_for_retry():
@@ -1026,7 +1026,6 @@ class TaskInstance(Base):
                 self.queued_dttm = datetime.now()
                 session.merge(self)
                 session.commit()
-                session.close()
                 logging.info("Queuing into pool {}".format(self.pool))
                 return
             if not test_mode:
@@ -1036,7 +1035,6 @@ class TaskInstance(Base):
             if not test_mode:
                 session.merge(self)
             session.commit()
-            session.close()
 
             # Closing all pooled connections to prevent
             # "max number of connections reached"
@@ -1088,7 +1086,6 @@ class TaskInstance(Base):
                 raise
 
             # Recording SUCCESS
-            session = settings.Session()
             self.end_date = datetime.now()
             self.set_duration()
             self.state = State.SUCCESS
@@ -1106,7 +1103,6 @@ class TaskInstance(Base):
                 logging.exception(e3)
 
         session.commit()
-        session.close()
 
     def dry_run(self):
         task = self.task
