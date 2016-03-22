@@ -42,10 +42,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.{datasources, FileRelation}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource, ParquetRelation}
+import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
-import org.apache.spark.sql.sources.{HadoopFsRelation, HDFSFileCatalog}
+import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
+import org.apache.spark.sql.sources.{FileFormat, HadoopFsRelation, HDFSFileCatalog}
 import org.apache.spark.sql.types._
 
 private[hive] case class HiveSerDe(
@@ -440,6 +441,56 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     }
   }
 
+  private def getCached(
+      tableIdentifier: QualifiedTableName,
+      metastoreRelation: MetastoreRelation,
+      schemaInMetastore: StructType,
+      expectedFileFormat: Class[_ <: FileFormat],
+      partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
+
+    cachedDataSourceTables.getIfPresent(tableIdentifier) match {
+      case null => None // Cache miss
+      case logical @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
+        val pathsInMetastore = metastoreRelation.table.storage.locationUri.toSeq
+        val cachedRelationFileFormatClass = relation.fileFormat.getClass
+
+        expectedFileFormat match {
+          case `cachedRelationFileFormatClass` =>
+            // If we have the same paths, same schema, and same partition spec,
+            // we will use the cached relation.
+            val useCached =
+              relation.location.paths.map(_.toString).toSet == pathsInMetastore.toSet &&
+                logical.schema.sameType(schemaInMetastore) &&
+                relation.partitionSpec == partitionSpecInMetastore.getOrElse {
+                  PartitionSpec(StructType(Nil), Array.empty[PartitionDirectory])
+                }
+
+            if (useCached) {
+              Some(logical)
+            } else {
+              // If the cached relation is not updated, we invalidate it right away.
+              cachedDataSourceTables.invalidate(tableIdentifier)
+              None
+            }
+          case _ =>
+            logWarning(
+              s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} " +
+                s"should be stored as $expectedFileFormat. However, we are getting " +
+                s"a ${relation.fileFormat} from the metastore cache. This cached " +
+                s"entry will be invalidated.")
+            cachedDataSourceTables.invalidate(tableIdentifier)
+            None
+        }
+      case other =>
+        logWarning(
+          s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} should be stored " +
+            s"as $expectedFileFormat. However, we are getting a $other from the metastore cache. " +
+            s"This cached entry will be invalidated.")
+        cachedDataSourceTables.invalidate(tableIdentifier)
+        None
+    }
+  }
+
   private def convertToParquetRelation(metastoreRelation: MetastoreRelation): LogicalRelation = {
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
     val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
@@ -453,40 +504,6 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     )
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
-
-    def getCached(
-        tableIdentifier: QualifiedTableName,
-        pathsInMetastore: Seq[String],
-        schemaInMetastore: StructType,
-        partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
-      cachedDataSourceTables.getIfPresent(tableIdentifier) match {
-        case null => None // Cache miss
-        case logical @ LogicalRelation(parquetRelation: HadoopFsRelation, _, _) =>
-          // If we have the same paths, same schema, and same partition spec,
-          // we will use the cached Parquet Relation.
-          val useCached =
-            parquetRelation.location.paths.map(_.toString).toSet == pathsInMetastore.toSet &&
-            logical.schema.sameType(metastoreSchema) &&
-            parquetRelation.partitionSpec == partitionSpecInMetastore.getOrElse {
-              PartitionSpec(StructType(Nil), Array.empty[datasources.PartitionDirectory])
-            }
-
-          if (useCached) {
-            Some(logical)
-          } else {
-            // If the cached relation is not updated, we invalidate it right away.
-            cachedDataSourceTables.invalidate(tableIdentifier)
-            None
-          }
-        case other =>
-          logWarning(
-            s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} should be stored " +
-              s"as Parquet. However, we are getting a $other from the metastore cache. " +
-              s"This cached entry will be invalidated.")
-          cachedDataSourceTables.invalidate(tableIdentifier)
-          None
-      }
-    }
 
     val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
@@ -504,14 +521,15 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
       val cached = getCached(
         tableIdentifier,
-        metastoreRelation.table.storage.locationUri.toSeq,
+        metastoreRelation,
         metastoreSchema,
+        classOf[ParquetDefaultSource],
         Some(partitionSpec))
 
       val parquetRelation = cached.getOrElse {
         val paths = new Path(metastoreRelation.table.storage.locationUri.get) :: Nil
         val fileCatalog = new MetaStoreFileCatalog(hive, paths, partitionSpec)
-        val format = new DefaultSource()
+        val format = new ParquetDefaultSource()
         val inferredSchema = format.inferSchema(hive, parquetOptions, fileCatalog.allFiles())
 
         val mergedSchema = inferredSchema.map { inferred =>
@@ -524,7 +542,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
           partitionSchema = partitionSchema,
           dataSchema = mergedSchema,
           bucketSpec = None, // We don't support hive bucketed tables, only ones we write out.
-          fileFormat = new DefaultSource(),
+          fileFormat = new ParquetDefaultSource(),
           options = parquetOptions)
 
         val created = LogicalRelation(relation)
@@ -536,7 +554,11 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     } else {
       val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
 
-      val cached = getCached(tableIdentifier, paths, metastoreSchema, None)
+      val cached = getCached(tableIdentifier,
+        metastoreRelation,
+        metastoreSchema,
+        classOf[ParquetDefaultSource],
+        None)
       val parquetRelation = cached.getOrElse {
         val created =
           LogicalRelation(
@@ -588,6 +610,107 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
           relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
           SubqueryAlias(relation.alias.getOrElse(relation.tableName), parquetRelation)
+      }
+    }
+  }
+
+  private def convertToOrcRelation(metastoreRelation: MetastoreRelation): LogicalRelation = {
+    val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
+
+    val tableIdentifier =
+      QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
+
+    val orcOptions = Map[String, String]()
+
+    val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
+      val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
+      val partitionColumnDataTypes = partitionSchema.map(_.dataType)
+      // We're converting the entire table into OrcRelation, so predicates to Hive metastore
+      // are empty.
+      val partitions = metastoreRelation.getHiveQlPartitions().map { p =>
+        val location = p.getLocation
+        val values = InternalRow.fromSeq(p.getValues.asScala.zip(partitionColumnDataTypes).map {
+          case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
+        })
+        PartitionDirectory(values, location)
+      }
+      val partitionSpec = PartitionSpec(partitionSchema, partitions)
+
+      val cached = getCached(
+        tableIdentifier,
+        metastoreRelation,
+        metastoreSchema,
+        classOf[OrcDefaultSource],
+        Some(partitionSpec))
+
+      val orcRelation = cached.getOrElse {
+        val paths = new Path(metastoreRelation.table.storage.locationUri.get) :: Nil
+        val fileCatalog = new MetaStoreFileCatalog(hive, paths, partitionSpec)
+        val format = new OrcDefaultSource()
+        val inferredSchema = format.inferSchema(hive, orcOptions, fileCatalog.allFiles()).get
+
+        val relation = HadoopFsRelation(
+          sqlContext = hive,
+          location = fileCatalog,
+          partitionSchema = partitionSchema,
+          dataSchema = inferredSchema,
+          bucketSpec = None, // We don't support hive bucketed tables, only ones we write out.
+          fileFormat = new OrcDefaultSource(),
+          options = orcOptions)
+
+        val created = LogicalRelation(relation)
+        cachedDataSourceTables.put(tableIdentifier, created)
+        created
+      }
+
+      orcRelation
+    } else {
+      val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
+
+      val cached = getCached(tableIdentifier,
+        metastoreRelation,
+        metastoreSchema,
+        classOf[OrcDefaultSource],
+        None)
+      val orcRelation = cached.getOrElse {
+        val created =
+          LogicalRelation(
+            DataSource(
+              sqlContext = hive,
+              paths = paths,
+              userSpecifiedSchema = Some(metastoreRelation.schema),
+              options = orcOptions,
+              className = "orc").resolveRelation())
+
+        cachedDataSourceTables.put(tableIdentifier, created)
+        created
+      }
+
+      orcRelation
+    }
+    result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
+  }
+
+  /**
+    * When scanning Metastore ORC tables, convert them to ORC data source relations
+    * for better performance.
+    */
+  object OrcConversions extends Rule[LogicalPlan] {
+    private def isConvertMetastoreOrc(relation: MetastoreRelation): Boolean = {
+      relation.tableDesc.getSerdeClassName.toLowerCase.contains("orc") &&
+        hive.convertMetastoreOrc
+    }
+
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (!plan.resolved || plan.analyzed) {
+        return plan
+      }
+
+      plan transformUp {
+        // Read path
+        case relation: MetastoreRelation if isConvertMetastoreOrc(relation) =>
+          val orcRelation = convertToOrcRelation(relation)
+          SubqueryAlias(relation.alias.getOrElse(relation.tableName), orcRelation)
       }
     }
   }

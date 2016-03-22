@@ -400,4 +400,33 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       }
     }
   }
+
+  test("SPARK-14070 Use ORC data source for SQL queries on ORC tables") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val path = dir.getCanonicalPath
+
+        withTable("dummy_orc") {
+          withTempTable("single") {
+            sqlContext.sql(
+              s"""CREATE TABLE dummy_orc(key INT, value STRING)
+                  |STORED AS ORC
+                  |LOCATION '$path'
+               """.stripMargin)
+
+            val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
+            singleRowDF.registerTempTable("single")
+
+            sqlContext.sql(
+              s"""INSERT INTO TABLE dummy_orc
+                  |SELECT key, value FROM single
+               """.stripMargin).collect()
+
+            val df = sqlContext.sql("SELECT * FROM dummy_orc WHERE key=0")
+            checkAnswer(df, singleRowDF)
+          }
+        }
+      }
+    }
+  }
 }
