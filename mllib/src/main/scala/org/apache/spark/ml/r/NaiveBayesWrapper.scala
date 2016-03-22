@@ -18,7 +18,7 @@
 package org.apache.spark.ml.r
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.{AttributeGroup, Attribute, NominalAttribute}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.sql.DataFrame

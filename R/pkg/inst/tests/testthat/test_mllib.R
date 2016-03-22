@@ -186,9 +186,9 @@ test_that("naiveBayes", {
   df <- suppressWarnings(createDataFrame(sqlContext, t1))
   m <- naiveBayes(Survived ~ ., data = df)
   s <- summary(m)
-  expect_equal(s$apriori[1, "Yes"], 0.5833333, tolerance = 1e-6)
+  expect_equal(as.double(s$apriori[1, "Yes"]), 0.5833333, tolerance = 1e-6)
   expect_equal(sum(s$apriori), 1)
-  expect_equal(s$tables["Yes", "Age_Adult"], 0.5714286, tolerance = 1e-6)
+  expect_equal(as.double(s$tables["Yes", "Age_Adult"]), 0.5714286, tolerance = 1e-6)
   p <- collect(select(predict(m, df), "prediction"))
   expect_equal(p$prediction, c("Yes", "Yes", "Yes", "Yes", "No", "No", "Yes", "Yes", "No", "No",
                                "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "No", "No",

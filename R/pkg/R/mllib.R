@@ -22,7 +22,7 @@
 #' @export
 setClass("PipelineModel", representation(model = "jobj"))
 
-#' @tile S4 class that represents a NaiveBayesModel
+#' @title S4 class that represents a NaiveBayesModel
 #' @param jobj a Java object reference to the backing Scala NaiveBayesWrapper
 #' @export
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
@@ -66,7 +66,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
             return(new("PipelineModel", model = model))
           })
 
-#' Make predictions from a amodel
+#' Make predictions from a model
 #'
 #' Makes predictions from a model produced by glm(), similarly to R's predict().
 #'
@@ -268,7 +268,6 @@ setMethod("fitted", signature(object = "PipelineModel"),
 #'}
 setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
           function(formula, data, laplace = 0, ...) {
-            data <- na.omit(data)
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
                                  formula, data@sdf, laplace)
