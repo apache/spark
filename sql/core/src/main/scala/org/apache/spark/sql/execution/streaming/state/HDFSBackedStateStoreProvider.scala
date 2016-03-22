@@ -456,7 +456,7 @@ private[state] class HDFSBackedStateStoreProvider(
           filesForVersion(files, lastVersion).filter(_.isSnapshot == false)
         synchronized { loadedMaps.get(lastVersion) } match {
           case Some(map) =>
-            if (deltaFilesForLastVersion.size > storeConf.maxDeltaChainForSnapshots) {
+            if (deltaFilesForLastVersion.size > storeConf.maxDeltasForSnapshot) {
               writeSnapshotFile(lastVersion, map)
             }
           case None =>
@@ -479,7 +479,7 @@ private[state] class HDFSBackedStateStoreProvider(
     try {
       val files = fetchFiles()
       if (files.nonEmpty) {
-        val earliestVersionToRetain = files.last.version - storeConf.minBatchesToRetain
+        val earliestVersionToRetain = files.last.version - storeConf.minVersionsToRetain
         if (earliestVersionToRetain > 0) {
           val earliestFileToRetain = filesForVersion(files, earliestVersionToRetain).head
           synchronized {

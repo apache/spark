@@ -207,7 +207,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   }
 
   test("snapshotting") {
-    val provider = newStoreProvider(maxDeltaChainForSnapshots = 5)
+    val provider = newStoreProvider(minDeltasForSnapshot = 5)
 
     var currentVersion = 0
     def updateVersionTo(targetVersion: Int): Unit = {
@@ -260,7 +260,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   }
 
   test("cleaning") {
-    val provider = newStoreProvider(maxDeltaChainForSnapshots = 5)
+    val provider = newStoreProvider(minDeltasForSnapshot = 5)
 
     for (i <- 1 to 20) {
       val store = provider.getStore(i - 1)
@@ -281,7 +281,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
 
   test("corrupted file handling") {
-    val provider = newStoreProvider(maxDeltaChainForSnapshots = 5)
+    val provider = newStoreProvider(minDeltasForSnapshot = 5)
     for (i <- 1 to 6) {
       val store = provider.getStore(i - 1)
       update(store, "a", i)
@@ -490,13 +490,11 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   def newStoreProvider(
       opId: Long = Random.nextLong,
       partition: Int = 0,
-      maxDeltaChainForSnapshots: Int = StateStoreConf.MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT
+      minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get
     ): HDFSBackedStateStoreProvider = {
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val sqlConf = new SQLConf()
-    sqlConf.setConfString(
-      StateStoreConf.MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF,
-      maxDeltaChainForSnapshots.toString)
+    sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
     new HDFSBackedStateStoreProvider(
       StateStoreId(dir, opId, partition),
       keySchema,

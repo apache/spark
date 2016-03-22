@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.sql.execution.streaming.state.StateStoreConf._
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
@@ -25,24 +24,15 @@ private[state] class StateStoreConf(@transient private val conf: SQLConf) extend
 
   def this() = this(new SQLConf)
 
-  val maxDeltaChainForSnapshots = conf.getConfString(
-    StateStoreConf.MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF,
-    MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT.toString).toInt
+  import SQLConf._
 
-  val minBatchesToRetain = conf.getConfString(
-    MIN_BATCHES_TO_RETAIN_CONF,
-    MIN_BATCHES_TO_RETAIN_DEFAULT.toString).toInt
+  val maxDeltasForSnapshot = conf.getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
+
+  val minVersionsToRetain = conf.getConf(STATE_STORE_MIN_VERSIONS_TO_RETAIN)
 }
 
 private[state] object StateStoreConf {
-
   val empty = new StateStoreConf()
-
-  val MAX_DELTA_CHAIN_FOR_SNAPSHOTS_CONF = "spark.sql.streaming.stateStore.maxDeltaChain"
-  val MAX_DELTA_CHAIN_FOR_SNAPSHOTS_DEFAULT = 10
-
-  val MIN_BATCHES_TO_RETAIN_CONF = "spark.sql.streaming.stateStore.minBatchesToRetain"
-  val MIN_BATCHES_TO_RETAIN_DEFAULT = 2
 }
 
 

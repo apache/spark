@@ -514,6 +514,21 @@ object SQLConf {
     doc = "When true, the planner will try to find out duplicated exchanges and re-use them",
     isPublic = false)
 
+  val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT = intConf(
+    "spark.sql.streaming.stateStore.minDeltasForSnapshot",
+    defaultValue = Some(10),
+    doc = "Minimum number of state store delta files that needs to be generated before they " +
+      "consolidated into snapshots.",
+    isPublic = false
+  )
+
+  val STATE_STORE_MIN_VERSIONS_TO_RETAIN = intConf(
+    "spark.sql.streaming.stateStore.minBatchesToRetain",
+    defaultValue = Some(2),
+    doc = "Minimum number of versions of a state store's data to retain after cleaning.",
+    isPublic = false
+  )
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
