@@ -61,7 +61,7 @@ class UIUtilsSuite extends SparkFunSuite {
       plainText = false
     )
   }
-  
+
   test("makeDescription(plainText = true)") {
     verify(
       """test <a href="/link"> text </a>""",
