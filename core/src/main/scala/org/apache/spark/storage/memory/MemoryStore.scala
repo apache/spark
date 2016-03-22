@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryManager
-import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel}
+import org.apache.spark.storage.{BlockId, BlockInfoManager, BlockManager, StorageLevel}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -50,6 +50,7 @@ private case class SerializedMemoryEntry[T](
  */
 private[spark] class MemoryStore(
     conf: SparkConf,
+    blockInfoManager: BlockInfoManager,
     blockManager: BlockManager,
     memoryManager: MemoryManager)
   extends Logging {
@@ -339,7 +340,7 @@ private[spark] class MemoryStore(
             // We don't want to evict blocks which are currently being read, so we need to obtain
             // an exclusive write lock on blocks which are candidates for eviction. We perform a
             // non-blocking "tryLock" here in order to ignore blocks which are locked for reading:
-            if (blockManager.blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
+            if (blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
               selectedBlocks += blockId
               freedMemory += pair.getValue.size
             }
@@ -357,11 +358,11 @@ private[spark] class MemoryStore(
         if (newEffectiveStorageLevel.isValid) {
           // The block is still present in at least one store, so release the lock
           // but don't delete the block info
-          blockManager.releaseLock(blockId)
+          blockInfoManager.unlock(blockId)
         } else {
           // The block isn't present in any store, so delete the block info so that the
           // block can be stored again
-          blockManager.blockInfoManager.removeBlock(blockId)
+          blockInfoManager.removeBlock(blockId)
         }
       }
 
@@ -383,7 +384,7 @@ private[spark] class MemoryStore(
             "from the same RDD")
         }
         selectedBlocks.foreach { id =>
-          blockManager.releaseLock(id)
+          blockInfoManager.unlock(id)
         }
         0L
       }

@@ -80,13 +80,14 @@ private[spark] class BlockManager(
     new DiskBlockManager(conf, deleteFilesOnStop)
   }
 
+  // Visible for testing
   private[storage] val blockInfoManager = new BlockInfoManager
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
   // Actual storage of where blocks are kept
-  private[spark] val memoryStore = new MemoryStore(conf, this, memoryManager)
+  private[spark] val memoryStore = new MemoryStore(conf, blockInfoManager, this, memoryManager)
   private[spark] val diskStore = new DiskStore(conf, diskBlockManager)
   memoryManager.setMemoryStore(memoryStore)
 
@@ -286,7 +287,7 @@ private[spark] class BlockManager(
       shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       getLocalBytes(blockId) match {
-        case Some(buffer) => new BlockManagerManagedBuffer(this, blockId, buffer)
+        case Some(buffer) => new BlockManagerManagedBuffer(blockInfoManager, blockId, buffer)
         case None => throw new BlockNotFoundException(blockId.toString)
       }
     }
