@@ -223,6 +223,39 @@ streaming_kafka = Module(
 )
 
 
+streaming_flume_sink = Module(
+    name="streaming-flume-sink",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/flume-sink",
+    ],
+    sbt_test_goals=[
+        "streaming-flume-sink/test",
+    ]
+)
+
+
+streaming_flume = Module(
+    name="streaming-flume",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/flume",
+    ],
+    sbt_test_goals=[
+        "streaming-flume/test",
+    ]
+)
+
+
+streaming_flume_assembly = Module(
+    name="streaming-flume-assembly",
+    dependencies=[streaming_flume, streaming_flume_sink],
+    source_file_regexes=[
+        "external/flume-assembly",
+    ]
+)
+
+
 mllib = Module(
     name="mllib",
     dependencies=[streaming, sql],
@@ -294,6 +327,7 @@ pyspark_streaming = Module(
         pyspark_core,
         streaming,
         streaming_kafka,
+        streaming_flume_assembly,
         streaming_kinesis_asl
     ],
     source_file_regexes=[
