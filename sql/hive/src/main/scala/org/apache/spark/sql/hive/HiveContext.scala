@@ -83,8 +83,8 @@ class HiveContext private[hive](
     sc: SparkContext,
     cacheManager: CacheManager,
     listener: SQLListener,
-    @transient protected[hive] val executionHive: HiveClientImpl,
-    @transient protected[hive] val metadataHive: HiveClient,
+    @transient private[hive] val executionHive: HiveClientImpl,
+    @transient private[hive] val metadataHive: HiveClient,
     isRootContext: Boolean,
     @transient private[sql] val hiveCatalog: HiveCatalog)
   extends SQLContext(sc, cacheManager, listener, isRootContext, hiveCatalog) with Logging {
@@ -318,7 +318,7 @@ class HiveContext private[hive](
   /**
    * SQLConf and HiveConf contracts:
    *
-   * 1. create a new SessionState for each HiveContext
+   * 1. create a new o.a.h.hive.ql.session.SessionState for each HiveContext
    * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
    *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
    *    set in the SQLConf *as well as* in the HiveConf.
@@ -607,6 +607,7 @@ private[hive] object HiveContext extends Logging {
       hadoopConf: Configuration,
       configurations: Map[String, String]): HiveClient = {
     val sqlConf = new SQLConf
+    sqlConf.setConf(SQLContext.getSQLProperties(conf))
     val hiveMetastoreVersion = HiveContext.hiveMetastoreVersion(sqlConf)
     val hiveMetastoreJars = HiveContext.hiveMetastoreJars(sqlConf)
     val hiveMetastoreSharedPrefixes = HiveContext.hiveMetastoreSharedPrefixes(sqlConf)

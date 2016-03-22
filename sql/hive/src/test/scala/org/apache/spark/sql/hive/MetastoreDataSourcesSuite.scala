@@ -704,7 +704,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             partitionColumns = Array.empty[String],
             bucketSpec = None,
             provider = "json",
-            options = Map("path" -> "just a dummy path"),
+            options = Map("path" -> tempDir.getCanonicalPath),
             isExternal = false)
 
           invalidateTable("wide_schema")
@@ -912,11 +912,11 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",
-        options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "false"),
+        options = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "false"),
         isExternal = false)
 
-      // As a proxy for verifying that the table was stored in Hive compatible format, we verify that
-      // each column of the table is of native type StringType.
+      // As a proxy for verifying that the table was stored in Hive compatible format,
+      // we verify that each column of the table is of native type StringType.
       assert(hiveCatalog.getTable("default", "not_skip_hive_metadata").schema
         .forall(column => HiveMetastoreTypes.toDataType(column.dataType) == StringType))
 
@@ -926,13 +926,14 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",
-        options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "true"),
+        options = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "true"),
         isExternal = false)
 
-      // As a proxy for verifying that the table was stored in SparkSQL format, we verify that
-      // the table has a column type as array of StringType.
-      assert(hiveCatalog.getTable("default", "skip_hive_metadata").schema
-        .forall(column => HiveMetastoreTypes.toDataType(column.dataType) == ArrayType(StringType)))
+      // As a proxy for verifying that the table was stored in SparkSQL format,
+      // we verify that the table has a column type as array of StringType.
+      assert(hiveCatalog.getTable("default", "skip_hive_metadata").schema.forall { c =>
+        HiveMetastoreTypes.toDataType(c.dataType) == ArrayType(StringType)
+      })
     }
   }
 }
