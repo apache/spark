@@ -370,7 +370,7 @@ object SQLConf {
           "unmatching partitions can be eliminated earlier.")
 
   val NATIVE_VIEW = booleanConf("spark.sql.nativeView",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
           "Note that this function is experimental and should ony be used when you are using " +
           "non-hive-compatible tables written by Spark SQL.  The SQL string used to create " +
