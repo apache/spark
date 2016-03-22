@@ -377,13 +377,10 @@ object Decimal {
   def apply(value: String): Decimal = new Decimal().set(BigDecimal(value))
 
   // This is used for RowEncoder to handle Decimal inside external row.
-  def apply(value: Any): Decimal = {
+  def fromDecimal(value: Any): Decimal = {
     value match {
       case j: java.math.BigDecimal => apply(j)
       case d: Decimal => d
-      case i: java.lang.Integer => apply(i.asInstanceOf[Int])
-      case l: java.lang.Long => apply(l.asInstanceOf[Long])
-      case d: java.lang.Double => apply(d.asInstanceOf[Double])
     }
   }
 

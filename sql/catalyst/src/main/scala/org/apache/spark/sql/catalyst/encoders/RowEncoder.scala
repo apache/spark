@@ -79,7 +79,7 @@ object RowEncoder {
       StaticInvoke(
         Decimal.getClass,
         DecimalType.SYSTEM_DEFAULT,
-        "apply",
+        "fromDecimal",
         inputObject :: Nil)
 
     case StringType =>
@@ -138,19 +138,10 @@ object RowEncoder {
   }
 
   private def externalDataTypeForInput(dt: DataType): DataType = dt match {
-    case _ if ScalaReflection.isNativeType(dt) => dt
-    case CalendarIntervalType => dt
-    case TimestampType => ObjectType(classOf[java.sql.Timestamp])
-    case DateType => ObjectType(classOf[java.sql.Date])
     // In order to support both Decimal and java BigDecimal in external row, we make this
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
-    case StringType => ObjectType(classOf[java.lang.String])
-    case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
-    case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
-    case _: StructType => ObjectType(classOf[Row])
-    case udt: UserDefinedType[_] => ObjectType(udt.userClass)
-    case _: NullType => ObjectType(classOf[java.lang.Object])
+    case _ => externalDataTypeFor(dt)
   }
 
   private def externalDataTypeFor(dt: DataType): DataType = dt match {
