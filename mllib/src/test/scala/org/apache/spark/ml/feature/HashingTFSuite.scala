@@ -46,7 +46,7 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     require(attrGroup.numAttributes === Some(n))
     val features = output.select("features").first().getAs[Vector](0)
     // Assume perfect hash on "a", "b", "c", and "d".
-    def idx(any: Any): Int = Utils.nonNegativeMod(any.##, n)
+    def idx: Any => Int = featureIdx(n)
     val expected = Vectors.sparse(n,
       Seq((idx("a"), 2.0), (idx("b"), 2.0), (idx("c"), 1.0), (idx("d"), 1.0)))
     assert(features ~== expected absTol 1e-14)
@@ -63,11 +63,8 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
         .setNumFeatures(n)
         .setBinary(true)
     val output = hashingTF.transform(df)
-    val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
-    require(attrGroup.numAttributes === Some(n))
     val features = output.select("features").first().getAs[Vector](0)
-    // Assume perfect hash on "a", "b", "c".
-    def idx(any: Any): Int = Utils.nonNegativeMod(any.##, n)
+    def idx: Any => Int = featureIdx(n)  // Assume perfect hash on input features
     val expected = Vectors.sparse(n,
       Seq((idx("a"), 1.0), (idx("b"), 1.0), (idx("c"), 1.0)))
     assert(features ~== expected absTol 1e-14)
@@ -79,5 +76,9 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       .setOutputCol("myOutputCol")
       .setNumFeatures(10)
     testDefaultReadWrite(t)
+  }
+
+  private def featureIdx(numFeatures: Int)(term: Any): Int = {
+    Utils.nonNegativeMod(term.##, numFeatures)
   }
 }
