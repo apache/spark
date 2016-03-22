@@ -72,7 +72,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
   private def newMetadataDir = Utils.createTempDir("streaming.metadata").getCanonicalPath
 
   after {
-    sqlContext.streams.active.foreach(_.stop())
+    sqlContext.streams.active.foreach(_.stopQuietly())
   }
 
   test("resolve default source") {
@@ -83,7 +83,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .startStream()
-      .stop()
+      .stopQuietly()
   }
 
   test("resolve full class") {
@@ -94,7 +94,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .startStream()
-      .stop()
+      .stopQuietly()
   }
 
   test("options") {
@@ -121,7 +121,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .options(map)
       .option("checkpointLocation", newMetadataDir)
       .startStream()
-      .stop()
+      .stopQuietly()
 
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
@@ -137,7 +137,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .startStream()
-      .stop()
+      .stopQuietly()
     assert(LastOptions.partitionColumns == Nil)
 
     df.write
@@ -145,7 +145,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .option("checkpointLocation", newMetadataDir)
       .partitionBy("a")
       .startStream()
-      .stop()
+      .stopQuietly()
     assert(LastOptions.partitionColumns == Seq("a"))
 
     withSQLConf("spark.sql.caseSensitive" -> "false") {
@@ -154,7 +154,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
         .option("checkpointLocation", newMetadataDir)
         .partitionBy("A")
         .startStream()
-        .stop()
+        .stopQuietly()
       assert(LastOptions.partitionColumns == Seq("a"))
     }
 
@@ -164,7 +164,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
         .option("checkpointLocation", newMetadataDir)
         .partitionBy("b")
         .startStream()
-        .stop()
+        .stopQuietly()
     }
   }
 
@@ -182,7 +182,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .startStream("/test")
-      .stop()
+      .stopQuietly()
 
     assert(LastOptions.parameters("path") == "/test")
   }
@@ -207,7 +207,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .option("doubleOpt", 6.7)
       .option("checkpointLocation", newMetadataDir)
       .startStream("/test")
-      .stop()
+      .stopQuietly()
 
     assert(LastOptions.parameters("intOpt") == "56")
     assert(LastOptions.parameters("boolOpt") == "false")
@@ -269,9 +269,9 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     }
 
     // Should be able to start query with that name after stopping the previous query
-    q1.stop()
+    q1.stopQuietly()
     val q5 = startQueryWithName("name")
     assert(activeStreamNames.contains("name"))
-    sqlContext.streams.active.foreach(_.stop())
+    sqlContext.streams.active.foreach(_.stopQuietly())
   }
 }

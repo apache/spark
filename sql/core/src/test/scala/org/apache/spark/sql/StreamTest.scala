@@ -65,6 +65,12 @@ import org.apache.spark.util.Utils
  */
 trait StreamTest extends QueryTest with Timeouts {
 
+  implicit class RichContinuousQuery(cq: ContinuousQuery) {
+    def stopQuietly(): Unit = quietly {
+      cq.stop()
+    }
+  }
+
   implicit class RichSource(s: Source) {
     def toDF(): DataFrame = Dataset.newDataFrame(sqlContext, StreamingRelation(s))
 
