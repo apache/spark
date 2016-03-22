@@ -190,6 +190,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "cannot resolve" :: "havingCondition" :: Nil)
 
   errorTest(
+    "unresolved star expansion in max",
+    testRelation2.groupBy('a)(sum(UnresolvedStar(None))),
+    "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
+
+  errorTest(
     "bad casts",
     testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
   "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
