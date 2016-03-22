@@ -146,7 +146,7 @@ private[state] class HDFSBackedStateStoreProvider(
       }
     }
 
-    /** Commit all the updates that have been made to the store. */
+    /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
       verify(state == UPDATING, "Cannot commit again after already committed or cancelled")
 
