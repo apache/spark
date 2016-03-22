@@ -22,7 +22,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
@@ -105,12 +104,7 @@ class NaiveBayes @Since("1.5.0") (
   override protected def train(dataset: DataFrame): NaiveBayesModel = {
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))
-    val nbModel = copyValues(NaiveBayesModel.fromOld(oldModel, this))
-    val attr = AttributeGroup.fromStructField(dataset.schema($(featuresCol))).attributes
-    if (attr.isDefined) {
-      nbModel.setFeatureNames(attr.get.map(_.name.getOrElse("NA")))
-    }
-    nbModel
+    NaiveBayesModel.fromOld(oldModel, this)
   }
 
   @Since("1.5.0")
@@ -233,21 +227,6 @@ class NaiveBayesModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new NaiveBayesModel.NaiveBayesModelWriter(this)
-
-  private var featureNames: Option[Array[String]] = None
-
-  private[classification] def setFeatureNames(names: Array[String]): this.type = {
-    this.featureNames = Some(names)
-    this
-  }
-
-  private[ml] def getFeatureNames: Array[String] = featureNames match {
-    case Some(names) => names
-    case None =>
-      throw new SparkException(
-        s"No training result available for the ${this.getClass.getSimpleName}",
-        new NullPointerException())
-  }
 }
 
 @Since("1.6.0")
@@ -258,6 +237,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       oldModel: OldNaiveBayesModel,
       parent: NaiveBayes): NaiveBayesModel = {
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("nb")
+    val labels = Vectors.dense(oldModel.labels)
     val pi = Vectors.dense(oldModel.pi)
     val theta = new DenseMatrix(oldModel.labels.length, oldModel.theta(0).length,
       oldModel.theta.flatten, true)

@@ -22,6 +22,11 @@
 #' @export
 setClass("PipelineModel", representation(model = "jobj"))
 
+#' @tile S4 class that represents a NaiveBayesModel
+#' @param jobj a Java object reference to the backing Scala NaiveBayesWrapper
+#' @export
+setClass("NaiveBayesModel", representation(jobj = "jobj"))
+
 #' Fits a generalized linear model
 #'
 #' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
@@ -61,7 +66,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
             return(new("PipelineModel", model = model))
           })
 
-#' Make predictions from a model
+#' Make predictions from a amodel
 #'
 #' Makes predictions from a model produced by glm(), similarly to R's predict().
 #'
@@ -79,6 +84,26 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 setMethod("predict", signature(object = "PipelineModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@model, "transform", newData@sdf)))
+          })
+
+#' Make predictions from a naive Bayes model
+#'
+#' Makes predictions from a model produced by naiveBayes(), similarly to R package e1071's predict.
+#'
+#' @param object A fitted naive Bayes model
+#' @param newData DataFrame for testing
+#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @rdname predict
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- naiveBayes(y ~ x, trainingData)
+#' predicted <- predict(model, testData)
+#' showDF(predicted)
+#'}
+setMethod("predict", signature(object = "NaiveBayesModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
 #' Get the summary of a model
@@ -135,22 +160,38 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- unlist(features)
               rownames(coefficients) <- 1:k
               return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
-            } else if (modelName == "NaiveBayesModel") {
-              labels <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                    "getNaiveBayesLabels", object@model)
-              pi <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                "getNaiveBayesPi", object@model)
-              theta <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getNaiveBayesTheta", object@model)
-              pi <- t(as.matrix(unlist(pi)))
-              colnames(pi) <- unlist(labels)
-              theta <- matrix(theta, nrow = length(labels))
-              rownames(theta) <- unlist(labels)
-              colnames(theta) <- unlist(features)
-              return(list(pi = pi, theta = theta))
             } else {
               stop(paste("Unsupported model", modelName, sep = " "))
             }
+          })
+
+#' Get the summary of a naive Bayes model
+#'
+#' Returns the summary of a naive Bayes model produced by naiveBayes(), similarly to R's summary().
+#'
+#' @param object A fitted MLlib model
+#' @return a list containing 'apriori', the label distribution, and 'tables', conditional
+#          probabilities given the target label
+#' @rdname summary
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- naiveBayes(y ~ x, trainingData)
+#' summary(model)
+#'}
+setMethod("summary", signature(object = "NaiveBayesModel"),
+          function(object, ...) {
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "features")
+            labels <- callJMethod(jobj, "labels")
+            apriori <- callJMethod(jobj, "apriori")
+            apriori <- t(as.matrix(unlist(apriori)))
+            colnames(apriori) <- unlist(labels)
+            tables <- callJMethod(jobj, "tables")
+            tables <- matrix(tables, nrow = length(labels))
+            rownames(tables) <- unlist(labels)
+            colnames(tables) <- unlist(features)
+            return(list(apriori = apriori, tables = tables))
           })
 
 #' Fit a k-means model
@@ -206,34 +247,30 @@ setMethod("fitted", signature(object = "PipelineModel"),
             }
           })
 
-#' Fit a naive Bayes model
+#' Fit a Bernoulli naive Bayes model
 #'
-#' Fit a naive Bayes model, similarly to R's naiveBayes() except for omitting two arguments 'subset'
-#' and 'na.action'. Users can use 'subset' function and 'fillna' or 'na.omit' function of DataFrame,
-#' respectively, to preprocess their DataFrame. We use na.omit in this interface to remove rows with
-#' NA values.
+#' Fit a Bernoulli naive Bayes model, similarly to R package e1071's naiveBayes() while only
+#' categorical features are supported. The input should be a DataFrame of observations instead of a
+#' contingency table.
 #'
 #' @param object A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#'               operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data DataFrame for training
-#' @param lambda Smoothing parameter
-#' @param modelType Either 'multinomial' or 'bernoulli'. Default "multinomial".
-#' @return A fitted naive Bayes model.
+#' @param laplace Smoothing parameter
+#' @return a fitted naive Bayes model
 #' @rdname naiveBayes
+#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
 #' @export
 #' @examples
 #' \dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
 #' df <- createDataFrame(sqlContext, infert)
-#' model <- naiveBayes(education ~ ., df, lambda = 1, modelType = "multinomial")
+#' model <- naiveBayes(education ~ ., df, laplace = 0)
 #'}
 setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
-          function(formula, data, lambda = 1, modelType = c("multinomial", "bernoulli"), ...) {
+          function(formula, data, laplace = 0, ...) {
             data <- na.omit(data)
             formula <- paste(deparse(formula), collapse = "")
-            modelType <- match.arg(modelType)
-            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers", "fitNaiveBayes",
-                                 formula, data@sdf, lambda, modelType)
-            return(new("PipelineModel", model = model))
+            jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
+                                 formula, data@sdf, laplace)
+            return(new("NaiveBayesModel", jobj = jobj))
           })
