@@ -29,20 +29,24 @@ import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.{SQLContext, SQLConf}
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.CacheTableCommand
-import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.execution.HiveNativeCommand
-import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.command.CacheTableCommand
+import org.apache.spark.sql.hive._
+import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.hive.execution.HiveNativeCommand
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
   extends TestHiveContext(
     new SparkContext(
-      System.getProperty("spark.sql.test.master", "local[32]"),
+      System.getProperty("spark.sql.test.master", "local[1]"),
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
@@ -87,7 +91,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     dir
   }
 
-  private lazy val temporaryConfig = newTemporaryConfiguration()
+  private lazy val temporaryConfig = newTemporaryConfiguration(useInMemoryDerby = false)
 
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] = {
@@ -116,19 +120,24 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
-  protected[sql] override lazy val conf: SQLConf = new SQLConf {
-    // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
-    override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
-    override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-
-    clear()
-
-    override def clear(): Unit = {
-      super.clear()
-
-      TestHiveContext.overrideConfs.map {
-        case (key, value) => setConfString(key, value)
+  @transient
+  protected[sql] override lazy val sessionState = new HiveSessionState(this) {
+    override lazy val conf: SQLConf = {
+      new SQLConf {
+        clear()
+        override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+        override def clear(): Unit = {
+          super.clear()
+          TestHiveContext.overrideConfs.map {
+            case (key, value) => setConfString(key, value)
+          }
+        }
       }
+    }
+
+    override lazy val functionRegistry = {
+      new TestHiveFunctionRegistry(
+        org.apache.spark.sql.catalyst.analysis.FunctionRegistry.builtin.copy(), self.executionHive)
     }
   }
 
@@ -196,7 +205,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
       // Proceed with analysis.
-      analyzer.execute(logical)
+      sessionState.analyzer.execute(logical)
     }
   }
 
@@ -410,14 +419,17 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     try {
       // HACK: Hive is too noisy by default.
       org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>
-        log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
+        val logger = log.asInstanceOf[org.apache.log4j.Logger]
+        if (!logger.getName.contains("org.apache.spark")) {
+          logger.setLevel(org.apache.log4j.Level.WARN)
+        }
       }
 
       cacheManager.clearCache()
       loadedTables.clear()
-      catalog.cachedDataSourceTables.invalidateAll()
-      catalog.client.reset()
-      catalog.unregisterAllTables()
+      sessionState.catalog.cachedDataSourceTables.invalidateAll()
+      sessionState.catalog.client.reset()
+      sessionState.catalog.unregisterAllTables()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
@@ -443,16 +455,27 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       defaultOverrides()
 
       runSqlHive("USE default")
-
-      // Just loading src makes a lot of tests pass.  This is because some tests do something like
-      // drop an index on src at the beginning.  Since we just pass DDL to hive this bypasses our
-      // Analyzer and thus the test table auto-loading mechanism.
-      // Remove after we handle more DDL operations natively.
-      loadTestTable("src")
-      loadTestTable("srcpart")
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
+    }
+  }
+
+}
+
+private[hive] class TestHiveFunctionRegistry(fr: SimpleFunctionRegistry, client: HiveClientImpl)
+  extends HiveFunctionRegistry(fr, client) {
+
+  private val removedFunctions =
+    collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
+
+  def unregisterFunction(name: String): Unit = {
+    fr.functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
+  }
+
+  def restore(): Unit = {
+    removedFunctions.foreach {
+      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
     }
   }
 }

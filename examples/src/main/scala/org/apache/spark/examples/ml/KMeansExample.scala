@@ -17,57 +17,54 @@
 
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
-import org.apache.spark.ml.clustering.KMeans
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.types.{StructField, StructType}
+// scalastyle:off println
 
+import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
+import org.apache.spark.ml.clustering.KMeans
+import org.apache.spark.mllib.linalg.Vectors
+// $example off$
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 /**
  * An example demonstrating a k-means clustering.
  * Run with
  * {{{
- * bin/run-example ml.KMeansExample <file> <k>
+ * bin/run-example ml.KMeansExample
  * }}}
  */
 object KMeansExample {
 
-  final val FEATURES_COL = "features"
-
   def main(args: Array[String]): Unit = {
-    if (args.length != 2) {
-      // scalastyle:off println
-      System.err.println("Usage: ml.KMeansExample <file> <k>")
-      // scalastyle:on println
-      System.exit(1)
-    }
-    val input = args(0)
-    val k = args(1).toInt
-
     // Creates a Spark context and a SQL context
     val conf = new SparkConf().setAppName(s"${this.getClass.getSimpleName}")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
-    // Loads data
-    val rowRDD = sc.textFile(input).filter(_.nonEmpty)
-      .map(_.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
-    val schema = StructType(Array(StructField(FEATURES_COL, new VectorUDT, false)))
-    val dataset = sqlContext.createDataFrame(rowRDD, schema)
+    // $example on$
+    // Crates a DataFrame
+    val dataset: DataFrame = sqlContext.createDataFrame(Seq(
+      (1, Vectors.dense(0.0, 0.0, 0.0)),
+      (2, Vectors.dense(0.1, 0.1, 0.1)),
+      (3, Vectors.dense(0.2, 0.2, 0.2)),
+      (4, Vectors.dense(9.0, 9.0, 9.0)),
+      (5, Vectors.dense(9.1, 9.1, 9.1)),
+      (6, Vectors.dense(9.2, 9.2, 9.2))
+    )).toDF("id", "features")
 
     // Trains a k-means model
     val kmeans = new KMeans()
-      .setK(k)
-      .setFeaturesCol(FEATURES_COL)
+      .setK(2)
+      .setFeaturesCol("features")
+      .setPredictionCol("prediction")
     val model = kmeans.fit(dataset)
 
     // Shows the result
-    // scalastyle:off println
     println("Final Centers: ")
     model.clusterCenters.foreach(println)
-    // scalastyle:on println
+    // $example off$
 
     sc.stop()
   }
 }
+// scalastyle:on println

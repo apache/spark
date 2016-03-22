@@ -17,8 +17,6 @@ cache
 work/
 out/
 .DS_Store
-third_party/libmesos.so
-third_party/libmesos.dylib
 build/apache-maven*
 build/zinc*
 build/scala*
@@ -50,6 +48,7 @@ spark-tests.log
 streaming-tests.log
 dependency-reduced-pom.xml
 .ensime
+.ensime_cache/
 .ensime_lucene
 checkpoint
 derby.log
@@ -59,8 +58,6 @@ dev/create-release/*final
 spark-*-bin-*.tgz
 unit-tests.log
 /lib/
-ec2/lib/
-rat-results.txt
 scalastyle.txt
 scalastyle-output.xml
 R-unit-tests.log
@@ -74,3 +71,7 @@ metastore/
 warehouse/
 TempStatsStore/
 sql/hive-thriftserver/test_warehouses
+
+# For R session data
+.RHistory
+.RData

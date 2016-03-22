@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -34,21 +35,21 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 public class ShuffleInMemorySorterSuite {
 
   final TestMemoryManager memoryManager =
-    new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"));
+    new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final TestMemoryConsumer consumer = new TestMemoryConsumer(taskMemoryManager);
 
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int strLength) {
     final byte[] strBytes = new byte[strLength];
     Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, strLength);
-    return new String(strBytes);
+    return new String(strBytes, StandardCharsets.UTF_8);
   }
 
   @Test
   public void testSortingEmptyInput() {
     final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 100);
     final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
-    assert(!iter.hasNext());
+    Assert.assertFalse(iter.hasNext());
   }
 
   @Test
@@ -64,7 +65,7 @@ public class ShuffleInMemorySorterSuite {
       "Lychee",
       "Mango"
     };
-    final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
+    final SparkConf conf = new SparkConf().set("spark.memory.offHeap.enabled", "false");
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);
@@ -75,8 +76,11 @@ public class ShuffleInMemorySorterSuite {
     // Write the records into the data page and store pointers into the sorter
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
+      if (!sorter.hasSpaceForAnotherRecord()) {
+        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 2));
+      }
       final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
-      final byte[] strBytes = str.getBytes("utf-8");
+      final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
       Platform.putInt(baseObject, position, strBytes.length);
       position += 4;
       Platform.copyMemory(
@@ -114,6 +118,9 @@ public class ShuffleInMemorySorterSuite {
     int[] numbersToSort = new int[128000];
     Random random = new Random(16);
     for (int i = 0; i < numbersToSort.length; i++) {
+      if (!sorter.hasSpaceForAnotherRecord()) {
+        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 2));
+      }
       numbersToSort[i] = random.nextInt(PackedRecordPointer.MAXIMUM_PARTITION_ID + 1);
       sorter.insertRecord(0, numbersToSort[i]);
     }

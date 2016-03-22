@@ -24,8 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.ByteBufferInputStream
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 private[spark] class JavaSerializationStream(
     out: OutputStream, counterReset: Int, extraDebugInfo: Boolean)
@@ -69,7 +68,7 @@ private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoa
         // scalastyle:on classforname
       } catch {
         case e: ClassNotFoundException =>
-          JavaDeserializationStream.primitiveMappings.get(desc.getName).getOrElse(throw e)
+          JavaDeserializationStream.primitiveMappings.getOrElse(desc.getName, throw e)
       }
   }
 
@@ -96,11 +95,11 @@ private[spark] class JavaSerializerInstance(
   extends SerializerInstance {
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
-    val bos = new ByteArrayOutputStream()
+    val bos = new ByteBufferOutputStream()
     val out = serializeStream(bos)
     out.writeObject(t)
     out.close()
-    ByteBuffer.wrap(bos.toByteArray)
+    bos.toByteBuffer
   }
 
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {

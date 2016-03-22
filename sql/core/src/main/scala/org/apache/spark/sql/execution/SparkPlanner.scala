@@ -18,27 +18,25 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
+import org.apache.spark.sql.internal.SQLConf
 
-@Experimental
-class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
-  val sparkContext: SparkContext = sqlContext.sparkContext
+class SparkPlanner(
+    val sparkContext: SparkContext,
+    val conf: SQLConf,
+    val experimentalMethods: ExperimentalMethods)
+  extends SparkStrategies {
 
-  def codegenEnabled: Boolean = sqlContext.conf.codegenEnabled
-
-  def unsafeEnabled: Boolean = sqlContext.conf.unsafeEnabled
-
-  def numPartitions: Int = sqlContext.conf.numShufflePartitions
+  def numPartitions: Int = conf.numShufflePartitions
 
   def strategies: Seq[Strategy] =
-    sqlContext.experimental.extraStrategies ++ (
+    experimentalMethods.extraStrategies ++ (
+      FileSourceStrategy ::
       DataSourceStrategy ::
       DDLStrategy ::
-      TakeOrderedAndProject ::
-      HashAggregation ::
+      SpecialLimits ::
       Aggregation ::
       LeftSemiJoin ::
       EquiJoinSelection ::
@@ -69,7 +67,7 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
 
     val projectSet = AttributeSet(projectList.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
-    val filterCondition =
+    val filterCondition: Option[Expression] =
       prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
 
     // Right now we still use a projection even if the only evaluation is applying an alias

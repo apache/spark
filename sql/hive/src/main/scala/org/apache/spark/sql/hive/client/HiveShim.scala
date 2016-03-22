@@ -33,13 +33,13 @@ import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorF
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{StringType, IntegralType}
+import org.apache.spark.sql.types.{IntegralType, StringType}
 
 /**
- * A shim that defines the interface between ClientWrapper and the underlying Hive library used to
- * talk to the metastore. Each Hive version has its own implementation of this class, defining
+ * A shim that defines the interface between [[HiveClientImpl]] and the underlying Hive library used
+ * to talk to the metastore. Each Hive version has its own implementation of this class, defining
  * version-specific version of needed functions.
  *
  * The guideline for writing shims is:
@@ -52,7 +52,6 @@ private[client] sealed abstract class Shim {
   /**
    * Set the current SessionState to the given SessionState. Also, set the context classloader of
    * the current thread to the one set in the HiveConf of this given `state`.
-   * @param state
    */
   def setCurrentSessionState(state: SessionState): Unit
 
@@ -321,7 +320,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   def convertFilters(table: Table, filters: Seq[Expression]): String = {
     // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
     val varcharKeys = table.getPartitionKeys.asScala
-      .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME))
+      .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
+        col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
       .map(col => col.getName).toSet
 
     filters.collect {

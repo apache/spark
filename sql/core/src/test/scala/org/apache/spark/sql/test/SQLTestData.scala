@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.test
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext, SQLImplicits}
 
@@ -103,11 +105,11 @@ private[sql] trait SQLTestData { self =>
 
   protected lazy val binaryData: DataFrame = {
     val df = sqlContext.sparkContext.parallelize(
-      BinaryData("12".getBytes, 1) ::
-      BinaryData("22".getBytes, 5) ::
-      BinaryData("122".getBytes, 3) ::
-      BinaryData("121".getBytes, 2) ::
-      BinaryData("123".getBytes, 4) :: Nil).toDF()
+      BinaryData("12".getBytes(StandardCharsets.UTF_8), 1) ::
+      BinaryData("22".getBytes(StandardCharsets.UTF_8), 5) ::
+      BinaryData("122".getBytes(StandardCharsets.UTF_8), 3) ::
+      BinaryData("121".getBytes(StandardCharsets.UTF_8), 2) ::
+      BinaryData("123".getBytes(StandardCharsets.UTF_8), 4) :: Nil).toDF()
     df.registerTempTable("binaryData")
     df
   }
@@ -242,6 +244,17 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val courseSales: DataFrame = {
+    val df = sqlContext.sparkContext.parallelize(
+      CourseSales("dotNET", 2012, 10000) ::
+        CourseSales("Java", 2012, 20000) ::
+        CourseSales("dotNET", 2012, 5000) ::
+        CourseSales("dotNET", 2013, 48000) ::
+        CourseSales("Java", 2013, 30000) :: Nil).toDF()
+    df.registerTempTable("courseSales")
+    df
+  }
+
   /**
    * Initialize all test data such that all temp tables are properly registered.
    */
@@ -270,6 +283,7 @@ private[sql] trait SQLTestData { self =>
     person
     salary
     complexData
+    courseSales
   }
 }
 
@@ -295,4 +309,5 @@ private[sql] object SQLTestData {
   case class Person(id: Int, name: String, age: Int)
   case class Salary(personId: Int, salary: Double)
   case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
+  case class CourseSales(course: String, year: Int, earnings: Double)
 }

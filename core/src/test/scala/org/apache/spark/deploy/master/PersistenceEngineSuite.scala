@@ -25,7 +25,7 @@ import org.apache.curator.test.TestingServer
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
-import org.apache.spark.serializer.{Serializer, JavaSerializer}
+import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.Utils
 
 class PersistenceEngineSuite extends SparkFunSuite {
@@ -63,56 +63,57 @@ class PersistenceEngineSuite extends SparkFunSuite {
       conf: SparkConf, persistenceEngineCreator: Serializer => PersistenceEngine): Unit = {
     val serializer = new JavaSerializer(conf)
     val persistenceEngine = persistenceEngineCreator(serializer)
-    persistenceEngine.persist("test_1", "test_1_value")
-    assert(Seq("test_1_value") === persistenceEngine.read[String]("test_"))
-    persistenceEngine.persist("test_2", "test_2_value")
-    assert(Set("test_1_value", "test_2_value") === persistenceEngine.read[String]("test_").toSet)
-    persistenceEngine.unpersist("test_1")
-    assert(Seq("test_2_value") === persistenceEngine.read[String]("test_"))
-    persistenceEngine.unpersist("test_2")
-    assert(persistenceEngine.read[String]("test_").isEmpty)
-
-    // Test deserializing objects that contain RpcEndpointRef
-    val testRpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     try {
-      // Create a real endpoint so that we can test RpcEndpointRef deserialization
-      val workerEndpoint = testRpcEnv.setupEndpoint("worker", new RpcEndpoint {
-        override val rpcEnv: RpcEnv = testRpcEnv
-      })
+      persistenceEngine.persist("test_1", "test_1_value")
+      assert(Seq("test_1_value") === persistenceEngine.read[String]("test_"))
+      persistenceEngine.persist("test_2", "test_2_value")
+      assert(Set("test_1_value", "test_2_value") === persistenceEngine.read[String]("test_").toSet)
+      persistenceEngine.unpersist("test_1")
+      assert(Seq("test_2_value") === persistenceEngine.read[String]("test_"))
+      persistenceEngine.unpersist("test_2")
+      assert(persistenceEngine.read[String]("test_").isEmpty)
 
-      val workerToPersist = new WorkerInfo(
-        id = "test_worker",
-        host = "127.0.0.1",
-        port = 10000,
-        cores = 0,
-        memory = 0,
-        endpoint = workerEndpoint,
-        webUiPort = 0,
-        publicAddress = ""
-      )
+      // Test deserializing objects that contain RpcEndpointRef
+      val testRpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
+      try {
+        // Create a real endpoint so that we can test RpcEndpointRef deserialization
+        val workerEndpoint = testRpcEnv.setupEndpoint("worker", new RpcEndpoint {
+          override val rpcEnv: RpcEnv = testRpcEnv
+        })
 
-      persistenceEngine.addWorker(workerToPersist)
+        val workerToPersist = new WorkerInfo(
+          id = "test_worker",
+          host = "127.0.0.1",
+          port = 10000,
+          cores = 0,
+          memory = 0,
+          endpoint = workerEndpoint,
+          webUiAddress = "http://localhost:80")
 
-      val (storedApps, storedDrivers, storedWorkers) =
-        persistenceEngine.readPersistedData(testRpcEnv)
+        persistenceEngine.addWorker(workerToPersist)
 
-      assert(storedApps.isEmpty)
-      assert(storedDrivers.isEmpty)
+        val (storedApps, storedDrivers, storedWorkers) =
+          persistenceEngine.readPersistedData(testRpcEnv)
 
-      // Check deserializing WorkerInfo
-      assert(storedWorkers.size == 1)
-      val recoveryWorkerInfo = storedWorkers.head
-      assert(workerToPersist.id === recoveryWorkerInfo.id)
-      assert(workerToPersist.host === recoveryWorkerInfo.host)
-      assert(workerToPersist.port === recoveryWorkerInfo.port)
-      assert(workerToPersist.cores === recoveryWorkerInfo.cores)
-      assert(workerToPersist.memory === recoveryWorkerInfo.memory)
-      assert(workerToPersist.endpoint === recoveryWorkerInfo.endpoint)
-      assert(workerToPersist.webUiPort === recoveryWorkerInfo.webUiPort)
-      assert(workerToPersist.publicAddress === recoveryWorkerInfo.publicAddress)
+        assert(storedApps.isEmpty)
+        assert(storedDrivers.isEmpty)
+
+        // Check deserializing WorkerInfo
+        assert(storedWorkers.size == 1)
+        val recoveryWorkerInfo = storedWorkers.head
+        assert(workerToPersist.id === recoveryWorkerInfo.id)
+        assert(workerToPersist.host === recoveryWorkerInfo.host)
+        assert(workerToPersist.port === recoveryWorkerInfo.port)
+        assert(workerToPersist.cores === recoveryWorkerInfo.cores)
+        assert(workerToPersist.memory === recoveryWorkerInfo.memory)
+        assert(workerToPersist.endpoint === recoveryWorkerInfo.endpoint)
+        assert(workerToPersist.webUiAddress === recoveryWorkerInfo.webUiAddress)
+      } finally {
+        testRpcEnv.shutdown()
+        testRpcEnv.awaitTermination()
+      }
     } finally {
-      testRpcEnv.shutdown()
-      testRpcEnv.awaitTermination()
+      persistenceEngine.close()
     }
   }
 

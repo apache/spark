@@ -31,6 +31,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.storage.StorageLevel
@@ -81,9 +82,9 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
   test("from conf with settings") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", "10s")
+    myConf.set("spark.dummyTimeConfig", "10s")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
+    assert(ssc.conf.getTimeAsSeconds("spark.dummyTimeConfig", "-1") === 10)
   }
 
   test("from existing SparkContext") {
@@ -93,26 +94,27 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
   test("from existing SparkContext with settings") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", "10s")
+    myConf.set("spark.dummyTimeConfig", "10s")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
+    assert(ssc.conf.getTimeAsSeconds("spark.dummyTimeConfig", "-1") === 10)
   }
 
   test("from checkpoint") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", "10s")
+    myConf.set("spark.dummyTimeConfig", "10s")
     val ssc1 = new StreamingContext(myConf, batchDuration)
     addInputStream(ssc1).register()
     ssc1.start()
     val cp = new Checkpoint(ssc1, Time(1000))
     assert(
       Utils.timeStringAsSeconds(cp.sparkConfPairs
-          .toMap.getOrElse("spark.cleaner.ttl", "-1")) === 10)
+          .toMap.getOrElse("spark.dummyTimeConfig", "-1")) === 10)
     ssc1.stop()
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
-    assert(newCp.createSparkConf().getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
+    assert(
+      newCp.createSparkConf().getTimeAsSeconds("spark.dummyTimeConfig", "-1") === 10)
     ssc = new StreamingContext(null, newCp, null)
-    assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
+    assert(ssc.conf.getTimeAsSeconds("spark.dummyTimeConfig", "-1") === 10)
   }
 
   test("checkPoint from conf") {
@@ -146,7 +148,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
   }
 
-  test("start with non-seriazable DStream checkpoints") {
+  test("start with non-serializable DStream checkpoints") {
     val checkpointDir = Utils.createTempDir()
     ssc = new StreamingContext(conf, batchDuration)
     ssc.checkpoint(checkpointDir.getAbsolutePath)
@@ -288,7 +290,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
   test("stop gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
-    conf.set("spark.cleaner.ttl", "3600s")
+    conf.set("spark.dummyTimeConfig", "3600s")
     sc = new SparkContext(conf)
     for (i <- 1 to 4) {
       logInfo("==================================\n\n\n")
@@ -780,6 +782,22 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
       "Please don't use queueStream when checkpointing is enabled."))
   }
 
+  test("Creating an InputDStream but not using it should not crash") {
+    ssc = new StreamingContext(master, appName, batchDuration)
+    val input1 = addInputStream(ssc)
+    val input2 = addInputStream(ssc)
+    val output = new TestOutputStream(input2)
+    output.register()
+    val batchCount = new BatchCounter(ssc)
+    ssc.start()
+    // Just wait for completing 2 batches to make sure it triggers
+    // `DStream.getMaxInputStreamRememberDuration`
+    batchCount.waitUntilBatchesCompleted(2, 10000)
+    // Throw the exception if crash
+    ssc.awaitTerminationOrTimeout(1)
+    ssc.stop()
+  }
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => 1 to i)
     val inputStream = new TestInputStream(s, input, 1)
@@ -879,7 +897,7 @@ object SlowTestReceiver {
 package object testPackage extends Assertions {
   def test() {
     val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
-    val ssc = new StreamingContext(conf , Milliseconds(100))
+    val ssc = new StreamingContext(conf, Milliseconds(100))
     try {
       val inputStream = ssc.receiverStream(new TestReceiver)
 

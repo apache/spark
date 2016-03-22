@@ -17,14 +17,13 @@
 
 package org.apache.spark.serializer
 
-import org.apache.spark.util.Utils
-
 import com.esotericsoftware.kryo.Kryo
 
 import org.apache.spark._
 import org.apache.spark.serializer.KryoDistributedTest._
+import org.apache.spark.util.Utils
 
-class KryoSerializerDistributedSuite extends SparkFunSuite {
+class KryoSerializerDistributedSuite extends SparkFunSuite with LocalSparkContext {
 
   test("kryo objects are serialised consistently in different processes") {
     val conf = new SparkConf(false)
@@ -35,7 +34,7 @@ class KryoSerializerDistributedSuite extends SparkFunSuite {
     val jar = TestUtils.createJarWithClasses(List(AppJarRegistrator.customClassName))
     conf.setJars(List(jar.getPath))
 
-    val sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     val original = Thread.currentThread.getContextClassLoader
     val loader = new java.net.URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
     SparkEnv.get.serializer.setDefaultClassLoader(loader)
@@ -48,8 +47,6 @@ class KryoSerializerDistributedSuite extends SparkFunSuite {
 
     // Join the two RDDs, and force evaluation
     assert(shuffledRDD.join(cachedRDD).collect().size == 1)
-
-    LocalSparkContext.stop(sc)
   }
 }
 

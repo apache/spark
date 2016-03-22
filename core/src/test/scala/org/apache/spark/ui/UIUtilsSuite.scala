@@ -57,6 +57,30 @@ class UIUtilsSuite extends SparkFunSuite {
     )
   }
 
+  test("SPARK-11906: Progress bar should not overflow because of speculative tasks") {
+    val generated = makeProgressBar(2, 3, 0, 0, 4).head.child.filter(_.label == "div")
+    val expected = Seq(
+      <div class="bar bar-completed" style="width: 75.0%"></div>,
+      <div class="bar bar-running" style="width: 25.0%"></div>
+    )
+    assert(generated.sameElements(expected),
+      s"\nRunning progress bar should round down\n\nExpected:\n$expected\nGenerated:\n$generated")
+  }
+
+  test("decodeURLParameter (SPARK-12708: Sorting task error in Stages Page when yarn mode.)") {
+    val encoded1 = "%252F"
+    val decoded1 = "/"
+    val encoded2 = "%253Cdriver%253E"
+    val decoded2 = "<driver>"
+
+    assert(decoded1 === decodeURLParameter(encoded1))
+    assert(decoded2 === decodeURLParameter(encoded2))
+
+    // verify that no affect to decoded URL.
+    assert(decoded1 === decodeURLParameter(decoded1))
+    assert(decoded2 === decodeURLParameter(decoded2))
+  }
+
   private def verify(
       desc: String, expected: Elem, errorMsg: String = "", baseUrl: String = ""): Unit = {
     val generated = makeDescription(desc, baseUrl)

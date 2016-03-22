@@ -22,11 +22,12 @@ import scala.reflect.ClassTag
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{AccumulatorSuite, SparkConf, SparkContext}
+import org.apache.spark.sql.{QueryTest, SQLContext}
+import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{SQLConf, SQLContext, QueryTest}
 
 /**
- * Test various broadcast join operators with unsafe enabled.
+ * Test various broadcast join operators.
  *
  * Tests in this suite we need to run Spark in local-cluster mode. In particular, the use of
  * unsafe map in [[org.apache.spark.sql.execution.joins.UnsafeHashedRelation]] is not triggered
@@ -45,8 +46,6 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
       .setAppName("testing")
     val sc = new SparkContext(conf)
     sqlContext = new SQLContext(sc)
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED, true)
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
   }
 
   override def afterAll(): Unit = {
@@ -64,7 +63,8 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
       // Comparison at the end is for broadcast left semi join
       val joinExpression = df1("key") === df2("key") && df1("value") > df2("value")
       val df3 = df1.join(broadcast(df2), joinExpression, joinType)
-      val plan = df3.queryExecution.executedPlan
+      val plan =
+        EnsureRequirements(sqlContext.sessionState.conf).apply(df3.queryExecution.sparkPlan)
       assert(plan.collect { case p: T => p }.size === 1)
       plan.executeCollect()
     }
@@ -75,11 +75,11 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("unsafe broadcast hash outer join updates peak execution memory") {
-    testBroadcastJoin[BroadcastHashOuterJoin]("unsafe broadcast hash outer join", "left_outer")
+    testBroadcastJoin[BroadcastHashJoin]("unsafe broadcast hash outer join", "left_outer")
   }
 
   test("unsafe broadcast left semi join updates peak execution memory") {
-    testBroadcastJoin[BroadcastLeftSemiJoinHash]("unsafe broadcast left semi join", "leftsemi")
+    testBroadcastJoin[BroadcastHashJoin]("unsafe broadcast left semi join", "leftsemi")
   }
 
 }

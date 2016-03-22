@@ -17,43 +17,37 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockStatus, BlockId}
+import org.apache.spark.storage.BlockId
 
-class TestMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 1) {
-  private[memory] override def doAcquireExecutionMemory(
+class TestMemoryManager(conf: SparkConf)
+  extends MemoryManager(conf, numCores = 1, Long.MaxValue, Long.MaxValue) {
+
+  override private[memory] def acquireExecutionMemory(
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = {
     if (oomOnce) {
       oomOnce = false
       0
     } else if (available >= numBytes) {
-      _executionMemoryUsed += numBytes // To suppress warnings when freeing unallocated memory
       available -= numBytes
       numBytes
     } else {
-      _executionMemoryUsed += available
       val grant = available
       available = 0
       grant
     }
   }
-  override def acquireStorageMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def acquireUnrollMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def releaseExecutionMemory(numBytes: Long): Unit = {
-    available += numBytes
-    _executionMemoryUsed -= numBytes
-  }
+  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = true
+  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = true
   override def releaseStorageMemory(numBytes: Long): Unit = {}
-  override def maxExecutionMemory: Long = Long.MaxValue
+  override private[memory] def releaseExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Unit = {
+    available += numBytes
+  }
   override def maxStorageMemory: Long = Long.MaxValue
 
   private var oomOnce = false

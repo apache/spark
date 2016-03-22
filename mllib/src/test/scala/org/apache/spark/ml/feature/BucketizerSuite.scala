@@ -21,13 +21,13 @@ import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
-class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new Bucketizer)
@@ -111,6 +111,14 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val bsResult = Vectors.dense(data.map(x => Bucketizer.binarySearchForBuckets(splits, x)))
     val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
     assert(bsResult ~== lsResult absTol 1e-5)
+  }
+
+  test("read/write") {
+    val t = new Bucketizer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setSplits(Array(0.1, 0.8, 0.9))
+    testDefaultReadWrite(t)
   }
 }
 

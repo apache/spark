@@ -21,15 +21,17 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable
 
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
+import org.apache.xbean.asm5._
+import org.apache.xbean.asm5.Opcodes._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 
 class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
@@ -41,22 +43,20 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       l += 1L
       l.add(1L)
     }
-    BoxingFinder.getClassReader(f.getClass).foreach { cl =>
-      val boxingFinder = new BoxingFinder()
-      cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
-    }
+    val cl = BoxingFinder.getClassReader(f.getClass)
+    val boxingFinder = new BoxingFinder()
+    cl.accept(boxingFinder, 0)
+    assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
   }
 
   test("Normal accumulator should do boxing") {
     // We need this test to make sure BoxingFinder works.
     val l = sparkContext.accumulator(0L)
     val f = () => { l += 1L }
-    BoxingFinder.getClassReader(f.getClass).foreach { cl =>
-      val boxingFinder = new BoxingFinder()
-      cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
-    }
+    val cl = BoxingFinder.getClassReader(f.getClass)
+    val boxingFinder = new BoxingFinder()
+    cl.accept(boxingFinder, 0)
+    assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
   }
 
   /**
@@ -72,7 +72,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
     val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
-    df.collect()
+    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+      df.collect()
+    }
     sparkContext.listenerBus.waitUntilEmpty(10000)
     val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
     assert(executionIds.size === 1)
@@ -84,7 +86,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     if (jobs.size == expectedNumOfJobs) {
       // If we can track all jobs, check the metric values
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
-      val actualMetrics = SparkPlanGraph(df.queryExecution.executedPlan).nodes.filter { node =>
+      val actualMetrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
+        df.queryExecution.executedPlan)).allNodes.filter { node =>
         expectedMetrics.contains(node.id)
       }.map { node =>
         val nodeMetrics = node.metrics.map { metric =>
@@ -111,354 +114,164 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("Project metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "false",
-      SQLConf.TUNGSTEN_ENABLED.key -> "false") {
-      // Assume the execution plan is
-      // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
-      val df = person.select('name)
-      testSparkPlanMetrics(df, 1, Map(
-        0L ->("Project", Map(
-          "number of rows" -> 2L)))
-      )
-    }
-  }
-
-  test("TungstenProject metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true",
-      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
-      // Assume the execution plan is
-      // PhysicalRDD(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = person.select('name)
-      testSparkPlanMetrics(df, 1, Map(
-        0L ->("TungstenProject", Map(
-          "number of rows" -> 2L)))
-      )
-    }
-  }
-
   test("Filter metrics") {
     // Assume the execution plan is
     // PhysicalRDD(nodeId = 1) -> Filter(nodeId = 0)
     val df = person.filter('age < 25)
     testSparkPlanMetrics(df, 1, Map(
       0L -> ("Filter", Map(
-        "number of input rows" -> 2L,
         "number of output rows" -> 1L)))
     )
   }
 
-  test("Aggregate metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "false",
-      SQLConf.TUNGSTEN_ENABLED.key -> "false") {
-      // Assume the execution plan is
-      // ... -> Aggregate(nodeId = 2) -> TungstenExchange(nodeId = 1) -> Aggregate(nodeId = 0)
-      val df = testData2.groupBy().count() // 2 partitions
-      testSparkPlanMetrics(df, 1, Map(
-        2L -> ("Aggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 2L)),
-        0L -> ("Aggregate", Map(
-          "number of input rows" -> 2L,
-          "number of output rows" -> 1L)))
-      )
-
-      // 2 partitions and each partition contains 2 keys
-      val df2 = testData2.groupBy('a).count()
-      testSparkPlanMetrics(df2, 1, Map(
-        2L -> ("Aggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 4L)),
-        0L -> ("Aggregate", Map(
-          "number of input rows" -> 4L,
-          "number of output rows" -> 3L)))
-      )
-    }
-  }
-
-  test("SortBasedAggregate metrics") {
-    // Because SortBasedAggregate may skip different rows if the number of partitions is different,
-    // this test should use the deterministic number of partitions.
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "true",
-      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
-      // Assume the execution plan is
-      // ... -> SortBasedAggregate(nodeId = 2) -> TungstenExchange(nodeId = 1) ->
-      // SortBasedAggregate(nodeId = 0)
-      val df = testData2.groupBy().count() // 2 partitions
-      testSparkPlanMetrics(df, 1, Map(
-        2L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 2L)),
-        0L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 2L,
-          "number of output rows" -> 1L)))
-      )
-
-      // Assume the execution plan is
-      // ... -> SortBasedAggregate(nodeId = 3) -> TungstenExchange(nodeId = 2)
-      // -> ExternalSort(nodeId = 1)-> SortBasedAggregate(nodeId = 0)
-      // 2 partitions and each partition contains 2 keys
-      val df2 = testData2.groupBy('a).count()
-      testSparkPlanMetrics(df2, 1, Map(
-        3L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 4L)),
-        0L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 4L,
-          "number of output rows" -> 3L)))
-      )
-    }
+  test("WholeStageCodegen metrics") {
+    // Assume the execution plan is
+    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
+    // TODO: update metrics in generated operators
+    val ds = sqlContext.range(10).filter('id < 5)
+    testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
   }
 
   test("TungstenAggregate metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true",
-      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
-      // Assume the execution plan is
-      // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
-      // -> TungstenAggregate(nodeId = 0)
-      val df = testData2.groupBy().count() // 2 partitions
-      testSparkPlanMetrics(df, 1, Map(
-        2L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 2L)),
-        0L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 2L,
-          "number of output rows" -> 1L)))
-      )
+    // Assume the execution plan is
+    // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
+    // -> TungstenAggregate(nodeId = 0)
+    val df = testData2.groupBy().count() // 2 partitions
+    testSparkPlanMetrics(df, 1, Map(
+      2L -> ("TungstenAggregate", Map(
+        "number of output rows" -> 2L)),
+      0L -> ("TungstenAggregate", Map(
+        "number of output rows" -> 1L)))
+    )
 
-      // 2 partitions and each partition contains 2 keys
-      val df2 = testData2.groupBy('a).count()
-      testSparkPlanMetrics(df2, 1, Map(
-        2L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 4L)),
-        0L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 4L,
-          "number of output rows" -> 3L)))
-      )
-    }
+    // 2 partitions and each partition contains 2 keys
+    val df2 = testData2.groupBy('a).count()
+    testSparkPlanMetrics(df2, 1, Map(
+      2L -> ("TungstenAggregate", Map(
+        "number of output rows" -> 4L)),
+      0L -> ("TungstenAggregate", Map(
+        "number of output rows" -> 3L)))
+    )
+  }
+
+  test("Sort metrics") {
+    // Assume the execution plan is
+    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
+    val ds = sqlContext.range(10).sort('id)
+    testSparkPlanMetrics(ds.toDF(), 2, Map.empty)
   }
 
   test("SortMergeJoin metrics") {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
-      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-      testDataForJoin.registerTempTable("testDataForJoin")
-      withTempTable("testDataForJoin") {
-        // Assume the execution plan is
-        // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-        val df = sqlContext.sql(
-          "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
-        testSparkPlanMetrics(df, 1, Map(
-          1L -> ("SortMergeJoin", Map(
-            // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-            "number of left rows" -> 4L,
-            "number of right rows" -> 2L,
-            "number of output rows" -> 4L)))
-        )
-      }
+    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    testDataForJoin.registerTempTable("testDataForJoin")
+    withTempTable("testDataForJoin") {
+      // Assume the execution plan is
+      // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+      val df = sqlContext.sql(
+        "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+      testSparkPlanMetrics(df, 1, Map(
+        0L -> ("SortMergeJoin", Map(
+          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          "number of output rows" -> 4L)))
+      )
     }
   }
 
-  test("SortMergeOuterJoin metrics") {
-    // Because SortMergeOuterJoin may skip different rows if the number of partitions is different,
+  test("SortMergeJoin(outer) metrics") {
+    // Because SortMergeJoin may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
-      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-      testDataForJoin.registerTempTable("testDataForJoin")
-      withTempTable("testDataForJoin") {
-        // Assume the execution plan is
-        // ... -> SortMergeOuterJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-        val df = sqlContext.sql(
-          "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
-        testSparkPlanMetrics(df, 1, Map(
-          1L -> ("SortMergeOuterJoin", Map(
-            // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-            "number of left rows" -> 6L,
-            "number of right rows" -> 2L,
-            "number of output rows" -> 8L)))
-        )
+    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    testDataForJoin.registerTempTable("testDataForJoin")
+    withTempTable("testDataForJoin") {
+      // Assume the execution plan is
+      // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+      val df = sqlContext.sql(
+        "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+      testSparkPlanMetrics(df, 1, Map(
+        0L -> ("SortMergeJoin", Map(
+          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          "number of output rows" -> 8L)))
+      )
 
-        val df2 = sqlContext.sql(
-          "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
-        testSparkPlanMetrics(df2, 1, Map(
-          1L -> ("SortMergeOuterJoin", Map(
-            // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-            "number of left rows" -> 2L,
-            "number of right rows" -> 6L,
-            "number of output rows" -> 8L)))
-        )
-      }
+      val df2 = sqlContext.sql(
+        "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
+      testSparkPlanMetrics(df2, 1, Map(
+        0L -> ("SortMergeJoin", Map(
+          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          "number of output rows" -> 8L)))
+      )
     }
   }
 
   test("BroadcastHashJoin metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key", "value")
-      // Assume the execution plan is
-      // ... -> BroadcastHashJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = df1.join(broadcast(df2), "key")
-      testSparkPlanMetrics(df, 2, Map(
-        1L -> ("BroadcastHashJoin", Map(
-          "number of left rows" -> 2L,
-          "number of right rows" -> 4L,
-          "number of output rows" -> 2L)))
-      )
-    }
+    val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key", "value")
+    // Assume the execution plan is
+    // ... -> BroadcastHashJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+    val df = df1.join(broadcast(df2), "key")
+    testSparkPlanMetrics(df, 2, Map(
+      1L -> ("BroadcastHashJoin", Map(
+        "number of output rows" -> 2L)))
+    )
   }
 
-  test("ShuffledHashJoin metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-      testDataForJoin.registerTempTable("testDataForJoin")
-      withTempTable("testDataForJoin") {
-        // Assume the execution plan is
-        // ... -> ShuffledHashJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-        val df = sqlContext.sql(
-          "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
-        testSparkPlanMetrics(df, 1, Map(
-          1L -> ("ShuffledHashJoin", Map(
-            "number of left rows" -> 6L,
-            "number of right rows" -> 2L,
-            "number of output rows" -> 4L)))
-        )
-      }
-    }
-  }
+  test("BroadcastHashJoin(outer) metrics") {
+    val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
+    val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
+    // Assume the execution plan is
+    // ... -> BroadcastHashJoin(nodeId = 0)
+    val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
+    testSparkPlanMetrics(df, 2, Map(
+      0L -> ("BroadcastHashJoin", Map(
+        "number of output rows" -> 5L)))
+    )
 
-  test("ShuffledHashOuterJoin metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
-      val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
-      // Assume the execution plan is
-      // ... -> ShuffledHashOuterJoin(nodeId = 0)
-      val df = df1.join(df2, $"key" === $"key2", "left_outer")
-      testSparkPlanMetrics(df, 1, Map(
-        0L -> ("ShuffledHashOuterJoin", Map(
-          "number of left rows" -> 3L,
-          "number of right rows" -> 4L,
-          "number of output rows" -> 5L)))
-      )
-
-      val df3 = df1.join(df2, $"key" === $"key2", "right_outer")
-      testSparkPlanMetrics(df3, 1, Map(
-        0L -> ("ShuffledHashOuterJoin", Map(
-          "number of left rows" -> 3L,
-          "number of right rows" -> 4L,
-          "number of output rows" -> 6L)))
-      )
-
-      val df4 = df1.join(df2, $"key" === $"key2", "outer")
-      testSparkPlanMetrics(df4, 1, Map(
-        0L -> ("ShuffledHashOuterJoin", Map(
-          "number of left rows" -> 3L,
-          "number of right rows" -> 4L,
-          "number of output rows" -> 7L)))
-      )
-    }
-  }
-
-  test("BroadcastHashOuterJoin metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
-      val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
-      // Assume the execution plan is
-      // ... -> BroadcastHashOuterJoin(nodeId = 0)
-      val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
-      testSparkPlanMetrics(df, 2, Map(
-        0L -> ("BroadcastHashOuterJoin", Map(
-          "number of left rows" -> 3L,
-          "number of right rows" -> 4L,
-          "number of output rows" -> 5L)))
-      )
-
-      val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
-      testSparkPlanMetrics(df3, 2, Map(
-        0L -> ("BroadcastHashOuterJoin", Map(
-          "number of left rows" -> 3L,
-          "number of right rows" -> 4L,
-          "number of output rows" -> 6L)))
-      )
-    }
+    val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
+    testSparkPlanMetrics(df3, 2, Map(
+      0L -> ("BroadcastHashJoin", Map(
+        "number of output rows" -> 6L)))
+    )
   }
 
   test("BroadcastNestedLoopJoin metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
-      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-      testDataForJoin.registerTempTable("testDataForJoin")
-      withTempTable("testDataForJoin") {
-        // Assume the execution plan is
-        // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-        val df = sqlContext.sql(
-          "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
-            "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
-        testSparkPlanMetrics(df, 3, Map(
-          1L -> ("BroadcastNestedLoopJoin", Map(
-            "number of left rows" -> 12L, // left needs to be scanned twice
-            "number of right rows" -> 2L,
-            "number of output rows" -> 12L)))
-        )
-      }
+    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    testDataForJoin.registerTempTable("testDataForJoin")
+    withTempTable("testDataForJoin") {
+      // Assume the execution plan is
+      // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+      val df = sqlContext.sql(
+        "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+          "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
+      testSparkPlanMetrics(df, 3, Map(
+        1L -> ("BroadcastNestedLoopJoin", Map(
+          "number of output rows" -> 12L)))
+      )
     }
   }
 
   test("BroadcastLeftSemiJoinHash metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
-      // Assume the execution plan is
-      // ... -> BroadcastLeftSemiJoinHash(nodeId = 0)
-      val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
-      testSparkPlanMetrics(df, 2, Map(
-        0L -> ("BroadcastLeftSemiJoinHash", Map(
-          "number of left rows" -> 2L,
-          "number of right rows" -> 4L,
-          "number of output rows" -> 2L)))
-      )
-    }
+    val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
+    // Assume the execution plan is
+    // ... -> BroadcastLeftSemiJoinHash(nodeId = 0)
+    val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
+    testSparkPlanMetrics(df, 2, Map(
+      0L -> ("BroadcastLeftSemiJoinHash", Map(
+        "number of output rows" -> 2L)))
+    )
   }
 
-  test("LeftSemiJoinHash metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+  test("ShuffledHashJoin metrics") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
       // Assume the execution plan is
-      // ... -> LeftSemiJoinHash(nodeId = 0)
+      // ... -> ShuffledHashJoin(nodeId = 0)
       val df = df1.join(df2, $"key" === $"key2", "leftsemi")
       testSparkPlanMetrics(df, 1, Map(
-        0L -> ("LeftSemiJoinHash", Map(
-          "number of left rows" -> 2L,
-          "number of right rows" -> 4L,
-          "number of output rows" -> 2L)))
-      )
-    }
-  }
-
-  test("LeftSemiJoinBNL metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
-      // Assume the execution plan is
-      // ... -> LeftSemiJoinBNL(nodeId = 0)
-      val df = df1.join(df2, $"key" < $"key2", "leftsemi")
-      testSparkPlanMetrics(df, 2, Map(
-        0L -> ("LeftSemiJoinBNL", Map(
-          "number of left rows" -> 2L,
-          "number of right rows" -> 4L,
+        0L -> ("ShuffledHashJoin", Map(
           "number of output rows" -> 2L)))
       )
     }
@@ -473,9 +286,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = sqlContext.sql(
         "SELECT * FROM testData2 JOIN testDataForJoin")
       testSparkPlanMetrics(df, 1, Map(
-        1L -> ("CartesianProduct", Map(
-          "number of left rows" -> 12L, // left needs to be scanned twice
-          "number of right rows" -> 12L, // right is read 6 times
+        0L -> ("CartesianProduct", Map(
           "number of output rows" -> 12L)))
       )
     }
@@ -498,8 +309,30 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
       // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
       // However, we still can check the value.
-      assert(metricValues.values.toSeq === Seq("2"))
+      assert(metricValues.values.toSeq.exists(_ === "2"))
     }
+  }
+
+  test("metrics can be loaded by history server") {
+    val metric = new LongSQLMetric("zanzibar", LongSQLMetricParam)
+    metric += 10L
+    val metricInfo = metric.toInfo(Some(metric.localValue), None)
+    metricInfo.update match {
+      case Some(v: LongSQLMetricValue) => assert(v.value === 10L)
+      case Some(v) => fail(s"metric value was not a LongSQLMetricValue: ${v.getClass.getName}")
+      case _ => fail("metric update is missing")
+    }
+    assert(metricInfo.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
+    // After serializing to JSON, the original value type is lost, but we can still
+    // identify that it's a SQL metric from the metadata
+    val metricInfoJson = JsonProtocol.accumulableInfoToJson(metricInfo)
+    val metricInfoDeser = JsonProtocol.accumulableInfoFromJson(metricInfoJson)
+    metricInfoDeser.update match {
+      case Some(v: String) => assert(v.toLong === 10L)
+      case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
+      case _ => fail("deserialized metric update is missing")
+    }
+    assert(metricInfoDeser.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
   }
 
 }
@@ -516,7 +349,7 @@ private class BoxingFinder(
     method: MethodIdentifier[_] = null,
     val boxingInvokes: mutable.Set[String] = mutable.Set.empty,
     visitedMethods: mutable.Set[MethodIdentifier[_]] = mutable.Set.empty)
-  extends ClassVisitor(ASM4) {
+  extends ClassVisitor(ASM5) {
 
   private val primitiveBoxingClassName =
     Set("java/lang/Long",
@@ -533,11 +366,12 @@ private class BoxingFinder(
     MethodVisitor = {
     if (method != null && (method.name != name || method.desc != desc)) {
       // If method is specified, skip other methods.
-      return new MethodVisitor(ASM4) {}
+      return new MethodVisitor(ASM5) {}
     }
 
-    new MethodVisitor(ASM4) {
-      override def visitMethodInsn(op: Int, owner: String, name: String, desc: String) {
+    new MethodVisitor(ASM5) {
+      override def visitMethodInsn(
+          op: Int, owner: String, name: String, desc: String, itf: Boolean) {
         if (op == INVOKESPECIAL && name == "<init>" || op == INVOKESTATIC && name == "valueOf") {
           if (primitiveBoxingClassName.contains(owner)) {
             // Find boxing methods, e.g, new java.lang.Long(l) or java.lang.Long.valueOf(l)
@@ -552,10 +386,9 @@ private class BoxingFinder(
           if (!visitedMethods.contains(m)) {
             // Keep track of visited methods to avoid potential infinite cycles
             visitedMethods += m
-            BoxingFinder.getClassReader(classOfMethodOwner).foreach { cl =>
-              visitedMethods += m
-              cl.accept(new BoxingFinder(m, boxingInvokes, visitedMethods), 0)
-            }
+            val cl = BoxingFinder.getClassReader(classOfMethodOwner)
+            visitedMethods += m
+            cl.accept(new BoxingFinder(m, boxingInvokes, visitedMethods), 0)
           }
         }
       }
@@ -565,22 +398,14 @@ private class BoxingFinder(
 
 private object BoxingFinder {
 
-  def getClassReader(cls: Class[_]): Option[ClassReader] = {
+  def getClassReader(cls: Class[_]): ClassReader = {
     val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
     val resourceStream = cls.getResourceAsStream(className)
     val baos = new ByteArrayOutputStream(128)
     // Copy data over, before delegating to ClassReader -
     // else we can run out of open file handles.
     Utils.copyStream(resourceStream, baos, true)
-    // ASM4 doesn't support Java 8 classes, which requires ASM5.
-    // So if the class is ASM5 (E.g., java.lang.Long when using JDK8 runtime to run these codes),
-    // then ClassReader will throw IllegalArgumentException,
-    // However, since this is only for testing, it's safe to skip these classes.
-    try {
-      Some(new ClassReader(new ByteArrayInputStream(baos.toByteArray)))
-    } catch {
-      case _: IllegalArgumentException => None
-    }
+    new ClassReader(new ByteArrayInputStream(baos.toByteArray))
   }
 
 }

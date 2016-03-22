@@ -23,15 +23,17 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.lit
 
-class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class LogisticRegressionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   @transient var dataset: DataFrame = _
   @transient var binaryDataset: DataFrame = _
@@ -42,20 +44,6 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     dataset = sqlContext.createDataFrame(generateLogisticInput(1.0, 1.0, nPoints = 100, seed = 42))
 
-    /*
-       Here is the instruction describing how to export the test data into CSV format
-       so we can validate the training accuracy compared with R's glmnet package.
-
-       import org.apache.spark.mllib.classification.LogisticRegressionSuite
-       val nPoints = 10000
-       val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
-       val xMean = Array(5.843, 3.057, 3.758, 1.199)
-       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
-       val data = sc.parallelize(LogisticRegressionSuite.generateMultinomialLogisticInput(
-         coefficients, xMean, xVariance, true, nPoints, 42), 1)
-       data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1) + ", "
-         + x.features(2) + ", " + x.features(3)).saveAsTextFile("path")
-     */
     binaryDataset = {
       val nPoints = 10000
       val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
@@ -63,10 +51,21 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
 
       val testData =
-        generateMultinomialLogisticInput(coefficients, xMean, xVariance, true, nPoints, 42)
+        generateMultinomialLogisticInput(coefficients, xMean, xVariance,
+          addIntercept = true, nPoints, 42)
 
       sqlContext.createDataFrame(sc.parallelize(testData, 4))
     }
+  }
+
+  /**
+   * Enable the ignored test to export the dataset into CSV format,
+   * so we can validate the training accuracy compared with R's glmnet package.
+   */
+  ignore("export test data into CSV format") {
+    binaryDataset.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
   }
 
   test("params") {
@@ -96,6 +95,17 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.getProbabilityCol === "probability")
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
+  }
+
+  test("empty probabilityCol") {
+    val lr = new LogisticRegression().setProbabilityCol("")
+    val model = lr.fit(dataset)
+    assert(model.hasSummary)
+    // Validate that we re-insert a probability column for evaluation
+    val fieldNames = model.summary.predictions.schema.fieldNames
+    assert((dataset.schema.fieldNames.toSet).subsetOf(
+      fieldNames.toSet))
+    assert(fieldNames.exists(s => s.startsWith("probability_")))
   }
 
   test("setThreshold, getThreshold") {
@@ -722,7 +732,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    val histogram = binaryDataset.map { case Row(label: Double, features: Vector) => label }
+    val histogram = binaryDataset.rdd.map { case Row(label: Double, features: Vector) => label }
       .treeAggregate(new MultiClassSummarizer)(
         seqOp = (c, v) => (c, v) match {
           case (classSummarizer: MultiClassSummarizer, label: Double) => classSummarizer.add(label)
@@ -869,6 +879,79 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
     assert(model1a0.coefficients ~== model1b.coefficients absTol 1E-3)
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
-
   }
+
+  test("logistic regression with all labels the same") {
+    val sameLabels = dataset
+      .withColumn("zeroLabel", lit(0.0))
+      .withColumn("oneLabel", lit(1.0))
+
+    // fitIntercept=true
+    val lrIntercept = new LogisticRegression()
+      .setFitIntercept(true)
+      .setMaxIter(3)
+
+    val allZeroInterceptModel = lrIntercept
+      .setLabelCol("zeroLabel")
+      .fit(sameLabels)
+    assert(allZeroInterceptModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
+    assert(allZeroInterceptModel.intercept === Double.NegativeInfinity)
+    assert(allZeroInterceptModel.summary.totalIterations === 0)
+
+    val allOneInterceptModel = lrIntercept
+      .setLabelCol("oneLabel")
+      .fit(sameLabels)
+    assert(allOneInterceptModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
+    assert(allOneInterceptModel.intercept === Double.PositiveInfinity)
+    assert(allOneInterceptModel.summary.totalIterations === 0)
+
+    // fitIntercept=false
+    val lrNoIntercept = new LogisticRegression()
+      .setFitIntercept(false)
+      .setMaxIter(3)
+
+    val allZeroNoInterceptModel = lrNoIntercept
+      .setLabelCol("zeroLabel")
+      .fit(sameLabels)
+    assert(allZeroNoInterceptModel.intercept === 0.0)
+    assert(allZeroNoInterceptModel.summary.totalIterations > 0)
+
+    val allOneNoInterceptModel = lrNoIntercept
+      .setLabelCol("oneLabel")
+      .fit(sameLabels)
+    assert(allOneNoInterceptModel.intercept === 0.0)
+    assert(allOneNoInterceptModel.summary.totalIterations > 0)
+  }
+
+  test("read/write") {
+    def checkModelData(model: LogisticRegressionModel, model2: LogisticRegressionModel): Unit = {
+      assert(model.intercept === model2.intercept)
+      assert(model.coefficients.toArray === model2.coefficients.toArray)
+      assert(model.numClasses === model2.numClasses)
+      assert(model.numFeatures === model2.numFeatures)
+    }
+    val lr = new LogisticRegression()
+    testEstimatorAndModelReadWrite(lr, dataset, LogisticRegressionSuite.allParamSettings,
+      checkModelData)
+  }
+}
+
+object LogisticRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = ProbabilisticClassifierSuite.allParamSettings ++ Map(
+    "probabilityCol" -> "myProbability",
+    "thresholds" -> Array(0.4, 0.6),
+    "regParam" -> 0.01,
+    "elasticNetParam" -> 0.1,
+    "maxIter" -> 2,  // intentionally small
+    "fitIntercept" -> true,
+    "tol" -> 0.8,
+    "standardization" -> false,
+    "threshold" -> 0.6
+  )
 }
