@@ -90,7 +90,7 @@ def trigger_dag(args):
     execution_date = datetime.now()
     run_id = args.run_id or "manual__{0}".format(execution_date.isoformat())
     dr = session.query(DagRun).filter(
-        DagRun.dag_id==args.dag_id, DagRun.run_id==run_id).first()
+        DagRun.dag_id == args.dag_id, DagRun.run_id == run_id).first()
 
     conf = {}
     if args.conf:
@@ -145,7 +145,6 @@ def run(args, dag=None):
     iso = args.execution_date.isoformat()
     filename = "{directory}/{iso}".format(**locals())
 
-    subdir = process_subdir(args.subdir)
     logging.root.handlers = []
     logging.basicConfig(
         filename=filename,
@@ -257,10 +256,7 @@ def task_state(args):
     >>> airflow task_state tutorial sleep 2015-01-01
     success
     """
-    dagbag = DagBag(process_subdir(args.subdir))
-    if args.dag_id not in dagbag.dags:
-        raise AirflowException('dag_id could not be found')
-    dag = dagbag.dags[args.dag_id]
+    dag = get_dag(args)
     task = dag.get_task(task_id=args.task_id)
     ti = TaskInstance(task, args.execution_date)
     print(ti.current_state())
@@ -297,10 +293,7 @@ def test(args, dag=None):
 
 
 def render(args):
-    dagbag = DagBag(process_subdir(args.subdir))
-    if args.dag_id not in dagbag.dags:
-        raise AirflowException('dag_id could not be found')
-    dag = dagbag.dags[args.dag_id]
+    dag = get_dag(args)
     task = dag.get_task(task_id=args.task_id)
     ti = TaskInstance(task, args.execution_date)
     ti.render_templates()
@@ -317,11 +310,7 @@ def clear(args):
     logging.basicConfig(
         level=settings.LOGGING_LEVEL,
         format=settings.SIMPLE_LOG_FORMAT)
-    dagbag = DagBag(process_subdir(args.subdir))
-
-    if args.dag_id not in dagbag.dags:
-        raise AirflowException('dag_id could not be found')
-    dag = dagbag.dags[args.dag_id]
+    dag = get_dag(args)
 
     if args.task_regex:
         dag = dag.sub_dag(
@@ -466,7 +455,8 @@ class CLIFactory(object):
         'execution_date': Arg(
             ("execution_date",), help="The execution date of the DAG",
             type=parsedate),
-        'task_regex': Arg(("-t", "--task_regex"),
+        'task_regex': Arg(
+            ("-t", "--task_regex"),
             "The regex to filter specific task_ids to backfill (optional)"),
         'subdir': Arg(
             ("-sd", "--subdir"),
@@ -482,18 +472,24 @@ class CLIFactory(object):
             ("-dr", "--dry_run"), "Perform a dry run", "store_true"),
 
         # backfill
-        'mark_success': Arg(("-m", "--mark_success"),
+        'mark_success': Arg(
+            ("-m", "--mark_success"),
             "Mark jobs as succeeded without running them", "store_true"),
-        'local': Arg(("-l", "--local"),
+        'local': Arg(
+            ("-l", "--local"),
             "Run the task using the LocalExecutor", "store_true"),
-        'donot_pickle': Arg(("-x", "--donot_pickle"),
-            ("Do not attempt to pickle the DAG object to send over "
-            "to the workers, just tell the workers to run their version "
-            "of the code."),
+        'donot_pickle': Arg(
+            ("-x", "--donot_pickle"), (
+                "Do not attempt to pickle the DAG object to send over "
+                "to the workers, just tell the workers to run their version "
+                "of the code."),
             "store_true"),
-        'include_adhoc': Arg(("-a", "--include_adhoc"),
+        'include_adhoc': Arg(
+            ("-a", "--include_adhoc"),
             "Include dags with the adhoc parameter.", "store_true"),
-        'ignore_dependencies': Arg(("-i", "--ignore_dependencies"), (
+        'bf_ignore_dependencies': Arg(
+            ("-i", "--ignore_dependencies"),
+            (
                 "Skip upstream tasks, run only the tasks "
                 "matching the regexp. Only works in conjunction "
                 "with task_regex"),
@@ -515,62 +511,75 @@ class CLIFactory(object):
             "Do not request confirmation", "store_true"),
         # trigger_dag
         'run_id': Arg(("-r", "--run_id"), "Helps to indentify this run"),
-        'conf': Arg(('-c', '--conf'),
+        'conf': Arg(
+            ('-c', '--conf'),
             "json string that gets pickled into the DagRun's conf attribute"),
         # kerberos
-        'principal': Arg(("principal",), "kerberos principal",
+        'principal': Arg(
+            ("principal",), "kerberos principal",
             nargs='?', default=conf.get('kerberos', 'principal')),
-        'keytab': Arg(("-kt", "--keytab"), "keytab",
+        'keytab': Arg(
+            ("-kt", "--keytab"), "keytab",
             nargs='?', default=conf.get('kerberos', 'keytab')),
         # run
-        'task_start_date': Arg(("-s", "--task_start_date"),
+        'task_start_date': Arg(
+            ("-s", "--task_start_date"),
             "Override the tasks's start_date (used internally)",
             type=parsedate),
-        'force': Arg(("-f", "--force"),
+        'force': Arg(
+            ("-f", "--force"),
             "Force a run regardless or previous success", "store_true"),
-        'local': Arg(("-l", "--local"),
-            "Runs the task locally, don't use the executor", "store_true"),
         'raw': Arg(("-r", "--raw"), argparse.SUPPRESS, "store_true"),
-        'ignore_dependencies': Arg(("-i", "--ignore_dependencies"),
+        'ignore_dependencies': Arg(
+            ("-i", "--ignore_dependencies"),
             "Ignore upstream and depends_on_past dependencies", "store_true"),
-        'ship_dag': Arg(("--ship_dag",),
+        'ship_dag': Arg(
+            ("--ship_dag",),
             "Pickles (serializes) the DAG and ships it to the worker",
             "store_true"),
-        'pickle': Arg(("-p", "--pickle"),
+        'pickle': Arg(
+            ("-p", "--pickle"),
             "Serialized pickle object of the entire dag (used internally)"),
         'job_id': Arg(("-j", "--job_id"), argparse.SUPPRESS),
         # webserver
-        'port': Arg(("-p", "--port"),
+        'port': Arg(
+            ("-p", "--port"),
             default=conf.get('webserver', 'WEB_SERVER_PORT'),
             type=int,
             help="The port on which to run the server"),
-        'workers': Arg(("-w", "--workers"),
+        'workers': Arg(
+            ("-w", "--workers"),
             default=conf.get('webserver', 'WORKERS'),
             type=int,
             help="Number of workers to run the webserver on"),
-        'workerclass': Arg(("-k", "--workerclass"),
+        'workerclass': Arg(
+            ("-k", "--workerclass"),
             default=conf.get('webserver', 'WORKER_CLASS'),
             choices=['sync', 'eventlet', 'gevent', 'tornado'],
             help="The worker class to use for gunicorn"),
-        'hostname': Arg(("-hn", "--hostname"),
+        'hostname': Arg(
+            ("-hn", "--hostname"),
             default=conf.get('webserver', 'WEB_SERVER_HOST'),
             help="Set the hostname on which to run the web server"),
-        'debug': Arg(("-d", "--debug"),
+        'debug': Arg(
+            ("-d", "--debug"),
             "Use the server that ships with Flask in debug mode",
             "store_true"),
         # resetdb
-        'yes': Arg(("-y", "--yes"),
+        'yes': Arg(
+            ("-y", "--yes"),
             "Do not prompt to confirm reset. Use with care!",
             "store_true",
             default=False),
         # scheduler
         'dag_id_opt': Arg(("-d", "--dag_id"), help="The id of the dag to run"),
-        'num_runs': Arg(("-n", "--num_runs"),
-            default=None,
-            type=int,
+        'num_runs': Arg(
+            ("-n", "--num_runs"),
+            default=None, type=int,
             help="Set the number of runs to execute before exiting"),
         # worker
-        'do_pickle': Arg(("-p", "--do_pickle"),
+        'do_pickle': Arg(
+            ("-p", "--do_pickle"),
             default=False,
             help=(
                 "Attempt to pickle the DAG object to send over "
@@ -588,107 +597,113 @@ class CLIFactory(object):
             default=conf.get('celery', 'celeryd_concurrency')),
         # flower
         'broker_api': Arg(("-a", "--broker_api"), help="Broker api"),
-        'flower_port': Arg(("-p", "--port"),
+        'flower_port': Arg(
+            ("-p", "--port"),
             default=conf.get('webserver', 'WEB_SERVER_PORT'),
             type=int,
             help="The port on which to run the server"),
+        'task_params': Arg(
+            ("-tp", "--task_params"),
+            help="Sends a JSON params dict to the task"),
     }
-    subparsers = ({
-        'func': backfill,
-        'help': "Run subsections of a DAG for a specified date range",
-        'args': (
-            'dag_id', 'task_regex', 'start_date', 'end_date',
-            'mark_success', 'local', 'donot_pickle', 'include_adhoc',
-            'ignore_dependencies', 'subdir', 'pool', 'dry_run')
+    subparsers = (
+        {
+            'func': backfill,
+            'help': "Run subsections of a DAG for a specified date range",
+            'args': (
+                'dag_id', 'task_regex', 'start_date', 'end_date',
+                'mark_success', 'local', 'donot_pickle', 'include_adhoc',
+                'bf_ignore_dependencies', 'subdir', 'pool', 'dry_run')
         }, {
-        'func': list_tasks,
-        'help': "List the tasks within a DAG",
-        'args': ('dag_id', 'tree', 'subdir'),
+            'func': list_tasks,
+            'help': "List the tasks within a DAG",
+            'args': ('dag_id', 'tree', 'subdir'),
         }, {
-        'func': clear,
-        'help': "Clear a set of task instance, as if they never ran",
-        'args': (
-            'dag_id', 'task_regex', 'start_date', 'end_date', 'subdir',
-            'upstream', 'downstream', 'no_confirm'),
+            'func': clear,
+            'help': "Clear a set of task instance, as if they never ran",
+            'args': (
+                'dag_id', 'task_regex', 'start_date', 'end_date', 'subdir',
+                'upstream', 'downstream', 'no_confirm'),
         }, {
-        'func': pause,
-        'help': "Pause a DAG",
-        'args': ('dag_id', 'subdir'),
+            'func': pause,
+            'help': "Pause a DAG",
+            'args': ('dag_id', 'subdir'),
         }, {
-        'func': unpause,
-        'help': "Pause a DAG",
-        'args': ('dag_id', 'subdir'),
+            'func': unpause,
+            'help': "Pause a DAG",
+            'args': ('dag_id', 'subdir'),
         }, {
-        'func': trigger_dag,
-        'help': "Trigger a DAG run",
-        'args': ('dag_id', 'subdir', 'run_id', 'conf'),
+            'func': trigger_dag,
+            'help': "Trigger a DAG run",
+            'args': ('dag_id', 'subdir', 'run_id', 'conf'),
         }, {
-        'func': kerberos,
-        'help': "Start a kerberos ticket renewer",
-        'args': ('dag_id', 'principal', 'keytab'),
+            'func': kerberos,
+            'help': "Start a kerberos ticket renewer",
+            'args': ('dag_id', 'principal', 'keytab'),
         }, {
-        'func': render,
-        'help': "Render a task instance's template(s)",
-        'args': ('dag_id', 'task_id', 'execution_date', 'subdir'),
+            'func': render,
+            'help': "Render a task instance's template(s)",
+            'args': ('dag_id', 'task_id', 'execution_date', 'subdir'),
         }, {
-        'func': run,
-        'help': "Run a single task instance",
-        'args': (
-            'dag_id', 'task_id', 'execution_date', 'subdir',
-            'mark_success', 'force', 'pool',
-            'task_start_date', 'local', 'raw', 'ignore_dependencies',
-            'ship_dag', 'pickle', 'job_id',
-            ),
+            'func': run,
+            'help': "Run a single task instance",
+            'args': (
+                'dag_id', 'task_id', 'execution_date', 'subdir',
+                'mark_success', 'force', 'pool',
+                'task_start_date', 'local', 'raw', 'ignore_dependencies',
+                'ship_dag', 'pickle', 'job_id'),
         }, {
-        'func': initdb,
-        'help': "Initialize the metadata database",
-        'args': tuple(),
+            'func': initdb,
+            'help': "Initialize the metadata database",
+            'args': tuple(),
         }, {
-        'func': list_dags,
-        'help': "List all the DAGs",
-        'args': ('subdir',),
+            'func': list_dags,
+            'help': "List all the DAGs",
+            'args': ('subdir',),
         }, {
-        'func': task_state,
-        'help': "Get the status of a task instance",
-        'args': ('dag_id', 'task_id', 'execution_date', 'subdir'),
+            'func': task_state,
+            'help': "Get the status of a task instance",
+            'args': ('dag_id', 'task_id', 'execution_date', 'subdir'),
         }, {
-        'func': serve_logs,
-        'help': "Serve logs generate by worker",
-        'args': tuple(),
+            'func': serve_logs,
+            'help': "Serve logs generate by worker",
+            'args': tuple(),
         }, {
-        'func': test,
-        'help': (
-            "Test a task instance. This will run a task without checking for "
-            "dependencies or recording it's state in the database."),
-        'args': ('dag_id', 'task_id', 'execution_date', 'subdir', 'dry_run'),
+            'func': test,
+            'help': (
+                "Test a task instance. This will run a task without checking for "
+                "dependencies or recording it's state in the database."),
+            'args': (
+                'dag_id', 'task_id', 'execution_date', 'subdir', 'dry_run',
+                'task_params'),
         }, {
-        'func': scheduler,
-        'help': "Start a Airflow webserver instance",
-        'args': ('port', 'workers', 'workerclass', 'hostname', 'debug'),
+            'func': scheduler,
+            'help': "Start a Airflow webserver instance",
+            'args': ('port', 'workers', 'workerclass', 'hostname', 'debug'),
         }, {
-        'func': resetdb,
-        'help': "Burn down and rebuild the metadata database",
-        'args': ('yes',),
+            'func': resetdb,
+            'help': "Burn down and rebuild the metadata database",
+            'args': ('yes',),
         }, {
-        'func': upgradedb,
-        'help': "Upgrade metadata database to latest version",
-        'args': tuple(),
+            'func': upgradedb,
+            'help': "Upgrade metadata database to latest version",
+            'args': tuple(),
         }, {
-        'func': scheduler,
-        'help': "Start a scheduler scheduler instance",
-        'args': ('dag_id', 'subdir', 'num_runs', 'do_pickle'),
+            'func': scheduler,
+            'help': "Start a scheduler scheduler instance",
+            'args': ('dag_id', 'subdir', 'num_runs', 'do_pickle'),
         }, {
-        'func': worker,
-        'help': "Start a Celery worker node",
-        'args': ('do_pickle', 'queues', 'concurrency'),
+            'func': worker,
+            'help': "Start a Celery worker node",
+            'args': ('do_pickle', 'queues', 'concurrency'),
         }, {
-        'func': flower,
-        'help': "Start a Celery Flower",
-        'args': ('flower_port', 'broker_api'),
+            'func': flower,
+            'help': "Start a Celery Flower",
+            'args': ('flower_port', 'broker_api'),
         }, {
-        'func': version,
-        'help': "Show the version",
-        'args': tuple(),
+            'func': version,
+            'help': "Show the version",
+            'args': tuple(),
         },
     )
     subparsers_dict = {sp['func'].__name__: sp for sp in subparsers}
