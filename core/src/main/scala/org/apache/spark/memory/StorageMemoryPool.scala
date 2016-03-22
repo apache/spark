@@ -19,6 +19,8 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.memory.MemoryStore
@@ -60,10 +62,26 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
    * @return whether all N bytes were successfully granted.
    */
   def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = {
-    val numBytesToFree = lock.synchronized {
-      math.max(0, numBytes - memoryFree)
+    // First, attempt to acquire as much memory as we can without performing any eviction
+    val bytesAcquiredWithoutEviction = lock.synchronized {
+      val bytesAcquired = math.min(numBytes, memoryFree)
+      _memoryUsed += bytesAcquired
+      bytesAcquired
     }
-    acquireMemory(blockId, numBytes, numBytesToFree)
+    // Acquire the remainder of the memory by performing eviction
+    try {
+      val bytesToAcquireViaEviction = numBytes - bytesAcquiredWithoutEviction
+      if (acquireMemory(blockId, bytesToAcquireViaEviction, bytesToAcquireViaEviction)) {
+        true
+      } else {
+        releaseMemory(bytesAcquiredWithoutEviction)
+        false
+      }
+    } catch {
+      case NonFatal(e) =>
+        releaseMemory(bytesAcquiredWithoutEviction)
+        throw e
+    }
   }
 
   /**
