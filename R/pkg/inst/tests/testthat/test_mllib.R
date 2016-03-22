@@ -146,12 +146,12 @@ test_that("naiveBayes", {
   # R code to reproduce the result.
   # We do not support instance weights yet. So we ignore the frequencies.
   #
-  # library(e1071)
-  # t <- as.data.frame(Titanic)
-  # t1 <- t[t$Freq > 0, -5]
-  # m <- naiveBayes(Survived ~ ., data = t1)
-  # m
-  # predict(m, t1)
+  #' library(e1071)
+  #' t <- as.data.frame(Titanic)
+  #' t1 <- t[t$Freq > 0, -5]
+  #' m <- naiveBayes(Survived ~ ., data = t1)
+  #' m
+  #' predict(m, t1)
   #
   # -- output of 'm'
   #
