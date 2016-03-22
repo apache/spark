@@ -94,8 +94,9 @@ class ExpressionParserSuite extends PlanTest {
     // Multiple AND/OR get converted into a balanced tree
     assertEqual("a or b or c or d or e or f", (('a || 'b) || 'c) || (('d || 'e) || 'f))
     assertEqual("a and b and c and d and e and f", (('a && 'b) && 'c) && (('d && 'e) && 'f))
+  }
 
-    // very long binary logical expressions.
+  test("long binary logical expressions") {
     def testVeryBinaryExpression(op: String, clazz: Class[_]): Unit = {
       val sql = (1 to 1000).map(x => s"$x == $x").mkString(op)
       val e = parseExpression(sql)
