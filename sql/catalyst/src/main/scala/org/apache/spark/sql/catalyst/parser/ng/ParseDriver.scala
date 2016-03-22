@@ -27,11 +27,18 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types.DataType
 
 /**
  * Base SQL parsing infrastructure.
  */
 abstract class AbstractSqlParser extends ParserInterface with Logging {
+
+  /** Creates/Resolves DataType for a given SQL string. */
+  def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
+    // TODO add this to the parser interface.
+    astBuilder.visitSingleDataType(parser.singleDataType())
+  }
 
   /** Creates Expression for a given SQL string. */
   override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>

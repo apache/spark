@@ -185,7 +185,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       .getOrElse(Map.empty)
     CreateTableUsing(
       table,
-      Option(ctx.colTypeList).map(visitColTypeList),
+      Option(ctx.colTypeList).map(createStructType),
       ctx.tableProvider.qualifiedName.getText,
       temporary,
       options,

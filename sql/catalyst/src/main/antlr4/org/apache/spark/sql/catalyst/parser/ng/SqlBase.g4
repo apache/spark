@@ -32,6 +32,10 @@ singleTableIdentifier
     : tableIdentifier EOF
     ;
 
+singleDataType
+    : dataType EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
@@ -345,7 +349,7 @@ constant
     ;
 
 comparisonOperator
-    : EQ | NEQ | LT | LTE | GT | GTE | NSEQ
+    : EQ | NEQ | NEQJ | LT | LTE | GT | GTE | NSEQ
     ;
 
 booleanValue
@@ -368,9 +372,10 @@ intervalValue
 dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
-    | complex=STRUCT '<' colTypeList '>'                        #complexDataType
+    | complex=STRUCT ('<' colTypeList? '>' | NEQ)              #complexDataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
+
 colTypeList
     : colType (',' colType)*
     ;
@@ -608,7 +613,8 @@ IF: 'IF';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
-NEQ : '<>' | '!=';
+NEQ : '<>';
+NEQJ: '!=';
 LT  : '<';
 LTE : '<=';
 GT  : '>';

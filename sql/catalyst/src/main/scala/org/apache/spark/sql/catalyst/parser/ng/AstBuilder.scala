@@ -62,6 +62,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     visitTableIdentifier(ctx.tableIdentifier)
   }
 
+  override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
+    visit(ctx.dataType).asInstanceOf[DataType]
+  }
+
   /* ********************************************************************************************
    * Plan parsing
    * ******************************************************************************************** */
@@ -301,7 +305,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // Create the attributes.
         val attributes = if (colTypeList != null) {
           // Typed return columns.
-          visitColTypeList(colTypeList).toAttributes
+          createStructType(colTypeList).toAttributes
         } else if (columnAliasList != null) {
           // Untyped return columns.
           visitColumnAliasList(columnAliasList).map { name =>
@@ -841,7 +845,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         EqualTo(left, right)
       case SqlBaseParser.NSEQ =>
         EqualNullSafe(left, right)
-      case SqlBaseParser.NEQ =>
+      case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
         Not(EqualTo(left, right))
       case SqlBaseParser.LT =>
         LessThan(left, right)
@@ -1355,15 +1359,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.MAP =>
         MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
       case SqlBaseParser.STRUCT =>
-        visitColTypeList(ctx.colTypeList)
+        createStructType(ctx.colTypeList())
     }
+  }
+
+  /**
+    * Create a [[StructType]] from a sequence of [[StructField]]s.
+    */
+  protected def createStructType(ctx: ColTypeListContext): StructType = {
+    StructType(Option(ctx).toSeq.flatMap(visitColTypeList))
   }
 
   /**
    * Create a [[StructType]] from a number of column definitions.
    */
-  override def visitColTypeList(ctx: ColTypeListContext): StructType = withOrigin(ctx) {
-    StructType(ctx.colType().asScala.map(visitColType))
+  override def visitColTypeList(ctx: ColTypeListContext): Seq[StructField] = withOrigin(ctx) {
+    ctx.colType().asScala.map(visitColType)
   }
 
   /**
