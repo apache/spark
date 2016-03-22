@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-import java.util.{Timer, TimerTask}
+import java.util.Timer
+import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
