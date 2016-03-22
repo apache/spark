@@ -137,7 +137,7 @@ private[spark] class MemoryStore(
         entries.put(blockId, entry)
       }
       logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
-        blockId, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
+        blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
       true
     } else {
       false
@@ -257,7 +257,10 @@ private[spark] class MemoryStore(
         }
         val bytesOrValues = if (level.deserialized) "values" else "bytes"
         logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
-          blockId, bytesOrValues, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
+          blockId,
+          bytesOrValues,
+          Utils.bytesToString(size),
+          Utils.bytesToString(maxMemory - blocksMemoryUsed)))
         Right(size)
       } else {
         assert(currentUnrollMemoryForThisTask >= currentUnrollMemoryForThisTask,
@@ -304,7 +307,7 @@ private[spark] class MemoryStore(
     }
     if (entry != null) {
       memoryManager.releaseStorageMemory(entry.size)
-      logDebug(s"Block $blockId of size ${entry.size} dropped " +
+      logInfo(s"Block $blockId of size ${entry.size} dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")
       true
     } else {
@@ -386,7 +389,8 @@ private[spark] class MemoryStore(
       }
 
       if (freedMemory >= space) {
-        logInfo(s"${selectedBlocks.size} blocks selected for dropping")
+        logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
+          s"(${Utils.bytesToString(freedMemory)} bytes)")
         for (blockId <- selectedBlocks) {
           val entry = entries.synchronized { entries.get(blockId) }
           // This should never be null as only one task should be dropping
@@ -396,11 +400,12 @@ private[spark] class MemoryStore(
             dropBlock(blockId, entry)
           }
         }
+        logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
+          s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
         freedMemory
       } else {
         blockId.foreach { id =>
-          logInfo(s"Will not store $id as it would require dropping another block " +
-            "from the same RDD")
+          logInfo(s"Will not store $id")
         }
         selectedBlocks.foreach { id =>
           blockInfoManager.unlock(id)
