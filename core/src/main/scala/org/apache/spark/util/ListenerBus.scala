@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * An event bus which posts events to its listeners.

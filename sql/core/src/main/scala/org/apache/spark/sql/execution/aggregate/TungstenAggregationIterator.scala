@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._

@@ -105,7 +105,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 }
 
 /** An input DStream with for testing rate controlling */
-private[streaming] class RateTestInputDStream(@transient _ssc: StreamingContext)
+private[streaming] class RateTestInputDStream(_ssc: StreamingContext)
   extends ReceiverInputDStream[Int](_ssc) {
 
   override def getReceiver(): Receiver[Int] = new RateTestReceiver(id)

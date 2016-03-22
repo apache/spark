@@ -94,7 +94,7 @@ case class Generate(
   def output: Seq[Attribute] = {
     val qualified = qualifier.map(q =>
       // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifiers(q +: a.qualifiers))
+      generatorOutput.map(a => a.withQualifier(Some(q)))
     ).getOrElse(generatorOutput)
 
     if (join) child.output ++ qualified else qualified
@@ -298,10 +298,11 @@ case class Join(
       condition.forall(_.dataType == BooleanType)
   }
 
-  // if not a natural join, use `resolvedExceptNatural`. if it is a natural join, we still need
-  // to eliminate natural before we mark it resolved.
+  // if not a natural join, use `resolvedExceptNatural`. if it is a natural join or
+  // using join, we still need to eliminate natural or using before we mark it resolved.
   override lazy val resolved: Boolean = joinType match {
     case NaturalJoin(_) => false
+    case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
 }
@@ -434,14 +435,15 @@ case class Aggregate(
 }
 
 case class Window(
-    projectList: Seq[Attribute],
     windowExpressions: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] =
-    projectList ++ windowExpressions.map(_.toAttribute)
+    child.output ++ windowExpressions.map(_.toAttribute)
+
+  def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 }
 
 private[sql] object Expand {
@@ -613,7 +615,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 
 case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
 
 /**

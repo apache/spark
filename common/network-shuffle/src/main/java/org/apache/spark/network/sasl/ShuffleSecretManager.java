@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.sasl;
 
-import java.lang.Override;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 

@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.lang.reflect.InvocationTargetException
 import java.net.URI
+import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 import java.util.jar.JarFile
 
@@ -523,9 +524,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --proxy-user NAME           User to impersonate when submitting the application.
         |                              This argument does not work with --principal / --keytab.
         |
-        |  --help, -h                  Show this help message and exit
-        |  --verbose, -v               Print additional debug output
-        |  --version,                  Print the version of current Spark
+        |  --help, -h                  Show this help message and exit.
+        |  --verbose, -v               Print additional debug output.
+        |  --version,                  Print the version of current Spark.
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
@@ -608,7 +609,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       stream.flush()
 
       // Get the output and discard any unnecessary lines from it.
-      Source.fromString(new String(out.toByteArray())).getLines
+      Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines
         .filter { line =>
           !line.startsWith("log4j") && !line.startsWith("usage")
         }

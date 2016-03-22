@@ -161,6 +161,9 @@ class JavaMLReader(object):
         the Python full class name.
         """
         java_package = clazz.__module__.replace("pyspark", "org.apache.spark")
+        if clazz.__name__ in ("Pipeline", "PipelineModel"):
+            # Remove the last package name "pipeline" for Pipeline and PipelineModel.
+            java_package = ".".join(java_package.split(".")[0:-1])
         return ".".join([java_package, clazz.__name__])
 
     @classmethod

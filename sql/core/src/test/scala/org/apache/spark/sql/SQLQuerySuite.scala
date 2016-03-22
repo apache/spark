@@ -21,6 +21,8 @@ import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
@@ -54,7 +56,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
       val regex = java.util.regex.Pattern.compile(pattern)
-      sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
+      sqlContext.sessionState.functionRegistry.listFunction()
+        .filter(regex.matcher(_).matches()).map(Row(_))
     }
     checkAnswer(sql("SHOW functions"), getFunctions(".*"))
     Seq("^c.*", ".*e$", "log.*", ".*date.*").foreach { pattern =>
@@ -986,7 +989,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SET commands with illegal or inappropriate argument") {
     sqlContext.conf.clear()
-    // Set negative mapred.reduce.tasks for automatically determing
+    // Set negative mapred.reduce.tasks for automatically determining
     // the number of reducers is not supported
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
@@ -1618,15 +1621,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10215 Div of Decimal returns null") {
-    val d = Decimal(1.12321)
+    val d = Decimal(1.12321).toBigDecimal
     val df = Seq((d, 1)).toDF("a", "b")
 
     checkAnswer(
       df.selectExpr("b * a / b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a / b / b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a + b"),
       Seq(Row(BigDecimal(2.12321))))
@@ -1635,7 +1638,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(BigDecimal(0.12321))))
     checkAnswer(
       df.selectExpr("b * a * b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
   }
 
   test("precision smaller than scale") {
@@ -1717,7 +1720,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("run sql directly on files") {
-    val df = sqlContext.range(100)
+    val df = sqlContext.range(100).toDF()
     withTempPath(f => {
       df.write.json(f.getCanonicalPath)
       checkAnswer(sql(s"select id from json.`${f.getCanonicalPath}`"),
@@ -2155,6 +2158,47 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("order by ordinal number") {
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC"),
+      sql("SELECT * FROM testData2 ORDER BY a DESC"))
+    // If the position is not an integer, ignore it.
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 + 0 DESC, b ASC"),
+      sql("SELECT * FROM testData2 ORDER BY b ASC"))
+
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
+      sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 SORT BY 1 DESC, 2"),
+      sql("SELECT * FROM testData2 SORT BY a DESC, b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 ASC, b ASC"),
+      Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
+  }
+
+  test("order by ordinal number - negative cases") {
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 0")
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY -1 DESC, b ASC")
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 3 DESC, b ASC")
+    }
+  }
+
+  test("order by ordinal number with conf spark.sql.orderByOrdinal=false") {
+    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
+      // If spark.sql.orderByOrdinal=false, ignore the position number.
+      checkAnswer(
+        sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
+        sql("SELECT * FROM testData2 ORDER BY b ASC"))
+    }
+  }
+
   test("natural join") {
     val df1 = Seq(("one", 1), ("two", 2), ("three", 3)).toDF("k", "v1")
     val df2 = Seq(("one", 1), ("two", 22), ("one", 5)).toDF("k", "v2")
@@ -2176,6 +2220,70 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         sql("SELECT count(*) FROM nt1 natural full outer join nt2"),
         Row(4) :: Nil)
+    }
+  }
+
+  test("join with using clause") {
+    val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
+      ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")
+    val df2 = Seq(("r1c1", "r1c2", "t2r1c3"),
+      ("r2c1", "r2c2", "t2r2c3"), ("r3c1y", "r3c2", "t2r3c3")).toDF("c1", "c2", "c3")
+    val df3 = Seq((null, "r1c2", "t3r1c3"),
+      ("r2c1", "r2c2", "t3r2c3"), ("r3c1y", "r3c2", "t3r3c3")).toDF("c1", "c2", "c3")
+    withTempTable("t1", "t2", "t3") {
+      df1.registerTempTable("t1")
+      df2.registerTempTable("t2")
+      df3.registerTempTable("t3")
+      // inner join with one using column
+      checkAnswer(
+        sql("SELECT * FROM t1 join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") :: Nil)
+
+      // inner join with two using columns
+      checkAnswer(
+        sql("SELECT * FROM t1 join t2 using (c1, c2)"),
+        Row("r1c1", "r1c2", "t1r1c3", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "t2r2c3") :: Nil)
+
+      // Left outer join with one using column.
+      checkAnswer(
+        sql("SELECT * FROM t1 left join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", null, null) :: Nil)
+
+      // Right outer join with one using column.
+      checkAnswer(
+        sql("SELECT * FROM t1 right join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
+          Row("r3c1y", null, null, "r3c2", "t2r3c3") :: Nil)
+
+      // Full outer join with one using column.
+      checkAnswer(
+        sql("SELECT * FROM t1 full outer join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
+          Row("r3c1y", null,
+            null, "r3c2", "t2r3c3") :: Nil)
+
+      // Full outer join with null value in join column.
+      checkAnswer(
+        sql("SELECT * FROM t1 full outer join t3 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", null, null) ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t3r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
+          Row("r3c1y", null, null, "r3c2", "t3r3c3") ::
+          Row(null, null, null, "r1c2", "t3r1c3") :: Nil)
+
+      // Self join with using columns.
+      checkAnswer(
+        sql("SELECT * FROM t1 join t1 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t1r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t1r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
 }

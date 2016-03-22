@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}

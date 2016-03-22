@@ -19,6 +19,8 @@ package org.apache.spark.serializer
 
 import java.io._
 
+import scala.annotation.meta.param
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -191,7 +193,7 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     val originalException = new NotSerializableException("someClass")
-    // verify thaht original exception is returned on failure
+    // verify that original exception is returned on failure
     assert(SerializationDebugger.improveException(o, originalException).eq(originalException))
   }
 }
@@ -219,7 +221,7 @@ class SerializableClassWithWriteObject(val objectField: Object) extends Serializ
 }
 
 
-class SerializableClassWithWriteReplace(@transient replacementFieldObject: Object)
+class SerializableClassWithWriteReplace(@(transient @param) replacementFieldObject: Object)
   extends Serializable {
   private def writeReplace(): Object = {
     replacementFieldObject

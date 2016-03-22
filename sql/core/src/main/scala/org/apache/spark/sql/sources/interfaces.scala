@@ -25,16 +25,17 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{FileStreamSource, Sink, Source}
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 import org.apache.spark.util.collection.BitSet
@@ -57,7 +58,7 @@ trait DataSourceRegister {
    * overridden by children to provide a nice alias for the data source. For example:
    *
    * {{{
-   *   override def format(): String = "parquet"
+   *   override def shortName(): String = "parquet"
    * }}}
    *
    * @since 1.5.0
@@ -409,12 +410,12 @@ case class HadoopFsRelation(
 
   def partitionSchemaOption: Option[StructType] =
     if (partitionSchema.isEmpty) None else Some(partitionSchema)
-  def partitionSpec: PartitionSpec = location.partitionSpec(partitionSchemaOption)
+  def partitionSpec: PartitionSpec = location.partitionSpec()
 
   def refresh(): Unit = location.refresh()
 
   override def toString: String =
-    s"$fileFormat part: ${partitionSchema.simpleString}, data: ${dataSchema.simpleString}"
+    s"HadoopFiles"
 
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
@@ -454,10 +455,40 @@ trait FileFormat {
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      inputFiles: Array[FileStatus],
+      inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow]
+
+  /**
+   * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
+   *
+   * @param partitionSchema The schema of the partition column row that will be present in each
+   *                        PartitionedFile.  These columns should be prepended to the rows that
+   *                        are produced by the iterator.
+   * @param dataSchema The schema of the data that should be output for each row.  This may be a
+   *                   subset of the columns that are present in the file if  column pruning has
+   *                   occurred.
+   * @param filters A set of filters than can optionally be used to reduce the number of rows output
+   * @param options A set of string -> string configuration options.
+   * @return
+   */
+  def buildReader(
+      sqlContext: SQLContext,
+      partitionSchema: StructType,
+      dataSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
+    // TODO: Remove this default implementation when the other formats have been ported
+    // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
+    throw new UnsupportedOperationException(s"buildReader is not supported for $this")
+  }
 }
+
+/**
+ * A collection of data files from a partitioned relation, along with the partition values in the
+ * form of an [[InternalRow]].
+ */
+case class Partition(values: InternalRow, files: Seq[FileStatus])
 
 /**
  * An interface for objects capable of enumerating the files that comprise a relation as well
@@ -466,7 +497,18 @@ trait FileFormat {
 trait FileCatalog {
   def paths: Seq[Path]
 
-  def partitionSpec(schema: Option[StructType]): PartitionSpec
+  def partitionSpec(): PartitionSpec
+
+  /**
+   * Returns all valid files grouped into partitions when the data is partitioned. If the data is
+   * unpartitioned, this will return a single partition with not partition values.
+   *
+   * @param filters the filters used to prune which partitions are returned.  These filters must
+   *                only refer to partition columns and this method will only return files
+   *                where these predicates are guaranteed to evaluate to `true`.  Thus, these
+   *                filters will not need to be evaluated again on the returned data.
+   */
+  def listFiles(filters: Seq[Expression]): Seq[Partition]
 
   def allFiles(): Seq[FileStatus]
 
@@ -478,11 +520,17 @@ trait FileCatalog {
 /**
  * A file catalog that caches metadata gathered by scanning all the files present in `paths`
  * recursively.
+ *
+ * @param parameters as set of options to control discovery
+ * @param paths a list of paths to scan
+ * @param partitionSchema an optional partition schema that will be use to provide types for the
+ *                        discovered partitions
  */
 class HDFSFileCatalog(
     val sqlContext: SQLContext,
     val parameters: Map[String, String],
-    val paths: Seq[Path])
+    val paths: Seq[Path],
+    val partitionSchema: Option[StructType])
   extends FileCatalog with Logging {
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
@@ -491,15 +539,65 @@ class HDFSFileCatalog(
   var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
   var cachedPartitionSpec: PartitionSpec = _
 
-  def partitionSpec(schema: Option[StructType]): PartitionSpec = {
+  def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
-      cachedPartitionSpec = inferPartitioning(schema)
+      cachedPartitionSpec = inferPartitioning(partitionSchema)
     }
 
     cachedPartitionSpec
   }
 
   refresh()
+
+  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
+    if (partitionSpec().partitionColumns.isEmpty) {
+      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
+    } else {
+      prunePartitions(filters, partitionSpec()).map {
+        case PartitionDirectory(values, path) =>
+          Partition(
+            values,
+            getStatus(path).filterNot(_.getPath.getName startsWith "_"))
+      }
+    }
+  }
+
+  protected def prunePartitions(
+      predicates: Seq[Expression],
+      partitionSpec: PartitionSpec): Seq[PartitionDirectory] = {
+    val PartitionSpec(partitionColumns, partitions) = partitionSpec
+    val partitionColumnNames = partitionColumns.map(_.name).toSet
+    val partitionPruningPredicates = predicates.filter {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+
+    if (partitionPruningPredicates.nonEmpty) {
+      val predicate =
+        partitionPruningPredicates
+            .reduceOption(expressions.And)
+            .getOrElse(Literal(true))
+
+      val boundPredicate = InterpretedPredicate.create(predicate.transform {
+        case a: AttributeReference =>
+          val index = partitionColumns.indexWhere(a.name == _.name)
+          BoundReference(index, partitionColumns(index).dataType, nullable = true)
+      })
+
+      val selected = partitions.filter {
+        case PartitionDirectory(values, _) => boundPredicate(values)
+      }
+      logInfo {
+        val total = partitions.length
+        val selectedSize = selected.length
+        val percentPruned = (1 - selectedSize.toDouble / total.toDouble) * 100
+        s"Selected $selectedSize partitions out of $total, pruned $percentPruned% partitions."
+      }
+
+      selected
+    } else {
+      partitions
+    }
+  }
 
   def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
 
@@ -522,7 +620,7 @@ class HDFSFileCatalog(
         }
       }.filterNot { status =>
         val name = status.getPath.getName
-        name.toLowerCase == "_temporary" || name.startsWith(".")
+        HadoopFsRelation.shouldFilterOut(name)
       }
 
       val (dirs, files) = statuses.partition(_.isDirectory)
@@ -560,7 +658,7 @@ class HDFSFileCatalog(
         PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
           part.copy(values = castPartitionValuesToUserSchema(part.values))
         })
-      case None =>
+      case _ =>
         PartitioningUtils.parsePartitions(
           leafDirs,
           PartitioningUtils.DEFAULT_PARTITION_NAME,
@@ -616,6 +714,16 @@ class HDFSFileCatalog(
  * Helper methods for gathering metadata from HDFS.
  */
 private[sql] object HadoopFsRelation extends Logging {
+
+  /** Checks if we should filter out this path name. */
+  def shouldFilterOut(pathName: String): Boolean = {
+    // TODO: We should try to filter out all files/dirs starting with "." or "_".
+    // The only reason that we are not doing it now is that Parquet needs to find those
+    // metadata files from leaf files returned by this methods. We should refactor
+    // this logic to not mix metadata files with data files.
+    pathName == "_SUCCESS" || pathName == "_temporary" || pathName.startsWith(".")
+  }
+
   // We don't filter files/directories whose name start with "_" except "_temporary" here, as
   // specific data sources may take advantages over them (e.g. Parquet _metadata and
   // _common_metadata files). "_temporary" directories are explicitly ignored since failed
@@ -624,19 +732,21 @@ private[sql] object HadoopFsRelation extends Logging {
   def listLeafFiles(fs: FileSystem, status: FileStatus): Array[FileStatus] = {
     logInfo(s"Listing ${status.getPath}")
     val name = status.getPath.getName.toLowerCase
-    if (name == "_temporary" || name.startsWith(".")) {
+    if (shouldFilterOut(name)) {
       Array.empty
     } else {
       // Dummy jobconf to get to the pathFilter defined in configuration
       val jobConf = new JobConf(fs.getConf, this.getClass())
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-      if (pathFilter != null) {
-        val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDirectory)
-        files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-      } else {
-        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
-        files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-      }
+      val statuses =
+        if (pathFilter != null) {
+          val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDirectory)
+          files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+        } else {
+          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
+          files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+        }
+      statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
     }
   }
 
