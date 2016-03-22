@@ -498,7 +498,7 @@ class MatricesSuite extends SparkFunSuite {
 
   test("fromBreeze with sparse matrix") {
     // colPtr.last does NOT always equal to values.length in breeze SCSMatrix and
-    // invocation of compact() is necessary. Refer to SPARK-11507
+    // invocation of compact() may be necessary. Refer to SPARK-11507
     val bm1: BM[Double] = new CSCMatrix[Double](
       Array(1.0, 1, 1), 3, 3, Array(0, 1, 2, 3), Array(0, 1, 2))
     val bm2: BM[Double] = new CSCMatrix[Double](

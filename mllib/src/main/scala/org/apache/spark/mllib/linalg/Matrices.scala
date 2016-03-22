@@ -940,11 +940,14 @@ object Matrices {
       case dm: BDM[Double] =>
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
-        val mat = if(sm.colPtrs.last != sm.data.length) {
+        // Spark-11507. work around breeze issue 479.
+        val mat = if (sm.colPtrs.last != sm.data.length) {
           val matCopy = sm.copy
           matCopy.compact()
           matCopy
-        } else sm
+        } else {
+          sm
+        }
         // There is no isTranspose flag for sparse matrices in Breeze
         new SparseMatrix(mat.rows, mat.cols, mat.colPtrs, mat.rowIndices, mat.data)
       case _ =>
