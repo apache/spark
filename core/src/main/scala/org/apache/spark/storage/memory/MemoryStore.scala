@@ -30,7 +30,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryManager
-import org.apache.spark.serializer.SerializationStream
+import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
@@ -56,6 +56,7 @@ private case class SerializedMemoryEntry[T](
  */
 private[spark] class MemoryStore(
     conf: SparkConf,
+    serializerManager: SerializerManager,
     blockManager: BlockManager,
     memoryManager: MemoryManager)
   extends Logging {
@@ -290,7 +291,7 @@ private[spark] class MemoryStore(
     val byteArrayChunkOutputStream = new ByteArrayChunkOutputStream(initialMemoryThreshold.toInt)
     redirectableStream.setOutputStream(byteArrayChunkOutputStream)
     val serializationStream: SerializationStream = {
-      val ser = blockManager.serializerManager.getSerializer(classTag).newInstance()
+      val ser = serializerManager.getSerializer(classTag).newInstance()
       ser.serializeStream(blockManager.wrapForCompression(blockId, redirectableStream))
     }
 
