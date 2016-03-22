@@ -445,7 +445,6 @@ private[spark] object UIUtils extends Logging {
           "Links in job descriptions must be root-relative:\n" + allLinks.mkString("\n\t"))
       }
 
-
       val rule = if (plainText) {
         // Remove all tags, retaining only their texts
         new RewriteRule() {
@@ -466,7 +465,7 @@ private[spark] object UIUtils extends Logging {
               case e: Elem if e \ "@href" nonEmpty =>
                 val relativePath = e.attribute("href").get.toString
                 val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
-                  e % Attribute(null, "href", fullUri, Null)
+                e % Attribute(null, "href", fullUri, Null)
               case _ => n
             }
           }

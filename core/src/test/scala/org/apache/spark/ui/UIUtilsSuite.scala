@@ -133,8 +133,6 @@ class UIUtilsSuite extends SparkFunSuite {
     assert(decoded2 === decodeURLParameter(decoded2))
   }
 
-
-
   private def verify(
       desc: String,
       expected: Node,
