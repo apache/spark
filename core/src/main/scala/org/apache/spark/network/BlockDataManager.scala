@@ -41,7 +41,7 @@ trait BlockDataManager {
       blockId: BlockId,
       data: ManagedBuffer,
       level: StorageLevel,
-     classTag: ClassTag[_]): Boolean
+      classTag: ClassTag[_]): Boolean
 
   /**
    * Release locks acquired by [[putBlockData()]] and [[getBlockData()]].
