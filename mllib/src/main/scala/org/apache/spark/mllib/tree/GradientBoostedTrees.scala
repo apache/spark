@@ -59,7 +59,7 @@ class GradientBoostedTrees private[spark] (
    * @param boostingStrategy Parameters for the gradient boosting algorithm.
    */
   @Since("1.2.0")
-  def this(boostingStrategy: BoostingStrategy) = this(boostingStrategy, 0)
+  def this(boostingStrategy: BoostingStrategy) = this(boostingStrategy, seed = 0)
 
   /**
    * Method to train a gradient boosting model
@@ -144,42 +144,13 @@ object GradientBoostedTrees extends Logging {
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
    * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @param seed Random seed.
-   * @return GradientBoostedTreesModel that can be used for prediction.
-   */
-  @Since("2.0.0")
-  private[spark] def train(
-      input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy,
-      seed: Int): GradientBoostedTreesModel = {
-    new GradientBoostedTrees(boostingStrategy, seed).run(input)
-  }
-
-  /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees$#train]]
-   */
-  @Since("2.0.0")
-  private[spark] def train(
-      input: JavaRDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy,
-      seed: Int): GradientBoostedTreesModel = {
-    train(input.rdd, boostingStrategy, seed)
-  }
-
-  /**
-   * Method to train a gradient boosting model.
-   *
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
-   *              For regression, labels are real numbers.
-   * @param boostingStrategy Configuration options for the boosting algorithm.
    * @return GradientBoostedTreesModel that can be used for prediction.
    */
   @Since("1.2.0")
   def train(
       input: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
-    train(input, boostingStrategy, 0)
+    new GradientBoostedTrees(boostingStrategy, seed = 0).run(input)
   }
 
   /**

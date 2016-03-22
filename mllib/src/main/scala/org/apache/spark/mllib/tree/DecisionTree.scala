@@ -49,13 +49,13 @@ import org.apache.spark.util.random.XORShiftRandom
 class DecisionTree private[spark] (private val strategy: Strategy, private val seed: Int)
   extends Serializable with Logging {
 
-  @Since("1.0.0")
   /**
    * @param strategy The configuration parameters for the tree algorithm which specify the type
    *                 of decision tree (classification or regression), feature type (continuous,
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
    */
-  def this(strategy: Strategy) = this(strategy, 0)
+  @Since("1.0.0")
+  def this(strategy: Strategy) = this(strategy, seed = 0)
 
   strategy.assertValid()
 
@@ -68,7 +68,7 @@ class DecisionTree private[spark] (private val strategy: Strategy, private val s
   @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
     val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = seed.toInt)
+      seed = seed)
     val rfModel = rf.run(input)
     rfModel.trees(0)
   }

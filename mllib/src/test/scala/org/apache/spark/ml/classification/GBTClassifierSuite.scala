@@ -74,6 +74,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
           .setLossType("logistic")
           .setMaxIter(maxIter)
           .setStepSize(learningRate)
+          .setSeed(123)
         compareAPIs(data, None, gbt, categoricalFeatures)
     }
   }
@@ -91,6 +92,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMaxIter(5)
       .setStepSize(0.1)
       .setCheckpointInterval(2)
+      .setSeed(123)
     val model = gbt.fit(df)
 
     // copied model must have the same parent.
