@@ -94,8 +94,9 @@ trait ContinuousQuery {
   /**
    * Blocks until all available data in the source has been processed an committed to the sink.
    * This method is intended for testing. Note that in the case of continually arriving data, this
-   * method may block forever.  Additionally, it only works with sources that synchronously append
-   * data (i.e. `getOffset` will show the new data immediately upon addition).
+   * method may block forever.  Additionally, this method is only guranteed to block until data that
+   * has been synchronously appended data to a [[org.apache.spark.sql.execution.streaming.Source]]
+   * prior to invocation. (i.e. `getOffset` must immediately reflect the addition).
    */
   def processAllAvailable(): Unit
 

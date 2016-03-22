@@ -115,7 +115,7 @@ class FileStreamSource(
 
     assert(startId <= endId)
     val files = metadataLog.get(Some(startId + 1), Some(endId)).map(_._2).flatten
-    logError(s"Processing ${files.length} files from ${startId + 1}:$endId")
+    logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
     logDebug(s"Streaming ${files.mkString(", ")}")
     dataFrameBuilder(files)
 
@@ -127,7 +127,7 @@ class FileStreamSource(
       .filterNot(_.getPath.getName.startsWith("_"))
       .map(_.getPath.toUri.toString)
     val endTime = System.nanoTime()
-    logError(s"Listed ${files.size} in ${(endTime.toDouble - startTime) / 1000000}ms")
+    logDebug(s"Listed ${files.size} in ${(endTime.toDouble - startTime) / 1000000}ms")
     files
   }
 

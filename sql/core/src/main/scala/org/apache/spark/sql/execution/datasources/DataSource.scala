@@ -21,8 +21,8 @@ import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
@@ -192,6 +192,10 @@ case class DataSource(
     }
   }
 
+  /**
+   * Returns true if there is a single path that has a metadata log indicating which files should
+   * be read.
+   */
   def hasMetadata(path: Seq[String]): Boolean = {
     path match {
       case Seq(singlePath) =>
@@ -200,7 +204,6 @@ case class DataSource(
           val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
           val metadataPath = new Path(hdfsPath, FileStreamSink.metadataDir)
           val res = fs.exists(metadataPath)
-          println(s"checking for metadata at $metadataPath : $res")
           res
         } catch {
           case NonFatal(e) =>
@@ -225,6 +228,8 @@ case class DataSource(
       case (_: RelationProvider, Some(_)) =>
         throw new AnalysisException(s"$className does not allow user-specified schemas.")
 
+      // We are reading from the results of a streaming query. Load files from the metadata log
+      // instead of listing them using HDFS APIs.
       case (format: FileFormat, _)
           if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
@@ -250,6 +255,7 @@ case class DataSource(
           format,
           options)
 
+      // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val globbedPaths = allPaths.flatMap { path =>

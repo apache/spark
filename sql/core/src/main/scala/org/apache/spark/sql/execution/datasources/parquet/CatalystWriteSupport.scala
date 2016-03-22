@@ -55,7 +55,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
   // Schema of the `InternalRow`s to be written
-  var schema: StructType = _
+  private var schema: StructType = _
 
   // `ValueWriter`s for all fields of the schema
   private var rootFieldWriters: Seq[ValueWriter] = _

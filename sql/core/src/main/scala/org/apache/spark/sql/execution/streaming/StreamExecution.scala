@@ -164,7 +164,7 @@ class StreamExecution(
           s"Query $name terminated with exception: ${e.getMessage}",
           e,
           Some(committedOffsets.toCompositeOffset(sources)))
-        logDebug(s"Query $name terminated with error", e)
+        logError(s"Query $name terminated with error", e)
     } finally {
       state = TERMINATED
       sqlContext.streams.notifyQueryTermination(StreamExecution.this)
@@ -196,7 +196,7 @@ class StreamExecution(
         }
 
       case None => // We are starting this stream for the first time.
-        logDebug(s"Starting new continuous query.")
+        logInfo(s"Starting new continuous query.")
         currentBatchId = 0
         commitAndConstructNextBatch()
     }
@@ -303,7 +303,7 @@ class StreamExecution(
     }
 
     val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
-    logDebug(s"Completed up to $availableOffsets in ${batchTime}ms")
+    logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
     postEvent(new QueryProgress(this))
   }
 
@@ -323,7 +323,7 @@ class StreamExecution(
       microBatchThread.interrupt()
       microBatchThread.join()
     }
-    logDebug(s"Query $name was stopped")
+    logInfo(s"Query $name was stopped")
   }
 
   /**
@@ -334,10 +334,22 @@ class StreamExecution(
     def notDone = !committedOffsets.contains(source) || committedOffsets(source) < newOffset
 
     while (notDone) {
-      logDebug(s"Waiting until $newOffset at $source")
+      logInfo(s"Waiting until $newOffset at $source")
       awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
     logDebug(s"Unblocked at $newOffset for $source")
+  }
+
+  /** A flag to indicate that a batch has completed with no new data available. */
+  @volatile private var noNewData = false
+
+  override def processAllAvailable(): Unit = {
+    noNewData = false
+    while (!noNewData) {
+      awaitBatchLock.synchronized { awaitBatchLock.wait(10000) }
+      if (streamDeathCause != null) { throw streamDeathCause }
+    }
+    if (streamDeathCause != null) { throw streamDeathCause }
   }
 
   override def awaitTermination(): Unit = {
@@ -390,16 +402,6 @@ class StreamExecution(
   case object INITIALIZED extends State
   case object ACTIVE extends State
   case object TERMINATED extends State
-
-  var noNewData = false
-  override def processAllAvailable(): Unit = {
-    noNewData = false
-    while (!noNewData) {
-      awaitBatchLock.synchronized { awaitBatchLock.wait(10000) }
-      if (streamDeathCause != null) { throw streamDeathCause }
-    }
-    if (streamDeathCause != null) { throw streamDeathCause }
-  }
 }
 
 private[sql] object StreamExecution {

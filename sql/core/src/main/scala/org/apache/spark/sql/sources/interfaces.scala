@@ -418,10 +418,8 @@ case class HadoopFsRelation(
     s"HadoopFiles"
 
   /** Returns the list of files that will be read when scanning this relation. */
-  override def inputFiles: Array[String] = {
-    println(s"inputfiles: $location")
+  override def inputFiles: Array[String] =
     location.allFiles().map(_.getPath.toUri.toString).toArray
-  }
 
   override def sizeInBytes: Long = location.allFiles().map(_.getLen).sum
 }
@@ -429,7 +427,7 @@ case class HadoopFsRelation(
 /**
  * Used to read and write data stored in files to/from the [[InternalRow]] format.
  */
-trait FileFormat extends Serializable { // TODO: Remove
+trait FileFormat {
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
    * does not support inference, or no valid files are given should return None.  In these cases
@@ -484,20 +482,6 @@ trait FileFormat extends Serializable { // TODO: Remove
     // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
     throw new UnsupportedOperationException(s"buildReader is not supported for $this")
   }
-
-  def openWriter(
-      sqlContext: SQLContext,
-      path: String,
-      dataSchema: StructType): RowWriter = {
-    // TODO: Remove this default implementation when the other formats have been ported
-    // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
-    throw new UnsupportedOperationException(s"openWriter is not supported for $this")
-  }
-}
-
-abstract class RowWriter {
-  def write(row: InternalRow): Unit
-  def close(): Unit
 }
 
 /**
