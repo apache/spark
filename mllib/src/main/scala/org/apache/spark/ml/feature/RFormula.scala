@@ -257,6 +257,18 @@ class RFormulaModel private[feature](
       "Label column already exists and is not of type DoubleType.")
   }
 
+  /**
+   * Get the original array of labels if exists.
+   */
+  private[ml] def getOriginalLabels: Option[Array[String]] = {
+    // According to the sequences of transformers in RFormula, if the last stage is a
+    // StringIndexerModel, then we can extract the original labels from it.
+    pipelineModel.stages.last match {
+      case m: StringIndexerModel => Some(m.labels)
+      case _ => None
+    }
+  }
+
   @Since("2.0.0")
   override def write: MLWriter = new RFormulaModel.RFormulaModelWriter(this)
 }

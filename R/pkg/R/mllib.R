@@ -42,7 +42,7 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' @rdname glm
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' data(iris)
@@ -71,7 +71,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 #' @rdname predict
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- glm(y ~ x, trainingData)
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
@@ -97,7 +97,7 @@ setMethod("predict", signature(object = "PipelineModel"),
 #' @rdname summary
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- glm(y ~ x, trainingData)
 #' summary(model)
 #'}
@@ -135,6 +135,19 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- unlist(features)
               rownames(coefficients) <- 1:k
               return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
+            } else if (modelName == "NaiveBayesModel") {
+              labels <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                    "getNaiveBayesLabels", object@model)
+              pi <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                "getNaiveBayesPi", object@model)
+              theta <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getNaiveBayesTheta", object@model)
+              pi <- t(as.matrix(unlist(pi)))
+              colnames(pi) <- unlist(labels)
+              theta <- matrix(theta, nrow = length(labels))
+              rownames(theta) <- unlist(labels)
+              colnames(theta) <- unlist(features)
+              return(list(pi = pi, theta = theta))
             } else {
               stop(paste("Unsupported model", modelName, sep = " "))
             }
@@ -152,7 +165,7 @@ setMethod("summary", signature(object = "PipelineModel"),
 #' @rdname kmeans
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- kmeans(x, centers = 2, algorithm="random")
 #'}
 setMethod("kmeans", signature(x = "DataFrame"),
@@ -173,7 +186,7 @@ setMethod("kmeans", signature(x = "DataFrame"),
 #' @rdname fitted
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- kmeans(trainingData, 2)
 #' fitted.model <- fitted(model)
 #' showDF(fitted.model)
@@ -191,4 +204,36 @@ setMethod("fitted", signature(object = "PipelineModel"),
             } else {
               stop(paste("Unsupported model", modelName, sep = " "))
             }
+          })
+
+#' Fit a naive Bayes model
+#'
+#' Fit a naive Bayes model, similarly to R's naiveBayes() except for omitting two arguments 'subset'
+#' and 'na.action'. Users can use 'subset' function and 'fillna' or 'na.omit' function of DataFrame,
+#' respectively, to preprocess their DataFrame. We use na.omit in this interface to remove rows with
+#' NA values.
+#'
+#' @param object A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param data DataFrame for training
+#' @param lambda Smoothing parameter
+#' @param modelType Either 'multinomial' or 'bernoulli'. Default "multinomial".
+#' @return A fitted naive Bayes model.
+#' @rdname naiveBayes
+#' @export
+#' @examples
+#' \dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' df <- createDataFrame(sqlContext, infert)
+#' model <- naiveBayes(education ~ ., df, lambda = 1, modelType = "multinomial")
+#'}
+setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
+          function(formula, data, lambda = 1, modelType = c("multinomial", "bernoulli"), ...) {
+            data <- na.omit(data)
+            formula <- paste(deparse(formula), collapse = "")
+            modelType <- match.arg(modelType)
+            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers", "fitNaiveBayes",
+                                 formula, data@sdf, lambda, modelType)
+            return(new("PipelineModel", model = model))
           })
