@@ -65,6 +65,7 @@ private[spark] class Benchmark(
     val firstBest = results.head.bestMs
     // The results are going to be processor specific so it is useful to include that.
     println(Benchmark.getProcessorName())
+    println(Benchmark.getJVMInfo())
     printf("%-35s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
       "Per Row(ns)", "Relative")
     println("-----------------------------------------------------------------------------------" +
@@ -101,6 +102,16 @@ private[spark] object Benchmark {
     } else {
       System.getenv("PROCESSOR_IDENTIFIER")
     }
+  }
+
+  /**
+   * This should return a user helpful JVM information.
+   * This should return something like "Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz"
+   */
+  def getJVMInfo(): String = {
+    val vmName = System.getProperty("java.vm.name")
+    val runtimeVersion = System.getProperty("java.runtime.version")
+    s"JVM information : ${vmName}, ${runtimeVersion}"
   }
 
   /**
