@@ -17,6 +17,8 @@
 
 package org.apache.spark.memory
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.BlockId
 
@@ -51,7 +53,7 @@ private[spark] class StaticMemoryManager(
     (maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
-  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
+  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = {
     if (numBytes > maxStorageMemory) {
       // Fail fast if the block simply won't fit
       logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
@@ -62,17 +64,34 @@ private[spark] class StaticMemoryManager(
     }
   }
 
-  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
-    val currentUnrollMemory = storageMemoryPool.memoryStore.currentUnrollMemory
-    val freeMemory = storageMemoryPool.memoryFree
+  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = {
     // When unrolling, we will use all of the existing free memory, and, if necessary,
     // some extra space freed from evicting cached blocks. We must place a cap on the
     // amount of memory to be evicted by unrolling, however, otherwise unrolling one
     // big block can blow away the entire cache.
-    val maxNumBytesToFree = math.max(0, maxUnrollMemory - currentUnrollMemory - freeMemory)
-    // Keep it within the range 0 <= X <= maxNumBytesToFree
-    val numBytesToFree = math.max(0, math.min(maxNumBytesToFree, numBytes - freeMemory))
-    storageMemoryPool.acquireMemory(blockId, numBytes, numBytesToFree)
+    val (freeMemoryAcquired, numBytesToFree) = synchronized {
+      val currentUnrollMemory = storageMemoryPool.memoryStore.currentUnrollMemory
+      val freeMemory = storageMemoryPool.memoryFree
+      val freeMemoryAcquired = math.min(numBytes, freeMemory)
+      val res = storageMemoryPool.acquireMemory(blockId, freeMemoryAcquired, numBytesToFree = 0)
+      assert(res, "failed to acquire free storage memory")
+      val maxNumBytesToFree = math.max(0, maxUnrollMemory - currentUnrollMemory - freeMemory)
+      // Keep it within the range 0 <= X <= maxNumBytesToFree
+      val numBytesToFree = math.min(numBytes - freeMemoryAcquired, maxNumBytesToFree)
+      (freeMemoryAcquired, numBytesToFree)
+    }
+    try {
+      if (storageMemoryPool.acquireMemory(blockId, numBytes - freeMemoryAcquired, numBytesToFree)) {
+        true
+      } else {
+        storageMemoryPool.releaseMemory(freeMemoryAcquired)
+        false
+      }
+    } catch {
+      case NonFatal(e) =>
+        storageMemoryPool.releaseMemory(freeMemoryAcquired)
+        throw e
+    }
   }
 
   private[memory]
