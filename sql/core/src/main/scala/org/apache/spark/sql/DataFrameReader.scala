@@ -299,7 +299,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
    * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
-   * having malformed string created by `PERMISSIVE` mode. This overwrites
+   * having malformed string created by `PERMISSIVE` mode. This overrides
    * `spark.sql.columnNameOfCorruptRecord`.<li>
    *
    * @since 1.4.0
@@ -335,7 +335,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
    * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
-   * having malformed string created by `PERMISSIVE` mode. This overwrites
+   * having malformed string created by `PERMISSIVE` mode. This overrides
    * `spark.sql.columnNameOfCorruptRecord`.<li>
    *
    * @since 1.6.0

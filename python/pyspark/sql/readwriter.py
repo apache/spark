@@ -172,7 +172,7 @@ class DataFrameReader(object):
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
             *  ``columnNameOfCorruptRecord`` (default ``_corrupt_record``): allows renaming the \
                  new field having malformed string created by ``PERMISSIVE`` mode. \
-                 This overwrites ``spark.sql.columnNameOfCorruptRecord``.
+                 This overrides ``spark.sql.columnNameOfCorruptRecord``.
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
