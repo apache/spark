@@ -352,14 +352,14 @@ abstract class HashExpression[E] extends Expression {
 /**
  * Base class for interpreted hash functions.
  */
-abstract class InterpretedHashFunction[E] {
-  protected def hashInt(i: Int, seed: E): E
+abstract class InterpretedHashFunction {
+  protected def hashInt(i: Int, seed: Long): Long
 
-  protected def hashLong(l: Long, seed: E): E
+  protected def hashLong(l: Long, seed: Long): Long
 
-  protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: E): E
+  protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
-  def hash(value: Any, dataType: DataType, seed: E): E = {
+  def hash(value: Any, dataType: DataType, seed: Long): Long = {
     value match {
       case null => seed
       case b: Boolean => hashInt(if (b) 1 else 0, seed)
@@ -448,17 +448,21 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpress
   override protected def hasherClassName: String = classOf[Murmur3_x86_32].getName
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
-    Murmur3HashFunction.hash(value, dataType, seed)
+    Murmur3HashFunction.hash(value, dataType, seed).toInt
   }
 }
 
-object Murmur3HashFunction extends InterpretedHashFunction[Int] {
-  override protected def hashInt(i: Int, seed: Int): Int = Murmur3_x86_32.hashInt(i, seed)
+object Murmur3HashFunction extends InterpretedHashFunction {
+  override protected def hashInt(i: Int, seed: Long): Long = {
+    Murmur3_x86_32.hashInt(i, seed.toInt)
+  }
 
-  override protected def hashLong(l: Long, seed: Int): Int = Murmur3_x86_32.hashLong(l, seed)
+  override protected def hashLong(l: Long, seed: Long): Long = {
+    Murmur3_x86_32.hashLong(l, seed.toInt)
+  }
 
-  override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Int): Int = {
-    Murmur3_x86_32.hashUnsafeBytes(base, offset, len, seed)
+  override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
+    Murmur3_x86_32.hashUnsafeBytes(base, offset, len, seed.toInt)
   }
 }
 
@@ -497,7 +501,7 @@ case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpressio
   }
 }
 
-object XxHash64Function extends InterpretedHashFunction[Long] {
+object XxHash64Function extends InterpretedHashFunction {
   override protected def hashInt(i: Int, seed: Long): Long = XXH64.hashInt(i, seed)
 
   override protected def hashLong(l: Long, seed: Long): Long = XXH64.hashLong(l, seed)

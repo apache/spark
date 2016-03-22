@@ -63,82 +63,85 @@ object HashByteArrayBenchmark {
   }
 
   def main(args: Array[String]): Unit = {
+    /*
+    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
+    Hash byte arrays with length 8:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    Murmur3_x86_32                             11 /   12        185.1           5.4       1.0X
+    xxHash 64-bit                              17 /   18        120.0           8.3       0.6X
+    */
+    test(8, 42L, 1 << 10, 1 << 11)
+
+    /*
+    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
+    Hash byte arrays with length 16:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    Murmur3_x86_32                             18 /   18        118.6           8.4       1.0X
+    xxHash 64-bit                              20 /   21        102.5           9.8       0.9X
+    */
+    test(16, 42L, 1 << 10, 1 << 11)
+
+    /*
+    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
+    Hash byte arrays with length 24:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    Murmur3_x86_32                             24 /   24         86.6          11.5       1.0X
+    xxHash 64-bit                              23 /   23         93.2          10.7       1.1X
+    */
+    test(24, 42L, 1 << 10, 1 << 11)
+
     // Add 31 to all arrays to create worse case alignment for xxHash.
     /*
-    Running benchmark: Hash byte arrays with length 31
-      Running case: Murmur3_x86_32
-      Running case: xxHash 64-bit
-
     Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
     Hash byte arrays with length 31:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                             41 /   41         51.7          19.3       1.0X
-    xxHash 64-bit                              33 /   34         63.7          15.7       1.2X
+    Murmur3_x86_32                             38 /   39         54.7          18.3       1.0X
+    xxHash 64-bit                              33 /   33         64.4          15.5       1.2X
     */
     test(31, 42L, 1 << 10, 1 << 11)
 
     /*
-    Running benchmark: Hash byte arrays with length 95
-      Running case: Murmur3_x86_32
-      Running case: xxHash 64-bit
-
     Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
     Hash byte arrays with length 95:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                             97 /   98         21.6          46.3       1.0X
-    xxHash 64-bit                              73 /   74         28.8          34.7       1.3X
+    Murmur3_x86_32                             91 /   94         22.9          43.6       1.0X
+    xxHash 64-bit                              68 /   69         30.6          32.7       1.3X
     */
     test(64 + 31, 42L, 1 << 10, 1 << 11)
 
     /*
-    Running benchmark: Hash byte arrays with length 287
-      Running case: Murmur3_x86_32
-      Running case: xxHash 64-bit
-
     Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
     Hash byte arrays with length 287:   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                            282 /  284          7.4         134.7       1.0X
-    xxHash 64-bit                             113 /  114         18.5          54.0       2.5X
+    Murmur3_x86_32                            268 /  268          7.8         127.6       1.0X
+    xxHash 64-bit                             108 /  109         19.4          51.6       2.5X
     */
     test(256 + 31, 42L, 1 << 10, 1 << 11)
 
     /*
-    Running benchmark: Hash byte arrays with length 1055
-      Running case: Murmur3_x86_32
-      Running case: xxHash 64-bit
-
     Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
     Hash byte arrays with length 1055:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                           1050 / 1051          2.0         500.8       1.0X
-    xxHash 64-bit                             283 /  284          7.4         135.1       3.7X
+    Murmur3_x86_32                            942 /  945          2.2         449.4       1.0X
+    xxHash 64-bit                             276 /  276          7.6         131.4       3.4X
     */
     test(1024 + 31, 42L, 1 << 10, 1 << 11)
 
     /*
-    Running benchmark: Hash byte arrays with length 2079
-      Running case: Murmur3_x86_32
-      Running case: xxHash 64-bit
-
     Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
     Hash byte arrays with length 2079:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                           2065 / 2070          1.0         984.7       1.0X
-    xxHash 64-bit                             472 /  473          4.4         225.3       4.4X
+    Murmur3_x86_32                           1839 / 1843          1.1         876.8       1.0X
+    xxHash 64-bit                             445 /  448          4.7         212.1       4.1X
     */
     test(2048 + 31, 42L, 1 << 10, 1 << 11)
 
     /*
-    Running benchmark: Hash byte arrays with length 8223
-      Running case: Murmur3_x86_32
-      Running case: xxHash 64-bit
-
     Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
     Hash byte arrays with length 8223:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                           8184 / 8198          0.3        3902.3       1.0X
-    xxHash 64-bit                            1563 / 1569          1.3         745.4       5.2X
+    Murmur3_x86_32                           7307 / 7310          0.3        3484.4       1.0X
+    xxHash 64-bit                            1487 / 1488          1.4         709.1       4.9X
      */
     test(8192 + 31, 42L, 1 << 10, 1 << 11)
   }
