@@ -39,7 +39,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import RandomForestSuite.mapToVec
 
-  test("Binary classification with continuous features: split and bin calculation") {
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests for split calculation
+  /////////////////////////////////////////////////////////////////////////////
+
+  test("Binary classification with continuous features: split calculation") {
     val arr = OldDTSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -51,8 +55,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(splits(0).length === 99)
   }
 
-  test("Binary classification with binary (ordered) categorical features:" +
-    " split and bin calculation") {
+  test("Binary classification with binary (ordered) categorical features: split calculation") {
     val arr = OldDTSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -69,7 +72,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Binary classification with 3-ary (ordered) categorical features," +
-    " with no samples for one category") {
+    " with no samples for one category: split calculation") {
     val arr = OldDTSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -83,12 +86,6 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(splits.length === 2)
     // no splits pre-computed for ordered categorical features
     assert(splits(0).length === 0)
-  }
-
-  test("extract categories from a number for multiclass classification") {
-    val l = RandomForest.extractMultiClassCategories(13, 10)
-    assert(l.length === 3)
-    assert(List(3.0, 2.0, 0.0).toSeq === l.toSeq)
   }
 
   test("find splits for a continuous feature") {
@@ -151,8 +148,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("Multiclass classification with unordered categorical features:" +
-    " split and bin calculations") {
+  test("Multiclass classification with unordered categorical features: split calculations") {
     val arr = OldDTSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -193,7 +189,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     checkCategoricalSplit(splits(1)(2), 1, Array(0.0, 1.0))
   }
 
-  test("Multiclass classification with ordered categorical features: split and bin calculations") {
+  test("Multiclass classification with ordered categorical features: split calculations") {
     val arr = OldDTSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
     assert(arr.length === 3000)
     val rdd = sc.parallelize(arr)
@@ -208,6 +204,16 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(splits.length === 2)
     // no splits pre-computed for ordered categorical features
     assert(splits(0).length === 0)
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests of other algorithm internals
+  /////////////////////////////////////////////////////////////////////////////
+
+  test("extract categories from a number for multiclass classification") {
+    val l = RandomForest.extractMultiClassCategories(13, 10)
+    assert(l.length === 3)
+    assert(Seq(3.0, 2.0, 0.0) === l)
   }
 
   test("Avoid aggregation on the last level") {
@@ -228,6 +234,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val topNode = LearningNode.emptyNode(nodeIndex = 1)
     assert(topNode.isLeaf === false)
+    assert(topNode.stats === null)
 
     val nodesForGroup = Map((0, Array(topNode)))
     val treeToNodeToIndexInfo = Map((0, Map(
@@ -241,8 +248,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(nodeQueue.isEmpty)
 
     // set impurity and predict for topNode
-    assert(topNode.toNode.prediction !== Double.MinValue)
-    assert(topNode.stats.impurity !== -1.0)
+    assert(topNode.stats !== null)
+    assert(topNode.stats.impurity > 0.0)
 
     // set impurity and predict for child nodes
     assert(topNode.leftChild.get.toNode.prediction === 0.0)
@@ -269,6 +276,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val topNode = LearningNode.emptyNode(nodeIndex = 1)
     assert(topNode.isLeaf === false)
+    assert(topNode.stats === null)
 
     val nodesForGroup = Map((0, Array(topNode)))
     val treeToNodeToIndexInfo = Map((0, Map(
@@ -282,8 +290,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(nodeQueue.isEmpty)
 
     // set impurity and predict for topNode
-    assert(topNode.toNode.prediction !== Double.MinValue)
-    assert(topNode.stats.impurity !== -1.0)
+    assert(topNode.stats !== null)
+    assert(topNode.stats.impurity > 0.0)
 
     // set impurity and predict for child nodes
     assert(topNode.leftChild.get.toNode.prediction === 0.0)
@@ -372,9 +380,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Select feature subset for top nodes.  Return true if OK.
     def checkFeatureSubsetStrategy(
-                                    numTrees: Int,
-                                    featureSubsetStrategy: String,
-                                    numFeaturesPerNode: Int): Unit = {
+        numTrees: Int,
+        featureSubsetStrategy: String,
+        numFeaturesPerNode: Int): Unit = {
       val seeds = Array(123, 5354, 230, 349867, 23987)
       val maxMemoryUsage: Long = 128 * 1024L * 1024L
       val metadata =

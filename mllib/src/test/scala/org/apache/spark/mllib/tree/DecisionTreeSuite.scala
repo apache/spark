@@ -124,6 +124,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(rootNode.impurity === 0)
     assert(rootNode.stats.isEmpty)
+    assert(rootNode.predict.predict === 0)
   }
 
   test("Binary classification stump with fixed label 1 for Gini") {
@@ -375,9 +376,10 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
     val split = rootNode.split.get
-    val gain = rootNode.stats.get
+    val gainStats = rootNode.stats.get
     assert(split.feature == 1)
-    assert(gain != InformationGainStats.invalidInformationGainStats)
+    assert(gainStats.gain >= 0)
+    assert(gainStats.impurity >= 0)
   }
 
   test("split must satisfy min info gain requirements") {

@@ -815,7 +815,7 @@ private[spark] object RandomForest extends Logging {
   }
 
   /**
-   * Returns splits and bins for decision tree calculation.
+   * Returns splits for decision tree calculation.
    * Continuous and categorical features are handled differently.
    *
    * Continuous features:
@@ -838,11 +838,8 @@ private[spark] object RandomForest extends Logging {
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @param metadata Learning and dataset metadata
    * @param seed random seed
-   * @return A tuple of (splits, bins).
-   *         Splits is an Array of [[org.apache.spark.mllib.tree.model.Split]]
-   *          of size (numFeatures, numSplits).
-   *         Bins is an Array of [[org.apache.spark.mllib.tree.model.Bin]]
-   *          of size (numFeatures, numBins).
+   * @return Splits, an Array of [[org.apache.spark.mllib.tree.model.Split]]
+   *          of size (numFeatures, numSplits)
    */
   protected[tree] def findSplits(
       input: RDD[LabeledPoint],
@@ -869,10 +866,10 @@ private[spark] object RandomForest extends Logging {
       input.sparkContext.emptyRDD[LabeledPoint]
     }
 
-    findSplitsBinsBySorting(sampledInput, metadata, continuousFeatures)
+    findSplitsBySorting(sampledInput, metadata, continuousFeatures)
   }
 
-  private def findSplitsBinsBySorting(
+  private def findSplitsBySorting(
       input: RDD[LabeledPoint],
       metadata: DecisionTreeMetadata,
       continuousFeatures: IndexedSeq[Int]): Array[Array[Split]] = {
@@ -912,8 +909,7 @@ private[spark] object RandomForest extends Logging {
 
       case i if metadata.isCategorical(i) =>
         // Ordered features
-        //   Bins correspond to feature values, so we do not need to compute splits or bins
-        //   beforehand.  Splits are constructed as needed during training.
+        //   Splits are constructed as needed during training.
         Array.empty[Split]
     }
     splits
@@ -1076,7 +1072,7 @@ private[spark] object RandomForest extends Logging {
       numNodesInGroup += 1
       memUsage += nodeMemUsage
     }
-    if (memUsage > maxMemoryUsage && maxMemoryUsage != 0) {
+    if (memUsage > maxMemoryUsage) {
       // If maxMemoryUsage is 0, we should still allow splitting 1 node.
       logWarning(s"Tree learning is using approximately $memUsage bytes per iteration, which" +
         s" exceeds requested limit maxMemoryUsage=$maxMemoryUsage. This allows splitting" +

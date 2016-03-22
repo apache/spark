@@ -377,7 +377,7 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase
 }
 
-private[ml] object RandomForestParams {
+private[spark] object RandomForestParams {
   // These options should be lowercase.
   final val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
