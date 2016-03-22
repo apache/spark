@@ -100,6 +100,34 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(('b || !'a ) && 'a, 'b && 'a)
   }
 
+  test("a < 1 && (!(a < 1) || b)") {
+    checkCondition('a < 1 && (!('a < 1) || 'b), ('a < 1) && 'b)
+    checkCondition('a < 1 && ('b || !('a < 1)), ('a < 1) && 'b)
+
+    checkCondition('a <= 1 && (!('a <= 1) || 'b), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && ('b || !('a <= 1)), ('a <= 1) && 'b)
+
+    checkCondition('a > 1 && (!('a > 1) || 'b), ('a > 1) && 'b)
+    checkCondition('a > 1 && ('b || !('a > 1)), ('a > 1) && 'b)
+
+    checkCondition('a >= 1 && (!('a >= 1) || 'b), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && ('b || !('a >= 1)), ('a >= 1) && 'b)
+  }
+
+  test("a < 1 && ((a >= 1) || b)") {
+    checkCondition('a < 1 && ('a >= 1 || 'b ), ('a < 1) && 'b)
+    checkCondition('a < 1 && ('b || 'a >= 1), ('a < 1) && 'b)
+
+    checkCondition('a <= 1 && ('a > 1 || 'b ), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && ('b || 'a > 1), ('a <= 1) && 'b)
+
+    checkCondition('a > 1 && (('a <= 1) || 'b), ('a > 1) && 'b)
+    checkCondition('a > 1 && ('b || ('a <= 1)), ('a > 1) && 'b)
+
+    checkCondition('a >= 1 && (('a < 1) || 'b), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && ('b || ('a < 1)), ('a >= 1) && 'b)
+  }
+
   test("DeMorgan's law") {
     checkCondition(!('a && 'b), !'a || !'b)
 
