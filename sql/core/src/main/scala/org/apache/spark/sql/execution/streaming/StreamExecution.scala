@@ -164,7 +164,7 @@ class StreamExecution(
           s"Query $name terminated with exception: ${e.getMessage}",
           e,
           Some(committedOffsets.toCompositeOffset(sources)))
-        logError(s"Query $name terminated with error", e)
+        logDebug(s"Query $name terminated with error", e)
     } finally {
       state = TERMINATED
       sqlContext.streams.notifyQueryTermination(StreamExecution.this)
@@ -196,7 +196,7 @@ class StreamExecution(
         }
 
       case None => // We are starting this stream for the first time.
-        logInfo(s"Starting new continuous query.")
+        logDebug(s"Starting new continuous query.")
         currentBatchId = 0
         commitAndConstructNextBatch()
     }
@@ -239,6 +239,12 @@ class StreamExecution(
       logInfo(s"Committed offsets for batch $currentBatchId.")
       true
     } else {
+      noNewData = true
+      awaitBatchLock.synchronized {
+        // Wake up any threads that are waiting for the stream to progress.
+        awaitBatchLock.notifyAll()
+      }
+
       false
     }
   }
@@ -297,7 +303,7 @@ class StreamExecution(
     }
 
     val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
-    logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
+    logDebug(s"Completed up to $availableOffsets in ${batchTime}ms")
     postEvent(new QueryProgress(this))
   }
 
@@ -317,7 +323,7 @@ class StreamExecution(
       microBatchThread.interrupt()
       microBatchThread.join()
     }
-    logInfo(s"Query $name was stopped")
+    logDebug(s"Query $name was stopped")
   }
 
   /**
@@ -328,7 +334,7 @@ class StreamExecution(
     def notDone = !committedOffsets.contains(source) || committedOffsets(source) < newOffset
 
     while (notDone) {
-      logInfo(s"Waiting until $newOffset at $source")
+      logDebug(s"Waiting until $newOffset at $source")
       awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
     logDebug(s"Unblocked at $newOffset for $source")
@@ -384,6 +390,16 @@ class StreamExecution(
   case object INITIALIZED extends State
   case object ACTIVE extends State
   case object TERMINATED extends State
+
+  var noNewData = false
+  override def processAllAvailable(): Unit = {
+    noNewData = false
+    while (!noNewData) {
+      awaitBatchLock.synchronized { awaitBatchLock.wait(10000) }
+      if (streamDeathCause != null) { throw streamDeathCause }
+    }
+    if (streamDeathCause != null) { throw streamDeathCause }
+  }
 }
 
 private[sql] object StreamExecution {

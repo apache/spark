@@ -32,12 +32,13 @@ import org.apache.spark.sql.execution.streaming.{Offset, StreamExecution}
  */
 @Experimental
 class ContinuousQueryException private[sql](
+    @transient
     val query: ContinuousQuery,
     val message: String,
     val cause: Throwable,
     val startOffset: Option[Offset] = None,
     val endOffset: Option[Offset] = None
-  ) extends Exception(message, cause) {
+  ) extends Exception(message, cause) with Serializable {
 
   /** Time when the exception occurred */
   val time: Long = System.currentTimeMillis

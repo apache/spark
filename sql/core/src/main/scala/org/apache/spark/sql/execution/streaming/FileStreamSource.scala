@@ -44,7 +44,7 @@ class FileStreamSource(
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   private val seenFiles = new OpenHashSet[String]
-  metadataLog.get(None, maxBatchId).foreach { case (batchId, files) =>
+  metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, files) =>
     files.foreach(seenFiles.add)
   }
 
@@ -114,17 +114,21 @@ class FileStreamSource(
     val endId = end.asInstanceOf[LongOffset].offset
 
     assert(startId <= endId)
-    val files = metadataLog.get(Some(startId + 1), endId).map(_._2).flatten
-    logDebug(s"Return files from batches ${startId + 1}:$endId")
+    val files = metadataLog.get(Some(startId + 1), Some(endId)).map(_._2).flatten
+    logError(s"Processing ${files.length} files from ${startId + 1}:$endId")
     logDebug(s"Streaming ${files.mkString(", ")}")
     dataFrameBuilder(files)
 
   }
 
   private def fetchAllFiles(): Seq[String] = {
-    fs.listStatus(new Path(path))
+    val startTime = System.nanoTime()
+    val files = fs.listStatus(new Path(path))
       .filterNot(_.getPath.getName.startsWith("_"))
       .map(_.getPath.toUri.toString)
+    val endTime = System.nanoTime()
+    logError(s"Listed ${files.size} in ${(endTime.toDouble - startTime) / 1000000}ms")
+    files
   }
 
   override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)

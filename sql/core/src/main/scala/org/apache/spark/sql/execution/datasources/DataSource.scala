@@ -21,6 +21,7 @@ import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
@@ -29,7 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.execution.streaming.{FileStreamSource, Sink, Source}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
@@ -176,14 +177,38 @@ case class DataSource(
 
   /** Returns a sink that can be used to continually write data. */
   def createSink(): Sink = {
-    val datasourceClass = providingClass.newInstance() match {
-      case s: StreamSinkProvider => s
+    providingClass.newInstance() match {
+      case s: StreamSinkProvider => s.createSink(sqlContext, options, partitionColumns)
+      case format: FileFormat =>
+        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+        val path = caseInsensitiveOptions.getOrElse("path", {
+          throw new IllegalArgumentException("'path' is not specified")
+        })
+
+        new FileStreamSink(sqlContext, path, format)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed writing")
     }
+  }
 
-    datasourceClass.createSink(sqlContext, options, partitionColumns)
+  def hasMetadata(path: Seq[String]): Boolean = {
+    path match {
+      case Seq(singlePath) =>
+        try {
+          val hdfsPath = new Path(singlePath)
+          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          val metadataPath = new Path(hdfsPath, FileStreamSink.metadataDir)
+          val res = fs.exists(metadataPath)
+          println(s"checking for metadata at $metadataPath : $res")
+          res
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Error while looking for metadata directory.")
+            false
+        }
+      case _ => false
+    }
   }
 
   /** Create a resolved [[BaseRelation]] that can be used to read data from this [[DataSource]] */
@@ -199,6 +224,31 @@ case class DataSource(
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
       case (_: RelationProvider, Some(_)) =>
         throw new AnalysisException(s"$className does not allow user-specified schemas.")
+
+      case (format: FileFormat, _)
+          if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
+        val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
+        val fileCatalog =
+          new StreamFileCatalog(sqlContext, basePath)
+        val dataSchema = userSpecifiedSchema.orElse {
+          format.inferSchema(
+            sqlContext,
+            caseInsensitiveOptions,
+            fileCatalog.allFiles())
+        }.getOrElse {
+          throw new AnalysisException(
+            s"Unable to infer schema for $format at ${fileCatalog.allFiles().mkString(",")}. " +
+                "It must be specified manually")
+        }
+
+        HadoopFsRelation(
+          sqlContext,
+          fileCatalog,
+          partitionSchema = fileCatalog.partitionSpec().partitionColumns,
+          dataSchema = dataSchema,
+          bucketSpec = None,
+          format,
+          options)
 
       case (format: FileFormat, _) =>
         val allPaths = caseInsensitiveOptions.get("path") ++ paths

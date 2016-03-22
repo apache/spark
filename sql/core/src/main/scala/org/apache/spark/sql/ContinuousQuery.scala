@@ -92,6 +92,14 @@ trait ContinuousQuery {
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**
+   * Blocks until all available data in the source has been processed an committed to the sink.
+   * This method is intended for testing. Note that in the case of continually arriving data, this
+   * method may block forever.  Additionally, it only works with sources that synchronously append
+   * data (i.e. `getOffset` will show the new data immediately upon addition).
+   */
+  def processAllAvailable(): Unit
+
+  /**
    * Stops the execution of this query if it is running. This method blocks until the threads
    * performing execution has stopped.
    * @since 2.0.0
