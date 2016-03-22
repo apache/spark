@@ -85,6 +85,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUpCast ::
+      ResolveOrdinalInOrderByAndGroupBy ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -628,24 +629,26 @@ class Analyzer(
     }
   }
 
-  /**
-   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
-   * clause.  This rule detects such queries and adds the required attributes to the original
-   * projection, so that they will be available during sorting. Another projection is added to
-   * remove these attributes after sorting.
-   *
-   * This rule also resolves the position number in sort references. This support is introduced
-   * in Spark 2.0. Before Spark 2.0, the integers in Order By has no effect on output sorting.
-   * - When the sort references are not integer but foldable expressions, ignore them.
-   * - When spark.sql.orderByOrdinal is set to false, ignore the position numbers too.
-   */
-  object ResolveSortReferences extends Rule[LogicalPlan] {
+ /**
+  * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
+  * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
+  * select list. This support is introduced in Spark 2.0.
+  *
+  * - When the sort references or group by expressions are not integer but foldable expressions,
+  * just ignore them.
+  * - When spark.sql.orderByOrdinal/spark.sql.groupByOrdinal is set to false, ignore the position
+  * numbers too.
+  *
+  * Before the release of Spark 2.0, the literals in order/sort by and group by clauses
+  * have no effect on the results.
+  */
+  object ResolveOrdinalInOrderByAndGroupBy extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s: Sort if !s.child.resolved => s
-      // Replace the index with the related attribute for ORDER BY
+      // Replace the index with the related attribute for ORDER BY,
       // which is a 1-base position of the projection list.
       case s @ Sort(orders, global, child)
-          if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+          if conf.orderByOrdinal && child.resolved &&
+            orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
         val newOrders = orders map {
           case s @ SortOrder(IntegerIndex(index), direction) =>
             if (index > 0 && index <= child.output.size) {
@@ -659,6 +662,40 @@ class Analyzer(
         }
         Sort(newOrders, global, child)
 
+      // Replace the index with the corresponding expression in aggregateExpressions. The index is
+      // a 1-base position of aggregateExpressions, which is output columns (select expression)
+      case a @ Aggregate(groups, aggs, child)
+          if conf.groupByOrdinal && child.resolved && aggs.forall(_.resolved) &&
+            groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
+        val newGroups = groups.map {
+          case IntegerIndex(index) if index > 0 && index <= aggs.size =>
+            aggs(index - 1) match {
+              case Alias(c, _) if c.isInstanceOf[AggregateExpression] =>
+                throw new UnresolvedException(a,
+                  s"Group by position: the '$index'th column in the select is an aggregate " +
+                  s"function: ${c.sql}. Aggregate functions are not allowed in GROUP BY")
+              // Group by clause is unable to use the alias defined in aggregateExpressions
+              case Alias(c, _) => c
+              case o => o
+            }
+          case IntegerIndex(index) =>
+            throw new UnresolvedException(a,
+              s"Group by position: '$index' exceeds the size of the select list '${aggs.size}'.")
+          case o => o
+        }
+        Aggregate(newGroups, aggs, child)
+    }
+  }
+
+  /**
+   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
+   * clause.  This rule detects such queries and adds the required attributes to the original
+   * projection, so that they will be available during sorting. Another projection is added to
+   * remove these attributes after sorting.
+   */
+  object ResolveSortReferences extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case s: Sort if !s.child.resolved => s
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
