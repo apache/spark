@@ -533,12 +533,8 @@ private[spark] class Client(
      *   (3) whether to add these resources to the classpath
      */
     val cachedSecondaryJarLinks = ListBuffer.empty[String]
-    val files = sparkConf.get(FILES_TO_DISTRIBUTE).map(p => Utils.resolveURIs(p))
-      .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
-      .orNull
-    val archives = sparkConf.get(ARCHIVES_TO_DISTRIBUTE).map(p => Utils.resolveURIs(p))
-      .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
-      .orNull
+    val files = sparkConf.get(FILES_TO_DISTRIBUTE).map(p => Utils.resolveURIs(p)).orNull
+    val archives = sparkConf.get(ARCHIVES_TO_DISTRIBUTE).map(p => Utils.resolveURIs(p)).orNull
     List(
       (sparkConf.get(JARS_TO_DISTRIBUTE).orNull, LocalResourceType.FILE, true),
       (files, LocalResourceType.FILE, false),

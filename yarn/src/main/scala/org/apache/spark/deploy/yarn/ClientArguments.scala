@@ -33,7 +33,6 @@ private[spark] class ClientArguments(args: Array[String]) {
   private def parseArgs(inputArgs: List[String]): Unit = {
     var args = inputArgs
 
-    // scalastyle:off println
     while (!args.isEmpty) {
       args match {
         case ("--jar") :: value :: tail =>
@@ -62,7 +61,6 @@ private[spark] class ClientArguments(args: Array[String]) {
           throw new IllegalArgumentException(getUsageMessage(args))
       }
     }
-    // scalastyle:on println
 
     if (primaryPyFile != null && primaryRFile != null) {
       throw new IllegalArgumentException("Cannot have primary-py-file and primary-r-file" +
