@@ -259,8 +259,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
         throw new IOException("Complex types not supported.");
       }
-      PrimitiveType primitiveType = t.asPrimitiveType();
-
       originalTypes[i] = t.getOriginalType();
 
       // TODO: Be extremely cautious in what is supported. Expand this.
@@ -268,9 +266,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
           originalTypes[i] != OriginalType.UTF8 && originalTypes[i] != OriginalType.DATE &&
           originalTypes[i] != OriginalType.INT_8 && originalTypes[i] != OriginalType.INT_16) {
         throw new IOException("Unsupported type: " + t);
-      }
-      if (primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT96) {
-        throw new IOException("Int96 not supported.");
       }
       String[] colPath = requestedSchema.getPaths().get(i);
       if (fileSchema.containsPath(colPath)) {
