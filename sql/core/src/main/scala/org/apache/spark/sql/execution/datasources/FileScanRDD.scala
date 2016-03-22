@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.{Partition, TaskContext}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, SqlNewHadoopRDDState}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 
@@ -31,13 +31,17 @@ case class PartitionedFile(
     partitionValues: InternalRow,
     filePath: String,
     start: Long,
-    length: Long)
+    length: Long) {
+  override def toString(): String = {
+    s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
+  }
+}
+
 
 /**
  * A collection of files that should be read as a single task possibly from multiple partitioned
  * directories.
  *
- * IMPLEMENT ME: This is just a placeholder for a future implementation.
  * TODO: This currently does not take locality information about the files into account.
  */
 case class FilePartition(val index: Int, files: Seq[PartitionedFile]) extends Partition
@@ -48,10 +52,38 @@ class FileScanRDD(
     @transient val filePartitions: Seq[FilePartition])
     extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
 
-
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-    throw new NotImplementedError("Not Implemented Yet")
+    val iterator = new Iterator[Object] with AutoCloseable {
+      private[this] val files = split.asInstanceOf[FilePartition].files.toIterator
+      private[this] var currentIterator: Iterator[Object] = null
+
+      def hasNext = (currentIterator != null && currentIterator.hasNext) || nextIterator()
+      def next() = currentIterator.next()
+
+      /** Advances to the next file. Returns true if a new non-empty iterator is available. */
+      private def nextIterator(): Boolean = {
+        if (files.hasNext) {
+          val nextFile = files.next()
+          logInfo(s"Reading File $nextFile")
+          SqlNewHadoopRDDState.setInputFileName(nextFile.filePath)
+          currentIterator = readFunction(nextFile)
+          hasNext
+        } else {
+          SqlNewHadoopRDDState.unsetInputFileName()
+          false
+        }
+      }
+
+      override def close() = {
+        SqlNewHadoopRDDState.unsetInputFileName()
+      }
+    }
+
+    // Register an on-task-completion callback to close the input stream.
+    context.addTaskCompletionListener(context => iterator.close())
+
+    iterator.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
   }
 
-  override protected def getPartitions: Array[Partition] = Array.empty
+  override protected def getPartitions: Array[Partition] = filePartitions.toArray
 }

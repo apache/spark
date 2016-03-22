@@ -288,6 +288,11 @@ object SQLConf {
     defaultValue = Some(true),
     doc = "Whether the query analyzer should be case sensitive or not.")
 
+  val PARQUET_FILE_SCAN = booleanConf("spark.sql.parquet.fileScan",
+    defaultValue = Some(true),
+    doc = "Use the new FileScanRDD path for reading parquet data.",
+    isPublic = false)
+
   val PARQUET_SCHEMA_MERGING_ENABLED = booleanConf("spark.sql.parquet.mergeSchema",
     defaultValue = Some(false),
     doc = "When true, the Parquet data source merges schemas collected from all data files, " +
@@ -554,6 +559,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+
+  def parquetFileScan: Boolean = getConf(PARQUET_FILE_SCAN)
 
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 

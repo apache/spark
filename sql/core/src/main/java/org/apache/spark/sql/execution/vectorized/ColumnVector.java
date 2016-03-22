@@ -256,6 +256,8 @@ public abstract class ColumnVector {
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
+    if (isConstant) return;
+
     if (childColumns != null) {
       for (ColumnVector c: childColumns) {
         c.reset();
@@ -823,6 +825,11 @@ public abstract class ColumnVector {
   public final boolean isArray() { return resultArray != null; }
 
   /**
+   * Marks this column as being constant.
+   */
+  public final void setIsConstant() { isConstant = true; }
+
+  /**
    * Maximum number of rows that can be stored in this column.
    */
   protected int capacity;
@@ -842,6 +849,12 @@ public abstract class ColumnVector {
    * having to clear NULL bits.
    */
   protected boolean anyNullsSet;
+
+  /**
+   * True if this column's values are fixed. This means the column values never change, even
+   * across resets.
+   */
+  protected boolean isConstant;
 
   /**
    * Default size of each array length value. This grows as necessary.

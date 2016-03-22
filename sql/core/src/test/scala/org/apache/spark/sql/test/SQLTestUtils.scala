@@ -31,6 +31,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.Filter
 import org.apache.spark.util.Utils
 
 /**
@@ -204,10 +205,11 @@ private[sql] trait SQLTestUtils
    */
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
-    val childRDD = df
-      .queryExecution
-      .sparkPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
-      .child
+    val withoutFilters = df.queryExecution.sparkPlan transform {
+      case Filter(_, child) => child
+    }
+
+    val childRDD = withoutFilters
       .execute()
       .map(row => Row.fromSeq(row.copy().toSeq(schema)))
 
