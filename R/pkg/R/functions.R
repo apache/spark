@@ -2682,8 +2682,8 @@ setMethod("histogram",
             x <- eval(parse(text = paste0("df$", colname)))
 
             stats <- collect(describe(df[, colname]))
-            min <- as.numeric(stats[4,2])
-            max <- as.numeric(stats[5,2])
+            min <- as.numeric(stats[4, 2])
+            max <- as.numeric(stats[5, 2])
 
             # Normalize the data
             xnorm <- (x - min) / (max - min)

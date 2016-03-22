@@ -1904,7 +1904,7 @@ test_that("Histogram", {
     all(histogram(irisDF, "Petal_Width", 8) ==
         data.frame(bins = seq(0, 7),
                    counts = c(48, 2, 7, 21, 24, 19, 15, 14),
-                   centroids = seq(0,7) * 0.3 + 0.25)),
+                   centroids = seq(0, 7) * 0.3 + 0.25)),
         TRUE)
 
   # Missing nbins
@@ -1923,7 +1923,7 @@ test_that("Histogram", {
                    histogram(irisDF, "Sepal_Width", 12)$counts), T)
 
   # Test when there are zero counts
-  df <- as.DataFrame(sqlContext, data.frame(x = c(1,2,3,4,100)))
+  df <- as.DataFrame(sqlContext, data.frame(x = c(1, 2, 3, 4, 100)))
   expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
 })
 unlink(parquetPath)
