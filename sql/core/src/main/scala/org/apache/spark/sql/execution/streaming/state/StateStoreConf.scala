@@ -35,4 +35,3 @@ private[state] object StateStoreConf {
   val empty = new StateStoreConf()
 }
 
-
