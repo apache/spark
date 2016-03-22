@@ -453,7 +453,8 @@ object HiveTypeCoercion {
           case None => a
         }
 
-      case m @ CreateMap(children) if !isSameType(m.keys) || !isSameType(m.values) =>
+      case m @ CreateMap(children) if m.keys.length == m.values.length &&
+        (!isSameType(m.keys) || !isSameType(m.values)) =>
         val newKeys = if (isSameType(m.keys)) {
           m.keys
         } else {

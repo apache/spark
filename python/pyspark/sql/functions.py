@@ -1498,16 +1498,17 @@ def translate(srcCol, matching, replace):
 
 # ---------------------- Collection functions ------------------------------
 
+@ignore_unicode_prefix
 @since(2.0)
-def map(*cols):
+def create_map(*cols):
     """Creates a new map column.
 
     :param cols: list of column names (string) or list of :class:`Column` expressions that grouped
         as key-value pairs, e.g. (key1, value1, key2, value2, ...).
 
-    >>> df.select(map('name', 'age').alias("map")).collect()
+    >>> df.select(create_map('name', 'age').alias("map")).collect()
     [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
-    >>> df.select(map([df.name, df.age]).alias("map")).collect()
+    >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
     [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
     """
     sc = SparkContext._active_spark_context
