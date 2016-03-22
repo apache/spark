@@ -403,6 +403,7 @@ class Analyzer(
         } else {
           val expanded = a.aggregateExpressions.flatMap {
             case s: Star => s.expand(a.child, resolver)
+            case u @ UnresolvedAlias(_: Star, _) => expandStarExpression(u.child, a.child) :: Nil
             case o if containsStar(o :: Nil) => expandStarExpression(o, a.child) :: Nil
             case o => o :: Nil
           }.map(_.asInstanceOf[NamedExpression])

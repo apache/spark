@@ -547,10 +547,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("Group By Ordinal: spark.sql.groupByOrdinal=false") {
     withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
       // If spark.sql.groupByOrdinal=false, ignore the position number.
-      // intercept[AnalysisException] {
-      //   sql("SELECT a, sum(b) FROM testData2 GROUP BY 1")
-      // }
-      // // '*' is not allowed to use in the select list when users specify ordinals in group by
+      intercept[AnalysisException] {
+        sql("SELECT a, sum(b) FROM testData2 GROUP BY 1")
+      }
+      // '*' is not allowed to use in the select list when users specify ordinals in group by
       checkAnswer(
         sql("SELECT * FROM testData2 GROUP BY a, b, 1"),
         sql("SELECT * FROM testData2 GROUP BY a, b"))
