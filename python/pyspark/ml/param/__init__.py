@@ -213,7 +213,8 @@ class TypeConverters(object):
         if type(value) == bool:
             return value
         else:
-            raise TypeError("Boolean Param requires value of type bool. Found type %s" % value)
+            raise TypeError("Boolean Param requires value of type bool. Found type %s."
+                            % type(value).__name__)
 
 
 class Params(Identifiable):
