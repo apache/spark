@@ -30,6 +30,7 @@ import net.razorvine.pickle._
 
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.SerDeUtil
+import org.apache.spark.ml.param.Params
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.evaluation.RankingMetrics
@@ -62,6 +63,11 @@ import org.apache.spark.util.Utils
  * The Java stubs necessary for the Python mllib bindings. It is called by Py4J on the Python side.
  */
 private[python] class PythonMLLibAPI extends Serializable {
+
+  /**
+   * Check whether a Java Object is instance of [[Params]] or not.
+   */
+  def isInstanceOfParams(obj: AnyRef): Boolean = obj.isInstanceOf[Params]
 
   /**
    * Loads and serializes labeled points saved with `RDD#saveAsTextFile`.
