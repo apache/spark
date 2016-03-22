@@ -36,8 +36,8 @@ class ContinuousQueryException private[sql](
     val message: String,
     val cause: Throwable,
     val startOffset: Option[Offset] = None,
-    val endOffset: Option[Offset] = None
-  ) extends Exception(message, cause) with Serializable {
+    val endOffset: Option[Offset] = None)
+  extends Exception(message, cause) {
 
   /** Time when the exception occurred */
   val time: Long = System.currentTimeMillis

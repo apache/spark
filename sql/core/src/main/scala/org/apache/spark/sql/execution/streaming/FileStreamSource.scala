@@ -132,4 +132,6 @@ class FileStreamSource(
   }
 
   override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
+
+  override def toString: String = s"FileSink[$path]"
 }

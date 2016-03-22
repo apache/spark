@@ -42,9 +42,9 @@ class FileStreamSink(
     path: String,
     fileFormat: FileFormat) extends Sink with Logging {
 
-  val basePath = new Path(path)
-  val logPath = new Path(basePath, FileStreamSink.metadataDir)
-  val fileLog = new HDFSMetadataLog[Seq[String]](sqlContext, logPath.toUri.toString)
+  private val basePath = new Path(path)
+  private val logPath = new Path(basePath, FileStreamSink.metadataDir)
+  private val fileLog = new HDFSMetadataLog[Seq[String]](sqlContext, logPath.toUri.toString)
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (fileLog.get(batchId).isDefined) {
@@ -76,4 +76,6 @@ class FileStreamSink(
         .filterNot(_.getName.startsWith("_"))
         .map(_.toUri.toString)
   }
+
+  override def toString: String = s"FileSink[$path]"
 }
