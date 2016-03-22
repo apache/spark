@@ -95,7 +95,7 @@ class JavaWrapper(Params):
         """
         return _jvm().org.apache.spark.ml.param.ParamMap()
 
-    def _transfer_stage_to_java(self):
+    def _to_java(self):
         """
         Transfer this instance's Params to the wrapped Java object, and return the Java object.
         Used for ML persistence.
@@ -108,7 +108,7 @@ class JavaWrapper(Params):
         return self._java_obj
 
     @staticmethod
-    def _transfer_stage_from_java(java_stage):
+    def _from_java(java_stage):
         """
         Given a Java object, create and return a Python wrapper of it.
         Used for ML persistence.
@@ -134,8 +134,8 @@ class JavaWrapper(Params):
             py_stage._java_obj = java_stage
             py_stage._resetUid(java_stage.uid())
             py_stage._transfer_params_from_java()
-        elif hasattr(py_type, "_transfer_stage_from_java"):
-            py_stage = py_type._transfer_stage_from_java(java_stage)
+        elif hasattr(py_type, "_from_java"):
+            py_stage = py_type._from_java(java_stage)
         else:
             raise NotImplementedError("This Java stage cannot be loaded into Python currently: %r"
                                       % stage_name)

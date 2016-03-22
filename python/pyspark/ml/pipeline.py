@@ -34,8 +34,7 @@ class PipelineMLWriter(JavaMLWriter):
     """
     Private Pipeline utility class that can save ML instances through their Scala implementation.
 
-    We can currently use JavaMLWriter, rather than MLWriter, since Pipeline implements
-    _transfer_stage_to_java.
+    We can currently use JavaMLWriter, rather than MLWriter, since Pipeline implements _to_java.
     """
 
 
@@ -44,8 +43,7 @@ class PipelineMLReader(JavaMLReader):
     """
     Private utility class that can load Pipeline instances through their Scala implementation.
 
-    We can currently use JavaMLReader, rather than MLReader, since Pipeline implements
-    _transfer_stage_from_java.
+    We can currently use JavaMLReader, rather than MLReader, since Pipeline implements _from_java.
     """
 
 
@@ -171,7 +169,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         return PipelineMLReader(cls)
 
     @classmethod
-    def _transfer_stage_from_java(cls, java_stage):
+    def _from_java(cls, java_stage):
         """
         Given a Java Pipeline, create and return a Python wrapper of it.
         Used for ML persistence.
@@ -179,14 +177,14 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         # Create a new instance of this stage.
         py_stage = cls()
         # Load information from java_stage to the instance.
-        py_stages = [JavaWrapper._transfer_stage_from_java(s) for s in java_stage.getStages()]
+        py_stages = [JavaWrapper._from_java(s) for s in java_stage.getStages()]
         py_stage.setStages(py_stages)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
-    def _transfer_stage_to_java(self):
+    def _to_java(self):
         """
-        Transfer this instance to a Java object.  Used for ML persistence.
+        Transfer this instance to a Java Pipeline.  Used for ML persistence.
 
         :return: Java object equivalent to this instance.
         """
@@ -195,7 +193,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         cls = SparkContext._jvm.org.apache.spark.ml.PipelineStage
         java_stages = gateway.new_array(cls, len(self.getStages()))
         for idx, stage in enumerate(self.getStages()):
-            java_stages[idx] = stage._transfer_stage_to_java()
+            java_stages[idx] = stage._to_java()
 
         _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.Pipeline", self.uid)
         _java_obj.setStages(java_stages)
@@ -210,7 +208,7 @@ class PipelineModelMLWriter(JavaMLWriter):
     implementation.
 
     We can (currently) use JavaMLWriter, rather than MLWriter, since PipelineModel implements
-    _transfer_stage_to_java.
+    _to_java.
     """
 
 
@@ -220,7 +218,7 @@ class PipelineModelMLReader(JavaMLReader):
     Private utility class that can load PipelineModel instances through their Scala implementation.
 
     We can currently use JavaMLReader, rather than MLReader, since PipelineModel implements
-    _transfer_stage_from_java.
+    _from_java.
     """
 
 
@@ -271,21 +269,21 @@ class PipelineModel(Model, MLReadable, MLWritable):
         return PipelineModelMLReader(cls)
 
     @classmethod
-    def _transfer_stage_from_java(cls, java_stage):
+    def _from_java(cls, java_stage):
         """
         Given a Java PipelineModel, create and return a Python wrapper of it.
         Used for ML persistence.
         """
         # Load information from java_stage to the instance.
-        py_stages = [JavaWrapper._transfer_stage_from_java(s) for s in java_stage.stages()]
+        py_stages = [JavaWrapper._from_java(s) for s in java_stage.stages()]
         # Create a new instance of this stage.
         py_stage = cls(py_stages)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
-    def _transfer_stage_to_java(self):
+    def _to_java(self):
         """
-        Transfer this instance to a Java object.  Used for ML persistence.
+        Transfer this instance to a Java PipelineModel.  Used for ML persistence.
 
         :return: Java object equivalent to this instance.
         """
@@ -294,7 +292,7 @@ class PipelineModel(Model, MLReadable, MLWritable):
         cls = SparkContext._jvm.org.apache.spark.ml.Transformer
         java_stages = gateway.new_array(cls, len(self.stages))
         for idx, stage in enumerate(self.stages):
-            java_stages[idx] = stage._transfer_stage_to_java()
+            java_stages[idx] = stage._to_java()
 
         _java_obj =\
             JavaWrapper._new_java_obj("org.apache.spark.ml.PipelineModel", self.uid, java_stages)

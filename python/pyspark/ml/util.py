@@ -104,7 +104,7 @@ class JavaMLWriter(MLWriter):
 
     def __init__(self, instance):
         super(JavaMLWriter, self).__init__()
-        _java_obj = instance._transfer_stage_to_java()
+        _java_obj = instance._to_java()
         self._jwrite = _java_obj.write()
 
     def save(self, path):
@@ -188,10 +188,10 @@ class JavaMLReader(MLReader):
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
         java_obj = self._jread.load(path)
-        if not hasattr(self._clazz, "_transfer_stage_from_java"):
+        if not hasattr(self._clazz, "_from_java"):
             raise NotImplementedError("This Java ML type cannot be loaded into Python currently: %r"
                                       % self._clazz)
-        return self._clazz._transfer_stage_from_java(java_obj)
+        return self._clazz._from_java(java_obj)
 
     def context(self, sqlContext):
         """Sets the SQL context to use for loading."""
