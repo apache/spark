@@ -14,6 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import array
+import sys
+if sys.version > '3':
+    basestring = str
+    xrange = range
 
 from abc import ABCMeta
 import copy
@@ -22,7 +27,7 @@ import warnings
 
 from pyspark import since
 from pyspark.ml.util import Identifiable
-from pyspark.mllib.linalg import DenseVector, Vector, _convert_to_vector
+from pyspark.mllib.linalg import DenseVector, Vector
 
 
 __all__ = ['Param', 'Params', 'TypeConverters']
@@ -32,7 +37,7 @@ class Param(object):
     """
     A param with self-contained documentation.
 
-    Note: `expectedType` is deprecated and will be removed in 2.1.0, use typeConverter instead,
+    Note: `expectedType` is deprecated and will be removed in 2.1 Use typeConverter instead,
           as a keyword argument.
 
     .. versionadded:: 1.3.0
@@ -91,21 +96,17 @@ class TypeConverters(object):
 
     @staticmethod
     def _is_integer(value):
-        if TypeConverters._is_numeric(value):
-            value = float(value)
-            return value.is_integer()
-        else:
-            return False
+        return TypeConverters._is_numeric(value) and float(value).is_integer()
 
     @staticmethod
     def _can_convert_to_list(value):
         vtype = type(value)
-        return vtype == list or vtype == np.ndarray or isinstance(value, Vector)
+        return vtype in [list, np.ndarray, tuple, xrange, array.array] or isinstance(value, Vector)
 
     @staticmethod
     def _is_string(value):
         vtype = type(value)
-        return vtype in [str, np.unicode_, np.string_, np.str_] or type(value).__name__ == 'unicode'
+        return isinstance(value, basestring) or vtype in [np.unicode_, np.string_, np.str_]
 
     @staticmethod
     def identity(value):
@@ -121,7 +122,7 @@ class TypeConverters(object):
         """
         if type(value) == list:
             return value
-        elif type(value) == np.ndarray:
+        elif type(value) in [np.ndarray, tuple, xrange, array.array]:
             return list(value)
         elif isinstance(value, Vector):
             return list(value.toArray())
@@ -136,7 +137,7 @@ class TypeConverters(object):
         if TypeConverters._can_convert_to_list(value):
             value = TypeConverters.toList(value)
             if all(map(lambda v: TypeConverters._is_numeric(v), value)):
-                return list(map(lambda v: float(v), value))
+                return [float(v) for v in value]
         raise TypeError("Could not convert %s to list of floats" % value)
 
     @staticmethod
@@ -147,7 +148,7 @@ class TypeConverters(object):
         if TypeConverters._can_convert_to_list(value):
             value = TypeConverters.toList(value)
             if all(map(lambda v: TypeConverters._is_integer(v), value)):
-                return list(map(lambda v: int(v), value))
+                return [int(v) for v in value]
         raise TypeError("Could not convert %s to list of ints" % value)
 
     @staticmethod
@@ -158,7 +159,7 @@ class TypeConverters(object):
         if TypeConverters._can_convert_to_list(value):
             value = TypeConverters.toList(value)
             if all(map(lambda v: TypeConverters._is_string(v), value)):
-                return list(map(lambda v: str(v), value))
+                return [str(v) for v in value]
         raise TypeError("Could not convert %s to list of strings" % value)
 
     @staticmethod
@@ -212,7 +213,7 @@ class TypeConverters(object):
         if type(value) == bool:
             return value
         else:
-            raise TypeError("Could not convert %s to bool" % value)
+            raise TypeError("Boolean Param requires value of type bool. Found type %s" % value)
 
 
 class Params(Identifiable):
@@ -426,7 +427,10 @@ class Params(Identifiable):
         for param, value in kwargs.items():
             p = getattr(self, param)
             if value is not None:
-                value = p.typeConverter(value)
+                try:
+                    value = p.typeConverter(value)
+                except TypeError as e:
+                    raise TypeError('Invalid param value given for param "%s". %s' % (p.name, e))
             self._paramMap[p] = value
         return self
 

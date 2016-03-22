@@ -18,8 +18,11 @@
 """
 Unit tests for Spark ML Python APIs.
 """
-
+import array
 import sys
+if sys.version > '3':
+    xrange = range
+
 try:
     import xmlrunner
 except ImportError:
@@ -126,17 +129,19 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(TypeError, lambda: ElementwiseProduct(scalingVec=["a", "b"]))
 
     def test_list(self):
-        l = [1, 2]
-        for lst_like in [l, np.array(l), DenseVector(l), SparseVector(len(l), range(len(l)), l)]:
+        l = [0, 1]
+        for lst_like in [l, np.array(l), DenseVector(l), SparseVector(len(l), range(len(l)), l),
+                         array.array('l', l), xrange(2), tuple(l)]:
             converted = TypeConverters.toList(lst_like)
             self.assertEqual(type(converted), list)
             self.assertListEqual(converted, l)
 
     def test_list_int(self):
-        for indices in [[1.0, 4.0], np.array([1.0, 4.0]), DenseVector([1.0, 4.0]),
-                        SparseVector(2, {0: 1.0, 1: 4.0})]:
+        for indices in [[1.0, 2.0], np.array([1.0, 2.0]), DenseVector([1.0, 2.0]),
+                        SparseVector(2, {0: 1.0, 1: 2.0}), xrange(1, 3), (1.0, 2.0),
+                        array.array('d', [1.0, 2.0])]:
             vs = VectorSlicer(indices=indices)
-            self.assertListEqual(vs.getIndices(), [1, 4])
+            self.assertListEqual(vs.getIndices(), [1, 2])
             self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
         self.assertRaises(TypeError, lambda: VectorSlicer(indices=["a", "b"]))
 

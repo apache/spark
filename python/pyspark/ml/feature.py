@@ -445,8 +445,7 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
     .. versionadded:: 1.5.0
     """
 
-    scalingVec = Param(Params._dummy(), "scalingVec", "vector for hadamard product, " +
-                       "it must be MLlib Vector type.",
+    scalingVec = Param(Params._dummy(), "scalingVec", "Vector for hadamard product.",
                        typeConverter=TypeConverters.toVector)
 
     @keyword_only
@@ -2533,7 +2532,6 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     .. versionadded:: 2.0.0
     """
 
-    # a placeholder to make it appear in the generated doc
     numTopFeatures = \
         Param(Params._dummy(), "numTopFeatures",
               "Number of features that selector will select, ordered by statistics value " +
@@ -2547,11 +2545,6 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        self.numTopFeatures = \
-            Param(self, "numTopFeatures",
-                  "Number of features that selector will select, ordered by statistics value " +
-                  "descending. If the number of features is < numTopFeatures, then this will " +
-                  "select all features.", TypeConverters.toInt)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
