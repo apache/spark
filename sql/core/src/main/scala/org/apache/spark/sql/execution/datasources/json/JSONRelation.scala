@@ -107,7 +107,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
     val columnNameOfCorruptRecord =
       parsedOptions.columnNameOfCorruptRecord
-      .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
+        .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
     val rows = JacksonParser.parse(
       createBaseRdd(sqlContext, jsonFiles),
       requiredDataSchema,
