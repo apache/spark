@@ -177,10 +177,10 @@ class ParseException(
     val stop: (Int, Int)) extends AnalysisException(message, Some(start._1), Some(start._2)) {
 
   def this(message: String, ctx: ParserRuleContext) = {
-    this(ParseException.cmd(ctx),
+    this(ParseSource.cmd(ctx),
       message,
-      ParseException.position(ctx.getStart),
-      ParseException.position(ctx.getStop))
+      ParseSource.position(ctx.getStart),
+      ParseSource.position(ctx.getStop))
   }
 
   override def getMessage: String = {
@@ -205,7 +205,7 @@ class ParseException(
   }
 }
 
-object ParseException {
+object ParseSource {
   /** Get the command which created the token. */
   def cmd(ctx: ParserRuleContext): Option[String] = {
     cmd(ctx.getStart.getInputStream)

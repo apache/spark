@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.ParseUtils
+import org.apache.spark.sql.catalyst.parser.ParseUtils._
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -43,7 +43,6 @@ import org.apache.spark.util.random.RandomSampler
  */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   import AstBuilder._
-  import ParseUtils._
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
@@ -87,7 +86,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           throw new ParseException("SHOW FUNCTIONS unsupported name", ctx)
       }
     } else if (pattern != null) {
-      ShowFunctions(None, Some(unescapeSQLString(pattern.getText)))
+      ShowFunctions(None, Some(string(pattern)))
     } else {
       ShowFunctions(None, None)
     }
@@ -194,14 +193,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       ctx: InsertIntoContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
-    val partitionKeys = Option(ctx.partitionSpec).toSeq.flatMap {
-      _.partitionVal.asScala.map {
-        pVal =>
-          val name = pVal.identifier.getText
-          val value = Option(pVal.constant).map(c => expression(c).toString)
-          name -> value
-      }
-    }.toMap
+    val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
@@ -209,6 +201,38 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       query,
       ctx.OVERWRITE != null,
       ctx.EXISTS != null)
+  }
+
+  /**
+   * Create a partition specification map.
+   */
+  override def visitPartitionSpec(
+      ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
+    ctx.partitionVal.asScala.map { pVal =>
+      val name = pVal.identifier.getText
+      val value = Option(pVal.constant).map(visitStringConstant)
+      name -> value
+    }.toMap
+  }
+
+  /**
+   * Create a partition specification map without optional values.
+   */
+  protected def visitNonOptionalPartitionSpec(
+      ctx: PartitionSpecContext): Map[String, String] = withOrigin(ctx) {
+    visitPartitionSpec(ctx).mapValues(_.orNull).map(identity)
+  }
+
+  /**
+   * Convert a constant of any type into a string. This is typically used in DDL commands, and its
+   * main purpose is to prevent slight differences due to back to back conversions i.e.:
+   * String -> Literal -> String.
+   */
+  protected def visitStringConstant(ctx: ConstantContext): String = withOrigin(ctx) {
+    ctx match {
+      case s: StringLiteralContext => createString(s)
+      case o => o.getText
+    }
   }
 
   /**
@@ -306,9 +330,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         val attributes = if (colTypeList != null) {
           // Typed return columns.
           createStructType(colTypeList).toAttributes
-        } else if (columnAliasList != null) {
+        } else if (identifierSeq != null) {
           // Untyped return columns.
-          visitColumnAliasList(columnAliasList).map { name =>
+          visitIdentifierSeq(identifierSeq).map { name =>
             AttributeReference(name, StringType, nullable = true)()
           }
         } else {
@@ -318,7 +342,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // Create the transform.
         ScriptTransformation(
           expressions,
-          unescapeSQLString(script.getText),
+          string(script),
           attributes,
           withFilter,
           withScriptIOSchema(inRowFormat, outRowFormat, outRecordReader))
@@ -649,8 +673,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     // Construct attributes.
     val baseAttributes = structType.toAttributes.map(_.withNullability(true))
-    val attributes = if (ctx.columnAliases != null) {
-      val aliases = visitColumnAliases(ctx.columnAliases)
+    val attributes = if (ctx.identifierList != null) {
+      val aliases = visitIdentifierList(ctx.identifierList)
       assert(aliases.size == baseAttributes.size,
         "Number of aliases must match the number of fields in an inline table.", ctx)
       baseAttributes.zip(aliases).map(p => p._1.withName(p._2))
@@ -690,14 +714,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   /**
    * Create a Sequence of Strings for a parenthesis enclosed alias list.
    */
-  override def visitColumnAliases(ctx: ColumnAliasesContext): Seq[String] = withOrigin(ctx) {
-    visitColumnAliasList(ctx.columnAliasList)
+  override def visitIdentifierList(ctx: IdentifierListContext): Seq[String] = withOrigin(ctx) {
+    visitIdentifierSeq(ctx.identifierSeq)
   }
 
   /**
-   * Create a Sequence of Strings for an alias list.
+   * Create a Sequence of Strings for an identifier list.
    */
-  override def visitColumnAliasList(ctx: ColumnAliasListContext): Seq[String] = withOrigin(ctx) {
+  override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
     ctx.identifier.asScala.map(_.getText)
   }
 
@@ -719,7 +743,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an expression from the given context. This method just passes the context on to the
    * vistor and only takes care of typing (We assume that the visitor returns an Expression here).
    */
-  private def expression(ctx: ParserRuleContext): Expression = typedVisit(ctx)
+  protected def expression(ctx: ParserRuleContext): Expression = typedVisit(ctx)
 
   /**
    * Create sequence of expressions from the given sequence of contexts.
@@ -755,8 +779,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val e = expression(ctx.expression)
     if (ctx.identifier != null) {
       Alias(e, ctx.identifier.getText)()
-    } else if (ctx.columnAliases != null) {
-      MultiAlias(e, visitColumnAliases(ctx.columnAliases))
+    } else if (ctx.identifierList != null) {
+      MultiAlias(e, visitIdentifierList(ctx.identifierList))
     } else {
       e
     }
@@ -1175,7 +1199,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * TODO what the added value of this over casting?
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
-    val value = unescapeSQLString(ctx.STRING.getText)
+    val value = string(ctx.STRING)
     ctx.identifier.getText.toUpperCase match {
       case "DATE" =>
         Literal(Date.valueOf(value))
@@ -1273,14 +1297,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a String literal expression. This supports multiple consecutive string literals, these
-   * are concatenated, for example this expression "'hello' 'world'" will be converted into
-   * "helloworld".
+   * Create a String literal expression.
+   */
+  override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
+    Literal(createString(ctx))
+  }
+
+  /**
+   * Create a String from a string literal context. This supports multiple consecutive string
+   * literals, these are concatenated, for example this expression "'hello' 'world'" will be
+   * converted into "helloworld".
    *
    * Special characters can be escaped by using Hive/C-style escaping.
    */
-  override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal(ctx.STRING().asScala.map(s => unescapeSQLString(s.getText)).mkString)
+  private def createString(ctx: StringLiteralContext): String = {
+    ctx.STRING().asScala.map(string).mkString
   }
 
   /**
@@ -1386,7 +1417,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Add the comment to the metadata.
     val builder = new MetadataBuilder
     if (STRING != null) {
-      builder.putString("comment", unescapeSQLString(STRING.getText))
+      builder.putString("comment", string(STRING))
     }
 
     StructField(identifier.getText, typedVisit(dataType), nullable = true, builder.build())
@@ -1418,6 +1449,18 @@ private[sql] object AstBuilder extends Logging {
       throw new ParseException(message, ctx)
     }
   }
+
+  /** Get the command which created the token. */
+  def source(ctx: ParserRuleContext): String = ParseSource.cmd(ctx) match {
+    case Some(sql) => sql
+    case None => ""
+  }
+
+  /** Convert a string token into a string. */
+  def string(token: Token): String = unescapeSQLString(token.getText)
+
+  /** Convert a string node into a string. */
+  def string(node: TerminalNode): String = unescapeSQLString(node.getText)
 
   /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
   implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {

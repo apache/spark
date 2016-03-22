@@ -22,10 +22,10 @@ import org.antlr.v4.runtime.misc.Interval
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.parser.ng.{AbstractSqlParser, AstBuilder}
+import org.apache.spark.sql.catalyst.parser.ng.{AbstractSqlParser, AstBuilder, ParseException}
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.command.{CreateDatabase, CreateFunction, DescribeCommand => _, _}
 import org.apache.spark.sql.execution.datasources._
 
 /**
@@ -40,7 +40,6 @@ object SparkSqlParser extends AbstractSqlParser{
  */
 class SparkSqlAstBuilder extends AstBuilder {
   import AstBuilder._
-  import org.apache.spark.sql.catalyst.parser.ParseUtils._
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -231,20 +230,575 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Convert TableProperties into a key-value map.
+   * Convert table properties into a key-value map.
    */
   override def visitTableProperties(
       ctx: TablePropertiesContext): Map[String, String] = withOrigin(ctx) {
+    visitTablePropertyList(ctx.tablePropertyList)
+  }
+
+  /**
+    * Convert a table property list into a key-value map.
+    */
+  override def visitTablePropertyList(
+      ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
     ctx.tableProperty.asScala.map { property =>
       // A key can either be a String or a collection of dot separated elements. We need to treat
       // these differently.
       val key = if (property.key.STRING != null) {
-        unescapeSQLString(property.key.STRING.getText)
+        string(property.key.STRING)
       } else {
         property.key.getText
       }
-      val value = Option(property.value).map(t => unescapeSQLString(t.getText)).getOrElse("")
+      val value = Option(property.value).map(string).orNull
       key -> value
     }.toMap
+  }
+
+  /**
+   * Create a [[CreateDatabase]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE DATABASE [IF NOT EXISTS] database_name [COMMENT database_comment]
+   *    [LOCATION path] [WITH DBPROPERTIES (key1=val1, key2=val2, ...)]
+   * }}}
+   */
+  override def visitCreateDatabase(ctx: CreateDatabaseContext): LogicalPlan = withOrigin(ctx) {
+    CreateDatabase(
+      ctx.identifier.getText,
+      ctx.EXISTS != null,
+      Option(ctx.location).map(string),
+      Option(ctx.comment).map(string),
+      Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))(
+      source(ctx))
+  }
+
+  /**
+   * Create a [[CreateFunction]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE [TEMPORARY] FUNCTION [db_name.]function_name AS class_name
+   *    [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
+   * }}}
+   */
+  override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val resources = ctx.resource.asScala.map { resource =>
+      val resourceType = resource.identifier.getText.toLowerCase
+      resourceType match {
+        case "jar" | "file" | "archive" =>
+          resourceType -> string(resource.STRING)
+        case other =>
+          throw new ParseException(s"Resource Type '$resourceType' is not supported.", ctx)
+      }
+    }
+
+    CreateFunction(
+      ctx.qualifiedName.getText,
+      string(ctx.className),
+      resources,
+      ctx.TEMPORARY != null)(
+      source(ctx))
+  }
+
+  /**
+   * Create a [[AlterTableRename]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 RENAME TO table2;
+   * }}}
+   */
+  override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRename(
+      visitTableIdentifier(ctx.from),
+      visitTableIdentifier(ctx.to))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableSetProperties]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table SET TBLPROPERTIES ('comment' = new_comment);
+   * }}}
+   */
+  override def visitSetTableProperties(
+      ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableSetProperties(
+      visitTableIdentifier(ctx.tableIdentifier),
+      visitTablePropertyList(ctx.tablePropertyList))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableUnsetProperties]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table UNSET TBLPROPERTIES IF EXISTS ('comment', 'key');
+   * }}}
+   */
+  override def visitUnsetTableProperties(
+      ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableUnsetProperties(
+      visitTableIdentifier(ctx.tableIdentifier),
+      visitTablePropertyList(ctx.tablePropertyList),
+      ctx.EXISTS != null)(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableSerDeProperties]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION spec] SET SERDE serde_name [WITH SERDEPROPERTIES props];
+   *   ALTER TABLE table [PARTITION spec] SET SERDEPROPERTIES serde_properties;
+   * }}}
+   */
+  override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableSerDeProperties(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.STRING).map(string),
+      Option(ctx.tablePropertyList).map(visitTablePropertyList),
+      // TODO a partition spec is allowed to have optional values. This is currently violated.
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableStorageProperties]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table CLUSTERED BY (col, ...) [SORTED BY (col, ...)] INTO n BUCKETS;
+   * }}}
+   */
+  override def visitBucketTable(ctx: BucketTableContext): LogicalPlan = withOrigin(ctx) {
+    val sortColumnNames = Option(ctx.orderedIdentifierList).toSeq
+      .flatMap(_.orderedIdentifier.asScala)
+      .map(_.identifier.getText)
+
+    AlterTableStorageProperties(
+      visitTableIdentifier(ctx.tableIdentifier),
+      BucketSpec(
+        ctx.INTEGER_VALUE.getText.toInt,
+        visitIdentifierList(ctx.identifierList),
+        sortColumnNames))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableNotClustered]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table NOT CLUSTERED;
+   * }}}
+   */
+  override def visitUnclusterTable(ctx: UnclusterTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableNotClustered(visitTableIdentifier(ctx.tableIdentifier))(source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableNotSorted]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table NOT SORTED;
+   * }}}
+   */
+  override def visitUnsortTable(ctx: UnsortTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableNotSorted(visitTableIdentifier(ctx.tableIdentifier))(source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableSkewed]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table SKEWED BY (col1, col2)
+   *   ON ((col1_value, col2_value) [, (col1_value, col2_value), ...])
+   *   [STORED AS DIRECTORIES];
+   * }}}
+   */
+  override def visitSkewTable(ctx: SkewTableContext): LogicalPlan = withOrigin(ctx) {
+    val skewedValues = if (ctx.constantList != null) {
+      Seq(visitConstantList(ctx.constantList))
+    } else {
+      visitNestedConstantList(ctx.nestedConstantList)
+    }
+
+    AlterTableSkewed(
+      visitTableIdentifier(ctx.tableIdentifier),
+      visitIdentifierList(ctx.identifierList),
+      skewedValues,
+      ctx.DIRECTORIES != null)(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableNotSorted]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table NOT SKEWED;
+   * }}}
+   */
+  override def visitUnskewTable(ctx: UnskewTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableNotSkewed(visitTableIdentifier(ctx.tableIdentifier))(source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableNotStoredAsDirs]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table NOT STORED AS DIRECTORIES
+   * }}}
+   */
+  override def visitUnstoreTable(ctx: UnstoreTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableNotStoredAsDirs(visitTableIdentifier(ctx.tableIdentifier))(source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableNotStoredAsDirs]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table SET SKEWED LOCATION (col1="loc1" [, (col2, col3)="loc2", ...] );
+   * }}}
+   */
+  override def visitSetTableSkewLocations(
+      ctx: SetTableSkewLocationsContext): LogicalPlan = withOrigin(ctx) {
+    val skewedMap = ctx.skewedLocationList.skewedLocation.asScala.flatMap {
+      slCtx =>
+        val location = string(slCtx.STRING)
+        if (slCtx.constant != null) {
+          Seq(visitStringConstant(slCtx.constant) -> location)
+        } else {
+          // TODO this is similar to what was in the original implementation. However this does not
+          // make to much sense to me since we should be storing a tuple of values (not column
+          // names) for which we want a dedicated storage location.
+          visitConstantList(slCtx.constantList).map(_ -> location)
+        }
+    }.toMap
+
+    AlterTableSkewedLocation(
+      visitTableIdentifier(ctx.tableIdentifier),
+      skewedMap)(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableAddPartition]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
+   * }}}
+   */
+  override def visitAddTablePartition(
+      ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+    // Create partition spec to location mapping.
+    val specsAndLocs = ctx.partitionSpecLocation.asScala.map {
+      splCtx =>
+        val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
+        val location = Option(splCtx.STRING).map(string)
+        spec -> location
+    }
+    AlterTableAddPartition(
+      visitTableIdentifier(ctx.tableIdentifier),
+      specsAndLocs,
+      ctx.EXISTS != null)(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableExchangePartition]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 EXCHANGE PARTITION spec WITH TABLE table2;
+   * }}}
+   */
+  override def visitExchangeTablePartition(
+      ctx: ExchangeTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableExchangePartition(
+      visitTableIdentifier(ctx.from),
+      visitTableIdentifier(ctx.to),
+      visitNonOptionalPartitionSpec(ctx.partitionSpec))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableRenamePartition]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table PARTITION spec1 RENAME TO PARTITION spec2;
+   * }}}
+   */
+  override def visitRenameTablePartition(
+      ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRenamePartition(
+      visitTableIdentifier(ctx.tableIdentifier),
+      visitNonOptionalPartitionSpec(ctx.from),
+      visitNonOptionalPartitionSpec(ctx.to))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableDropPartition]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
+   * }}}
+   */
+  override def visitDropTablePartitions(
+      ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableDropPartition(
+      visitTableIdentifier(ctx.tableIdentifier),
+      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
+      ctx.EXISTS != null,
+      ctx.PURGE != null)(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableArchivePartition]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table ARCHIVE PARTITION spec;
+   * }}}
+   */
+  override def visitArchiveTablePartition(
+      ctx: ArchiveTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableArchivePartition(
+      visitTableIdentifier(ctx.tableIdentifier),
+      visitNonOptionalPartitionSpec(ctx.partitionSpec))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableUnarchivePartition]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table UNARCHIVE PARTITION spec;
+   * }}}
+   */
+  override def visitUnarchiveTablePartition(
+      ctx: UnarchiveTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableUnarchivePartition(
+      visitTableIdentifier(ctx.tableIdentifier),
+      visitNonOptionalPartitionSpec(ctx.partitionSpec))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableSetFileFormat]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION spec] SET FILEFORMAT file_format;
+   * }}}
+   */
+  override def visitSetTableFileFormat(
+      ctx: SetTableFileFormatContext): LogicalPlan = withOrigin(ctx) {
+    // TODO improve this! It can't be both!
+    val (fileFormat, genericFormat) = ctx.fileFormat match {
+      case s: GenericFileFormatContext =>
+        (Seq.empty[String], Option(visitGenericFileFormat(s)))
+      case s: TableFileFormatContext =>
+        (visitTableFileFormat(s), None)
+    }
+    AlterTableSetFileFormat(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
+      fileFormat,
+      genericFormat)(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableSetLocation]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION spec] SET LOCATION "loc";
+   * }}}
+   */
+  override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableSetLocation(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
+      string(ctx.STRING))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableTouch]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table TOUCH [PARTITION spec];
+   * }}}
+   */
+  override def visitTouchTable(ctx: TouchTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableTouch(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableCompact]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION spec] COMPACT 'compaction_type';
+   * }}}
+   */
+  override def visitCompactTable(ctx: CompactTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableCompact(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
+      string(ctx.STRING))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableMerge]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION spec] CONCATENATE;
+   * }}}
+   */
+  override def visitConcatenateTable(ctx: ConcatenateTableContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableMerge(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableChangeCol]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE tableIdentifier [PARTITION spec]
+   *    CHANGE [COLUMN] col_old_name col_new_name column_type [COMMENT col_comment]
+   *    [FIRST|AFTER column_name] [CASCADE|RESTRICT];
+   * }}}
+   */
+  override def visitChangeColumn(ctx: ChangeColumnContext): LogicalPlan = withOrigin(ctx) {
+    val col = visitColType(ctx.colType())
+    val comment = if (col.metadata.contains("comment")) {
+      Option(col.metadata.getString("comment"))
+    } else {
+      None
+    }
+
+    AlterTableChangeCol(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
+      ctx.oldName.getText,
+      // We could also pass in a struct field - seems easier.
+      col.name,
+      col.dataType,
+      comment,
+      Option(ctx.after).map(_.getText),
+      // Note that Restrict and Cascade are mutually exclusive.
+      ctx.RESTRICT != null,
+      ctx.CASCADE != null)(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableAddCol]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE tableIdentifier [PARTITION spec]
+   *    ADD COLUMNS (name type [COMMENT comment], ...) [CASCADE|RESTRICT]
+   * }}}
+   */
+  override def visitAddColumns(ctx: AddColumnsContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableAddCol(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
+      createStructType(ctx.colTypeList),
+      // Note that Restrict and Cascade are mutually exclusive.
+      ctx.RESTRICT != null,
+      ctx.CASCADE != null)(
+      source(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableReplaceCol]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE tableIdentifier [PARTITION spec]
+   *    REPLACE COLUMNS (name type [COMMENT comment], ...) [CASCADE|RESTRICT]
+   * }}}
+   */
+  override def visitReplaceColumns(ctx: ReplaceColumnsContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableReplaceCol(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
+      createStructType(ctx.colTypeList),
+      // Note that Restrict and Cascade are mutually exclusive.
+      ctx.RESTRICT != null,
+      ctx.CASCADE != null)(
+      source(ctx))
+  }
+
+  /**
+   * Convert a nested constants list into a sequence of string sequences.
+   */
+  override def visitNestedConstantList(
+      ctx: NestedConstantListContext): Seq[Seq[String]] = withOrigin(ctx) {
+    ctx.constantList.asScala.map(visitConstantList)
+  }
+
+  /**
+   * Convert a constants list into a String sequence.
+   */
+  override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
+    ctx.constant.asScala.map(visitStringConstant)
+  }
+
+  /**
+   * Create a FileFormat. Currently only a sequence of Strings is returned, this is to maintain
+   * compatibility with the current parser and command classes. This method should return a case
+   * class in the future.
+   *
+   * The returned sequence contains the following items:
+   * 1. inFormat
+   * 2. outFormat
+   * 3. serdeClass
+   * 4. inDriver (optional)
+   * 5. outDriver (optional)
+   */
+  override def visitTableFileFormat(ctx: TableFileFormatContext): Seq[String] = withOrigin(ctx) {
+    import ctx._
+    val elements = Seq(inFmt, outFmt, serdeCls) ++ Option(inDriver).toSeq ++ Option(outDriver).toSeq
+    elements.map(string)
+  }
+
+  /**
+   * Create a string containing a generic file format. This should return a proper class, but we
+   * return a string in order to maintain compatibility with the current command classes.
+   */
+  override def visitGenericFileFormat(ctx: GenericFileFormatContext): String = withOrigin(ctx) {
+    ctx.identifier.getText
   }
 }
