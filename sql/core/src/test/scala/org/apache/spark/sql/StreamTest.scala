@@ -80,7 +80,7 @@ trait StreamTest extends QueryTest with Timeouts {
   }
 
   implicit class RichSource(s: Source) {
-    def toDF(): DataFrame = Dataset.newDataFrame(sqlContext, StreamingRelation(s))
+    def toDF(): DataFrame = Dataset.ofRows(sqlContext, StreamingRelation(s))
 
     def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingRelation(s))
   }
