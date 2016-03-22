@@ -44,6 +44,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1, 1, 1)
   }
 
+  test("range") {
+    assert(sqlContext.range(10).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10, 1, 2).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10, 1, 2).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+  }
+
   test("SPARK-12404: Datatype Helper Serializability") {
     val ds = sparkContext.parallelize((
       new Timestamp(0),
