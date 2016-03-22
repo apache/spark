@@ -318,16 +318,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("fault tolerance") {
-    def assertBatch(batch1: Option[Batch], batch2: Option[Batch]): Unit = {
-      (batch1, batch2) match {
-        case (Some(b1), Some(b2)) =>
-          assert(b1.end === b2.end)
-          assert(b1.data.as[String].collect() === b2.data.as[String].collect())
-        case (None, None) =>
-        case _ => fail(s"batch ($batch1) is not equal to batch ($batch2)")
-      }
-    }
-
     val src = Utils.createTempDir("streaming.src")
     val tmp = Utils.createTempDir("streaming.tmp")
 
@@ -344,14 +334,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       AddTextFileData(textSource, "drop7\nkeep8\nkeep9", src, tmp),
       CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
     )
-
-    val textSource2 = createFileStreamSource("text", src.getCanonicalPath)
-    assert(textSource2.currentOffset === textSource.currentOffset)
-    assertBatch(textSource2.getNextBatch(None), textSource.getNextBatch(None))
-    for (f <- 0L to textSource.currentOffset.offset) {
-      val offset = LongOffset(f)
-      assertBatch(textSource2.getNextBatch(Some(offset)), textSource.getNextBatch(Some(offset)))
-    }
 
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)

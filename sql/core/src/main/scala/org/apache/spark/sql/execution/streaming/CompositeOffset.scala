@@ -52,6 +52,18 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
     case i if i == 0 => 0
     case i if i > 0 => 1
   }
+
+  /**
+   * Unpacks an offset into [[StreamProgress]] by associating each offset with the order list of
+   * sources.
+   *
+   * This method is typically used to associate a serialized offset with actual sources (which
+   * cannot be serialized).
+   */
+  def toStreamProgress(sources: Seq[Source]): StreamProgress = {
+    assert(sources.size == offsets.size)
+    new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
+  }
 }
 
 object CompositeOffset {
