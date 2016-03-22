@@ -725,7 +725,7 @@ class SQLContext private[sql](
    * @group dataset
    */
   @Experimental
-  def range(end: Long): Dataset[Long] = range(0, end)
+  def range(end: Long): Dataset[java.lang.Long] = range(0, end)
 
   /**
    * :: Experimental ::
@@ -736,7 +736,7 @@ class SQLContext private[sql](
    * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long): Dataset[Long] = {
+  def range(start: Long, end: Long): Dataset[java.lang.Long] = {
     range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
   }
 
@@ -749,7 +749,7 @@ class SQLContext private[sql](
     * @group dataset
     */
   @Experimental
-  def range(start: Long, end: Long, step: Long): Dataset[Long] = {
+  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, numPartitions = sparkContext.defaultParallelism)
   }
 
@@ -763,8 +763,8 @@ class SQLContext private[sql](
    * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Long] = {
-    new Dataset(this, Range(start, end, step, numPartitions), implicits.newLongEncoder)
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
+    new Dataset(this, Range(start, end, step, numPartitions), Encoders.LONG)
   }
 
   /**
