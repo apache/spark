@@ -109,7 +109,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
   override def toString: String = s"$name($left, $right)"
 
@@ -525,11 +525,45 @@ case class Atan2(left: Expression, right: Expression)
 
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
-  }
-}
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
 
+  override def dataType: DataType = (left.dataType, right.dataType) match {
+    case (dt: DecimalType, ByteType | ShortType | IntegerType) => dt
+    case _ => DoubleType
+  }
+
+  protected override def nullSafeEval(input1: Any, input2: Any): Any =
+    (left.dataType, right.dataType) match {
+      case (dt: DecimalType, ByteType) =>
+        input1.asInstanceOf[Decimal].pow(input2.asInstanceOf[Byte])
+      case (dt: DecimalType, ShortType) =>
+        input1.asInstanceOf[Decimal].pow(input2.asInstanceOf[Short])
+      case (dt: DecimalType, IntegerType) =>
+        input1.asInstanceOf[Decimal].pow(input2.asInstanceOf[Int])
+      case (dt: DecimalType, FloatType) =>
+        math.pow(input1.asInstanceOf[Decimal].toDouble, input2.asInstanceOf[Float])
+      case (dt: DecimalType, DoubleType) =>
+        math.pow(input1.asInstanceOf[Decimal].toDouble, input2.asInstanceOf[Double])
+      case (dt1: DecimalType, dt2: DecimalType) =>
+        math.pow(input1.asInstanceOf[Decimal].toDouble, input2.asInstanceOf[Decimal].toDouble)
+      case _ =>
+        math.pow(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
+    }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String =
+    (left.dataType, right.dataType) match {
+      case (dt: DecimalType, ByteType | ShortType | IntegerType) =>
+        defineCodeGen(ctx, ev, (c1, c2) => s"$c1.pow($c2)")
+      case (dt1: DecimalType, dt2: DecimalType) =>
+        defineCodeGen(ctx, ev, (c1, c2) =>
+          s"java.lang.Math.pow($c1.toDouble(),$c2.toDouble())")
+      case (dt: DecimalType, _) =>
+        defineCodeGen(ctx, ev, (c1, c2) =>
+          s"java.lang.Math.pow($c1.toDouble(),$c2)")
+      case _ =>
+        defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
+    }
+}
 
 /**
  * Bitwise unsigned left shift.

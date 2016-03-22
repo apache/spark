@@ -318,6 +318,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
+  def pow(n: Int): Decimal = Decimal(toJavaBigDecimal.pow(n, MATH_CONTEXT))
+
   def abs: Decimal = if (this.compare(Decimal.ZERO) < 0) this.unary_- else this
 
   def floor: Decimal = if (scale == 0) this else {

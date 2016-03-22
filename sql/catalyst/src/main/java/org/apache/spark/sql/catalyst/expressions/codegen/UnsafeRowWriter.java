@@ -170,6 +170,7 @@ public class UnsafeRowWriter {
   }
 
   public void write(int ordinal, Decimal input, int precision, int scale) {
+    input = input.clone();
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       // make sure Decimal object has the same scale as DecimalType
       if (input.changePrecision(precision, scale)) {
