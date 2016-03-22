@@ -572,6 +572,24 @@ private[spark] class MesosClusterScheduler(
     }
   }
 
+  /**
+   * Returns current master info. This is updated at every registration.
+   *
+   * @return the master info
+   */
+  def getSchedulerMasterInfo(): Option[MasterInfo] = {
+    this.masterInfo
+  }
+
+  /**
+   * Returns the Cluster Scheduler's fwId
+   *
+   *  @return the framework id
+   */
+  def getSchedulerFrameworkId(): Option[String] = {
+    Option(this.frameworkId)
+  }
+
   override def offerRescinded(driver: SchedulerDriver, offerId: OfferID): Unit = {}
   override def disconnected(driver: SchedulerDriver): Unit = {}
   override def reregistered(driver: SchedulerDriver, masterInfo: MasterInfo): Unit = {

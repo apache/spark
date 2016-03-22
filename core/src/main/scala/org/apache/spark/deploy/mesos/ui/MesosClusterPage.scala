@@ -17,22 +17,29 @@
 
 package org.apache.spark.deploy.mesos.ui
 
+import java.io.PrintWriter
+import java.nio.{ByteBuffer, ByteOrder}
 import javax.servlet.http.HttpServletRequest
 
+import scala.io.Source
 import scala.xml.Node
 
 import org.apache.mesos.Protos.TaskStatus
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonDSL._
 
-import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.{MesosClusterDispatcher, MesosDriverDescription}
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterSubmissionState
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = parent.scheduler.getSchedulerState()
+    val sandboxHeader = Seq("Sandbox")
     val queuedHeaders = Seq("Driver ID", "Submit Date", "Main Class", "Driver Resources")
     val driverHeaders = queuedHeaders ++
-      Seq("Start Date", "Mesos Slave ID", "State")
+      Seq("Start Date", "Mesos Slave ID", "State") ++ sandboxHeader
     val retryHeaders = Seq("Driver ID", "Submit Date", "Description") ++
       Seq("Last Failed Status", "Next Retry Time", "Attempt Count")
     val queuedTable = UIUtils.listingTable(queuedHeaders, queuedRow, state.queuedDrivers)
@@ -68,6 +75,25 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
 
   private def driverRow(state: MesosClusterSubmissionState): Seq[Node] = {
     val id = state.driverDescription.submissionId
+    val masterInfo = parent.scheduler.getSchedulerMasterInfo()
+    val schedulerFwId = parent.scheduler.getSchedulerFrameworkId()
+    val sandboxCol = if (masterInfo.isDefined && schedulerFwId.isDefined) {
+
+      val masterUri = masterInfo.map{info => s"http://${getIp4(info.getIp)}:${info.getPort}"}.get
+      val directory = getTaskDirectory(masterUri, id, state.slaveId.getValue)
+
+      if(directory.isDefined) {
+        val sandBoxUri = s"$masterUri" +
+          s"/#/slaves/${state.slaveId.getValue}" +
+          s"/browse?path=${directory.get}"
+          <a href={sandBoxUri}>Sandbox</a>
+      } else {
+        " " // just 1 space - could use &nbsp;
+      }
+    } else {
+     " " // just 1 space - could use &nbsp;
+    }
+
     <tr>
       <td><a href={s"driver?id=$id"}>{id}</a></td>
       <td>{state.driverDescription.submissionDate}</td>
@@ -76,6 +102,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
       <td>{state.startDate}</td>
       <td>{state.slaveId.getValue}</td>
       <td>{stateString(state.mesosTaskStatus)}</td>
+      <td>{sandboxCol}</td>
     </tr>
   }
 
@@ -114,5 +141,59 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
       sb.append(s", Time: ${s.getTimestamp}")
     }
     sb.toString()
+  }
+
+  private def getIp4(ip: Int): String = {
+    val buffer = ByteBuffer.allocate(4)
+    buffer.putInt(ip)
+    // we need to check about that because protocolbuf changes the order
+    // which by mesos api is considered to be network order (big endian).
+    val result = if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
+      buffer.array.toList.reverse
+    } else {
+      buffer.array.toList
+    }
+    result.map{byte => byte & 0xFF}.mkString(".")
+  }
+
+  private def getListFromJson(value: JValue): List[Map[String, Any]] = {
+    value.values.asInstanceOf[List[Map[String, Any]]]
+  }
+
+  private def getTaskDirectory(masterUri: String, driverFwId: String, slaveId: String):
+      Option[String] = {
+
+    val stateSummaryValues = getListFromJson(parse(Source.fromURL(s"$masterUri" +
+      "/state-summary").mkString) \ "slaves")
+
+    // get slave ip:port from state-summary in the form slave(1)@ip:port
+    val slaveUriArray = stateSummaryValues.filter(x => x.get("id").get == slaveId)
+      .map{x => x.get("pid").get}.head.toString.split("@")
+
+    if(slaveUriArray.length !=2) {
+      return None
+    }
+
+    val slavesStateJson = Source.fromURL("http://" + slaveUriArray(1) + "/slave(1)/state").mkString
+
+    val completedFrameworksValues = getListFromJson(parse(slavesStateJson) \ "completed_frameworks")
+
+    val frameworksValues = getListFromJson(parse(slavesStateJson) \ "frameworks")
+
+    val clusterSchedulerId = parent.scheduler.getSchedulerState().frameworkId
+
+    val clusterSchedulerInfo = (completedFrameworksValues ++ frameworksValues)
+      .filter(x => x.get("id").get == clusterSchedulerId)
+
+    val executorsInfoAll = clusterSchedulerInfo.
+      flatMap{x => x.get("completed_executors").get.asInstanceOf[List[Map[String, Any]]]} ++
+    clusterSchedulerInfo.
+      flatMap{x => x.get("executors").get.asInstanceOf[List[Map[String, Any]]]}
+
+    val executorsInfoDriver = executorsInfoAll.filter{x => x.get("id").get.toString == driverFwId}
+    if (executorsInfoDriver.size != 1) {
+      return None
+    }
+    executorsInfoDriver.head.get("directory").asInstanceOf[Option[String]]
   }
 }
