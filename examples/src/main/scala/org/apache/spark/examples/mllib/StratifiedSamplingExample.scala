@@ -19,7 +19,6 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.util.Utils
 
 object StratifiedSamplingExample {
 
@@ -35,12 +34,11 @@ object StratifiedSamplingExample {
 
     // specify the exact fraction desired from each key
     val fractions = Map(1 -> 0.1, 2 -> 0.6, 3 -> 0.3)
-    val seed = Utils.random.nextLong
 
     // Get an approximate sample from each stratum
-    val approxSample = data.sampleByKey(withReplacement = false, fractions = fractions, seed)
+    val approxSample = data.sampleByKey(withReplacement = false, fractions = fractions)
     // Get an exact sample from each stratum
-    val exactSample = data.sampleByKeyExact(withReplacement = false, fractions = fractions, seed)
+    val exactSample = data.sampleByKeyExact(withReplacement = false, fractions = fractions)
     // $example off$
 
     println("approxSample size is " + approxSample.collect().size.toString)
