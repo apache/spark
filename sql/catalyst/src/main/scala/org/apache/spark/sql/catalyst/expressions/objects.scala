@@ -146,6 +146,15 @@ case class Invoke(
     case _ => identity[String] _
   }
 
+  lazy val adapter = (dataType, method) match {
+    case (ObjectType(cls), "java.lang.Object") if cls.getName == "java.math.BigDecimal" =>
+      // When we want to return a java.lang.BigDecimal by calling a method with returning type as
+      // java.lang.Object. It is possibly the returned object is java.lang.BigDecimal or Decimal.
+      (s: String) =>
+        s"(Decimal.apply($s)).toJavaBigDecimal()"
+    case _ => identity[String] _
+  }
+
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val javaType = ctx.javaType(dataType)
     val obj = targetObject.gen(ctx)
@@ -160,7 +169,8 @@ case class Invoke(
       ""
     }
 
-    val value = unboxer(s"${obj.value}.$functionName($argString)")
+    val unboxedValue = unboxer(s"${obj.value}.$functionName($argString)")
+    val value = adapter(unboxedValue)
 
     s"""
       ${obj.code}
