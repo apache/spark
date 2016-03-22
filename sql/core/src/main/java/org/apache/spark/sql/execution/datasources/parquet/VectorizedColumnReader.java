@@ -214,7 +214,7 @@ public class VectorizedColumnReader {
             readLongBatch(rowId, num, column);
             break;
           case INT96:
-            readLongBatch(rowId, num, column);
+            readBinaryBatch(rowId, num, column);
             break;
           case FLOAT:
             readFloatBatch(rowId, num, column);
@@ -247,9 +247,15 @@ public class VectorizedColumnReader {
     switch (descriptor.getType()) {
       case INT32:
       case INT64:
+      case FLOAT:
+      case DOUBLE:
+      case BINARY:
+        column.setDictionary(dictionary);
+        break;
       case INT96:
         if (column.dataType() == DataTypes.TimestampType) {
           for (int i = rowId; i < rowId + num; ++i) {
+            // TODO: Convert dictionary of Binaries to dictionary of Longs
             Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
             column.putLong(i, CatalystRowConverter.binaryToSQLTimestamp(v));
           }
@@ -257,13 +263,6 @@ public class VectorizedColumnReader {
           throw new NotImplementedException();
         }
         break;
-
-      case FLOAT:
-      case DOUBLE:
-      case BINARY:
-        column.setDictionary(dictionary);
-        break;
-
       case FIXED_LEN_BYTE_ARRAY:
         // DecimalType written in the legacy mode
         if (DecimalType.is32BitDecimalType(column.dataType())) {
@@ -322,7 +321,7 @@ public class VectorizedColumnReader {
 
   private void readLongBatch(int rowId, int num, ColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
-    if (column.dataType() == DataTypes.LongType || column.dataType() == DataTypes.TimestampType ||
+    if (column.dataType() == DataTypes.LongType ||
         DecimalType.is64BitDecimalType(column.dataType())) {
       defColumn.readLongs(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
@@ -356,9 +355,19 @@ public class VectorizedColumnReader {
   private void readBinaryBatch(int rowId, int num, ColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
+    VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
     if (column.isArray()) {
-      defColumn.readBinarys(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+      defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
+    } else if (column.dataType() == DataTypes.TimestampType) {
+      for (int i = 0; i < num; i++) {
+        if (defColumn.readInteger() == maxDefLevel) {
+          column.putLong(rowId + i,
+              // Read 12 bytes for INT96
+              CatalystRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
+        } else {
+          column.putNull(rowId + i);
+        }
+      }
     } else {
       throw new NotImplementedException("Unimplemented type: " + column.dataType());
     }
