@@ -54,6 +54,24 @@ class StopWordsRemoverSuite
     testStopWordsRemover(remover, dataSet)
   }
 
+  test("StopWordsRemover with particular stop words list") {
+    val stopWords = Array("test", "a", "an", "the")
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered")
+      .setStopWords(stopWords)
+    val dataSet = sqlContext.createDataFrame(Seq(
+      (Seq("test", "test"), Seq()),
+      (Seq("a", "b", "c", "d"), Seq("b", "c")),
+      (Seq("a", "the", "an"), Seq()),
+      (Seq("A", "The", "AN"), Seq()),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    )).toDF("raw", "expected")
+
+    testStopWordsRemover(remover, dataSet)
+  }
+
   test("StopWordsRemover case sensitive") {
     val remover = new StopWordsRemover()
       .setInputCol("raw")
@@ -68,11 +86,11 @@ class StopWordsRemoverSuite
   }
 
   test("StopWordsRemover with ignored words") {
-    val ignoredWords = Array("a")
+    val stopWords = StopWordsRemover.loadStopWords("english").toSet -- Set("a")
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")
-      .setIgnoredWords(ignoredWords)
+      .setStopWords(stopWords.toArray)
     val dataSet = sqlContext.createDataFrame(Seq(
       (Seq("python", "scala", "a"), Seq("python", "scala", "a")),
       (Seq("Python", "Scala", "swift"), Seq("Python", "Scala", "swift"))
@@ -82,11 +100,11 @@ class StopWordsRemoverSuite
   }
 
   test("StopWordsRemover with additional words") {
-    val additionalWords = Array("python", "scala")
+    val stopWords = StopWordsRemover.loadStopWords("english").toSet ++ Set("python", "scala")
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")
-      .setAdditionalWords(additionalWords)
+      .setStopWords(stopWords.toArray)
     val dataSet = sqlContext.createDataFrame(Seq(
       (Seq("python", "scala", "a"), Seq()),
       (Seq("Python", "Scala", "swift"), Seq("swift"))

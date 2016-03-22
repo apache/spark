@@ -33,18 +33,14 @@ private[spark] object StopWords {
 
   /** Read stop words list from resources */
   def readStopWords(language: String): Array[String] = {
+    require(supportedLanguages.contains(language), s"$language is not in language list")
     val is = getClass.getResourceAsStream(s"/org/apache/spark/ml/feature/stopwords/$language.txt")
     scala.io.Source.fromInputStream(is).getLines().toArray
   }
 
   /** Supported languages list must be lowercase */
-  val supportedLanguages = Array("danish", "dutch", "english", "finnish", "french", "german",
+  private val supportedLanguages = Set("danish", "dutch", "english", "finnish", "french", "german",
     "hungarian", "italian", "norwegian", "portuguese", "russian", "spanish", "swedish", "turkish")
-
-  /** Languages and stopwords map */
-  val languageMap = supportedLanguages.map{
-    language => language -> readStopWords(language)
-  }.toMap
 }
 
 /**
@@ -67,16 +63,13 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * the stop words set to be filtered out
-   * Default: [[StopWords.languageMap("english")]]
+   * Default: [[Array.empty]]
    * @group param
    */
   val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
 
   /** @group setParam */
-  def setStopWords(value: Array[String]): this.type = {
-    set(stopWords, value)
-    set(language, "unknown")
-  }
+  def setStopWords(value: Array[String]): this.type = set(stopWords, value)
 
   /** @group getParam */
   def getStopWords: Array[String] = $(stopWords)
@@ -96,70 +89,39 @@ class StopWordsRemover(override val uid: String)
   def getCaseSensitive: Boolean = $(caseSensitive)
 
   /**
-    * the language of stop words
-    * Default: "english"
-    * @group param
-    */
+   * the language of stop words
+   * Supported languages: Danish, Dutch, English, Finnish, French, German, Hungarian,
+   * Italian, Norwegian, Portuguese, Russian, Spanish, Swedish, Turkish
+   * Default: "English"
+   * @group param
+   */
   val language: Param[String] = new Param[String](this, "language", "stopwords language")
 
   /** @group setParam */
-  def setLanguage(value: String): this.type = {
-    val lang = value.toLowerCase
-    require(StopWords.languageMap.contains(lang), s"$lang is not in language list")
-    set(language, lang)
-    set(stopWords, StopWords.languageMap(lang))
-  }
+  def setLanguage(value: String): this.type = set(language, value.toLowerCase)
 
   /** @group getParam */
   def getLanguage: String = $(language)
 
-  /**
-    * the ignored stop words set to be ignored out
-    * Default: [[Array.empty]]
-    * @group param
-    */
-  val ignoredWords: StringArrayParam = new StringArrayParam(this, "ignoredWords",
-    "the ignored stop words set to be ignored out")
-
-  /** @group setParam */
-  def setIgnoredWords(value: Array[String]): this.type = set(ignoredWords, value)
-
-  /** @group getParam */
-  def getIgnoredWords: Array[String] = $(ignoredWords)
-
-  /**
-    * the additional stop words set to be filtered out
-    * Default: [[Array.empty]]
-    * @group param
-    */
-  val additionalWords: StringArrayParam = new StringArrayParam(this, "additionalWords",
-    "the additional stop words set to be filtered out")
-
-  /** @group setParam */
-  def setAdditionalWords(value: Array[String]): this.type = set(additionalWords, value)
-
-  /** @group getParam */
-  def getAdditionalWords: Array[String] = $(additionalWords)
-
-  setDefault(stopWords -> StopWords.languageMap("english"),
+  setDefault(stopWords -> Array.empty[String],
     language -> "english",
-    ignoredWords -> Array.empty[String],
-    additionalWords -> Array.empty[String],
     caseSensitive -> false)
 
   override def transform(dataset: DataFrame): DataFrame = {
+    val stopWordsSet = if ($(stopWords).isEmpty) {
+      StopWords.readStopWords($(language)).toSet
+    } else {
+      $(stopWords).toSet
+    }
+
     val outputSchema = transformSchema(dataset.schema)
     val t = if ($(caseSensitive)) {
-      val stopWordsSet = ($(stopWords) ++ $(additionalWords)).toSet -- $(ignoredWords).toSet
       udf { terms: Seq[String] =>
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
       val toLower = (s: String) => if (s != null) s.toLowerCase else s
-      val lowerStopWords = {
-        ($(stopWords) ++ $(additionalWords))
-          .map(toLower(_)).toSet -- $(ignoredWords).map(toLower(_)).toSet
-      }
+      val lowerStopWords = stopWordsSet.map(toLower(_)).toSet
       udf { terms: Seq[String] =>
         terms.filter(s => !lowerStopWords.contains(toLower(s)))
       }
@@ -185,4 +147,11 @@ object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
 
   @Since("1.6.0")
   override def load(path: String): StopWordsRemover = super.load(path)
+
+  /**
+   * Stop words for the language
+   * Supported languages: Danish, Dutch, English, Finnish, French, German, Hungarian,
+   * Italian, Norwegian, Portuguese, Russian, Spanish, Swedish, Turkish
+   */
+  def loadStopWords(language: String): Array[String] = StopWords.readStopWords(language.toLowerCase)
 }
