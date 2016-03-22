@@ -340,7 +340,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       assert(StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf).version == 0)
 
       // Verify that you can remove the store and still reload and use it
-      StateStore.remove(storeId)
+      StateStore.unload(storeId)
       assert(!StateStore.isLoaded(storeId))
 
       val store1 = StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf)

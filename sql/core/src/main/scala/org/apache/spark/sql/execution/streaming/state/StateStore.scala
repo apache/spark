@@ -141,15 +141,17 @@ private[state] object StateStore extends Logging {
     storeProvider.getStore(version)
   }
 
-  def remove(storeId: StateStoreId): Unit = loadedProviders.synchronized {
+  /** Unload a state store provider */
+  def unload(storeId: StateStoreId): Unit = loadedProviders.synchronized {
     loadedProviders.remove(storeId)
   }
 
+  /** Whether a state store provider is loaded or not */
   def isLoaded(storeId: StateStoreId): Boolean = loadedProviders.synchronized {
     loadedProviders.contains(storeId)
   }
 
-  /** Unload and stop all state store provider */
+  /** Unload and stop all state store providers */
   def stop(): Unit = loadedProviders.synchronized {
     loadedProviders.clear()
     _coordRef = null
@@ -186,7 +188,7 @@ private[state] object StateStore extends Logging {
         if (verifyIfStoreInstanceActive(id)) {
           provider.doMaintenance()
         } else {
-          remove(id)
+          unload(id)
           logInfo(s"Unloaded $provider")
         }
       } catch {
