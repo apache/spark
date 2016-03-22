@@ -44,7 +44,7 @@ class StopWordsRemoverSuite
       .setOutputCol("filtered")
     val dataSet = sqlContext.createDataFrame(Seq(
       (Seq("test", "test"), Seq("test", "test")),
-      (Seq("a", "b", "c", "d"), Seq("b", "c", "d")),
+      (Seq("a", "b", "c", "d"), Seq("b", "c")),
       (Seq("a", "the", "an"), Seq()),
       (Seq("A", "The", "AN"), Seq()),
       (Seq(null), Seq(null)),
