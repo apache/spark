@@ -569,6 +569,9 @@ object MimaExcludes {
             if missing.map(_.fullName).sameElements(Seq("org.apache.spark.Logging")) => false
           case _ => true
         }
+      ) ++ Seq(
+        // [SPARK-13990] Automatically pick serializer when caching RDDs
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.NettyBlockTransferService.uploadBlock")
       )
     case v if v.startsWith("1.6") =>
       Seq(
