@@ -36,6 +36,17 @@ abstract class SQLImplicits {
 
   protected def _sqlContext: SQLContext
 
+  /**
+   * Converts $"col name" into an [[Column]].
+   *
+   * @since 2.0.0
+   */
+  implicit class StringToColumn(val sc: StringContext) {
+    def $(args: Any*): ColumnName = {
+      new ColumnName(sc.s(args: _*))
+    }
+  }
+
   /** @since 1.6.0 */
   implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
 
