@@ -130,7 +130,6 @@ class PruneFiltersSuite extends PlanTest {
   test("Nondeterministic predicate is not pruned") {
     val originalQuery = testRelation.where(Rand(10) > 5).select('a).where(Rand(10) > 5).analyze
     val optimized = Optimize.execute(originalQuery)
-    val correctAnswer = testRelation.where(Rand(10) > 5).where(Rand(10) > 5).select('a).analyze
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery)
   }
 }
