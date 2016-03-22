@@ -139,6 +139,14 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }
   }
 
+  test("upload metrics.properties to distributed cache in client mode") {
+    testMetricsConf(true)
+  }
+
+  test("upload metrics.properties to distributed cache in cluster mode") {
+    testMetricsConf(false)
+  }
+
   private def testBasicYarnApp(clientMode: Boolean): Unit = {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
@@ -187,12 +195,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   private def testUseClassPathFirst(clientMode: Boolean): Unit = {
     // Create a jar file that contains a different version of "test.resource".
+    val resource = "test.resource"
     val originalJar = TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
     val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
-      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
+      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath(), resource),
       extraClassPath = Seq(originalJar.getPath()),
       extraJars = Seq("local:" + userJar.getPath()),
       extraConf = Map(
@@ -200,6 +209,17 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         "spark.executor.userClassPathFirst" -> "true"))
     checkResult(finalState, driverResult, "OVERRIDDEN")
     checkResult(finalState, executorResult, "OVERRIDDEN")
+  }
+
+  private def testMetricsConf(clientMode: Boolean): Unit = {
+    // Create a jar file that contains a different version of "test.resource".
+    val resource = "metrics.properties"
+    val driverResult = File.createTempFile("driver", null, tempDir)
+    val executorResult = File.createTempFile("executor", null, tempDir)
+    val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
+      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath(), resource))
+    checkResult(finalState, driverResult, METRICS_CONF)
+    checkResult(finalState, executorResult, METRICS_CONF)
   }
 
 }
@@ -294,36 +314,36 @@ private object YarnClasspathTest extends Logging {
   }
 
   def main(args: Array[String]): Unit = {
-    if (args.length != 2) {
+    if (args.length != 3) {
       error(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: YarnClasspathTest [driver result file] [executor result file]
+        |Usage: YarnClasspathTest [driver result file] [executor result file] [resource name]
         """.stripMargin)
       // scalastyle:on println
     }
 
-    readResource(args(0))
+    readResource(args(0), args(2))
     val sc = new SparkContext(new SparkConf())
     try {
-      sc.parallelize(Seq(1)).foreach { x => readResource(args(1)) }
+      sc.parallelize(Seq(1)).foreach { x => readResource(args(1), args(2)) }
     } finally {
       sc.stop()
     }
     System.exit(exitCode)
   }
 
-  private def readResource(resultPath: String): Unit = {
+  private def readResource(resultPath: String, resourceName: String): Unit = {
     var result = "failure"
     try {
       val ccl = Thread.currentThread().getContextClassLoader()
-      val resource = ccl.getResourceAsStream("test.resource")
+      val resource = ccl.getResourceAsStream(resourceName)
       val bytes = ByteStreams.toByteArray(resource)
       result = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     } catch {
       case t: Throwable =>
-        error(s"loading test.resource to $resultPath", t)
+        error(s"loading $resourceName to $resultPath", t)
         // set the exit code if not yet set
         exitCode = 2
     } finally {
