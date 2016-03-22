@@ -417,7 +417,7 @@ private[spark] object UIUtils extends Logging {
    * attempts to embed links outside Spark UI, or other tags like <script> will cause in the whole
    * description to be treated as plain text.
    */
-  def makeDescription(desc: String, basePathUri: String): NodeSeq = {
+  def makeDescription(desc: String, basePathUri: String, plainText: Boolean = false): NodeSeq = {
     import scala.language.postfixOps
 
     // If the description can be parsed as HTML and has only relative links, then render
@@ -445,22 +445,37 @@ private[spark] object UIUtils extends Logging {
           "Links in job descriptions must be root-relative:\n" + allLinks.mkString("\n\t"))
       }
 
-      // Prepend the relative links with basePathUri
-      val rule = new RewriteRule() {
-        override def transform(n: Node): Seq[Node] = {
-          n match {
-            case e: Elem if e \ "@href" nonEmpty =>
-              val relativePath = e.attribute("href").get.toString
-              val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
-              e % Attribute(null, "href", fullUri, Null)
-            case _ => n
+
+      val rule = if (plainText) {
+        // Remove all tags, retaining only their texts
+        new RewriteRule() {
+          override def transform(n: Node): Seq[Node] = {
+            n match {
+              case e: Elem if e.child isEmpty => Text(e.text)
+              case e: Elem if e.child nonEmpty => Text(e.child.flatMap(transform).text)
+              case _ => n
+            }
+          }
+        }
+      }
+      else {
+        // Prepend the relative links with basePathUri
+        new RewriteRule() {
+          override def transform(n: Node): Seq[Node] = {
+            n match {
+              case e: Elem if e \ "@href" nonEmpty =>
+                val relativePath = e.attribute("href").get.toString
+                val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
+                  e % Attribute(null, "href", fullUri, Null)
+              case _ => n
+            }
           }
         }
       }
       new RuleTransformer(rule).transform(xml)
     } catch {
       case NonFatal(e) =>
-        <span class="description-input">{desc}</span>
+        if (plainText) Text(desc) else <span class="description-input">{desc}</span>
     }
   }
 
