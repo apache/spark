@@ -974,9 +974,7 @@ class TaskInstance(Base):
         self.pool = pool or task.pool
         self.test_mode = test_mode
         self.force = force
-        session = settings.Session()
-        self.refresh_from_db(session)
-        session.commit()
+        self.refresh_from_db()
         self.clear_xcom_data()
         self.job_id = job_id
         iso = datetime.now().isoformat()
