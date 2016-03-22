@@ -477,9 +477,9 @@ If you need a reference to the proper location to put log files in the YARN so t
 - The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named `localtest.txt` into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
 - The `--jars` option allows the `SparkContext.addJar` function to work if you are using it with local files and running in `cluster` mode. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.
 
-# Running in a secure YARN cluster
+# Running in a Secure Cluster
 
-As covered in [security](security.html), Kerberos is used in a secure YARN cluster to
+As covered in [security](security.html), Kerberos is used in a secure Hadoop cluster to
 authenticate principals associated with services and clients. This allows clients to
 make requests of these authenticated services; the services to grant rights
 to the authenticated principals.
@@ -518,8 +518,8 @@ the [Spark Property](#Spark Properties) `spark.yarn.keytab` for the specifics.
 
 ## Launching your application with Apache Oozie
 
-Apache Oozie can launch Spark.
-In a secure cluster, such an application will need the relevant tokens to access the cluster's
+Apache Oozie can launch Spark applications as part of a workflow.
+In a secure cluster, the launched application will need the relevant tokens to access the cluster's
 services. If Spark is launched with a keytab, this is automatic.
 However, if Spark is to be launched without a keytab, the responsibility for setting up security
 must be handed over to Oozie.
@@ -527,24 +527,28 @@ must be handed over to Oozie.
 The details of configuring Oozie for secure clusters and obtaining
 credentials for a job can be found on the [Oozie web site](http://oozie.apache.org/)
 in the "Authentication" section of the specific release's documentation.
- 
-For Spark applications, the Oozie workflow must be set up for Oozie to request all tokens, including:
+
+For Spark applications, the Oozie workflow must be set up for Oozie to request all tokens which
+the application needs, including:
 
 - The YARN resource manager.
 - The local HDFS filesystem.
-- Any remote HDFS filesystems.
-- Hive.
-- HBase.
+- Any remote HDFS filesystems used as a source or destination of I/O.
+- Hive —if used.
+- HBase —if used.
 - The YARN timeline server, if the application interacts with this.
 
-The Spark configuration must be set to *not* request Hive or HBase tokens:
+To avoid Spark attempting —and then failing— to obtain Hive, HBase and remote HDFS tokens,
+the Spark configuration must be set to disable token collection for the services.
+
+The Spark configuration must include the lines:
 
 ```
 spark.yarn.security.tokens.hive.enabled   false
 spark.yarn.security.tokens.hbase.enabled  false
 ```
 
-Finally, the property `spark.yarn.access.namenodes` must be left unset.
+The configuration option `spark.yarn.access.namenodes` must be unset.
 
 ## Troubleshooting Kerberos
 
@@ -552,14 +556,16 @@ Debugging Hadoop/Kerberos problems can be "difficult". One useful technique is t
 enable extra logging of Kerberos operations in Hadoop by setting the `HADOOP_JAAS_DEBUG`
 environment variable.
 
-`export HADOOP_JAAS_DEBUG=true`
+```bash
+export HADOOP_JAAS_DEBUG=true
+```
 
 The JDK classes can be configured to enable extra logging of their Kerberos and
 SPNEGO/REST authentication via the system properties `sun.security.krb5.debug`
 and `sun.security.spnego.debug=true`
 
 ```
- -Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
+-Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
 ```
 
 All these options can be enabled in the Application Master:
@@ -571,4 +577,3 @@ spark.yarn.am.extraJavaOptions -Dsun.security.krb5.debug=true -Dsun.security.spn
 
 Finally, if the log level for `org.apache.spark.deploy.yarn.Client` is set to `DEBUG`, the log
 will include a list of all tokens obtained, and their expiry details
-
