@@ -220,10 +220,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
           originalTypes[i] != OriginalType.INT_8 && originalTypes[i] != OriginalType.INT_16) {
         throw new IOException("Unsupported type: " + t);
       }
-      if (originalTypes[i] == OriginalType.DECIMAL &&
-          primitiveType.getDecimalMetadata().getPrecision() > Decimal.MAX_LONG_DIGITS()) {
-        throw new IOException("Decimal with high precision is not supported.");
-      }
       if (primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT96) {
         throw new IOException("Int96 not supported.");
       }

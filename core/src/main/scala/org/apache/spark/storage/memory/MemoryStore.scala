@@ -23,6 +23,7 @@ import java.util.LinkedHashMap
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import com.google.common.io.ByteStreams
 
@@ -35,11 +36,17 @@ import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.{ByteArrayChunkOutputStream, ChunkedByteBuffer}
 
-private sealed trait MemoryEntry {
+private sealed trait MemoryEntry[T] {
   def size: Long
+  def classTag: ClassTag[T]
 }
-private case class DeserializedMemoryEntry(value: Array[Any], size: Long) extends MemoryEntry
-private case class SerializedMemoryEntry(buffer: ChunkedByteBuffer) extends MemoryEntry {
+private case class DeserializedMemoryEntry[T](
+    value: Array[T],
+    size: Long,
+    classTag: ClassTag[T]) extends MemoryEntry[T]
+private case class SerializedMemoryEntry[T](
+    buffer: ChunkedByteBuffer,
+    classTag: ClassTag[T]) extends MemoryEntry[T] {
   def size: Long = buffer.size
 }
 
@@ -56,7 +63,7 @@ private[spark] class MemoryStore(
   // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
   // acquiring or releasing unroll memory, must be synchronized on `memoryManager`!
 
-  private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
+  private val entries = new LinkedHashMap[BlockId, MemoryEntry[_]](32, 0.75f, true)
 
   // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)
   // All accesses of this map are assumed to have manually synchronized on `memoryManager`
@@ -102,13 +109,16 @@ private[spark] class MemoryStore(
    *
    * @return true if the put() succeeded, false otherwise.
    */
-  def putBytes(blockId: BlockId, size: Long, _bytes: () => ChunkedByteBuffer): Boolean = {
+  def putBytes[T: ClassTag](
+      blockId: BlockId,
+      size: Long,
+      _bytes: () => ChunkedByteBuffer): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     if (memoryManager.acquireStorageMemory(blockId, size)) {
       // We acquired enough memory for the block, so go ahead and put it
       val bytes = _bytes()
       assert(bytes.size == size)
-      val entry = new SerializedMemoryEntry(bytes)
+      val entry = new SerializedMemoryEntry[T](bytes, implicitly[ClassTag[T]])
       entries.synchronized {
         entries.put(blockId, entry)
       }
@@ -136,9 +146,10 @@ private[spark] class MemoryStore(
    *         iterator or call `close()` on it in order to free the storage memory consumed by the
    *         partially-unrolled block.
    */
-  private[storage] def putIteratorAsValues(
+  private[storage] def putIteratorAsValues[T](
       blockId: BlockId,
-      values: Iterator[Any]): Either[PartiallyUnrolledIterator, Long] = {
+      values: Iterator[T],
+      classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
 
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
 
@@ -157,7 +168,7 @@ private[spark] class MemoryStore(
     // Keep track of unroll memory used by this particular block / putIterator() operation
     var unrollMemoryUsedByThisBlock = 0L
     // Underlying vector for unrolling the block
-    var vector = new SizeTrackingVector[Any]
+    var vector = new SizeTrackingVector[T]()(classTag)
 
     // Request enough memory to begin unrolling
     keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold)
@@ -192,7 +203,8 @@ private[spark] class MemoryStore(
       // We successfully unrolled the entirety of this block
       val arrayValues = vector.toArray
       vector = null
-      val entry = new DeserializedMemoryEntry(arrayValues, SizeEstimator.estimate(arrayValues))
+      val entry =
+        new DeserializedMemoryEntry[T](arrayValues, SizeEstimator.estimate(arrayValues), classTag)
       val size = entry.size
       def transferUnrollToStorage(amount: Long): Unit = {
         // Synchronize so that transfer is atomic
@@ -260,9 +272,10 @@ private[spark] class MemoryStore(
    *         iterator or call `discard()` on it in order to free the storage memory consumed by the
    *         partially-unrolled block.
    */
-  private[storage] def putIteratorAsBytes(
+  private[storage] def putIteratorAsBytes[T](
       blockId: BlockId,
-      values: Iterator[Any]): Either[PartiallySerializedBlock, Long] = {
+      values: Iterator[T],
+      classTag: ClassTag[T]): Either[PartiallySerializedBlock[T], Long] = {
 
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
 
@@ -277,7 +290,7 @@ private[spark] class MemoryStore(
     val byteArrayChunkOutputStream = new ByteArrayChunkOutputStream(initialMemoryThreshold.toInt)
     redirectableStream.setOutputStream(byteArrayChunkOutputStream)
     val serializationStream: SerializationStream = {
-      val ser = blockManager.defaultSerializer.newInstance()
+      val ser = blockManager.serializerManager.getSerializer(classTag).newInstance()
       ser.serializeStream(blockManager.wrapForCompression(blockId, redirectableStream))
     }
 
@@ -304,7 +317,7 @@ private[spark] class MemoryStore(
 
     // Unroll this block safely, checking whether we have exceeded our threshold
     while (values.hasNext && keepUnrolling) {
-      serializationStream.writeObject(values.next())
+      serializationStream.writeObject(values.next())(classTag)
       reserveAdditionalMemoryIfNecessary()
     }
 
@@ -314,8 +327,8 @@ private[spark] class MemoryStore(
     }
 
     if (keepUnrolling) {
-      val entry = SerializedMemoryEntry(
-        new ChunkedByteBuffer(byteArrayChunkOutputStream.toArrays.map(ByteBuffer.wrap)))
+      val entry = SerializedMemoryEntry[T](
+        new ChunkedByteBuffer(byteArrayChunkOutputStream.toArrays.map(ByteBuffer.wrap)), classTag)
       // Synchronize so that transfer is atomic
       memoryManager.synchronized {
         releaseUnrollMemoryForThisTask(unrollMemoryUsedByThisBlock)
@@ -340,7 +353,8 @@ private[spark] class MemoryStore(
           redirectableStream,
           unrollMemoryUsedByThisBlock,
           new ChunkedByteBuffer(byteArrayChunkOutputStream.toArrays.map(ByteBuffer.wrap)),
-          values))
+          values,
+          classTag))
     }
   }
 
@@ -348,19 +362,21 @@ private[spark] class MemoryStore(
     val entry = entries.synchronized { entries.get(blockId) }
     entry match {
       case null => None
-      case e: DeserializedMemoryEntry =>
+      case e: DeserializedMemoryEntry[_] =>
         throw new IllegalArgumentException("should only call getBytes on serialized blocks")
-      case SerializedMemoryEntry(bytes) => Some(bytes)
+      case SerializedMemoryEntry(bytes, _) => Some(bytes)
     }
   }
 
-  def getValues(blockId: BlockId): Option[Iterator[Any]] = {
+  def getValues(blockId: BlockId): Option[Iterator[_]] = {
     val entry = entries.synchronized { entries.get(blockId) }
     entry match {
       case null => None
-      case e: SerializedMemoryEntry =>
+      case e: SerializedMemoryEntry[_] =>
         throw new IllegalArgumentException("should only call getValues on deserialized blocks")
-      case DeserializedMemoryEntry(values, _) => Some(values.iterator)
+      case DeserializedMemoryEntry(values, _, _) =>
+        val x = Some(values)
+        x.map(_.iterator)
     }
   }
 
@@ -433,6 +449,24 @@ private[spark] class MemoryStore(
         }
       }
 
+      def dropBlock[T](blockId: BlockId, entry: MemoryEntry[T]): Unit = {
+        val data = entry match {
+          case DeserializedMemoryEntry(values, _, _) => Left(values)
+          case SerializedMemoryEntry(buffer, _) => Right(buffer)
+        }
+        val newEffectiveStorageLevel =
+          blockManager.dropFromMemory(blockId, () => data)(entry.classTag)
+        if (newEffectiveStorageLevel.isValid) {
+          // The block is still present in at least one store, so release the lock
+          // but don't delete the block info
+          blockManager.releaseLock(blockId)
+        } else {
+          // The block isn't present in any store, so delete the block info so that the
+          // block can be stored again
+          blockManager.blockInfoManager.removeBlock(blockId)
+        }
+      }
+
       if (freedMemory >= space) {
         logInfo(s"${selectedBlocks.size} blocks selected for dropping")
         for (blockId <- selectedBlocks) {
@@ -441,20 +475,7 @@ private[spark] class MemoryStore(
           // blocks and removing entries. However the check is still here for
           // future safety.
           if (entry != null) {
-            val data = entry match {
-              case DeserializedMemoryEntry(values, _) => Left(values)
-              case SerializedMemoryEntry(buffer) => Right(buffer)
-            }
-            val newEffectiveStorageLevel = blockManager.dropFromMemory(blockId, () => data)
-            if (newEffectiveStorageLevel.isValid) {
-              // The block is still present in at least one store, so release the lock
-              // but don't delete the block info
-              blockManager.releaseLock(blockId)
-            } else {
-              // The block isn't present in any store, so delete the block info so that the
-              // block can be stored again
-              blockManager.blockInfoManager.removeBlock(blockId)
-            }
+            dropBlock(blockId, entry)
           }
         }
         freedMemory
@@ -571,16 +592,16 @@ private[spark] class MemoryStore(
  * @param rest         the rest of the original iterator passed to
  *                     [[MemoryStore.putIteratorAsValues()]].
  */
-private[storage] class PartiallyUnrolledIterator(
+private[storage] class PartiallyUnrolledIterator[T](
     memoryStore: MemoryStore,
     unrollMemory: Long,
-    unrolled: Iterator[Any],
-    rest: Iterator[Any])
-  extends Iterator[Any] {
+    unrolled: Iterator[T],
+    rest: Iterator[T])
+  extends Iterator[T] {
 
   private[this] var unrolledIteratorIsConsumed: Boolean = false
-  private[this] var iter: Iterator[Any] = {
-    val completionIterator = CompletionIterator[Any, Iterator[Any]](unrolled, {
+  private[this] var iter: Iterator[T] = {
+    val completionIterator = CompletionIterator[T, Iterator[T]](unrolled, {
       unrolledIteratorIsConsumed = true
       memoryStore.releaseUnrollMemoryForThisTask(unrollMemory)
     })
@@ -588,7 +609,7 @@ private[storage] class PartiallyUnrolledIterator(
   }
 
   override def hasNext: Boolean = iter.hasNext
-  override def next(): Any = iter.next()
+  override def next(): T = iter.next()
 
   /**
    * Called to dispose of this iterator and free its memory.
@@ -627,8 +648,9 @@ private class RedirectableOutputStream extends OutputStream {
  * @param unrolled a byte buffer containing the partially-serialized values.
  * @param rest         the rest of the original iterator passed to
  *                     [[MemoryStore.putIteratorAsValues()]].
+ * @param classTag the [[ClassTag]] for the block.
  */
-private[storage] class PartiallySerializedBlock(
+private[storage] class PartiallySerializedBlock[T](
     memoryStore: MemoryStore,
     blockManager: BlockManager,
     blockId: BlockId,
@@ -636,7 +658,8 @@ private[storage] class PartiallySerializedBlock(
     redirectableOutputStream: RedirectableOutputStream,
     unrollMemory: Long,
     unrolled: ChunkedByteBuffer,
-    rest: Iterator[Any]) {
+    rest: Iterator[T],
+    classTag: ClassTag[T]) {
 
   /**
    * Called to dispose of this block and free its memory.
@@ -657,7 +680,7 @@ private[storage] class PartiallySerializedBlock(
     ByteStreams.copy(unrolled.toInputStream(), os)
     redirectableOutputStream.setOutputStream(os)
     while (rest.hasNext) {
-      serializationStream.writeObject(rest.next())
+      serializationStream.writeObject(rest.next())(classTag)
     }
     serializationStream.close()
   }
@@ -669,11 +692,11 @@ private[storage] class PartiallySerializedBlock(
    * If the caller does not plan to fully consume the resulting iterator then they must call
    * `close()` on it to free its resources.
    */
-  def valuesIterator: PartiallyUnrolledIterator = {
+  def valuesIterator: PartiallyUnrolledIterator[T] = {
     new PartiallyUnrolledIterator(
       memoryStore,
       unrollMemory,
-      unrolled = blockManager.dataDeserialize(blockId, unrolled),
+      unrolled = blockManager.dataDeserialize(blockId, unrolled)(classTag),
       rest = rest)
   }
 }
