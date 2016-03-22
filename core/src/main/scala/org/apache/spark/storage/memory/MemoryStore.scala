@@ -206,8 +206,12 @@ private[spark] class MemoryStore(
       }
       val size = entry.size
       def transferUnrollToStorage(amount: Long): Unit = {
-        memoryManager.synchronized {
-          unrollMemoryMap(currentTaskAttemptId()) -= amount
+        if (amount > 0) {
+          memoryManager.synchronized {
+            val taskAttemptId = currentTaskAttemptId()
+            assert(unrollMemoryMap(taskAttemptId) >= amount)
+            unrollMemoryMap(taskAttemptId) -= amount
+          }
         }
       }
       // Acquire storage memory if necessary to store this block in memory.
