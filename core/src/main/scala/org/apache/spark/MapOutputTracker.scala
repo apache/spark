@@ -443,13 +443,12 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
           statuses = mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
           epochGotten = epoch
       }
-    }
-    // If we got here, we failed to find the serialized locations in the cache, so we pulled
-    // out a snapshot of the locations as "statuses"; let's serialize and return that
-    val bytes = MapOutputTracker.serializeMapStatuses(statuses)
-    logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, bytes.length))
-    // Add them into the table only if the epoch hasn't changed while we were working
-    epochLock.synchronized {
+      
+      // If we got here, we failed to find the serialized locations in the cache, so we pulled
+      // out a snapshot of the locations as "statuses"; let's serialize and return that
+      val bytes = MapOutputTracker.serializeMapStatuses(statuses)
+      logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, bytes.length))
+      // Add them into the table only if the epoch hasn't changed while we were working
       if (epoch == epochGotten) {
         cachedSerializedStatuses(shuffleId) = bytes
       }
