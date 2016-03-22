@@ -22,7 +22,7 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import scala.collection.JavaConverters._
 import scala.util.Failure
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{PairRDDFunctions, RDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.ui.UIUtils

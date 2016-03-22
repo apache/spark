@@ -25,6 +25,7 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceF
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._

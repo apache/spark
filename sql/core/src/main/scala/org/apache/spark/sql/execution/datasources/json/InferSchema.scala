@@ -40,6 +40,7 @@ private[sql] object InferSchema {
       configOptions: JSONOptions): StructType = {
     require(configOptions.samplingRatio > 0,
       s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
+    val shouldHandleCorruptRecord = configOptions.permissive
     val schemaData = if (configOptions.samplingRatio > 0.99) {
       json
     } else {
@@ -50,21 +51,23 @@ private[sql] object InferSchema {
     val rootType = schemaData.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
-      iter.map { row =>
+      iter.flatMap { row =>
         try {
           Utils.tryWithResource(factory.createParser(row)) { parser =>
             parser.nextToken()
-            inferField(parser, configOptions)
+            Some(inferField(parser, configOptions))
           }
         } catch {
+          case _: JsonParseException if shouldHandleCorruptRecord =>
+            Some(StructType(Seq(StructField(columnNameOfCorruptRecords, StringType))))
           case _: JsonParseException =>
-            StructType(Seq(StructField(columnNameOfCorruptRecords, StringType)))
+            None
         }
       }
     }.treeAggregate[DataType](
       StructType(Seq()))(
-      compatibleRootType(columnNameOfCorruptRecords),
-      compatibleRootType(columnNameOfCorruptRecords))
+      compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord),
+      compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord))
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -194,18 +197,21 @@ private[sql] object InferSchema {
    * Remove top-level ArrayType wrappers and merge the remaining schemas
    */
   private def compatibleRootType(
-      columnNameOfCorruptRecords: String): (DataType, DataType) => DataType = {
+      columnNameOfCorruptRecords: String,
+      shouldHandleCorruptRecord: Boolean): (DataType, DataType) => DataType = {
     // Since we support array of json objects at the top level,
     // we need to check the element type and find the root level data type.
-    case (ArrayType(ty1, _), ty2) => compatibleRootType(columnNameOfCorruptRecords)(ty1, ty2)
-    case (ty1, ArrayType(ty2, _)) => compatibleRootType(columnNameOfCorruptRecords)(ty1, ty2)
+    case (ArrayType(ty1, _), ty2) =>
+      compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord)(ty1, ty2)
+    case (ty1, ArrayType(ty2, _)) =>
+      compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord)(ty1, ty2)
     // If we see any other data type at the root level, we get records that cannot be
     // parsed. So, we use the struct as the data type and add the corrupt field to the schema.
     case (struct: StructType, NullType) => struct
     case (NullType, struct: StructType) => struct
-    case (struct: StructType, o) if !o.isInstanceOf[StructType] =>
+    case (struct: StructType, o) if !o.isInstanceOf[StructType] && shouldHandleCorruptRecord =>
       withCorruptField(struct, columnNameOfCorruptRecords)
-    case (o, struct: StructType) if !o.isInstanceOf[StructType] =>
+    case (o, struct: StructType) if !o.isInstanceOf[StructType] && shouldHandleCorruptRecord =>
       withCorruptField(struct, columnNameOfCorruptRecords)
     // If we get anything else, we call compatibleType.
     // Usually, when we reach here, ty1 and ty2 are two StructTypes.

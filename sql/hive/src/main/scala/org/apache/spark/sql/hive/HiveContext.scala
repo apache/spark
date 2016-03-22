@@ -38,8 +38,9 @@ import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -112,8 +113,6 @@ class HiveContext private[hive](
 
   @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
-
-  protected[sql] override def catalog = sessionState.catalog
 
   // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
   // but the optimizer can't access the SessionState of metadataHive.
@@ -212,6 +211,7 @@ class HiveContext private[hive](
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       sparkConf = sc.conf,
       execJars = Seq(),
+      hadoopConf = sc.hadoopConfiguration,
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
       baseClassLoader = Utils.getContextOrSparkClassLoader)
@@ -241,7 +241,7 @@ class HiveContext private[hive](
 
     // We instantiate a HiveConf here to read in the hive-site.xml file and then pass the options
     // into the isolated client loader
-    val metadataConf = new HiveConf()
+    val metadataConf = new HiveConf(sc.hadoopConfiguration, classOf[HiveConf])
 
     val defaultWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
     logInfo("default warehouse location is " + defaultWarehouseLocation)
@@ -281,6 +281,7 @@ class HiveContext private[hive](
         version = metaVersion,
         sparkConf = sc.conf,
         execJars = jars.toSeq,
+        hadoopConf = sc.hadoopConfiguration,
         config = allConfig,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
@@ -293,6 +294,7 @@ class HiveContext private[hive](
         hiveMetastoreVersion = hiveMetastoreVersion,
         hadoopVersion = VersionInfo.getVersion,
         sparkConf = sc.conf,
+        hadoopConf = sc.hadoopConfiguration,
         config = allConfig,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -322,6 +324,7 @@ class HiveContext private[hive](
         version = metaVersion,
         sparkConf = sc.conf,
         execJars = jars.toSeq,
+        hadoopConf = sc.hadoopConfiguration,
         config = allConfig,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
@@ -348,13 +351,13 @@ class HiveContext private[hive](
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    catalog.refreshTable(tableIdent)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionState.catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    catalog.invalidateTable(tableIdent)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionState.catalog.invalidateTable(tableIdent)
   }
 
   /**
@@ -367,8 +370,8 @@ class HiveContext private[hive](
    * @since 1.2.0
    */
   def analyze(tableName: String) {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(catalog.lookupRelation(tableIdent))
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -429,7 +432,7 @@ class HiveContext private[hive](
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          catalog.client.alterTable(
+          sessionState.catalog.client.alterTable(
             relation.table.copy(
               properties = relation.table.properties +
                 (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))

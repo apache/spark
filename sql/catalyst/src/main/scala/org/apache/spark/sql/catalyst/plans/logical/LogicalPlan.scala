@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
+import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
@@ -117,6 +118,23 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   override lazy val canonicalized: LogicalPlan = EliminateSubqueryAliases(this)
 
   /**
+   * Resolves a given schema to concrete [[Attribute]] references in this query plan. This function
+   * should only be called on analyzed plans since it will throw [[AnalysisException]] for
+   * unresolved [[Attribute]]s.
+   */
+  def resolve(schema: StructType, resolver: Resolver): Seq[Attribute] = {
+    schema.map { field =>
+      resolveQuoted(field.name, resolver).map {
+        case a: AttributeReference => a
+        case other => sys.error(s"can not handle nested schema yet...  plan $this")
+      }.getOrElse {
+        throw new AnalysisException(
+          s"Unable to resolve ${field.name} given [${output.map(_.name).mkString(", ")}]")
+      }
+    }
+  }
+
+  /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
    * nodes of this LogicalPlan. The attribute is expressed as
    * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
@@ -159,7 +177,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
     assert(nameParts.length > 1)
-    if (attribute.qualifiers.exists(resolver(_, nameParts.head))) {
+    if (attribute.qualifier.exists(resolver(_, nameParts.head))) {
       // At least one qualifier matches. See if remaining parts match.
       val remainingParts = nameParts.tail
       resolveAsColumn(remainingParts, resolver, attribute)

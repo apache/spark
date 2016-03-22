@@ -101,13 +101,13 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     if (table == null) {
       throw new AnalysisException("Table not found: " + tableName)
     }
-    val tableWithQualifiers = SubqueryAlias(tableName, table)
+    val qualifiedTable = SubqueryAlias(tableName, table)
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
     alias
-      .map(a => SubqueryAlias(a, tableWithQualifiers))
-      .getOrElse(tableWithQualifiers)
+      .map(a => SubqueryAlias(a, qualifiedTable))
+      .getOrElse(qualifiedTable)
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
@@ -149,11 +149,11 @@ trait OverrideCatalog extends Catalog {
     getOverriddenTable(tableIdent) match {
       case Some(table) =>
         val tableName = getTableName(tableIdent)
-        val tableWithQualifiers = SubqueryAlias(tableName, table)
+        val qualifiedTable = SubqueryAlias(tableName, table)
 
         // If an alias was specified by the lookup, wrap the plan in a sub-query so that attributes
         // are properly qualified with this alias.
-        alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+        alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
 
       case None => super.lookupRelation(tableIdent, alias)
     }

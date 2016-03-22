@@ -38,11 +38,11 @@ import org.apache.spark.util.Benchmark
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
     .set("spark.sql.shuffle.partitions", "1")
-    .set("spark.sql.autoBroadcastJoinThreshold", "0")
+    .set("spark.sql.autoBroadcastJoinThreshold", "1")
   lazy val sc = SparkContext.getOrCreate(conf)
   lazy val sqlContext = SQLContext.getOrCreate(sc)
 
-  def runBenchmark(name: String, values: Int)(f: => Unit): Unit = {
+  def runBenchmark(name: String, values: Long)(f: => Unit): Unit = {
     val benchmark = new Benchmark(name, values)
 
     Seq(false, true).foreach { enabled =>
@@ -57,7 +57,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
   // These benchmark are skipped in normal build
   ignore("range/filter/sum") {
-    val N = 500 << 20
+    val N = 500L << 20
     runBenchmark("rang/filter/sum", N) {
       sqlContext.range(N).filter("(id & 1) = 1").groupBy().sum().collect()
     }
@@ -71,7 +71,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("range/limit/sum") {
-    val N = 500 << 20
+    val N = 500L << 20
     runBenchmark("range/limit/sum", N) {
       sqlContext.range(N).limit(1000000).groupBy().sum().collect()
     }
@@ -85,7 +85,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("stat functions") {
-    val N = 100 << 20
+    val N = 100L << 20
 
     runBenchmark("stddev", N) {
       sqlContext.range(N).groupBy().agg("id" -> "stddev").collect()
@@ -200,6 +200,18 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     outer join w long codegen=false        15280 / 16497          6.9         145.7       1.0X
     outer join w long codegen=true            769 /  796        136.3           7.3      19.9X
       */
+
+    runBenchmark("semi join w long", N) {
+      sqlContext.range(N).join(dim, (col("id") bitwiseAND M) === col("k"), "leftsemi").count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    semi join w long:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    semi join w long codegen=false           5804 / 5969         18.1          55.3       1.0X
+    semi join w long codegen=true             814 /  934        128.8           7.8       7.1X
+     */
   }
 
   ignore("sort merge join") {
@@ -235,7 +247,27 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       */
   }
 
-  ignore("rube") {
+  ignore("shuffle hash join") {
+    val N = 4 << 20
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+    sqlContext.setConf("spark.sql.autoBroadcastJoinThreshold", "10000000")
+    sqlContext.setConf("spark.sql.join.preferSortMergeJoin", "false")
+    runBenchmark("shuffle hash join", N) {
+      val df1 = sqlContext.range(N).selectExpr(s"id as k1")
+      val df2 = sqlContext.range(N / 5).selectExpr(s"id * 3 as k2")
+      df1.join(df2, col("k1") === col("k2")).count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    shuffle hash join:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    shuffle hash join codegen=false          1168 / 1902          3.6         278.6       1.0X
+    shuffle hash join codegen=true            850 / 1196          4.9         202.8       1.4X
+     */
+  }
+
+  ignore("cube") {
     val N = 5 << 20
 
     runBenchmark("cube", N) {
@@ -427,5 +459,51 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     BytesToBytesMap (on Heap)                2693 / 2989         19.5          51.4       0.2X
       */
     benchmark.run()
+  }
+
+  ignore("collect") {
+    val N = 1 << 20
+
+    val benchmark = new Benchmark("collect", N)
+    benchmark.addCase("collect 1 million") { iter =>
+      sqlContext.range(N).collect()
+    }
+    benchmark.addCase("collect 2 millions") { iter =>
+      sqlContext.range(N * 2).collect()
+    }
+    benchmark.addCase("collect 4 millions") { iter =>
+      sqlContext.range(N * 4).collect()
+    }
+    benchmark.run()
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    collect:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    collect 1 million                         439 /  654          2.4         418.7       1.0X
+    collect 2 millions                        961 / 1907          1.1         916.4       0.5X
+    collect 4 millions                       3193 / 3895          0.3        3044.7       0.1X
+     */
+  }
+
+  ignore("collect limit") {
+    val N = 1 << 20
+
+    val benchmark = new Benchmark("collect limit", N)
+    benchmark.addCase("collect limit 1 million") { iter =>
+      sqlContext.range(N * 4).limit(N).collect()
+    }
+    benchmark.addCase("collect limit 2 millions") { iter =>
+      sqlContext.range(N * 4).limit(N * 2).collect()
+    }
+    benchmark.run()
+
+    /**
+    model name      : Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    collect limit:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    collect limit 1 million                   833 / 1284          1.3         794.4       1.0X
+    collect limit 2 millions                 3348 / 4005          0.3        3193.3       0.2X
+     */
   }
 }

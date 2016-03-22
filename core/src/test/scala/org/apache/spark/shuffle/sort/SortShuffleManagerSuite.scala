@@ -41,7 +41,7 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
 
   private def shuffleDep(
       partitioner: Partitioner,
-      serializer: Option[Serializer],
+      serializer: Serializer,
       keyOrdering: Option[Ordering[Any]],
       aggregator: Option[Aggregator[Any, Any, Any]],
       mapSideCombine: Boolean): ShuffleDependency[Any, Any, Any] = {
@@ -56,7 +56,7 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
   }
 
   test("supported shuffle dependencies for serialized shuffle") {
-    val kryo = Some(new KryoSerializer(new SparkConf()))
+    val kryo = new KryoSerializer(new SparkConf())
 
     assert(canUseSerializedShuffle(shuffleDep(
       partitioner = new HashPartitioner(2),
@@ -88,8 +88,8 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
   }
 
   test("unsupported shuffle dependencies for serialized shuffle") {
-    val kryo = Some(new KryoSerializer(new SparkConf()))
-    val java = Some(new JavaSerializer(new SparkConf()))
+    val kryo = new KryoSerializer(new SparkConf())
+    val java = new JavaSerializer(new SparkConf())
 
     // We only support serializers that support object relocation
     assert(!canUseSerializedShuffle(shuffleDep(

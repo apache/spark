@@ -445,7 +445,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-6352 DirectParquetOutputCommitter") {
+  testQuietly("SPARK-6352 DirectParquetOutputCommitter") {
     val clonedConf = new Configuration(hadoopConfiguration)
 
     // Write to a parquet file and let it fail.
@@ -469,7 +469,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible") {
+  testQuietly("SPARK-9849 DirectParquetOutputCommitter qualified name backwards compatiblity") {
     val clonedConf = new Configuration(hadoopConfiguration)
 
     // Write to a parquet file and let it fail.
@@ -599,11 +599,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("null and non-null strings") {
     // Create a dataset where the first values are NULL and then some non-null values. The
     // number of non-nulls needs to be bigger than the ParquetReader batch size.
-    val data = sqlContext.range(200).rdd.map { i =>
-      if (i.getLong(0) < 150) Row(None)
-      else Row("a")
-    }
-    val df = sqlContext.createDataFrame(data, StructType(StructField("col", StringType) :: Nil))
+    val data: Dataset[String] = sqlContext.range(200).map (i =>
+      if (i < 150) null
+      else "a"
+    )
+    val df = data.toDF("col")
     assert(df.agg("col" -> "count").collect().head.getLong(0) == 50)
 
     withTempPath { dir =>
@@ -656,7 +656,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       var hash1: Int = 0
       var hash2: Int = 0
       (false :: true :: Nil).foreach { v =>
-        withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> v.toString) {
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> v.toString) {
           val df = sqlContext.read.parquet(dir.getCanonicalPath)
           val rows = df.queryExecution.toRdd.map(_.copy()).collect()
           val unsafeRows = rows.map(_.asInstanceOf[UnsafeRow])
@@ -672,13 +672,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("UnsafeRowParquetRecordReader - direct path read") {
-    val data = (0 to 10).map(i => (i, ((i + 'a').toChar.toString)))
+  test("VectorizedParquetRecordReader - direct path read") {
+    val data = (0 to 10).map(i => (i, (i + 'a').toChar.toString))
     withTempPath { dir =>
       sqlContext.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
       val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
       {
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -695,7 +695,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project just one column
       {
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -711,7 +711,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project columns in opposite order
       {
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -728,7 +728,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Empty projection
       {
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0

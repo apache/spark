@@ -20,7 +20,7 @@ package org.apache.spark.util.logging
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * Defines the policy based on which [[org.apache.spark.util.logging.RollingFileAppender]] will

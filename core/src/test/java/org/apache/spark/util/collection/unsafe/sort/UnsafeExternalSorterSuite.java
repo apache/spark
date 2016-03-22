@@ -103,9 +103,11 @@ public class UnsafeExternalSorterSuite {
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
-    when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(
+        new Answer<Tuple2<TempLocalBlockId, File>>() {
       @Override
-      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock)
+          throws Throwable {
         TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
         File file = File.createTempFile("spillFile", ".spill", tempDir);
         spillFilesCreated.add(file);
