@@ -529,15 +529,13 @@ object SQLConf {
     defaultValue = Some(10),
     doc = "Minimum number of state store delta files that needs to be generated before they " +
       "consolidated into snapshots.",
-    isPublic = false
-  )
+    isPublic = false)
 
   val STATE_STORE_MIN_VERSIONS_TO_RETAIN = intConf(
     "spark.sql.streaming.stateStore.minBatchesToRetain",
     defaultValue = Some(2),
     doc = "Minimum number of versions of a state store's data to retain after cleaning.",
-    isPublic = false
-  )
+    isPublic = false)
 
   val CHECKPOINT_LOCATION = stringConf("spark.sql.streaming.checkpointLocation",
     defaultValue = None,
