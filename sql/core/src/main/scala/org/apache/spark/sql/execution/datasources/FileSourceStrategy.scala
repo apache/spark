@@ -57,7 +57,9 @@ import org.apache.spark.sql.types._
 private[sql] object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, l@LogicalRelation(files: HadoopFsRelation, _, _))
-      if files.fileFormat.toString == "TestFileFormat" =>
+      if (files.fileFormat.toString == "TestFileFormat" ||
+         files.fileFormat.isInstanceOf[parquet.DefaultSource]) &&
+         files.sqlContext.conf.parquetFileScan =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -67,11 +69,14 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val filterSet = ExpressionSet(filters)
 
       val partitionColumns =
-        AttributeSet(
-          l.resolve(files.partitionSchema, files.sqlContext.sessionState.analyzer.resolver))
+        l.resolve(files.partitionSchema, files.sqlContext.sessionState.analyzer.resolver)
+      val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
-        ExpressionSet(filters.filter(_.references.subsetOf(partitionColumns)))
+        ExpressionSet(filters.filter(_.references.subsetOf(partitionSet)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
+
+      val dataColumns =
+        l.resolve(files.dataSchema, files.sqlContext.sessionState.analyzer.resolver)
 
       val bucketColumns =
         AttributeSet(
@@ -82,7 +87,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
                   .getOrElse(sys.error(""))))
 
       // Partition keys are not available in the statistics of the files.
-      val dataFilters = filters.filter(_.references.intersect(partitionColumns).isEmpty)
+      val dataFilters = filters.filter(_.references.intersect(partitionSet).isEmpty)
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters
@@ -92,11 +97,13 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val filterAttributes = AttributeSet(afterScanFilters)
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
-      val requiredAttributes = AttributeSet(requiredExpressions).map(_.name).toSet
+      val requiredAttributes = AttributeSet(requiredExpressions)
 
-      val prunedDataSchema =
-        StructType(
-          files.dataSchema.filter(f => requiredAttributes.contains(f.name)))
+      val readDataColumns =
+        dataColumns
+            .filter(requiredAttributes.contains)
+            .filterNot(partitionColumns.contains)
+      val prunedDataSchema = readDataColumns.toStructType
       logInfo(s"Pruned Data Schema: ${prunedDataSchema.simpleString(5)}")
 
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
@@ -132,7 +139,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
-              assert(file.getLen != 0)
+              assert(file.getLen != 0, file.toString)
               (0L to file.getLen by maxSplitBytes).map { offset =>
                 val remaining = file.getLen - offset
                 val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
@@ -180,17 +187,20 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val scan =
         DataSourceScan(
-          l.output,
+          readDataColumns ++ partitionColumns,
           new FileScanRDD(
             files.sqlContext,
             readFile,
             plannedPartitions),
           files,
-          Map("format" -> files.fileFormat.toString))
+          Map(
+            "Format" -> files.fileFormat.toString,
+            "PushedFilters" -> pushedDownFilters.mkString("[", ", ", "]"),
+            "ReadSchema" -> prunedDataSchema.simpleString))
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
       val withFilter = afterScanFilter.map(execution.Filter(_, scan)).getOrElse(scan)
-      val withProjections = if (projects.forall(_.isInstanceOf[AttributeReference])) {
+      val withProjections = if (projects == withFilter.output) {
         withFilter
       } else {
         execution.Project(projects, withFilter)
