@@ -1033,6 +1033,46 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!store.memoryStore.contains(rdd(1, 0)), "rdd_1_0 was in store")
   }
 
+  test("safely unroll blocks through putIterator (disk)") {
+    store = makeBlockManager(12000)
+    val memAndDisk = StorageLevel.MEMORY_AND_DISK
+    val memoryStore = store.memoryStore
+    val diskStore = store.diskStore
+    val smallList = List.fill(40)(new Array[Byte](100))
+    val bigList = List.fill(40)(new Array[Byte](1000))
+    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+
+    store.putIterator("b1", smallIterator, memAndDisk)
+    store.putIterator("b2", smallIterator, memAndDisk)
+
+    // Unroll with not enough space. This should succeed but kick out b1 in the process.
+    // Memory store should contain b2 and b3, while disk store should contain only b1
+    val result3 = memoryStore.putIterator("b3", smallIterator, memAndDisk, ClassTag.Any)
+    assert(result3.isRight)
+    assert(!memoryStore.contains("b1"))
+    assert(memoryStore.contains("b2"))
+    assert(memoryStore.contains("b3"))
+    assert(diskStore.contains("b1"))
+    assert(!diskStore.contains("b2"))
+    assert(!diskStore.contains("b3"))
+    memoryStore.remove("b3")
+    store.putIterator("b3", smallIterator, StorageLevel.MEMORY_ONLY)
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+
+    // Unroll huge block with not enough space. This should fail and return an iterator so that
+    // the block may be stored to disk. During the unrolling process, block "b2" should be kicked
+    // out, so the memory store should contain only b3, while the disk store should contain
+    // b1, b2 and b4.
+    val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk, ClassTag.Any)
+    assert(result4.isLeft)
+    assert(!memoryStore.contains("b1"))
+    assert(!memoryStore.contains("b2"))
+    assert(memoryStore.contains("b3"))
+    assert(!memoryStore.contains("b4"))
+  }
+
   test("read-locked blocks cannot be evicted from memory") {
     store = makeBlockManager(12000)
     val arr = new Array[Byte](4000)
