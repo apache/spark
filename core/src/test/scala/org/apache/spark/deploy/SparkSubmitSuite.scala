@@ -18,10 +18,10 @@
 package org.apache.spark.deploy
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
@@ -31,10 +31,11 @@ import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 // Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
-// of properties that neeed to be cleared after tests.
+// of properties that needed to be cleared after tests.
 class SparkSubmitSuite
   extends SparkFunSuite
   with Matchers
@@ -358,7 +359,8 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, _, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     sysProps("spark.executor.memory") should be ("5g")
-    sysProps("spark.master") should be ("yarn-cluster")
+    sysProps("spark.master") should be ("yarn")
+    sysProps("spark.submit.deployMode") should be ("cluster")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
   }
 
@@ -454,7 +456,7 @@ class SparkSubmitSuite
 
     // Test files and archives (Yarn)
     val clArgs2 = Seq(
-      "--master", "yarn-client",
+      "--master", "yarn",
       "--class", "org.SomeClass",
       "--files", files,
       "--archives", archives,
@@ -512,7 +514,7 @@ class SparkSubmitSuite
     writer2.println("spark.yarn.dist.archives " + archives)
     writer2.close()
     val clArgs2 = Seq(
-      "--master", "yarn-client",
+      "--master", "yarn",
       "--class", "org.SomeClass",
       "--properties-file", f2.getPath,
       "thejar.jar"
@@ -592,7 +594,7 @@ class SparkSubmitSuite
     val tmpDir = Utils.createTempDir()
 
     val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")
-    val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf))
+    val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf), StandardCharsets.UTF_8)
     for ((key, value) <- defaults) writer.write(s"$key $value\n")
 
     writer.close()
@@ -617,7 +619,7 @@ object JarCreationTest extends Logging {
         Utils.classForName(args(1))
       } catch {
         case t: Throwable =>
-          exception = t + "\n" + t.getStackTraceString
+          exception = t + "\n" + Utils.exceptionString(t)
           exception = exception.replaceAll("\n", "\n\t")
       }
       Option(exception).toSeq.iterator
@@ -660,7 +662,7 @@ object UserClasspathFirstTest {
     val ccl = Thread.currentThread().getContextClassLoader()
     val resource = ccl.getResourceAsStream("test.resource")
     val bytes = ByteStreams.toByteArray(resource)
-    val contents = new String(bytes, 0, bytes.length, UTF_8)
+    val contents = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     if (contents != "USER") {
       throw new SparkException("Should have read user resource, but instead read: " + contents)
     }

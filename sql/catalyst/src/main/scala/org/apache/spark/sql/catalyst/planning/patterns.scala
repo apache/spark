@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import org.apache.spark.Logging
+import scala.annotation.tailrec
+import scala.collection.mutable
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -75,10 +79,13 @@ object PhysicalOperation extends PredicateHelper {
   private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
     expr.transform {
       case a @ Alias(ref: AttributeReference, name) =>
-        aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
+        aliases.get(ref)
+          .map(Alias(_, name)(a.exprId, a.qualifier, isGenerated = a.isGenerated))
+          .getOrElse(a)
 
       case a: AttributeReference =>
-        aliases.get(a).map(Alias(_, a.name)(a.exprId, a.qualifiers)).getOrElse(a)
+        aliases.get(a)
+          .map(Alias(_, a.name)(a.exprId, a.qualifier, isGenerated = a.isGenerated)).getOrElse(a)
     }
   }
 }
@@ -170,17 +177,41 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
   }
 }
 
+
 /**
  * A pattern that collects all adjacent unions and returns their children as a Seq.
  */
 object Unions {
   def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {
-    case u: Union => Some(collectUnionChildren(u))
+    case u: Union => Some(collectUnionChildren(mutable.Stack(u), Seq.empty[LogicalPlan]))
     case _ => None
   }
 
-  private def collectUnionChildren(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
-    case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
-    case other => other :: Nil
+  // Doing a depth-first tree traversal to combine all the union children.
+  @tailrec
+  private def collectUnionChildren(
+      plans: mutable.Stack[LogicalPlan],
+      children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+    if (plans.isEmpty) children
+    else {
+      plans.pop match {
+        case Union(grandchildren) =>
+          grandchildren.reverseMap(plans.push(_))
+          collectUnionChildren(plans, children)
+        case other => collectUnionChildren(plans, children :+ other)
+      }
+    }
+  }
+}
+
+/**
+ * Extractor for retrieving Int value.
+ */
+object IntegerIndex {
+  def unapply(a: Any): Option[Int] = a match {
+    case Literal(a: Int, IntegerType) => Some(a)
+    // When resolving ordinal in Sort, negative values are extracted for issuing error messages.
+    case UnaryMinus(IntegerLiteral(v)) => Some(-v)
+    case _ => None
   }
 }

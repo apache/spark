@@ -349,7 +349,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       testData2.collect().toSeq.filter(r => r.getInt(0) == r.getInt(1)))
   }
 
-  test("!==") {
+  test("=!=") {
     val nullData = sqlContext.createDataFrame(sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
@@ -629,7 +629,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     }
 
     def checkNumProjects(df: DataFrame, expectedNumProjects: Int): Unit = {
-      val projects = df.queryExecution.executedPlan.collect {
+      val projects = df.queryExecution.sparkPlan.collect {
         case tungstenProject: Project => tungstenProject
       }
       assert(projects.size === expectedNumProjects)

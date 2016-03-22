@@ -41,8 +41,8 @@ sqlContext <- sparkRSQL.init(sc)
 mockLines <- c("{\"name\":\"Michael\"}",
                "{\"name\":\"Andy\", \"age\":30}",
                "{\"name\":\"Justin\", \"age\":19}")
-jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
-parquetPath <- tempfile(pattern="sparkr-test", fileext=".parquet")
+jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+parquetPath <- tempfile(pattern = "sparkr-test", fileext = ".parquet")
 writeLines(mockLines, jsonPath)
 
 # For test nafunctions, like dropna(), fillna(),...
@@ -51,7 +51,7 @@ mockLinesNa <- c("{\"name\":\"Bob\",\"age\":16,\"height\":176.5}",
                  "{\"name\":\"David\",\"age\":60,\"height\":null}",
                  "{\"name\":\"Amy\",\"age\":null,\"height\":null}",
                  "{\"name\":null,\"age\":null,\"height\":null}")
-jsonPathNa <- tempfile(pattern="sparkr-test", fileext=".tmp")
+jsonPathNa <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesNa, jsonPathNa)
 
 # For test complex types in DataFrame
@@ -59,7 +59,7 @@ mockLinesComplexType <-
   c("{\"c1\":[1, 2, 3], \"c2\":[\"a\", \"b\", \"c\"], \"c3\":[1.0, 2.0, 3.0]}",
     "{\"c1\":[4, 5, 6], \"c2\":[\"d\", \"e\", \"f\"], \"c3\":[4.0, 5.0, 6.0]}",
     "{\"c1\":[7, 8, 9], \"c2\":[\"g\", \"h\", \"i\"], \"c3\":[7.0, 8.0, 9.0]}")
-complexTypeJsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+complexTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
 
 test_that("calling sparkRSQL.init returns existing SQL context", {
@@ -151,9 +151,9 @@ test_that("create DataFrame from RDD", {
   expect_equal(as.list(collect(where(df2AsDF, df2AsDF$name == "Bob"))),
                list(name = "Bob", age = 16, height = 176.5))
 
-  localDF <- data.frame(name=c("John", "Smith", "Sarah"),
-                        age=c(19L, 23L, 18L),
-                        height=c(176.5, 181.4, 173.7))
+  localDF <- data.frame(name = c("John", "Smith", "Sarah"),
+                        age = c(19L, 23L, 18L),
+                        height = c(176.5, 181.4, 173.7))
   df <- createDataFrame(sqlContext, localDF, schema)
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
@@ -263,7 +263,7 @@ test_that("create DataFrame from list or data.frame", {
 
   irisdf <- suppressWarnings(createDataFrame(sqlContext, iris))
   iris_collected <- collect(irisdf)
-  expect_equivalent(iris_collected[,-5], iris[,-5])
+  expect_equivalent(iris_collected[, -5], iris[, -5])
   expect_equal(iris_collected$Species, as.character(iris$Species))
 
   mtcarsdf <- createDataFrame(sqlContext, mtcars)
@@ -329,13 +329,12 @@ test_that("create DataFrame from a data.frame with complex types", {
 mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}",
                       "{\"name\":\"Alice\",\"info\":{\"age\":20,\"height\":164.3}}",
                       "{\"name\":\"David\",\"info\":{\"age\":60,\"height\":180}}")
-mapTypeJsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesMapType, mapTypeJsonPath)
 
 test_that("Collect DataFrame with complex types", {
   # ArrayType
   df <- read.json(sqlContext, complexTypeJsonPath)
-
   ldf <- collect(df)
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
@@ -400,11 +399,11 @@ test_that("read/write json files", {
   expect_equal(count(df), 3)
 
   # Test write.df
-  jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".json")
-  write.df(df, jsonPath2, "json", mode="overwrite")
+  jsonPath2 <- tempfile(pattern = "jsonPath2", fileext = ".json")
+  write.df(df, jsonPath2, "json", mode = "overwrite")
 
   # Test write.json
-  jsonPath3 <- tempfile(pattern="jsonPath3", fileext=".json")
+  jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
   write.json(df, jsonPath3)
 
   # Test read.json()/jsonFile() works with multiple input paths
@@ -467,7 +466,7 @@ test_that("insertInto() on a registered table", {
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
              "{\"name\":\"James\", \"age\":35}")
-  jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".tmp")
+  jsonPath2 <- tempfile(pattern = "jsonPath2", fileext = ".tmp")
   parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
   writeLines(lines, jsonPath2)
   df2 <- read.df(sqlContext, jsonPath2, "json")
@@ -490,19 +489,15 @@ test_that("insertInto() on a registered table", {
   unlink(parquetPath2)
 })
 
-test_that("table() returns a new DataFrame", {
+test_that("tableToDF() returns a new DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   registerTempTable(df, "table1")
-  tabledf <- table(sqlContext, "table1")
+  tabledf <- tableToDF(sqlContext, "table1")
   expect_is(tabledf, "DataFrame")
   expect_equal(count(tabledf), 3)
+  tabledf2 <- tableToDF(sqlContext, "table1")
+  expect_equal(count(tabledf2), 3)
   dropTempTable(sqlContext, "table1")
-
-  # nolint start
-  # Test base::table is working
-  #a <- letters[1:3]
-  #expect_equal(class(table(a, sample(a))), "table")
-  # nolint end
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -531,7 +526,7 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
   textLines <- c("Michael",
                  "Andy, 30",
                  "Justin, 19")
-  textPath <- tempfile(pattern="sparkr-textLines", fileext=".tmp")
+  textPath <- tempfile(pattern = "sparkr-textLines", fileext = ".tmp")
   writeLines(textLines, textPath)
   textRDD <- textFile(sc, textPath)
 
@@ -552,7 +547,7 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
 })
 
 test_that("objectFile() works with row serialization", {
-  objectPath <- tempfile(pattern="spark-test", fileext=".tmp")
+  objectPath <- tempfile(pattern = "spark-test", fileext = ".tmp")
   df <- read.json(sqlContext, jsonPath)
   dfRDD <- toRDD(df)
   saveAsObjectFile(coalesce(dfRDD, 1L), objectPath)
@@ -616,7 +611,7 @@ test_that("collect() support Unicode characters", {
              "{\"name\":\"こんにちは\", \"age\":19}",
              "{\"name\":\"Xin chào\"}")
 
-  jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(lines, jsonPath)
 
   df <- read.df(sqlContext, jsonPath, "json")
@@ -696,10 +691,21 @@ test_that("names() colnames() set the column names", {
   colnames(df) <- c("col3", "col4")
   expect_equal(names(df)[1], "col3")
 
+  expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
+               "Colum names cannot contain the '.' symbol.")
+  expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
+  expect_error(colnames(df) <- c("a"),
+               "Column names must have the same length as the number of columns in the dataset.")
+  expect_error(colnames(df) <- c("1", NA), "Column names cannot be NA.")
+
+  # Note: if this test is broken, remove check for "." character on colnames<- method
+  irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
+  expect_equal(names(irisDF)[1], "Sepal_Length")
+
   # Test base::colnames base::names
   m2 <- cbind(1, 1:4)
   expect_equal(colnames(m2, do.NULL = FALSE), c("col1", "col2"))
-  colnames(m2) <- c("x","Y")
+  colnames(m2) <- c("x", "Y")
   expect_equal(colnames(m2), c("x", "Y"))
 
   z <- list(a = 1, b = "c", c = 1:3)
@@ -734,12 +740,12 @@ test_that("head() and first() return the correct data", {
   expect_equal(ncol(testFirst), 2)
 })
 
-test_that("distinct() and unique on DataFrames", {
+test_that("distinct(), unique() and dropDuplicates() on DataFrames", {
   lines <- c("{\"name\":\"Michael\"}",
              "{\"name\":\"Andy\", \"age\":30}",
              "{\"name\":\"Justin\", \"age\":19}",
              "{\"name\":\"Justin\", \"age\":19}")
-  jsonPathWithDup <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  jsonPathWithDup <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(lines, jsonPathWithDup)
 
   df <- read.json(sqlContext, jsonPathWithDup)
@@ -750,6 +756,42 @@ test_that("distinct() and unique on DataFrames", {
   uniques2 <- unique(df)
   expect_is(uniques2, "DataFrame")
   expect_equal(count(uniques2), 3)
+
+  # Test dropDuplicates()
+  df <- createDataFrame(
+    sqlContext,
+    list(
+      list(2, 1, 2), list(1, 1, 1),
+      list(1, 2, 1), list(2, 1, 2),
+      list(2, 2, 2), list(2, 2, 1),
+      list(2, 1, 1), list(1, 1, 2),
+      list(1, 2, 2), list(1, 2, 1)),
+    schema = c("key", "value1", "value2"))
+  result <- collect(dropDuplicates(df))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 1, 2), c(1, 2, 1),
+    c(1, 2, 2), c(2, 1, 1), c(2, 1, 2),
+    c(2, 2, 1), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2), ],
+    expected)
+
+  result <- collect(dropDuplicates(df, c("key", "value1")))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 2, 1), c(2, 1, 2), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2), ],
+    expected)
+
+  result <- collect(dropDuplicates(df, "key"))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(2, 1, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2), ],
+    expected)
 })
 
 test_that("sample on a DataFrame", {
@@ -780,10 +822,10 @@ test_that("select operators", {
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
 
-  expect_is(df[,1], "DataFrame")
-  expect_equal(columns(df[,1]), c("name"))
-  expect_equal(columns(df[,"age"]), c("age"))
-  df2 <- df[,c("age", "name")]
+  expect_is(df[, 1], "DataFrame")
+  expect_equal(columns(df[, 1]), c("name"))
+  expect_equal(columns(df[, "age"]), c("age"))
+  df2 <- df[, c("age", "name")]
   expect_is(df2, "DataFrame")
   expect_equal(columns(df2), c("age", "name"))
 
@@ -793,11 +835,6 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
-
-  df$age2 <- NULL
-  expect_equal(columns(df), c("name", "age"))
-  df$age3 <- NULL
-  expect_equal(columns(df), c("name", "age"))
 })
 
 test_that("select with column", {
@@ -823,10 +860,31 @@ test_that("select with column", {
                 "To select multiple columns, use a character vector or list for col")
 })
 
+test_that("drop column", {
+  df <- select(read.json(sqlContext, jsonPath), "name", "age")
+  df1 <- drop(df, "name")
+  expect_equal(columns(df1), c("age"))
+
+  df$age2 <- df$age
+  df1 <- drop(df, c("name", "age"))
+  expect_equal(columns(df1), c("age2"))
+
+  df1 <- drop(df, df$age)
+  expect_equal(columns(df1), c("name", "age2"))
+
+  df$age2 <- NULL
+  expect_equal(columns(df), c("name", "age"))
+  df$age3 <- NULL
+  expect_equal(columns(df), c("name", "age"))
+
+  # Test to make sure base::drop is not masked
+  expect_equal(drop(1:3 %*% 2:4), 20)
+})
+
 test_that("subsetting", {
   # read.json returns columns in random order
   df <- select(read.json(sqlContext, jsonPath), "name", "age")
-  filtered <- df[df$age > 20,]
+  filtered <- df[df$age > 20, ]
   expect_equal(count(filtered), 1)
   expect_equal(columns(filtered), c("name", "age"))
   expect_equal(collect(filtered)$name, "Andy")
@@ -845,11 +903,11 @@ test_that("subsetting", {
   expect_equal(count(df4), 2)
   expect_equal(columns(df4), c("name", "age"))
 
-  df5 <- df[df$age %in% c(19), c(1,2)]
+  df5 <- df[df$age %in% c(19), c(1, 2)]
   expect_equal(count(df5), 1)
   expect_equal(columns(df5), c("name", "age"))
 
-  df6 <- subset(df, df$age %in% c(30), c(1,2))
+  df6 <- subset(df, df$age %in% c(30), c(1, 2))
   expect_equal(count(df6), 1)
   expect_equal(columns(df6), c("name", "age"))
 
@@ -901,13 +959,26 @@ test_that("test HiveContext", {
   expect_is(df2, "DataFrame")
   expect_equal(count(df2), 3)
 
-  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   invisible(saveAsTable(df, "json2", "json", "append", path = jsonPath2))
   df3 <- sql(hiveCtx, "select * from json2")
   expect_is(df3, "DataFrame")
   expect_equal(count(df3), 3)
-
   unlink(jsonPath2)
+
+  hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+  invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
+  df4 <- sql(hiveCtx, "select * from hivetestbl")
+  expect_is(df4, "DataFrame")
+  expect_equal(count(df4), 3)
+  unlink(hivetestDataPath)
+
+  parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+  invisible(saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath))
+  df5 <- sql(hiveCtx, "select * from parquetest")
+  expect_is(df5, "DataFrame")
+  expect_equal(count(df5), 3)
+  unlink(parquetDataPath)
 })
 
 test_that("column operators", {
@@ -936,6 +1007,8 @@ test_that("column functions", {
   c14 <- cume_dist() + ntile(1) + corr(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
+  c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
+  c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -985,13 +1058,13 @@ test_that("column functions", {
                         schema = c("a", "b", "c"))
   result <- collect(select(df, struct("a", "c")))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a,c)" <- list(listToStruct(list(a = 1L, c = 3L)),
+  expected$"struct(a, c)" <- list(listToStruct(list(a = 1L, c = 3L)),
                                  listToStruct(list(a = 4L, c = 6L)))
   expect_equal(result, expected)
 
   result <- collect(select(df, struct(df$a, df$b)))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a,b)" <- list(listToStruct(list(a = 1L, b = 2L)),
+  expected$"struct(a, b)" <- list(listToStruct(list(a = 1L, b = 2L)),
                                  listToStruct(list(a = 4L, b = 5L)))
   expect_equal(result, expected)
 
@@ -1003,6 +1076,17 @@ test_that("column functions", {
   result <- collect(select(df, encode(df$a, "utf-8"), decode(df$c, "utf-8")))
   expect_equal(result[[1]][[1]], bytes)
   expect_equal(result[[2]], markUtf8("大千世界"))
+
+  # Test first(), last()
+  df <- read.json(sqlContext, jsonPath)
+  expect_equal(collect(select(df, first(df$age)))[[1]], NA)
+  expect_equal(collect(select(df, first(df$age, TRUE)))[[1]], 30)
+  expect_equal(collect(select(df, first("age")))[[1]], NA)
+  expect_equal(collect(select(df, first("age", TRUE)))[[1]], 30)
+  expect_equal(collect(select(df, last(df$age)))[[1]], 19)
+  expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
+  expect_equal(collect(select(df, last("age")))[[1]], 19)
+  expect_equal(collect(select(df, last("age", TRUE)))[[1]], 19)
 })
 
 test_that("column binary mathfunctions", {
@@ -1010,7 +1094,7 @@ test_that("column binary mathfunctions", {
              "{\"a\":2, \"b\":6}",
              "{\"a\":3, \"b\":7}",
              "{\"a\":4, \"b\":8}")
-  jsonPathWithDup <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  jsonPathWithDup <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(lines, jsonPathWithDup)
   df <- read.json(sqlContext, jsonPathWithDup)
   expect_equal(collect(select(df, atan2(df$a, df$b)))[1, "ATAN2(a, b)"], atan2(1, 5))
@@ -1160,7 +1244,7 @@ test_that("group by, agg functions", {
   df3 <- agg(gd, age = "stddev")
   expect_is(df3, "DataFrame")
   df3_local <- collect(df3)
-  expect_true(is.nan(df3_local[df3_local$name == "Andy",][1, 2]))
+  expect_true(is.nan(df3_local[df3_local$name == "Andy", ][1, 2]))
 
   df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "DataFrame")
@@ -1173,41 +1257,41 @@ test_that("group by, agg functions", {
 
   expect_equal(3, count(mean(gd)))
   expect_equal(3, count(max(gd)))
-  expect_equal(30, collect(max(gd))[1, 2])
+  expect_equal(30, collect(max(gd))[2, 2])
   expect_equal(1, collect(count(gd))[1, 2])
 
   mockLines2 <- c("{\"name\":\"ID1\", \"value\": \"10\"}",
                   "{\"name\":\"ID1\", \"value\": \"10\"}",
                   "{\"name\":\"ID1\", \"value\": \"22\"}",
                   "{\"name\":\"ID2\", \"value\": \"-3\"}")
-  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(mockLines2, jsonPath2)
   gd2 <- groupBy(read.json(sqlContext, jsonPath2), "name")
   df6 <- agg(gd2, value = "sum")
   df6_local <- collect(df6)
-  expect_equal(42, df6_local[df6_local$name == "ID1",][1, 2])
-  expect_equal(-3, df6_local[df6_local$name == "ID2",][1, 2])
+  expect_equal(42, df6_local[df6_local$name == "ID1", ][1, 2])
+  expect_equal(-3, df6_local[df6_local$name == "ID2", ][1, 2])
 
   df7 <- agg(gd2, value = "stddev")
   df7_local <- collect(df7)
-  expect_true(abs(df7_local[df7_local$name == "ID1",][1, 2] - 6.928203) < 1e-6)
-  expect_true(is.nan(df7_local[df7_local$name == "ID2",][1, 2]))
+  expect_true(abs(df7_local[df7_local$name == "ID1", ][1, 2] - 6.928203) < 1e-6)
+  expect_true(is.nan(df7_local[df7_local$name == "ID2", ][1, 2]))
 
   mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Justin\", \"age\":19}",
                   "{\"name\":\"Justin\", \"age\":1}")
-  jsonPath3 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  jsonPath3 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(mockLines3, jsonPath3)
   df8 <- read.json(sqlContext, jsonPath3)
   gd3 <- groupBy(df8, "name")
   gd3_local <- collect(sum(gd3))
-  expect_equal(60, gd3_local[gd3_local$name == "Andy",][1, 2])
-  expect_equal(20, gd3_local[gd3_local$name == "Justin",][1, 2])
+  expect_equal(60, gd3_local[gd3_local$name == "Andy", ][1, 2])
+  expect_equal(20, gd3_local[gd3_local$name == "Justin", ][1, 2])
 
   expect_true(abs(collect(agg(df, sd(df$age)))[1, 1] - 7.778175) < 1e-6)
   gd3_local <- collect(agg(gd3, var(df8$age)))
-  expect_equal(162, gd3_local[gd3_local$name == "Justin",][1, 2])
+  expect_equal(162, gd3_local[gd3_local$name == "Justin", ][1, 2])
 
   # Test stats::sd, stats::var are working
   expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
@@ -1220,10 +1304,10 @@ test_that("group by, agg functions", {
 test_that("arrange() and orderBy() on a DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   sorted <- arrange(df, df$age)
-  expect_equal(collect(sorted)[1,2], "Michael")
+  expect_equal(collect(sorted)[1, 2], "Michael")
 
   sorted2 <- arrange(df, "name", decreasing = FALSE)
-  expect_equal(collect(sorted2)[2,"age"], 19)
+  expect_equal(collect(sorted2)[2, "age"], 19)
 
   sorted3 <- orderBy(df, asc(df$age))
   expect_true(is.na(first(sorted3)$age))
@@ -1231,16 +1315,16 @@ test_that("arrange() and orderBy() on a DataFrame", {
 
   sorted4 <- orderBy(df, desc(df$name))
   expect_equal(first(sorted4)$name, "Michael")
-  expect_equal(collect(sorted4)[3,"name"], "Andy")
+  expect_equal(collect(sorted4)[3, "name"], "Andy")
 
   sorted5 <- arrange(df, "age", "name", decreasing = TRUE)
-  expect_equal(collect(sorted5)[1,2], "Andy")
+  expect_equal(collect(sorted5)[1, 2], "Andy")
 
-  sorted6 <- arrange(df, "age","name", decreasing = c(T, F))
-  expect_equal(collect(sorted6)[1,2], "Andy")
+  sorted6 <- arrange(df, "age", "name", decreasing = c(T, F))
+  expect_equal(collect(sorted6)[1, 2], "Andy")
 
   sorted7 <- arrange(df, "name", decreasing = FALSE)
-  expect_equal(collect(sorted7)[2,"age"], 19)
+  expect_equal(collect(sorted7)[2, "age"], 19)
 })
 
 test_that("filter() on a DataFrame", {
@@ -1273,7 +1357,7 @@ test_that("join() and merge() on a DataFrame", {
                   "{\"name\":\"Andy\",  \"test\": \"no\"}",
                   "{\"name\":\"Justin\", \"test\": \"yes\"}",
                   "{\"name\":\"Bob\", \"test\": \"yes\"}")
-  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(mockLines2, jsonPath2)
   df2 <- read.json(sqlContext, jsonPath2)
 
@@ -1325,12 +1409,12 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
   expect_equal(collect(orderBy(merged, merged$name_x))$age[3], 19)
 
-  merged <- merge(df, df2, suffixes = c("-X","-Y"))
+  merged <- merge(df, df2, suffixes = c("-X", "-Y"))
   expect_equal(count(merged), 3)
   expect_equal(names(merged), c("age", "name-X", "name-Y", "test"))
   expect_equal(collect(orderBy(merged, merged$"name-X"))$age[1], 30)
 
-  merged <- merge(df, df2, by = "name", suffixes = c("-X","-Y"), sort = FALSE)
+  merged <- merge(df, df2, by = "name", suffixes = c("-X", "-Y"), sort = FALSE)
   expect_equal(count(merged), 3)
   expect_equal(names(merged), c("age", "name-X", "name-Y", "test"))
   expect_equal(collect(orderBy(merged, merged$"name-Y"))$"name-X"[3], "Michael")
@@ -1348,7 +1432,7 @@ test_that("join() and merge() on a DataFrame", {
                   "{\"name\":\"Andy\", \"name_y\":\"Andy\", \"test\": \"no\"}",
                   "{\"name\":\"Justin\", \"name_y\":\"Justin\", \"test\": \"yes\"}",
                   "{\"name\":\"Bob\", \"name_y\":\"Bob\", \"test\": \"yes\"}")
-  jsonPath3 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  jsonPath3 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(mockLines3, jsonPath3)
   df3 <- read.json(sqlContext, jsonPath3)
   expect_error(merge(df, df3),
@@ -1376,8 +1460,8 @@ test_that("showDF()", {
                     "|null|Michael|\n",
                     "|  30|   Andy|\n",
                     "|  19| Justin|\n",
-                    "+----+-------+\n", sep="")
-  expect_output(s , expected)
+                    "+----+-------+\n", sep = "")
+  expect_output(s, expected)
 })
 
 test_that("isLocal()", {
@@ -1391,7 +1475,7 @@ test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
              "{\"name\":\"Andy\", \"age\":30}",
              "{\"name\":\"James\", \"age\":35}")
-  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   writeLines(lines, jsonPath2)
   df2 <- read.df(sqlContext, jsonPath2, "json")
 
@@ -1431,6 +1515,11 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_equal(columns(newDF)[3], "newAge")
   expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 32)
 
+  # Replace existing column
+  newDF <- withColumn(df, "age", df$age + 2)
+  expect_equal(length(columns(newDF)), 2)
+  expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
   newDF2 <- withColumnRenamed(df, "age", "newerAge")
   expect_equal(length(columns(newDF2)), 2)
   expect_equal(columns(newDF2)[1], "newerAge")
@@ -1469,7 +1558,7 @@ test_that("mutate(), transform(), rename() and names()", {
 test_that("read/write Parquet files", {
   df <- read.df(sqlContext, jsonPath, "json")
   # Test write.df and read.df
-  write.df(df, parquetPath, "parquet", mode="overwrite")
+  write.df(df, parquetPath, "parquet", mode = "overwrite")
   df2 <- read.df(sqlContext, parquetPath, "parquet")
   expect_is(df2, "DataFrame")
   expect_equal(count(df2), 3)
@@ -1504,7 +1593,7 @@ test_that("read/write text files", {
   expect_equal(colnames(df), c("value"))
   expect_equal(count(df), 3)
   textPath <- tempfile(pattern = "textPath", fileext = ".txt")
-  write.df(df, textPath, "text", mode="overwrite")
+  write.df(df, textPath, "text", mode = "overwrite")
 
   # Test write.text and read.text
   textPath2 <- tempfile(pattern = "textPath2", fileext = ".txt")
@@ -1542,13 +1631,13 @@ test_that("dropna() and na.omit() on a DataFrame", {
 
   # drop with columns
 
-  expected <- rows[!is.na(rows$name),]
+  expected <- rows[!is.na(rows$name), ]
   actual <- collect(dropna(df, cols = "name"))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, cols = "name"))
   expect_identical(expected, actual)
 
-  expected <- rows[!is.na(rows$age),]
+  expected <- rows[!is.na(rows$age), ]
   actual <- collect(dropna(df, cols = "age"))
   row.names(expected) <- row.names(actual)
   # identical on two dataframes does not work here. Don't know why.
@@ -1558,13 +1647,13 @@ test_that("dropna() and na.omit() on a DataFrame", {
   expect_identical(expected$name, actual$name)
   actual <- collect(na.omit(df, cols = "age"))
 
-  expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height), ]
   actual <- collect(dropna(df, cols = c("age", "height")))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, cols = c("age", "height")))
   expect_identical(expected, actual)
 
-  expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name), ]
   actual <- collect(dropna(df))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df))
@@ -1572,31 +1661,31 @@ test_that("dropna() and na.omit() on a DataFrame", {
 
   # drop with how
 
-  expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name), ]
   actual <- collect(dropna(df))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df))
   expect_identical(expected, actual)
 
-  expected <- rows[!is.na(rows$age) | !is.na(rows$height) | !is.na(rows$name),]
+  expected <- rows[!is.na(rows$age) | !is.na(rows$height) | !is.na(rows$name), ]
   actual <- collect(dropna(df, "all"))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, "all"))
   expect_identical(expected, actual)
 
-  expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name), ]
   actual <- collect(dropna(df, "any"))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, "any"))
   expect_identical(expected, actual)
 
-  expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
+  expected <- rows[!is.na(rows$age) & !is.na(rows$height), ]
   actual <- collect(dropna(df, "any", cols = c("age", "height")))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, "any", cols = c("age", "height")))
   expect_identical(expected, actual)
 
-  expected <- rows[!is.na(rows$age) | !is.na(rows$height),]
+  expected <- rows[!is.na(rows$age) | !is.na(rows$height), ]
   actual <- collect(dropna(df, "all", cols = c("age", "height")))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, "all", cols = c("age", "height")))
@@ -1604,7 +1693,7 @@ test_that("dropna() and na.omit() on a DataFrame", {
 
   # drop with threshold
 
-  expected <- rows[as.integer(!is.na(rows$age)) + as.integer(!is.na(rows$height)) >= 2,]
+  expected <- rows[as.integer(!is.na(rows$age)) + as.integer(!is.na(rows$height)) >= 2, ]
   actual <- collect(dropna(df, minNonNulls = 2, cols = c("age", "height")))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, minNonNulls = 2, cols = c("age", "height")))
@@ -1612,7 +1701,7 @@ test_that("dropna() and na.omit() on a DataFrame", {
 
   expected <- rows[as.integer(!is.na(rows$age)) +
                    as.integer(!is.na(rows$height)) +
-                   as.integer(!is.na(rows$name)) >= 3,]
+                   as.integer(!is.na(rows$name)) >= 3, ]
   actual <- collect(dropna(df, minNonNulls = 3, cols = c("name", "age", "height")))
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, minNonNulls = 3, cols = c("name", "age", "height")))
@@ -1665,7 +1754,7 @@ test_that("crosstab() on a DataFrame", {
   })
   df <- toDF(rdd, list("a", "b"))
   ct <- crosstab(df, "a", "b")
-  ordered <- ct[order(ct$a_b),]
+  ordered <- ct[order(ct$a_b), ]
   row.names(ordered) <- NULL
   expected <- data.frame("a_b" = c("a0", "a1", "a2"), "b0" = c(1, 0, 1), "b1" = c(1, 1, 0),
                          stringsAsFactors = FALSE, row.names = NULL)
@@ -1693,10 +1782,10 @@ test_that("freqItems() on a DataFrame", {
                     negDoubles = input * -1.0, stringsAsFactors = F)
   rdf[ input %% 3 == 0, ] <- c(1, "1", -1)
   df <- createDataFrame(sqlContext, rdf)
-  multiColResults <- freqItems(df, c("numbers", "letters"), support=0.1)
+  multiColResults <- freqItems(df, c("numbers", "letters"), support = 0.1)
   expect_true(1 %in% multiColResults$numbers[[1]])
   expect_true("1" %in% multiColResults$letters[[1]])
-  singleColResult <- freqItems(df, "negDoubles", support=0.1)
+  singleColResult <- freqItems(df, "negDoubles", support = 0.1)
   expect_true(-1 %in% head(singleColResult$negDoubles)[[1]])
 
   l <- lapply(c(0:99), function(i) {
@@ -1716,6 +1805,14 @@ test_that("sampleBy() on a DataFrame", {
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
   expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
   expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
+})
+
+test_that("approxQuantile() on a DataFrame", {
+  l <- lapply(c(0:99), function(i) { i })
+  df <- createDataFrame(sqlContext, l, "key")
+  quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
+  expect_equal(quantiles[[1]], 50)
+  expect_equal(quantiles[[2]], 80)
 })
 
 test_that("SQL error message is returned from JVM", {
@@ -1763,9 +1860,9 @@ test_that("with() on a DataFrame", {
 test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(coltypes(irisDF), c(rep("numeric", 4), "character"))
 
-  data <- data.frame(c1=c(1,2,3),
-                     c2=c(T,F,T),
-                     c3=c("2015/01/01 10:00:00", "2015/01/02 10:00:00", "2015/01/03 10:00:00"))
+  data <- data.frame(c1 = c(1, 2, 3),
+                     c2 = c(T, F, T),
+                     c3 = c("2015/01/01 10:00:00", "2015/01/02 10:00:00", "2015/01/03 10:00:00"))
 
   schema <- structType(structField("c1", "byte"),
                        structField("c3", "boolean"),
@@ -1777,7 +1874,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
 
   # Test complex types
   x <- createDataFrame(sqlContext, list(list(as.environment(
-    list("a"="b", "c"="d", "e"="f")))))
+    list("a" = "b", "c" = "d", "e" = "f")))))
   expect_equal(coltypes(x), "map<string,string>")
 
   df <- selectExpr(read.json(sqlContext, jsonPath), "name", "(age * 1.21) as age")
@@ -1797,6 +1894,37 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
                "Length of type vector should match the number of columns for DataFrame")
   expect_error(coltypes(df) <- c("environment", "list"),
                "Only atomic type is supported for column types")
+})
+
+test_that("Method str()", {
+  # Structure of Iris
+  iris2 <- iris
+  colnames(iris2) <- c("Sepal_Length", "Sepal_Width", "Petal_Length", "Petal_Width", "Species")
+  iris2$col <- TRUE
+  irisDF2 <- createDataFrame(sqlContext, iris2)
+
+  out <- capture.output(str(irisDF2))
+  expect_equal(length(out), 7)
+  expect_equal(out[1], "'DataFrame': 6 variables:")
+  expect_equal(out[2], " $ Sepal_Length: num 5.1 4.9 4.7 4.6 5 5.4")
+  expect_equal(out[3], " $ Sepal_Width : num 3.5 3 3.2 3.1 3.6 3.9")
+  expect_equal(out[4], " $ Petal_Length: num 1.4 1.4 1.3 1.5 1.4 1.7")
+  expect_equal(out[5], " $ Petal_Width : num 0.2 0.2 0.2 0.2 0.2 0.4")
+  expect_equal(out[6], paste0(" $ Species     : chr \"setosa\" \"setosa\" \"",
+                              "setosa\" \"setosa\" \"setosa\" \"setosa\""))
+  expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE")
+
+  # A random dataset with many columns. This test is to check str limits
+  # the number of columns. Therefore, it will suffice to check for the
+  # number of returned rows
+  x <- runif(200, 1, 10)
+  df <- data.frame(t(as.matrix(data.frame(x, x, x, x, x, x, x, x, x))))
+  DF <- createDataFrame(sqlContext, df)
+  out <- capture.output(str(DF))
+  expect_equal(length(out), 103)
+
+  # Test utils:::str
+  expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
 })
 
 unlink(parquetPath)

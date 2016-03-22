@@ -29,7 +29,9 @@ case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
   override protected def doExecute(): RDD[InternalRow] = {
     val str = Literal("so fast").value
     val row = new GenericInternalRow(Array[Any](str))
-    sparkContext.parallelize(Seq(row))
+    val unsafeProj = UnsafeProjection.create(schema)
+    val unsafeRow = unsafeProj(row).copy()
+    sparkContext.parallelize(Seq(unsafeRow))
   }
 
   override def producedAttributes: AttributeSet = outputSet

@@ -559,7 +559,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """
       |select  p_mfgr,p_name, p_size,
       |histogram_numeric(p_retailprice, 5) over w1 as hist,
-      |percentile(p_partkey, 0.5) over w1 as per,
+      |percentile(p_partkey, cast(0.5 as double)) over w1 as per,
       |row_number() over(distribute by p_mfgr sort by p_name) as rn
       |from part
       |window w1 as (distribute by p_mfgr sort by p_mfgr, p_name

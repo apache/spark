@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -299,11 +300,7 @@ public class UnsafeArrayData extends ArrayData {
 
   @Override
   public int hashCode() {
-    int result = 37;
-    for (int i = 0; i < sizeInBytes; i++) {
-      result = 37 * result + Platform.getByte(baseObject, baseOffset + i);
-    }
-    return result;
+    return Murmur3_x86_32.hashUnsafeBytes(baseObject, baseOffset, sizeInBytes, 42);
   }
 
   @Override

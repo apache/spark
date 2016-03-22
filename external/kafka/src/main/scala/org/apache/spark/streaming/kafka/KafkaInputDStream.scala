@@ -26,7 +26,7 @@ import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
@@ -48,12 +48,12 @@ class KafkaInputDStream[
   V: ClassTag,
   U <: Decoder[_]: ClassTag,
   T <: Decoder[_]: ClassTag](
-    ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     useReliableReceiver: Boolean,
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
+  ) extends ReceiverInputDStream[(K, V)](_ssc) with Logging {
 
   def getReceiver(): Receiver[(K, V)] = {
     if (!useReliableReceiver) {

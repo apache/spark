@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
@@ -132,7 +132,7 @@ class StandardScalerModel @Since("1.3.0") (
       vector match {
         case DenseVector(vs) =>
           val values = vs.clone()
-          val size = values.size
+          val size = values.length
           if (withStd) {
             var i = 0
             while (i < size) {
@@ -153,7 +153,7 @@ class StandardScalerModel @Since("1.3.0") (
       vector match {
         case DenseVector(vs) =>
           val values = vs.clone()
-          val size = values.size
+          val size = values.length
           var i = 0
           while(i < size) {
             values(i) *= (if (std(i) != 0.0) 1.0 / std(i) else 0.0)
@@ -164,7 +164,7 @@ class StandardScalerModel @Since("1.3.0") (
           // For sparse vector, the `index` array inside sparse vector object will not be changed,
           // so we can re-use it to save memory.
           val values = vs.clone()
-          val nnz = values.size
+          val nnz = values.length
           var i = 0
           while (i < nnz) {
             values(i) *= (if (std(indices(i)) != 0.0) 1.0 / std(indices(i)) else 0.0)

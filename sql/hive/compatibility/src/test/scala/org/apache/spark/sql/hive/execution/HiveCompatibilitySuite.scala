@@ -23,14 +23,12 @@ import java.util.{Locale, TimeZone}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.tags.ExtendedHiveTest
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Runs the test cases that are included in the hive distribution.
  */
-@ExtendedHiveTest
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
   private lazy val hiveQueryDir = TestHive.getHiveFile(
@@ -57,7 +55,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Enable in-memory partition pruning for testing purposes
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Use Hive hash expression instead of the native one
-    TestHive.functionRegistry.unregisterFunction("hash")
+    TestHive.sessionState.functionRegistry.unregisterFunction("hash")
     RuleExecutor.resetTime()
   }
 
@@ -67,7 +65,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-    TestHive.functionRegistry.restore()
+    TestHive.sessionState.functionRegistry.restore()
 
     // For debugging dump some statistics about how much time was spent in various optimizer rules.
     logWarning(RuleExecutor.dumpTimeSpent())
@@ -296,6 +294,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Odd changes to output
     "merge4",
 
+    // Unsupported underscore syntax.
+    "inputddl5",
+
     // Thift is broken...
     "inputddl8",
 
@@ -320,7 +321,22 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Feature removed in HIVE-11145
     "alter_partition_protect_mode",
     "drop_partitions_ignore_protection",
-    "protectmode"
+    "protectmode",
+
+    // Hive returns null rather than NaN when n = 1
+    "udaf_covar_samp",
+
+    // The implementation of GROUPING__ID in Hive is wrong (not match with doc).
+    "groupby_grouping_id1",
+    "groupby_grouping_id2",
+    "groupby_grouping_sets1",
+
+    // Spark parser treats numerical literals differently: it creates decimals instead of doubles.
+    "udf_abs",
+    "udf_format_number",
+    "udf_round",
+    "udf_round_3",
+    "view_cast"
   )
 
   /**
@@ -490,9 +506,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby11",
     "groupby12",
     "groupby1_limit",
-    "groupby_grouping_id1",
-    "groupby_grouping_id2",
-    "groupby_grouping_sets1",
     "groupby_grouping_sets2",
     "groupby_grouping_sets3",
     "groupby_grouping_sets4",
@@ -603,7 +616,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl2",
     "inputddl3",
     "inputddl4",
-    "inputddl5",
     "inputddl6",
     "inputddl7",
     "inputddl8",
@@ -872,7 +884,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "type_widening",
     "udaf_collect_set",
     "udaf_covar_pop",
-    "udaf_covar_samp",
     "udaf_histogram_numeric",
     "udf2",
     "udf5",
@@ -882,7 +893,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_10_trims",
     "udf_E",
     "udf_PI",
-    "udf_abs",
     "udf_acos",
     "udf_add",
     "udf_array",
@@ -926,7 +936,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_find_in_set",
     "udf_float",
     "udf_floor",
-    "udf_format_number",
     "udf_from_unixtime",
     "udf_greaterthan",
     "udf_greaterthanorequal",
@@ -974,8 +983,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_regexp_replace",
     "udf_repeat",
     "udf_rlike",
-    "udf_round",
-    "udf_round_3",
     "udf_rpad",
     "udf_rtrim",
     "udf_sign",

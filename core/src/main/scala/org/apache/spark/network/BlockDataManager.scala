@@ -17,6 +17,8 @@
 
 package org.apache.spark.network
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.storage.{BlockId, StorageLevel}
 
@@ -31,6 +33,18 @@ trait BlockDataManager {
 
   /**
    * Put the block locally, using the given storage level.
+   *
+   * Returns true if the block was stored and false if the put operation failed or the block
+   * already existed.
    */
-  def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit
+  def putBlockData(
+      blockId: BlockId,
+      data: ManagedBuffer,
+      level: StorageLevel,
+      classTag: ClassTag[_]): Boolean
+
+  /**
+   * Release locks acquired by [[putBlockData()]] and [[getBlockData()]].
+   */
+  def releaseLock(blockId: BlockId): Unit
 }

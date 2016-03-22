@@ -31,7 +31,7 @@ private[spark] class MesosClusterUI(
     conf: SparkConf,
     dispatcherPublicAddress: String,
     val scheduler: MesosClusterScheduler)
-  extends WebUI(securityManager, port, conf) {
+  extends WebUI(securityManager, securityManager.getSSLOptions("mesos"), port, conf) {
 
   initialize()
 

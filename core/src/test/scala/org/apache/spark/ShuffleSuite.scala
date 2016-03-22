@@ -450,8 +450,8 @@ object ShuffleSuite {
     val listener = new SparkListener {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
         taskEnd.taskMetrics.shuffleWriteMetrics.foreach { m =>
-          recordsWritten += m.shuffleRecordsWritten
-          bytesWritten += m.shuffleBytesWritten
+          recordsWritten += m.recordsWritten
+          bytesWritten += m.bytesWritten
         }
         taskEnd.taskMetrics.shuffleReadMetrics.foreach { m =>
           recordsRead += m.recordsRead

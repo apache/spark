@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.OpenHashSet
 
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
 private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
@@ -46,11 +45,8 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
   override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
-  override def serialize(obj: Any): ArrayData = {
-    obj match {
-      case features: MyDenseVector =>
-        new GenericArrayData(features.data.map(_.asInstanceOf[Any]))
-    }
+  override def serialize(features: MyDenseVector): ArrayData = {
+    new GenericArrayData(features.data.map(_.asInstanceOf[Any]))
   }
 
   override def deserialize(datum: Any): MyDenseVector = {

@@ -21,18 +21,15 @@ import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
-import org.apache.spark.sql.catalyst.DefaultParserDialect
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
-
-/** A SQL Dialect for testing purpose, and it can not be nested type */
-class MyDialect extends DefaultParserDialect
 
 class SQLQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -57,8 +54,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("show functions") {
-    checkAnswer(sql("SHOW functions"),
-      FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))
+    def getFunctions(pattern: String): Seq[Row] = {
+      val regex = java.util.regex.Pattern.compile(pattern)
+      sqlContext.sessionState.functionRegistry.listFunction()
+        .filter(regex.matcher(_).matches()).map(Row(_))
+    }
+    checkAnswer(sql("SHOW functions"), getFunctions(".*"))
+    Seq("^c.*", ".*e$", "log.*", ".*date.*").foreach { pattern =>
+      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
+    }
   }
 
   test("describe functions") {
@@ -79,7 +83,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       "Extended Usage")
 
     checkExistence(sql("describe functioN abcadf"), true,
-      "Function: abcadf is not found.")
+      "Function: abcadf not found.")
   }
 
   test("SPARK-6743: no columns from cache") {
@@ -145,23 +149,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       .toDF("id", "saying")
       .groupBy(expr("length(saying)"))
       .count(), Row(24, 1) :: Row(14, 1) :: Nil)
-  }
-
-  test("SQL Dialect Switching to a new SQL parser") {
-    val newContext = new SQLContext(sparkContext)
-    newContext.setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
-    assert(newContext.getSQLDialect().getClass === classOf[MyDialect])
-    assert(newContext.sql("SELECT 1").collect() === Array(Row(1)))
-  }
-
-  test("SQL Dialect Switch to an invalid parser with alias") {
-    val newContext = new SQLContext(sparkContext)
-    newContext.sql("SET spark.sql.dialect=MyTestClass")
-    intercept[DialectException] {
-      newContext.sql("SELECT 1")
-    }
-    // test if the dialect set back to DefaultSQLDialect
-    assert(newContext.getSQLDialect().getClass === classOf[DefaultParserDialect])
   }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
@@ -246,7 +233,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
-    val hasGeneratedAgg = df.queryExecution.executedPlan
+    val hasGeneratedAgg = df.queryExecution.sparkPlan
       .collect { case _: aggregate.TungstenAggregate => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
@@ -586,7 +573,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Allow only a single WITH clause per query") {
-    intercept[RuntimeException] {
+    intercept[AnalysisException] {
       sql(
         "with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
     }
@@ -602,8 +589,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("from follow multiple brackets") {
     checkAnswer(sql(
       """
-        |select key from ((select * from testData limit 1)
-        |  union all (select * from testData limit 1)) x limit 1
+        |select key from ((select * from testData)
+        |  union all (select * from testData)) x limit 1
       """.stripMargin),
       Row(1)
     )
@@ -616,7 +603,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql(
       """
         |select key from
-        |  (select * from testData limit 1 union all select * from testData limit 1) x
+        |  (select * from testData union all select * from testData) x
         |  limit 1
       """.stripMargin),
       Row(1)
@@ -649,13 +636,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("approximate count distinct") {
     checkAnswer(
-      sql("SELECT APPROXIMATE COUNT(DISTINCT a) FROM testData2"),
+      sql("SELECT APPROX_COUNT_DISTINCT(a) FROM testData2"),
       Row(3))
   }
 
   test("approximate count distinct with user provided standard deviation") {
     checkAnswer(
-      sql("SELECT APPROXIMATE(0.04) COUNT(DISTINCT a) FROM testData2"),
+      sql("SELECT APPROX_COUNT_DISTINCT(a, 0.04) FROM testData2"),
       Row(3))
   }
 
@@ -791,14 +778,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-11111 null-safe join should not use cartesian product") {
     val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
-    val cp = df.queryExecution.executedPlan.collect {
+    val cp = df.queryExecution.sparkPlan.collect {
       case cp: CartesianProduct => cp
     }
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
-    val smj = df.queryExecution.executedPlan.collect {
+    val smj = df.queryExecution.sparkPlan.collect {
       case smj: SortMergeJoin => smj
+      case j: BroadcastHashJoin => j
     }
-    assert(smj.size > 0, "should use SortMergeJoin")
+    assert(smj.size > 0, "should use SortMergeJoin or BroadcastHashJoin")
     checkAnswer(df, Row(100) :: Nil)
   }
 
@@ -806,7 +794,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
       .limit(2)
       .registerTempTable("subset1")
-    sql("SELECT DISTINCT n FROM lowerCaseData")
+    sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n ASC")
       .limit(2)
       .registerTempTable("subset2")
     checkAnswer(
@@ -1001,7 +989,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SET commands with illegal or inappropriate argument") {
     sqlContext.conf.clear()
-    // Set negative mapred.reduce.tasks for automatically determing
+    // Set negative mapred.reduce.tasks for automatically determining
     // the number of reducers is not supported
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
@@ -1192,11 +1180,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Floating point number format") {
     checkAnswer(
-      sql("SELECT 0.3"), Row(BigDecimal(0.3).underlying())
+      sql("SELECT 0.3"), Row(BigDecimal(0.3))
     )
 
     checkAnswer(
-      sql("SELECT -0.8"), Row(BigDecimal(-0.8).underlying())
+      sql("SELECT -0.8"), Row(BigDecimal(-0.8))
     )
 
     checkAnswer(
@@ -1241,7 +1229,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
-      sql("SELECT +6.8"), Row(BigDecimal(6.8))
+      sql("SELECT +6.8e0"), Row(6.8d)
     )
 
     checkAnswer(
@@ -1577,16 +1565,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       e.message.contains("Cannot save interval data type into external storage")
     })
 
-    def checkIntervalParseError(s: String): Unit = {
-      val e = intercept[AnalysisException] {
-        sql(s)
-      }
-      e.message.contains("at least one time unit should be given for interval literal")
+    val e1 = intercept[AnalysisException] {
+      sql("select interval")
     }
-
-    checkIntervalParseError("select interval")
+    assert(e1.message.contains("at least one time unit should be given for interval literal"))
     // Currently we don't yet support nanosecond
-    checkIntervalParseError("select interval 23 nanosecond")
+    val e2 = intercept[AnalysisException] {
+      sql("select interval 23 nanosecond")
+    }
+    assert(e2.message.contains("cannot recognize input near"))
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
@@ -1634,15 +1621,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10215 Div of Decimal returns null") {
-    val d = Decimal(1.12321)
+    val d = Decimal(1.12321).toBigDecimal
     val df = Seq((d, 1)).toDF("a", "b")
 
     checkAnswer(
       df.selectExpr("b * a / b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a / b / b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a + b"),
       Seq(Row(BigDecimal(2.12321))))
@@ -1651,7 +1638,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(BigDecimal(0.12321))))
     checkAnswer(
       df.selectExpr("b * a * b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
   }
 
   test("precision smaller than scale") {
@@ -1666,7 +1653,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("external sorting updates peak execution memory") {
     AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
-      sortTest()
+      sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC").collect()
     }
   }
 
@@ -1733,7 +1720,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("run sql directly on files") {
-    val df = sqlContext.range(100)
+    val df = sqlContext.range(100).toDF()
     withTempPath(f => {
       df.write.json(f.getCanonicalPath)
       checkAnswer(sql(s"select id from json.`${f.getCanonicalPath}`"),
@@ -1750,14 +1737,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e1.message.contains("Table not found"))
 
     val e2 = intercept[AnalysisException] {
-      sql("select * from no_db.no_table")
+      sql("select * from no_db.no_table").show()
     }
     assert(e2.message.contains("Table not found"))
 
     val e3 = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
     }
-    assert(e3.message.contains("No input paths specified"))
+    assert(e3.message.contains("Unable to infer schema"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
@@ -1951,51 +1938,60 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Common subexpression elimination") {
-    // select from a table to prevent constant folding.
-    val df = sql("SELECT a, b from testData2 limit 1")
-    checkAnswer(df, Row(1, 1))
+    // TODO: support subexpression elimination in whole stage codegen
+    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+      // select from a table to prevent constant folding.
+      val df = sql("SELECT a, b from testData2 limit 1")
+      checkAnswer(df, Row(1, 1))
 
-    checkAnswer(df.selectExpr("a + 1", "a + 1"), Row(2, 2))
-    checkAnswer(df.selectExpr("a + 1", "a + 1 + 1"), Row(2, 3))
+      checkAnswer(df.selectExpr("a + 1", "a + 1"), Row(2, 2))
+      checkAnswer(df.selectExpr("a + 1", "a + 1 + 1"), Row(2, 3))
 
-    // This does not work because the expressions get grouped like (a + a) + 1
-    checkAnswer(df.selectExpr("a + 1", "a + a + 1"), Row(2, 3))
-    checkAnswer(df.selectExpr("a + 1", "a + (a + 1)"), Row(2, 3))
+      // This does not work because the expressions get grouped like (a + a) + 1
+      checkAnswer(df.selectExpr("a + 1", "a + a + 1"), Row(2, 3))
+      checkAnswer(df.selectExpr("a + 1", "a + (a + 1)"), Row(2, 3))
 
-    // Identity udf that tracks the number of times it is called.
-    val countAcc = sparkContext.accumulator(0, "CallCount")
-    sqlContext.udf.register("testUdf", (x: Int) => {
-      countAcc.++=(1)
-      x
-    })
+      // Identity udf that tracks the number of times it is called.
+      val countAcc = sparkContext.accumulator(0, "CallCount")
+      sqlContext.udf.register("testUdf", (x: Int) => {
+        countAcc.++=(1)
+        x
+      })
 
-    // Evaluates df, verifying it is equal to the expectedResult and the accumulator's value
-    // is correct.
-    def verifyCallCount(df: DataFrame, expectedResult: Row, expectedCount: Int): Unit = {
-      countAcc.setValue(0)
-      checkAnswer(df, expectedResult)
-      assert(countAcc.value == expectedCount)
+      // Evaluates df, verifying it is equal to the expectedResult and the accumulator's value
+      // is correct.
+      def verifyCallCount(df: DataFrame, expectedResult: Row, expectedCount: Int): Unit = {
+        countAcc.setValue(0)
+        checkAnswer(df, expectedResult)
+        assert(countAcc.value == expectedCount)
+      }
+
+      verifyCallCount(df.selectExpr("testUdf(a)"), Row(1), 1)
+      verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
+      verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a + 1)"), Row(2, 2), 1)
+      verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a)"), Row(2, 1), 2)
+      verifyCallCount(
+        df.selectExpr("testUdf(a + 1) + testUdf(a + 1)", "testUdf(a + 1)"), Row(4, 2), 1)
+
+      verifyCallCount(
+        df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
+
+      val testUdf = functions.udf((x: Int) => {
+        countAcc.++=(1)
+        x
+      })
+      verifyCallCount(
+        df.groupBy().agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 1)
+
+      verifyCallCount(
+        df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 1)
+
+      // Try disabling it via configuration.
+      sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "false")
+      verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
+      sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "true")
+      verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
     }
-
-    verifyCallCount(df.selectExpr("testUdf(a)"), Row(1), 1)
-    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
-    verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a + 1)"), Row(2, 2), 1)
-    verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a)"), Row(2, 1), 2)
-    verifyCallCount(
-      df.selectExpr("testUdf(a + 1) + testUdf(a + 1)", "testUdf(a + 1)"), Row(4, 2), 1)
-
-    verifyCallCount(
-      df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
-
-    // Would be nice if semantic equals for `+` understood commutative
-    verifyCallCount(
-      df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 2)
-
-    // Try disabling it via configuration.
-    sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "false")
-    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
-    sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "true")
-    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
   }
 
   test("SPARK-10707: nullability should be correctly propagated through set operations (1)") {
@@ -2042,6 +2038,36 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("grouping sets when aggregate functions containing groupBy columns") {
+    checkAnswer(
+      sql("select course, sum(earnings) as sum from courseSales group by course, earnings " +
+        "grouping sets((), (course), (course, earnings)) " +
+        "order by course, sum"),
+      Row(null, 113000.0) ::
+        Row("Java", 20000.0) ::
+        Row("Java", 30000.0) ::
+        Row("Java", 50000.0) ::
+        Row("dotNET", 5000.0) ::
+        Row("dotNET", 10000.0) ::
+        Row("dotNET", 48000.0) ::
+        Row("dotNET", 63000.0) :: Nil
+    )
+
+    checkAnswer(
+      sql("select course, sum(earnings) as sum, grouping_id(course, earnings) from courseSales " +
+        "group by course, earnings grouping sets((), (course), (course, earnings)) " +
+        "order by course, sum"),
+      Row(null, 113000.0, 3) ::
+        Row("Java", 20000.0, 0) ::
+        Row("Java", 30000.0, 0) ::
+        Row("Java", 50000.0, 1) ::
+        Row("dotNET", 5000.0, 0) ::
+        Row("dotNET", 10000.0, 0) ::
+        Row("dotNET", 48000.0, 0) ::
+        Row("dotNET", 63000.0, 1) :: Nil
+    )
+  }
+
   test("cube") {
     checkAnswer(
       sql("select course, year, sum(earnings) from courseSales group by cube(course, year)"),
@@ -2057,6 +2083,70 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("grouping sets") {
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by course, year " +
+        "grouping sets(course, year)"),
+      Row("Java", null, 50000.0) ::
+        Row("dotNET", null, 63000.0) ::
+        Row(null, 2012, 35000.0) ::
+        Row(null, 2013, 78000.0) :: Nil
+    )
+
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by course, year " +
+        "grouping sets(course)"),
+      Row("Java", null, 50000.0) ::
+        Row("dotNET", null, 63000.0) :: Nil
+    )
+
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by course, year " +
+        "grouping sets(year)"),
+      Row(null, 2012, 35000.0) ::
+        Row(null, 2013, 78000.0) :: Nil
+    )
+  }
+
+  test("grouping and grouping_id") {
+    checkAnswer(
+      sql("select course, year, grouping(course), grouping(year), grouping_id(course, year)" +
+        " from courseSales group by cube(course, year)"),
+      Row("Java", 2012, 0, 0, 0) ::
+        Row("Java", 2013, 0, 0, 0) ::
+        Row("Java", null, 0, 1, 1) ::
+        Row("dotNET", 2012, 0, 0, 0) ::
+        Row("dotNET", 2013, 0, 0, 0) ::
+        Row("dotNET", null, 0, 1, 1) ::
+        Row(null, 2012, 1, 0, 2) ::
+        Row(null, 2013, 1, 0, 2) ::
+        Row(null, null, 1, 1, 3) :: Nil
+    )
+
+    var error = intercept[AnalysisException] {
+      sql("select course, year, grouping(course) from courseSales group by course, year")
+    }
+    assert(error.getMessage contains "grouping() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year, grouping_id(course, year) from courseSales group by course, year")
+    }
+    assert(error.getMessage contains "grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year, grouping__id from courseSales group by cube(course, year)")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
+  }
+
+  test("SPARK-13056: Null in map value causes NPE") {
+    val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
+    withTempTable("maptest") {
+      df.registerTempTable("maptest")
+      // local optimization will by pass codegen code, so we should keep the filter `key=1`
+      checkAnswer(sql("SELECT value['abc'] FROM maptest where key = 1"), Row("somestring"))
+      checkAnswer(sql("SELECT value['cba'] FROM maptest where key = 1"), Row(null))
+    }
+  }
+
   test("hash function") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
     withTempTable("tbl") {
@@ -2065,6 +2155,135 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.select(hash($"i", $"j")),
         sql("SELECT hash(i, j) from tbl")
       )
+    }
+  }
+
+  test("order by ordinal number") {
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC"),
+      sql("SELECT * FROM testData2 ORDER BY a DESC"))
+    // If the position is not an integer, ignore it.
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 + 0 DESC, b ASC"),
+      sql("SELECT * FROM testData2 ORDER BY b ASC"))
+
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
+      sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 SORT BY 1 DESC, 2"),
+      sql("SELECT * FROM testData2 SORT BY a DESC, b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 ASC, b ASC"),
+      Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
+  }
+
+  test("order by ordinal number - negative cases") {
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 0")
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY -1 DESC, b ASC")
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 3 DESC, b ASC")
+    }
+  }
+
+  test("order by ordinal number with conf spark.sql.orderByOrdinal=false") {
+    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
+      // If spark.sql.orderByOrdinal=false, ignore the position number.
+      checkAnswer(
+        sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
+        sql("SELECT * FROM testData2 ORDER BY b ASC"))
+    }
+  }
+
+  test("natural join") {
+    val df1 = Seq(("one", 1), ("two", 2), ("three", 3)).toDF("k", "v1")
+    val df2 = Seq(("one", 1), ("two", 22), ("one", 5)).toDF("k", "v2")
+    withTempTable("nt1", "nt2") {
+      df1.registerTempTable("nt1")
+      df2.registerTempTable("nt2")
+      checkAnswer(
+        sql("SELECT * FROM nt1 natural join nt2 where k = \"one\""),
+        Row("one", 1, 1) :: Row("one", 1, 5) :: Nil)
+
+      checkAnswer(
+        sql("SELECT * FROM nt1 natural left join nt2 order by v1, v2"),
+        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Row("three", 3, null) :: Nil)
+
+      checkAnswer(
+        sql("SELECT * FROM nt1 natural right join nt2 order by v1, v2"),
+        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Nil)
+
+      checkAnswer(
+        sql("SELECT count(*) FROM nt1 natural full outer join nt2"),
+        Row(4) :: Nil)
+    }
+  }
+
+  test("join with using clause") {
+    val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
+      ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")
+    val df2 = Seq(("r1c1", "r1c2", "t2r1c3"),
+      ("r2c1", "r2c2", "t2r2c3"), ("r3c1y", "r3c2", "t2r3c3")).toDF("c1", "c2", "c3")
+    val df3 = Seq((null, "r1c2", "t3r1c3"),
+      ("r2c1", "r2c2", "t3r2c3"), ("r3c1y", "r3c2", "t3r3c3")).toDF("c1", "c2", "c3")
+    withTempTable("t1", "t2", "t3") {
+      df1.registerTempTable("t1")
+      df2.registerTempTable("t2")
+      df3.registerTempTable("t3")
+      // inner join with one using column
+      checkAnswer(
+        sql("SELECT * FROM t1 join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") :: Nil)
+
+      // inner join with two using columns
+      checkAnswer(
+        sql("SELECT * FROM t1 join t2 using (c1, c2)"),
+        Row("r1c1", "r1c2", "t1r1c3", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "t2r2c3") :: Nil)
+
+      // Left outer join with one using column.
+      checkAnswer(
+        sql("SELECT * FROM t1 left join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", null, null) :: Nil)
+
+      // Right outer join with one using column.
+      checkAnswer(
+        sql("SELECT * FROM t1 right join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
+          Row("r3c1y", null, null, "r3c2", "t2r3c3") :: Nil)
+
+      // Full outer join with one using column.
+      checkAnswer(
+        sql("SELECT * FROM t1 full outer join t2 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
+          Row("r3c1y", null,
+            null, "r3c2", "t2r3c3") :: Nil)
+
+      // Full outer join with null value in join column.
+      checkAnswer(
+        sql("SELECT * FROM t1 full outer join t3 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", null, null) ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t3r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
+          Row("r3c1y", null, null, "r3c2", "t3r3c3") ::
+          Row(null, null, null, "r1c2", "t3r1c3") :: Nil)
+
+      // Self join with using columns.
+      checkAnswer(
+        sql("SELECT * FROM t1 join t1 using (c1)"),
+        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t1r1c3") ::
+          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t1r2c3") ::
+          Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
 }

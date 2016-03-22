@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -238,7 +238,7 @@ abstract class AggregationIterator(
         resultProjection(joinedRow(currentGroupingKey, currentBuffer))
       }
     } else {
-      // Grouping-only: we only output values of grouping expressions.
+      // Grouping-only: we only output values based on grouping expressions.
       val resultProjection = UnsafeProjection.create(resultExpressions, groupingAttributes)
       (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
         resultProjection(currentGroupingKey)

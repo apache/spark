@@ -19,7 +19,7 @@ package org.apache.spark.ui.storage
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkFunSuite, Success}
+import org.apache.spark.{SparkConf, SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
@@ -44,7 +44,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
 
   before {
     bus = new LiveListenerBus
-    storageStatusListener = new StorageStatusListener
+    storageStatusListener = new StorageStatusListener(new SparkConf())
     storageListener = new StorageListener(storageStatusListener)
     bus.addListener(storageStatusListener)
     bus.addListener(storageListener)
@@ -127,21 +127,18 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Task end with a few new persisted blocks, some from the same RDD
     val metrics1 = new TaskMetrics
-    metrics1.updatedBlocks = Some(Seq(
-      (RDDBlockId(0, 100), BlockStatus(memAndDisk, 400L, 0L, 0L)),
-      (RDDBlockId(0, 101), BlockStatus(memAndDisk, 0L, 400L, 0L)),
-      (RDDBlockId(0, 102), BlockStatus(memAndDisk, 400L, 0L, 200L)),
-      (RDDBlockId(1, 20), BlockStatus(memAndDisk, 0L, 240L, 0L))
+    metrics1.setUpdatedBlockStatuses(Seq(
+      (RDDBlockId(0, 100), BlockStatus(memAndDisk, 400L, 0L)),
+      (RDDBlockId(0, 101), BlockStatus(memAndDisk, 0L, 400L)),
+      (RDDBlockId(1, 20), BlockStatus(memAndDisk, 0L, 240L))
     ))
     bus.postToAll(SparkListenerTaskEnd(1, 0, "obliteration", Success, taskInfo, metrics1))
-    assert(storageListener._rddInfoMap(0).memSize === 800L)
+    assert(storageListener._rddInfoMap(0).memSize === 400L)
     assert(storageListener._rddInfoMap(0).diskSize === 400L)
-    assert(storageListener._rddInfoMap(0).externalBlockStoreSize === 200L)
-    assert(storageListener._rddInfoMap(0).numCachedPartitions === 3)
+    assert(storageListener._rddInfoMap(0).numCachedPartitions === 2)
     assert(storageListener._rddInfoMap(0).isCached)
     assert(storageListener._rddInfoMap(1).memSize === 0L)
     assert(storageListener._rddInfoMap(1).diskSize === 240L)
-    assert(storageListener._rddInfoMap(1).externalBlockStoreSize === 0L)
     assert(storageListener._rddInfoMap(1).numCachedPartitions === 1)
     assert(storageListener._rddInfoMap(1).isCached)
     assert(!storageListener._rddInfoMap(2).isCached)
@@ -149,17 +146,16 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Task end with a few dropped blocks
     val metrics2 = new TaskMetrics
-    metrics2.updatedBlocks = Some(Seq(
-      (RDDBlockId(0, 100), BlockStatus(none, 0L, 0L, 0L)),
-      (RDDBlockId(1, 20), BlockStatus(none, 0L, 0L, 0L)),
-      (RDDBlockId(2, 40), BlockStatus(none, 0L, 0L, 0L)), // doesn't actually exist
-      (RDDBlockId(4, 80), BlockStatus(none, 0L, 0L, 0L)) // doesn't actually exist
+    metrics2.setUpdatedBlockStatuses(Seq(
+      (RDDBlockId(0, 100), BlockStatus(none, 0L, 0L)),
+      (RDDBlockId(1, 20), BlockStatus(none, 0L, 0L)),
+      (RDDBlockId(2, 40), BlockStatus(none, 0L, 0L)), // doesn't actually exist
+      (RDDBlockId(4, 80), BlockStatus(none, 0L, 0L)) // doesn't actually exist
     ))
     bus.postToAll(SparkListenerTaskEnd(2, 0, "obliteration", Success, taskInfo, metrics2))
-    assert(storageListener._rddInfoMap(0).memSize === 400L)
+    assert(storageListener._rddInfoMap(0).memSize === 0L)
     assert(storageListener._rddInfoMap(0).diskSize === 400L)
-    assert(storageListener._rddInfoMap(0).externalBlockStoreSize === 200L)
-    assert(storageListener._rddInfoMap(0).numCachedPartitions === 2)
+    assert(storageListener._rddInfoMap(0).numCachedPartitions === 1)
     assert(storageListener._rddInfoMap(0).isCached)
     assert(!storageListener._rddInfoMap(1).isCached)
     assert(storageListener._rddInfoMap(2).numCachedPartitions === 0)
@@ -175,10 +171,10 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     val stageInfo1 = new StageInfo(1, 0, "stage1", 1, Seq(rddInfo1), Seq.empty, "details")
     val taskMetrics0 = new TaskMetrics
     val taskMetrics1 = new TaskMetrics
-    val block0 = (RDDBlockId(0, 1), BlockStatus(memOnly, 100L, 0L, 0L))
-    val block1 = (RDDBlockId(1, 1), BlockStatus(memOnly, 200L, 0L, 0L))
-    taskMetrics0.updatedBlocks = Some(Seq(block0))
-    taskMetrics1.updatedBlocks = Some(Seq(block1))
+    val block0 = (RDDBlockId(0, 1), BlockStatus(memOnly, 100L, 0L))
+    val block1 = (RDDBlockId(1, 1), BlockStatus(memOnly, 200L, 0L))
+    taskMetrics0.setUpdatedBlockStatuses(Seq(block0))
+    taskMetrics1.setUpdatedBlockStatuses(Seq(block1))
     bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
     assert(storageListener.rddInfoList.size === 0)

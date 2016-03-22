@@ -122,9 +122,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.fileBufferSizeBytes = 32 * 1024;
-    // TODO: metrics tracking + integration with shuffle write metrics
-    // need to connect the write metrics to task metrics so we count the spill IO somewhere.
-    this.writeMetrics = new ShuffleWriteMetrics();
+    this.writeMetrics = taskContext.taskMetrics().registerShuffleWriteMetrics();
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(
@@ -301,7 +299,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         array = allocateArray(used / 8 * 2);
       } catch (OutOfMemoryError e) {
         // should have trigger spilling
-        assert(inMemSorter.hasSpaceForAnotherRecord());
+        if (!inMemSorter.hasSpaceForAnotherRecord()) {
+          logger.error("Unable to grow the pointer array");
+          throw e;
+        }
         return;
       }
       // check if spilling is triggered or not
@@ -431,7 +432,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private boolean loaded = false;
     private int numRecords = 0;
 
-    public SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
+    SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
       this.upstream = inMemIterator;
       this.numRecords = inMemIterator.getNumRecords();
     }
@@ -560,13 +561,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   /**
    * Chain multiple UnsafeSorterIterator together as single one.
    */
-  class ChainedIterator extends UnsafeSorterIterator {
+  static class ChainedIterator extends UnsafeSorterIterator {
 
     private final Queue<UnsafeSorterIterator> iterators;
     private UnsafeSorterIterator current;
     private int numRecords;
 
-    public ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
+    ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
       assert iterators.size() > 0;
       this.numRecords = 0;
       for (UnsafeSorterIterator iter: iterators) {
