@@ -54,6 +54,11 @@ private[execution] sealed trait HashedRelation {
     */
   def getMemorySize: Long = 1L  // to make the test happy
 
+  /**
+   * Release any used resources.
+   */
+  def close(): Unit = {}
+
   // This is a helper method to implement Externalizable, and is used by
   // GeneralHashedRelation and UniqueKeyHashedRelation
   protected def writeBytes(out: ObjectOutput, serialized: Array[Byte]): Unit = {
@@ -145,16 +150,6 @@ private[joins] class UnsafeHashedRelation(
 
   private[joins] def this() = this(0, null)  // Needed for serialization
 
-  /**
-   * Return the size of the unsafe map on the executors.
-   *
-   * For broadcast joins, this hashed relation is bigger on the driver because it is
-   * represented as a Java hash map there. While serializing the map to the executors,
-   * however, we rehash the contents in a binary map to reduce the memory footprint on
-   * the executors.
-   *
-   * For non-broadcast joins or in local mode, return 0.
-   */
   override def getMemorySize: Long = {
     binaryMap.getTotalMemoryConsumption
   }
@@ -183,6 +178,10 @@ private[joins] class UnsafeHashedRelation(
     } else {
       null
     }
+  }
+
+  override def close(): Unit = {
+    binaryMap.free()
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {

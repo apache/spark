@@ -57,14 +57,19 @@ case class ShuffledHashJoin(
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   private def buildHashedRelation(iter: Iterator[UnsafeRow]): HashedRelation = {
+    val context = TaskContext.get()
     if (!canJoinKeyFitWithinLong) {
       // build BytesToBytesMap
-      return HashedRelation(canJoinKeyFitWithinLong, iter, buildSideKeyGenerator)
+      val relation = HashedRelation(canJoinKeyFitWithinLong, iter, buildSideKeyGenerator)
+      // This relation is usually used until the end of task.
+      context.addTaskCompletionListener((t: TaskContext) =>
+        relation.close()
+      )
+      return relation
     }
 
     // try to acquire some memory for the hash table, it could trigger other operator to free some
     // memory. The memory acquired here will mostly be used until the end of task.
-    val context = TaskContext.get()
     val memoryManager = context.taskMemoryManager()
     var acquired = 0L
     var used = 0L
