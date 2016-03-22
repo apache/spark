@@ -503,7 +503,7 @@ class TestHiveContext private[hive](
         .foreach { case (k, v) => metadataHive.runSqlHive(s"SET $k=$v") }
       defaultOverrides()
 
-      runSqlHive("USE default")
+      sessionState.catalog.setCurrentDatabase("default")
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
