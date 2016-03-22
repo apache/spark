@@ -180,8 +180,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
   }
 
-  // TODO: re-enable me after SPARK-14014
-  ignore("Single command with --database") {
+  test("Single command with --database") {
     runCliWithin(2.minute)(
       "CREATE DATABASE hive_test_db;"
         -> "OK",
@@ -194,10 +193,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
 
     runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
-      ""
-        -> "OK",
-      ""
-        -> "hive_test"
+      "" -> "hive_test"
     )
   }
 
