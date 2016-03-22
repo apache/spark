@@ -61,6 +61,34 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
             return(new("PipelineModel", model = model))
           })
 
+#' Fit an accelerated failure time (AFT) survival regression model.
+#'
+#' Fit an accelerated failure time (AFT) survival regression model, similarly to R's survreg().
+#'
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', ':', '+', and '-'.
+#' @param data DataFrame for training.
+#' @return a fitted MLlib model
+#' @rdname survreg
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' library(survival)
+#' data(ovarian)
+#' df <- createDataFrame(sqlContext, ovarian)
+#' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
+#' summary(model)
+#'}
+setMethod("survreg", signature(formula = "formula", data = "DataFrame"),
+          function(formula, data) {
+            formula <- paste(deparse(formula), collapse = "")
+            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                 "fitAFTSurvivalRegression", formula, data@sdf)
+            return(new("PipelineModel", model = model))
+          })
+
 #' Make predictions from a model
 #'
 #' Makes predictions from a model produced by glm(), similarly to R's predict().
@@ -135,6 +163,11 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- unlist(features)
               rownames(coefficients) <- 1:k
               return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
+            } else if (modelName == "AFTSurvivalRegressionModel") {
+              coefficients <- as.matrix(unlist(coefficients))
+              colnames(coefficients) <- c("Value")
+              rownames(coefficients) <- unlist(features)
+              return(list(coefficients = coefficients))
             } else {
               stop(paste("Unsupported model", modelName, sep = " "))
             }

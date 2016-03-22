@@ -141,3 +141,24 @@ test_that("kmeans", {
   cluster <- summary.model$cluster
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 })
+
+test_that("SparkR::survreg vs survival::survreg", {
+  library(survival)
+  data(ovarian)
+  df <- suppressWarnings(createDataFrame(sqlContext, ovarian))
+
+  model <- SparkR::survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
+  stats <- summary(model)
+  coefs <- as.vector(stats$coefficients[, 1][1:3])
+  scale <- exp(stats$coefficients[, 1][4])
+
+  rModel <- survival::survreg(Surv(futime, fustat) ~ ecog.ps + rx, ovarian)
+  rCoefs <- as.vector(coef(rModel))
+  rScale <- rModel$scale
+
+  expect_true(all(abs(rCoefs - coefs) < 1e-4))
+  expect_true(abs(rScale - scale) < 1e-4)
+  expect_true(all(
+    rownames(stats$coefficients) ==
+    c("(Intercept)", "ecog_ps", "rx", "Log(scale)")))
+})

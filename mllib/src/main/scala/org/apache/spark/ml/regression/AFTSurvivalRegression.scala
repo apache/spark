@@ -232,8 +232,14 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val coefficients = Vectors.dense(parameters.slice(2, parameters.length))
     val intercept = parameters(1)
     val scale = math.exp(parameters(0))
-    val model = new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
-    copyValues(model.setParent(this))
+    val model = copyValues(
+      new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
+        .setParent(this))
+    // Handle possible missing or invalid prediction columns
+    val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
+    val summary = new AFTSurvivalRegressionSummary(
+      summaryModel.transform(dataset), predictionColName)
+    model.setSummary(summary)
   }
 
   @Since("1.6.0")
@@ -280,6 +286,39 @@ class AFTSurvivalRegressionModel private[ml] (
   /** @group setParam */
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
+
+  private var trainingSummary: Option[AFTSurvivalRegressionSummary] = None
+
+  private[regression] def setSummary(summary: AFTSurvivalRegressionSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /**
+   * If the prediction column is set returns the current model and prediction column,
+   * otherwise generates a new column and sets it as the prediction column on a new copy
+   * of the current model.
+   */
+  private[regression] def findSummaryModelAndPredictionCol()
+    : (AFTSurvivalRegressionModel, String) = {
+    $(predictionCol) match {
+      case "" =>
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
+      case p => (this, p)
+    }
+  }
+
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  @Since("2.0.0")
+  def summary: AFTSurvivalRegressionSummary = trainingSummary.getOrElse {
+    throw new SparkException(
+      "No training summary available for this AFTSurvivalRegressionModel",
+      new RuntimeException())
+  }
 
   @Since("1.6.0")
   def predictQuantiles(features: Vector): Vector = {
@@ -374,6 +413,19 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
     }
   }
 }
+
+/**
+ * :: Experimental ::
+ * AFT survival regression results evaluated on a dataset.
+ *
+ * @param predictions dataframe outputted by the model's `transform` method.
+ * @param predictionCol field in "predictions" which gives the prediction of each instance.
+ */
+@Experimental
+@Since("2.0.0")
+class AFTSurvivalRegressionSummary private[regression] (
+    @Since("2.0.0") @transient val predictions: DataFrame,
+    @Since("2.0.0") val predictionCol: String) extends Serializable
 
 /**
  * AFTAggregator computes the gradient and loss for a AFT loss function,

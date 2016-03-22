@@ -17,12 +17,13 @@
 
 package org.apache.spark.ml.api.r
 
+import org.apache.spark.SparkException
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
-import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
+import org.apache.spark.ml.regression._
 import org.apache.spark.sql.DataFrame
 
 private[r] object SparkRWrappers {
@@ -48,6 +49,43 @@ private[r] object SparkRWrappers {
         .setFitIntercept(formula.hasIntercept)
         .setStandardization(standardize)
     }
+    val pipeline = new Pipeline().setStages(Array(formula, estimator))
+    pipeline.fit(df)
+  }
+
+  def fitAFTSurvivalRegression(
+      value: String,
+      df: DataFrame): PipelineModel = {
+
+    def formulaRewrite(value: String): (String, String) = {
+      var rewrited: String = null
+      var censorCol: String = null
+
+      val regex = "^Surv\\s*\\(([^,]+),([^,]+)\\)\\s*\\~\\s*(.+)".r
+      try {
+        val regex(label, censor, features) = value
+        // TODO: Support dot operator.
+        if (features.contains(".")) {
+          throw new UnsupportedOperationException(
+            "Terms of survreg formula can not support dot operator.")
+        }
+        rewrited = label.trim + "~" + features
+        censorCol = censor.trim
+      } catch {
+        case e: MatchError =>
+          throw new SparkException(s"Could not parse formula: $value")
+      }
+
+      (rewrited, censorCol)
+    }
+
+    val (rewritedValue, censorCol) = formulaRewrite(value)
+
+    val formula = new RFormula().setFormula(rewritedValue)
+    val estimator = new AFTSurvivalRegression()
+      .setCensorCol(censorCol)
+      .setFitIntercept(formula.hasIntercept)
+
     val pipeline = new Pipeline().setStages(Array(formula, estimator))
     pipeline.fit(df)
   }
@@ -91,6 +129,12 @@ private[r] object SparkRWrappers {
       }
       case m: KMeansModel =>
         m.clusterCenters.flatMap(_.toArray)
+      case m: AFTSurvivalRegressionModel =>
+        if (m.getFitIntercept) {
+          Array(m.intercept) ++ m.coefficients.toArray ++ Array(math.log(m.scale))
+        } else {
+          m.coefficients.toArray ++ Array(math.log(m.scale))
+        }
     }
   }
 
@@ -151,6 +195,14 @@ private[r] object SparkRWrappers {
         val attrs = AttributeGroup.fromStructField(
           m.summary.predictions.schema(m.summary.featuresCol))
         attrs.attributes.get.map(_.name.get)
+      case m: AFTSurvivalRegressionModel =>
+        val attrs = AttributeGroup.fromStructField(
+          m.summary.predictions.schema(m.getFeaturesCol))
+        if (m.getFitIntercept) {
+          Array("(Intercept)") ++ attrs.attributes.get.map(_.name.get) ++ Array("Log(scale)")
+        } else {
+          attrs.attributes.get.map(_.name.get) ++ Array("Log(scale)")
+        }
     }
   }
 
@@ -162,6 +214,8 @@ private[r] object SparkRWrappers {
         "LogisticRegressionModel"
       case m: KMeansModel =>
         "KMeansModel"
+      case m: AFTSurvivalRegressionModel =>
+        "AFTSurvivalRegressionModel"
     }
   }
 }
