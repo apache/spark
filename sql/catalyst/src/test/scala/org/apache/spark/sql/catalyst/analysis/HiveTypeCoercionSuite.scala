@@ -299,6 +299,20 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
+  test("test for SPARK-13772") {
+    val rule = HiveTypeCoercion.IfCoercion
+    ruleTest(rule,
+      If(Literal(true), Literal(1.0), Cast(Literal(1.0), DecimalType(19, 0))),
+      If(Literal(true), Literal(1.0), Cast(Cast(Literal(1.0), DecimalType(19, 0)), DoubleType))
+    )
+
+    ruleTest(rule,
+      If(Literal(true), Literal(Decimal(1)), Cast(Literal(1.0), DecimalType(19, 9))),
+      If(Literal(true), Cast(Literal(Decimal(1)), DecimalType(19, 9)),
+        Cast(Literal(1.0), DecimalType(19, 9)))
+    )
+  }
+
   test("type coercion for CaseKeyWhen") {
     ruleTest(HiveTypeCoercion.CaseWhenCoercion,
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
