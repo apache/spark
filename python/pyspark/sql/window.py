@@ -60,7 +60,7 @@ class Window(object):
     @since(1.4)
     def orderBy(*cols):
         """
-        Creates a :class:`WindowSpec` with the partitioning defined.
+        Creates a :class:`WindowSpec` with the ordering defined.
         """
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
