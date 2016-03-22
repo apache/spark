@@ -34,6 +34,7 @@ public abstract class BufferedRowIterator {
   protected LinkedList<InternalRow> currentRows = new LinkedList<>();
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
+  private long startTimeNs = System.nanoTime();
 
   public boolean hasNext() throws IOException {
     if (currentRows.isEmpty()) {
@@ -44,6 +45,14 @@ public abstract class BufferedRowIterator {
 
   public InternalRow next() {
     return currentRows.remove();
+  }
+
+  /**
+   * Returns the elapsed time since this object is created. This object represents a pipeline so
+   * this is a measure of how long the pipeline has been running.
+   */
+  public long durationMs() {
+    return (System.nanoTime() - startTimeNs) / (1000 * 1000);
   }
 
   /**

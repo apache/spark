@@ -98,7 +98,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    */
   private boolean stopping = false;
 
-  public BypassMergeSortShuffleWriter(
+  BypassMergeSortShuffleWriter(
       BlockManager blockManager,
       IndexShuffleBlockResolver shuffleBlockResolver,
       BypassMergeSortShuffleHandle<K, V> handle,
@@ -115,7 +115,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.partitioner = dep.partitioner();
     this.numPartitions = partitioner.numPartitions();
     this.writeMetrics = taskContext.taskMetrics().registerShuffleWriteMetrics();
-    this.serializer = Serializer.getSerializer(dep.serializer());
+    this.serializer = dep.serializer();
     this.shuffleBlockResolver = shuffleBlockResolver;
   }
 

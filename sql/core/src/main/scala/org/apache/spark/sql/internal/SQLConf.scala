@@ -24,7 +24,7 @@ import scala.collection.immutable
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
@@ -210,11 +210,11 @@ object SQLConf {
 
   val ALLOW_MULTIPLE_CONTEXTS = booleanConf("spark.sql.allowMultipleContexts",
     defaultValue = Some(true),
-    doc = "When set to true, creating multiple SQLContexts/HiveContexts is allowed." +
+    doc = "When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
       "When set to false, only one SQLContext/HiveContext is allowed to be created " +
       "through the constructor (new SQLContexts/HiveContexts created through newSession " +
-      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once" +
-      "a SQLContext/HiveContext has been created, changing the value of this conf will not" +
+      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once " +
+      "a SQLContext/HiveContext has been created, changing the value of this conf will not " +
       "have effect.",
     isPublic = true)
 
@@ -236,6 +236,11 @@ object SQLConf {
       doc = "When true, enable partition pruning for in-memory columnar tables.",
       isPublic = false)
 
+  val PREFER_SORTMERGEJOIN = booleanConf("spark.sql.join.preferSortMergeJoin",
+      defaultValue = Some(true),
+      doc = "When true, prefer sort merge join over shuffle hash join.",
+      isPublic = false)
+
   val AUTO_BROADCASTJOIN_THRESHOLD = intConf("spark.sql.autoBroadcastJoinThreshold",
     defaultValue = Some(10 * 1024 * 1024),
     doc = "Configures the maximum size in bytes for a table that will be broadcast to all worker " +
@@ -247,8 +252,8 @@ object SQLConf {
     "spark.sql.defaultSizeInBytes",
     doc = "The default table size used in query planning. By default, it is set to a larger " +
       "value than `spark.sql.autoBroadcastJoinThreshold` to be more conservative. That is to say " +
-      "by default the optimizer will not choose to broadcast a table unless it knows for sure its" +
-      "size is small enough.",
+      "by default the optimizer will not choose to broadcast a table unless it knows for sure " +
+      "its size is small enough.",
     isPublic = false)
 
   val SHUFFLE_PARTITIONS = intConf("spark.sql.shuffle.partitions",
@@ -270,7 +275,7 @@ object SQLConf {
       doc = "The advisory minimal number of post-shuffle partitions provided to " +
         "ExchangeCoordinator. This setting is used in our test to make sure we " +
         "have enough parallelism to expose issues that will not be exposed with a " +
-        "single partition. When the value is a non-positive value, this setting will" +
+        "single partition. When the value is a non-positive value, this setting will " +
         "not be provided to ExchangeCoordinator.",
       isPublic = false)
 
@@ -282,6 +287,11 @@ object SQLConf {
   val CASE_SENSITIVE = booleanConf("spark.sql.caseSensitive",
     defaultValue = Some(true),
     doc = "Whether the query analyzer should be case sensitive or not.")
+
+  val PARQUET_FILE_SCAN = booleanConf("spark.sql.parquet.fileScan",
+    defaultValue = Some(true),
+    doc = "Use the new FileScanRDD path for reading parquet data.",
+    isPublic = false)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = booleanConf("spark.sql.parquet.mergeSchema",
     defaultValue = Some(false),
@@ -340,11 +350,6 @@ object SQLConf {
       "option must be set in Hadoop Configuration.  2. This option overrides " +
       "\"spark.sql.sources.outputCommitterClass\".")
 
-  val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = booleanConf(
-    key = "spark.sql.parquet.enableUnsafeRowRecordReader",
-    defaultValue = Some(true),
-    doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
-
   val PARQUET_VECTORIZED_READER_ENABLED = booleanConf(
     key = "spark.sql.parquet.enableVectorizedReader",
     defaultValue = Some(true),
@@ -365,7 +370,7 @@ object SQLConf {
           "unmatching partitions can be eliminated earlier.")
 
   val NATIVE_VIEW = booleanConf("spark.sql.nativeView",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
           "Note that this function is experimental and should ony be used when you are using " +
           "non-hive-compatible tables written by Spark SQL.  The SQL string used to create " +
@@ -391,7 +396,7 @@ object SQLConf {
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = stringConf("spark.sql.thriftserver.scheduler.pool",
-    doc = "Set a Fair Scheduler pool for a JDBC client session")
+    doc = "Set a Fair Scheduler pool for a JDBC client session.")
 
   val THRIFTSERVER_UI_STATEMENT_LIMIT = intConf("spark.sql.thriftserver.ui.retainedStatements",
     defaultValue = Some(200),
@@ -433,7 +438,12 @@ object SQLConf {
 
   val BUCKETING_ENABLED = booleanConf("spark.sql.sources.bucketing.enabled",
     defaultValue = Some(true),
-    doc = "When false, we will treat bucketed table as normal table")
+    doc = "When false, we will treat bucketed table as normal table.")
+
+  val ORDER_BY_ORDINAL = booleanConf("spark.sql.orderByOrdinal",
+    defaultValue = Some(true),
+    doc = "When true, the ordinal numbers are treated as the position in the select list. " +
+          "When false, the ordinal numbers in order/sort By clause are ignored.")
 
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
@@ -482,7 +492,7 @@ object SQLConf {
   val RUN_SQL_ON_FILES = booleanConf("spark.sql.runSQLOnFiles",
     defaultValue = Some(true),
     isPublic = false,
-    doc = "When true, we could use `datasource`.`path` as table in SQL query"
+    doc = "When true, we could use `datasource`.`path` as table in SQL query."
   )
 
   val PARSER_SUPPORT_QUOTEDID = booleanConf("spark.sql.parser.supportQuotedIdentifiers",
@@ -501,12 +511,17 @@ object SQLConf {
   val WHOLESTAGE_CODEGEN_ENABLED = booleanConf("spark.sql.codegen.wholeStage",
     defaultValue = Some(true),
     doc = "When true, the whole stage (of multiple operators) will be compiled into single java" +
-      " method",
+      " method.",
     isPublic = false)
+
+  val FILES_MAX_PARTITION_BYTES = longConf("spark.sql.files.maxPartitionBytes",
+    defaultValue = Some(128 * 1024 * 1024), // parquet.block.size
+    doc = "The maximum number of bytes to pack into a single partition when reading files.",
+    isPublic = true)
 
   val EXCHANGE_REUSE_ENABLED = booleanConf("spark.sql.exchange.reuse",
     defaultValue = Some(true),
-    doc = "When true, the planner will try to find out duplicated exchanges and re-use them",
+    doc = "When true, the planner will try to find out duplicated exchanges and re-use them.",
     isPublic = false)
 
   object Deprecated {
@@ -517,6 +532,7 @@ object SQLConf {
     val CODEGEN_ENABLED = "spark.sql.codegen"
     val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
     val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
+    val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = "spark.sql.parquet.enableUnsafeRowRecordReader"
   }
 }
 
@@ -538,9 +554,13 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   /** ************************ Spark SQL Params/Hints ******************* */
 
+  def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
+
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+
+  def parquetFileScan: Boolean = getConf(PARQUET_FILE_SCAN)
 
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
@@ -579,6 +599,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
+  def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
+
   def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)
 
@@ -605,7 +627,7 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
-  def bucketingEnabled(): Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+  def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
@@ -623,6 +645,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def supportQuotedId: Boolean = getConf(PARSER_SUPPORT_QUOTEDID)
 
   def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
+
+  override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   /** ********************** SQLConf functionality methods ************ */
 

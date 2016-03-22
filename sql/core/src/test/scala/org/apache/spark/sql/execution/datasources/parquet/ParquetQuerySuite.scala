@@ -51,7 +51,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(sqlContext.table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sqlContext.catalog.unregisterTable(TableIdentifier("tmp"))
+    sqlContext.sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
   }
 
   test("overwriting") {
@@ -61,7 +61,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(sqlContext.table("t"), data.map(Row.fromTuple))
     }
-    sqlContext.catalog.unregisterTable(TableIdentifier("tmp"))
+    sqlContext.sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
   }
 
   test("self-join") {
@@ -590,14 +590,11 @@ object TestingUDT {
         .add("b", LongType, nullable = false)
         .add("c", DoubleType, nullable = false)
 
-    override def serialize(obj: Any): Any = {
+    override def serialize(n: NestedStruct): Any = {
       val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
-      obj match {
-        case n: NestedStruct =>
-          row.setInt(0, n.a)
-          row.setLong(1, n.b)
-          row.setDouble(2, n.c)
-      }
+      row.setInt(0, n.a)
+      row.setLong(1, n.b)
+      row.setDouble(2, n.c)
     }
 
     override def userClass: Class[NestedStruct] = classOf[NestedStruct]

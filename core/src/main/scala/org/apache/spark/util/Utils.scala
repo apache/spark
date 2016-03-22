@@ -50,6 +50,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
@@ -1817,15 +1818,6 @@ private[spark] object Utils extends Logging {
         false
       case _ =>
         true
-    }
-  }
-
-  lazy val isInInterpreter: Boolean = {
-    try {
-      val interpClass = classForName("org.apache.spark.repl.Main")
-      interpClass.getMethod("interp").invoke(null) != null
-    } catch {
-      case _: ClassNotFoundException => false
     }
   }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, MutableRow, _}

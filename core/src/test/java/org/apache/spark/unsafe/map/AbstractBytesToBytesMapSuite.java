@@ -92,9 +92,11 @@ public abstract class AbstractBytesToBytesMapSuite {
     spillFilesCreated.clear();
     MockitoAnnotations.initMocks(this);
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
-    when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(
+        new Answer<Tuple2<TempLocalBlockId, File>>() {
       @Override
-      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock)
+          throws Throwable {
         TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
         File file = File.createTempFile("spillFile", ".spill", tempDir);
         spillFilesCreated.add(file);
@@ -544,7 +546,8 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void spillInIterator() throws IOException {
-    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, blockManager, 1, 0.75, 1024, false);
+    BytesToBytesMap map =
+        new BytesToBytesMap(taskMemoryManager, blockManager, 1, 0.75, 1024, false);
     try {
       int i;
       for (i = 0; i < 1024; i++) {
