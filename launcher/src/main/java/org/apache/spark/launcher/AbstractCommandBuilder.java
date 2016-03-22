@@ -174,7 +174,8 @@ abstract class AbstractCommandBuilder {
     // Add Spark jars to the classpath. For the testing case, we rely on the test code to set and
     // propagate the test classpath appropriately. For normal invocation, look for the jars
     // directory under SPARK_HOME.
-    String jarsDir = findJarsDir(!isTesting);
+    boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
+    String jarsDir = findJarsDir(!isTesting && !isTestingSql);
     if (jarsDir != null) {
       addToClassPath(cp, join(File.separator, jarsDir, "*"));
     }

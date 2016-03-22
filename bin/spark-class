@@ -42,7 +42,7 @@ else
   SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION"
 fi
 
-if [ ! -d "$SPARK_JARS_DIR" ] && [ -z "$SPARK_TESTING" ]; then
+if [ ! -d "$SPARK_JARS_DIR" ] && [ -z "$SPARK_TESTING$SPARK_SQL_TESTING" ]; then
   echo "Failed to find Spark jars directory ($SPARK_JARS_DIR)." 1>&2
   echo "You need to build Spark before running this program." 1>&2
   exit 1

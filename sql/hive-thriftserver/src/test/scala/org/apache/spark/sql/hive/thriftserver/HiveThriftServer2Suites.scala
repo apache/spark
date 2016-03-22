@@ -763,11 +763,15 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         extraEnvironment = Map(
           // Disables SPARK_TESTING to exclude log4j.properties in test directories.
           "SPARK_TESTING" -> "0",
+          // But set SPARK_SQL_TESTING to make spark-class happy.
+          "SPARK_SQL_TESTING" -> "1",
           // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be
           // started at a time, which is not Jenkins friendly.
           "SPARK_PID_DIR" -> pidDir.getCanonicalPath),
         redirectStderr = true)
 
+      logInfo(s"COMMAND: $command")
+      logInfo(s"OUTPUT: $lines")
       lines.split("\n").collectFirst {
         case line if line.contains(LOG_FILE_MARK) => new File(line.drop(LOG_FILE_MARK.length))
       }.getOrElse {
