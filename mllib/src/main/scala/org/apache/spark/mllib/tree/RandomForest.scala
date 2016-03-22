@@ -160,7 +160,6 @@ private class RandomForest (
 
     val withReplacement = if (numTrees > 1) true else false
 
-//    println("OLD RF")
     val baggedInput
       = BaggedPoint.convertToBaggedRDD(treeInput,
           strategy.subsamplingRate, numTrees,

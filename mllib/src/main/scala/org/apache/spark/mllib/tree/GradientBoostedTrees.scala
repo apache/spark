@@ -47,13 +47,17 @@ import org.apache.spark.storage.StorageLevel
  *       for other loss functions.
  *
  * @param boostingStrategy Parameters for the gradient boosting algorithm.
+ * @param seed Random seed.
  */
 @Since("1.2.0")
-class GradientBoostedTrees @Since("2.0.0") (
-      private val boostingStrategy: BoostingStrategy,
-      seed: Int)
+class GradientBoostedTrees private[spark] (
+    private val boostingStrategy: BoostingStrategy,
+    private val seed: Int)
   extends Serializable with Logging {
 
+  /**
+   * @param boostingStrategy Parameters for the gradient boosting algorithm.
+   */
   @Since("1.2.0")
   def this(boostingStrategy: BoostingStrategy) = this(boostingStrategy, 0)
 
@@ -144,7 +148,7 @@ object GradientBoostedTrees extends Logging {
    * @return GradientBoostedTreesModel that can be used for prediction.
    */
   @Since("2.0.0")
-  def train(
+  private[spark] def train(
       input: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy,
       seed: Int): GradientBoostedTreesModel = {
@@ -155,13 +159,22 @@ object GradientBoostedTrees extends Logging {
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees$#train]]
    */
   @Since("2.0.0")
-  def train(
+  private[spark] def train(
       input: JavaRDD[LabeledPoint],
       boostingStrategy: BoostingStrategy,
       seed: Int): GradientBoostedTreesModel = {
     train(input.rdd, boostingStrategy, seed)
   }
 
+  /**
+   * Method to train a gradient boosting model.
+   *
+   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
+   *              For regression, labels are real numbers.
+   * @param boostingStrategy Configuration options for the boosting algorithm.
+   * @return GradientBoostedTreesModel that can be used for prediction.
+   */
   @Since("1.2.0")
   def train(
       input: RDD[LabeledPoint],
@@ -185,6 +198,7 @@ object GradientBoostedTrees extends Logging {
    * @param validationInput Validation dataset, ignored if validate is set to false.
    * @param boostingStrategy Boosting parameters.
    * @param validate Whether or not to use the validation dataset.
+   * @param seed Random seed.
    * @return GradientBoostedTreesModel that can be used for prediction.
    */
   private def boost(
