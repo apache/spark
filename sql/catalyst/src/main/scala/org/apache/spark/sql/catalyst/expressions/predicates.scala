@@ -408,6 +408,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 
   override def nullable: Boolean = false
 
+  override def nullIntolerant: Boolean = false
+
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
     val input2 = right.eval(input)

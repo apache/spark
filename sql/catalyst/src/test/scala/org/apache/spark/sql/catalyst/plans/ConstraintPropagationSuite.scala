@@ -220,12 +220,18 @@ class ConstraintPropagationSuite extends SparkFunSuite {
   }
 
   test("infer constraints on cast") {
-    val tr = LocalRelation('a.int, 'b.long)
+    val tr = LocalRelation('a.int, 'b.long, 'c.int, 'd.long, 'e.int)
     verifyConstraints(
       tr.where('a.attr === 'b.attr &&
-        IsNotNull(Cast(Cast(resolveColumn(tr, "a"), LongType), LongType))).analyze.constraints,
+        'c.attr + 100 > 'd.attr &&
+        IsNotNull(Cast(Cast(resolveColumn(tr, "e"), LongType), LongType))).analyze.constraints,
       ExpressionSet(Seq(Cast(resolveColumn(tr, "a"), LongType) === resolveColumn(tr, "b"),
+        Cast(resolveColumn(tr, "c") + 100, LongType) > resolveColumn(tr, "d"),
         IsNotNull(resolveColumn(tr, "a")),
-        IsNotNull(resolveColumn(tr, "b")))))
+        IsNotNull(resolveColumn(tr, "b")),
+        IsNotNull(resolveColumn(tr, "c")),
+        IsNotNull(resolveColumn(tr, "d")),
+        IsNotNull(resolveColumn(tr, "e")),
+        IsNotNull(Cast(Cast(resolveColumn(tr, "e"), LongType), LongType)))))
   }
 }

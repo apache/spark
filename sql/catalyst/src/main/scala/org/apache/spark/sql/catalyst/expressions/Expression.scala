@@ -81,10 +81,10 @@ abstract class Expression extends TreeNode[Expression] {
   def nullable: Boolean
 
   /**
-   * Indicates whether this expression is null intolerant
-   * (i.e., any null input will result in null output).
+   * Indicates whether this expression is null intolerant. If this is true,
+   * then any null input will result in null output).
    */
-  def nullIntolerant: Boolean = false
+  def nullIntolerant: Boolean = true
 
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 

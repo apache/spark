@@ -47,24 +47,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
     // Currently we only propagate constraints if the condition consists of equality
     // and ranges. For all other cases, we return an empty set of constraints
-    constraints.map {
-      case EqualTo(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThan(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThanOrEqual(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case LessThan(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case LessThanOrEqual(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case Not(EqualTo(l, r)) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case _ =>
-        Set.empty[Expression]
-    }.foldLeft(Set.empty[Expression])(_ union _.toSet).map(_.transform {
-      case IsNotNull(Casts(a)) => IsNotNull(a)
-    })
+    constraints.map(scanNullIntolerantExpr)
+      .foldLeft(Set.empty[Expression])(_ union _.toSet)
+  }
+
+  private def scanNullIntolerantExpr(expr: Expression): Set[Expression] = expr match {
+    case a: Attribute => Set(IsNotNull(a))
+    case IsNotNull(e) =>
+      // IsNotNull is null tolerant, but we need to explore for the attributes not null.
+      scanNullIntolerantExpr(e)
+    case e: Expression if e.nullIntolerant => e.children.flatMap(scanNullIntolerantExpr).toSet
+    case _ => Set.empty[Expression]
   }
 
   /**
