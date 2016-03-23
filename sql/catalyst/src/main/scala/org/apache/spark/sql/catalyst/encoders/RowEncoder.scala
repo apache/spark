@@ -137,6 +137,8 @@ object RowEncoder {
         CreateStruct(convertedFields))
   }
 
+  // This is used to get external type for an input with DateType dt. So this should
+  // be only used in extractorsFor.
   private def externalDataTypeForInput(dt: DataType): DataType = dt match {
     // In order to support both Decimal and java BigDecimal in external row, we make this
     // as java.lang.Object.
