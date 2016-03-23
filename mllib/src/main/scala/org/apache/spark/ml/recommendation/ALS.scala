@@ -656,7 +656,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
         if (shouldCheckpoint(iter)) {
-          ALS.checkpointAndCleanParents(itemFactors) // itemFactors gets materialized in computeFactors.
+          // itemFactors gets materialized in computeFactors & here.
+          ALS.checkpointAndCleanParents(itemFactors)
         }
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
