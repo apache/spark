@@ -164,9 +164,9 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
   def createTempTable(
       name: String,
       tableDefinition: LogicalPlan,
-      ignoreIfExists: Boolean): Unit = {
+      overrideIfExists: Boolean): Unit = {
     val table = formatTableName(name)
-    if (tempTables.containsKey(table) && !ignoreIfExists) {
+    if (tempTables.containsKey(table) && !overrideIfExists) {
       throw new AnalysisException(s"Temporary table '$name' already exists.")
     }
     tempTables.put(table, tableDefinition)

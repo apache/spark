@@ -671,7 +671,7 @@ class SQLContext private[sql](
     sessionState.catalog.createTempTable(
       sessionState.sqlParser.parseTableIdentifier(tableName).table,
       df.logicalPlan,
-      ignoreIfExists = true)
+      overrideIfExists = true)
   }
 
   /**
