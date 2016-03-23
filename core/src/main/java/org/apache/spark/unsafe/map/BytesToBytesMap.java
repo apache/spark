@@ -55,9 +55,10 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  *   Bytes 4 to 8: len(k)
  *   Bytes 8 to 8 + len(k): key data
  *   Bytes 8 + len(k) to 8 + len(k) + len(v): value data
+ *   Bytes 8 + len(k) + len(v) to 8 + len(k) + len(v) + 8: pointer to next pair
  *
  * This means that the first four bytes store the entire record (key + value) length. This format
- * is consistent with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
+ * is compatible with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
  * so we can pass records from this map directly into the sorter to sort records in place.
  */
 public final class BytesToBytesMap extends MemoryConsumer {
@@ -306,7 +307,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       if (currentPage != null) {
         int totalLength = Platform.getInt(pageBaseObject, offsetInPage);
         loc.with(currentPage, offsetInPage);
-        offsetInPage += 4 + totalLength;
+        // [total size] [key size] [key] [value] [pointer to next]
+        offsetInPage += 4 + totalLength + 8;
         recordsInPage --;
         return loc;
       } else {
@@ -356,7 +358,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
           while (numRecords > 0) {
             int length = Platform.getInt(base, offset);
             writer.write(base, offset + 4, length, 0);
-            offset += 4 + length;
+            offset += 4 + length + 8;
             numRecords--;
           }
           writer.close();
@@ -449,13 +451,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
       }
       if (longArray.get(pos * 2) == 0) {
         // This is a new key.
-        loc.with(pos, step, hash, false);
+        loc.with(pos, hash, false);
         return;
       } else {
         long stored = longArray.get(pos * 2 + 1);
         if ((int) (stored) == hash) {
           // Full hash code matches.  Let's compare the keys for equality.
-          loc.with(pos, step, hash, true);
+          loc.with(pos, hash, true);
           if (loc.getKeyLength() == keyLength) {
             final boolean areEqual = ByteArrayMethods.arrayEquals(
               keyBase,
@@ -480,29 +482,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Append a pair of key-value at the end, there could other pairs with the same keys.
-   */
-  public boolean append(Object keyBase, long keyOffset, int keyLength,
-                        Object valueBase, long valueOffset, int valueLength) {
-    assert(longArray != null);
-    int hash = Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42);
-    int pos = hash & mask;
-    int step = 1;
-    while (longArray.get(pos * 2) != 0) {
-      pos = (pos + step++) & mask;
-    }
-    loc.with(pos, step, hash, false);
-    return loc.putNewKey(keyBase, keyOffset, keyLength, valueBase, valueOffset, valueLength);
-  }
-
-  /**
    * Handle returned by {@link BytesToBytesMap#lookup(Object, long, int)} function.
    */
   public final class Location {
     /** An index into the hash map's Long array */
     private int pos;
-    /** Number of steps to move to next slot for the key that have the same hash (masked) */
-    private int step;
     /** True if this location points to a position where a key is defined, false otherwise */
     private boolean isDefined;
     /**
@@ -539,10 +523,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
       valueLength = totalLength - keyLength - 4;
     }
 
-    private Location with(int pos, int step, int keyHashcode, boolean isDefined) {
+    private Location with(int pos, int keyHashcode, boolean isDefined) {
       assert(longArray != null);
       this.pos = pos;
-      this.step = step;
       this.isDefined = isDefined;
       this.keyHashcode = keyHashcode;
       if (isDefined) {
@@ -576,25 +559,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
     /**
      * Find the next pair that has the same key as current one.
      */
-    public boolean nextPairWithMatchingKey() {
-      pos = (pos + step++) & mask;
+    public boolean nextValue() {
       // Remember the current key
-      Object keyBase = getKeyBase();
-      long keyOffset = getKeyOffset();
-      int keyLength = getKeyLength();
-      assert (longArray != null);
-      while (longArray.get(pos * 2) != 0) {
-        long stored = longArray.get(pos * 2 + 1);
-        if ((int) (stored) == keyHashcode) {
-          with(pos, step, keyHashcode, true);
-          if (getKeyLength() == keyLength &&
-            ByteArrayMethods.arrayEquals(keyBase, keyOffset, getKeyBase(), getKeyOffset(),
-              keyLength)) {
-              return true;
-          }
-        }
-        pos = (pos + step++) & mask;
+      assert isDefined;
+      long nextAddr = Platform.getLong(baseObject, valueOffset + valueLength);
+      if (nextAddr == 0) {
+        return false;
       }
+      updateAddressesAndSizes(nextAddr);
       return false;
     }
 
@@ -664,10 +636,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
 
     /**
-     * Store a new key and value. This method may only be called once for a given key; if you want
-     * to update the value associated with a key, then you can directly manipulate the bytes stored
-     * at the value address. The return value indicates whether the put succeeded or whether it
-     * failed because additional memory could not be acquired.
+     * Append a new value for the key. This method could be called multiple times for a given key.
+     * The return value indicates whether the put succeeded or whether it failed because additional
+     * memory could not be acquired.
      * <p>
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
      * </p>
@@ -676,7 +647,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * </p>
      * <p>
      * After calling this method, calls to `get[Key|Value]Address()` and `get[Key|Value]Length`
-     * will return information on the data stored by this `putNewKey` call.
+     * will return information on the data stored by this `append` call.
      * </p>
      * <p>
      * As an example usage, here's the proper way to store a new key:
@@ -684,7 +655,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * <pre>
      *   Location loc = map.lookup(keyBase, keyOffset, keyLength);
      *   if (!loc.isDefined()) {
-     *     if (!loc.putNewKey(keyBase, keyOffset, keyLength, ...)) {
+     *     if (!loc.append(keyBase, keyOffset, keyLength, ...)) {
      *       // handle failure to grow map (by spilling, for example)
      *     }
      *   }
@@ -696,13 +667,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * @return true if the put() was successful and false if the put() failed because memory could
      *         not be acquired.
      */
-    public boolean putNewKey(Object keyBase, long keyOffset, int keyLength,
-        Object valueBase, long valueOffset, int valueLength) {
-      assert (!isDefined) : "Can only set value once for a key";
+    public boolean append(Object keyBase, long keyOffset, int keyLength,
+                          Object valueBase, long valueOffset, int valueLength) {
       assert (keyLength % 8 == 0);
       assert (valueLength % 8 == 0);
       assert(longArray != null);
-
 
       if (numElements == MAX_CAPACITY
         // The map could be reused from last spill (because of no enough memory to grow),
@@ -714,8 +683,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
-      // (8 byte key length) (key) (value)
-      final long recordLength = 8 + keyLength + valueLength;
+      // (8 byte key length) (key) (value) (8 byte pointer to next value)
+      final long recordLength = 8 + keyLength + valueLength + 8;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
         if (!acquireNewPage(recordLength + 4L)) {
           return false;
@@ -737,13 +706,22 @@ public final class BytesToBytesMap extends MemoryConsumer {
       offset = currentPage.getBaseOffset();
       Platform.putInt(base, offset, Platform.getInt(base, offset) + 1);
       pageCursor += recordLength;
-      numElements++;
       final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
         currentPage, recordOffset);
-      longArray.set(pos * 2, storedKeyAddress);
-      longArray.set(pos * 2 + 1, keyHashcode);
-      updateAddressesAndSizes(storedKeyAddress);
-      isDefined = true;
+      if (isDefined) {
+        // put this pair at the end of chain
+        while (nextValue()) {
+          // do nothing
+        }
+        Platform.putLong(baseObject, valueOffset + valueLength, storedKeyAddress);
+        nextValue();  // point to new added value
+      } else {
+        numElements++;
+        longArray.set(pos * 2, storedKeyAddress);
+        longArray.set(pos * 2 + 1, keyHashcode);
+        updateAddressesAndSizes(storedKeyAddress);
+        isDefined = true;
+      }
 
       if (numElements > growthThreshold && longArray.size() < MAX_CAPACITY) {
         try {

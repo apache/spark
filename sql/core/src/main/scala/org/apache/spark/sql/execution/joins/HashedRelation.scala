@@ -169,7 +169,7 @@ private[joins] class UnsafeHashedRelation(
       val row = new UnsafeRow(numFields)
       row.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       buffer += row
-      while (loc.nextPairWithMatchingKey()) {
+      while (loc.nextValue()) {
         val row = new UnsafeRow(numFields)
         row.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
         buffer += row
@@ -185,8 +185,8 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    // This could happen when a cached broadcast object need to be dumped into disk to free memory
     out.writeInt(numFields)
+    // TODO: move these into BytesToBytesMap
     out.writeInt(binaryMap.numElements())
 
     var buffer = new Array[Byte](64)
@@ -215,7 +215,7 @@ private[joins] class UnsafeHashedRelation(
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     // TODO(josh): This needs to be revisited before we merge this patch; making this change now
     // so that tests compile:
-    val taskMemoryManager = new TaskMemoryManager(
+    val taskMemoryManager = new StaticMemoryManager(
       new StaticMemoryManager(
         new SparkConf().set("spark.memory.offHeap.enabled", "false"),
         Long.MaxValue,
@@ -249,8 +249,9 @@ private[joins] class UnsafeHashedRelation(
       }
       in.readFully(valuesBuffer, 0, valuesSize)
 
-      val putSuceeded = binaryMap.append(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize,
-       valuesBuffer, Platform.BYTE_ARRAY_OFFSET, valuesSize)
+      val loc = binaryMap.lookup(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize)
+      val putSuceeded = loc.append(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize,
+        valuesBuffer, Platform.BYTE_ARRAY_OFFSET, valuesSize)
       if (!putSuceeded) {
         binaryMap.free()
         throw new IOException("Could not allocate memory to grow BytesToBytesMap")
@@ -322,7 +323,8 @@ private[joins] object UnsafeHashedRelation {
           val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
           allUnique = !loc.isDefined
         }
-        val success = binaryMap.append(
+        val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
+        val success = loc.append(
           key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
           row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
         if (!success) {
