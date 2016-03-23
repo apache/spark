@@ -1745,12 +1745,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * has overridden the call site using `setCallSite()`, this will return the user's version.
    */
   private[spark] def getCallSite(): CallSite = {
-    CallSite(
-      Option(getLocalProperty(CallSite.SHORT_FORM))
-        .getOrElse(Utils.getCallSite().shortForm),
-      Option(getLocalProperty(CallSite.LONG_FORM))
-        .getOrElse(Utils.getCallSite().shortForm)
-    )
+    var (shortForm, longForm) = (getLocalProperty(CallSite.SHORT_FORM),
+      getLocalProperty(CallSite.LONG_FORM))
+
+    if (shortForm == null || longForm == null) {
+      val callSite = Utils.getCallSite()
+      shortForm = callSite.shortForm
+      longForm = callSite.longForm
+    }
+
+    CallSite(shortForm, longForm)
   }
 
   /**
