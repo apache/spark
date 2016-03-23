@@ -39,7 +39,7 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("case insensitive") {
-    val plan = table("a").select(all())
+    val plan = table("a").select(star())
     assertEqual("sELEct * FroM a", plan)
     assertEqual("select * fRoM a", plan)
     assertEqual("SELECT * FROM a", plan)
@@ -61,8 +61,8 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("set operations") {
-    val a = table("a").select(all())
-    val b = table("b").select(all())
+    val a = table("a").select(star())
+    val b = table("b").select(star())
 
     assertEqual("select * from a union select * from b", Distinct(a.unionAll(b)))
     assertEqual("select * from a union distinct select * from b", Distinct(a.unionAll(b)))
@@ -85,15 +85,15 @@ class PlanParserSuite extends PlanTest {
     }
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
-      cte(table("cte1").select(all()), "cte1" -> table("a").select(all())))
+      cte(table("cte1").select(star()), "cte1" -> table("a").select(star())))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(all()), "cte1" -> OneRowRelation.select(1)))
+      cte(table("cte1").select(star()), "cte1" -> OneRowRelation.select(1)))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
-      cte(table("cte2").select(all()),
+      cte(table("cte2").select(star()),
         "cte1" -> OneRowRelation.select(1),
-        "cte2" -> table("cte1").select(all())))
+        "cte2" -> table("cte1").select(star())))
     intercept(
       "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1",
       "Name 'cte1' is used for multiple common table expressions")
@@ -122,20 +122,20 @@ class PlanParserSuite extends PlanTest {
   test("multi select query") {
     assertEqual(
       "from a select * select * where s < 10",
-      table("a").select(all()).unionAll(table("a").where('s < 10).select(all())))
+      table("a").select(star()).unionAll(table("a").where('s < 10).select(star())))
     intercept(
       "from a select * select * from x where a.s < 10",
       "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
-      table("a").select(all()).insertInto("tbl1").unionAll(
-        table("a").where('s < 10).select(all()).insertInto("tbl2")))
+      table("a").select(star()).insertInto("tbl1").unionAll(
+        table("a").where('s < 10).select(star()).insertInto("tbl2")))
   }
 
   test("query organization") {
     // Test all valid combinations of order by/sort by/distribute by/cluster by/limit/windows
     val baseSql = "select * from t"
-    val basePlan = table("t").select(all())
+    val basePlan = table("t").select(star())
 
     val ws = Map("w1" -> WindowSpecDefinition(Seq.empty, Seq.empty, UnspecifiedFrame))
     val limitWindowClauses = Seq(
@@ -171,7 +171,7 @@ class PlanParserSuite extends PlanTest {
 
   test("insert into") {
     val sql = "select * from t"
-    val plan = table("t").select(all())
+    val plan = table("t").select(star())
     def insert(
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
@@ -191,7 +191,7 @@ class PlanParserSuite extends PlanTest {
       insert(Map("c" -> Option("d"), "x" -> None), overwrite = true, ifNotExists = true))
 
     // Multi insert
-    val plan2 = table("t").where('x > 5).select(all())
+    val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
       InsertIntoTable(
         table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).unionAll(
@@ -222,7 +222,7 @@ class PlanParserSuite extends PlanTest {
 
   test("limit") {
     val sql = "select * from t"
-    val plan = table("t").select(all())
+    val plan = table("t").select(star())
     assertEqual(s"$sql limit 10", plan.limit(10))
     assertEqual(s"$sql limit cast(9 / 4 as int)", plan.limit(Cast(Literal(9) / 4, IntegerType)))
   }
@@ -230,7 +230,7 @@ class PlanParserSuite extends PlanTest {
   test("window spec") {
     // Note that WindowSpecs are testing in the ExpressionParserSuite
     val sql = "select * from t"
-    val plan = table("t").select(all())
+    val plan = table("t").select(star())
     val spec = WindowSpecDefinition(Seq('a, 'b), Seq('c.asc),
       SpecifiedWindowFrame(RowFrame, ValuePreceding(1), ValueFollowing(1)))
 
@@ -262,7 +262,7 @@ class PlanParserSuite extends PlanTest {
       "select * from t lateral view explode(x) expl as x",
       table("t")
         .generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
-        .select(all()))
+        .select(star()))
 
     // Multiple lateral views
     assertEqual(
@@ -273,7 +273,7 @@ class PlanParserSuite extends PlanTest {
       table("t")
         .generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
         .generate(JsonTuple(Seq('x, 'y)), join = true, outer = true, Some("jtup"), Seq("q", "z"))
-        .select(all()))
+        .select(star()))
 
     // Multi-Insert lateral views.
     val from = table("t1").generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
@@ -289,9 +289,9 @@ class PlanParserSuite extends PlanTest {
       """.stripMargin,
       Union(from
         .generate(JsonTuple(Seq('x, 'y)), join = true, outer = false, Some("jtup"), Seq("q", "z"))
-        .select(all())
+        .select(star())
         .insertInto("t2"),
-        from.where('s < 10).select(all()).insertInto("t3")))
+        from.where('s < 10).select(star()).insertInto("t3")))
 
     // Unsupported generator.
     intercept(
@@ -303,22 +303,22 @@ class PlanParserSuite extends PlanTest {
     val testUnconditionalJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t as tt $sql u",
-        table("t").as("tt").join(table("u"), jt, None).select(all()))
+        table("t").as("tt").join(table("u"), jt, None).select(star()))
     }
     val testConditionalJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t $sql u as uu on a = b",
-        table("t").join(table("u").as("uu"), jt, Option('a === 'b)).select(all()))
+        table("t").join(table("u").as("uu"), jt, Option('a === 'b)).select(star()))
     }
     val testNaturalJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t tt natural $sql u as uu",
-        table("t").as("tt").join(table("u").as("uu"), NaturalJoin(jt), None).select(all()))
+        table("t").as("tt").join(table("u").as("uu"), NaturalJoin(jt), None).select(star()))
     }
     val testUsingJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t $sql u using(a, b)",
-        table("t").join(table("u"), UsingJoin(jt, Seq('a.attr, 'b.attr)), None).select(all()))
+        table("t").join(table("u"), UsingJoin(jt, Seq('a.attr, 'b.attr)), None).select(star()))
     }
     val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
 
@@ -340,11 +340,11 @@ class PlanParserSuite extends PlanTest {
   test("sampled relations") {
     val sql = "select * from t"
     assertEqual(s"$sql tablesample(100 rows)",
-      table("t").limit(100).select(all()))
+      table("t").limit(100).select(star()))
     assertEqual(s"$sql as x tablesample(43 percent)",
-      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x"))(true).select(all()))
+      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
     assertEqual(s"$sql as x tablesample(bucket 4 out of 10)",
-      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(all()))
+      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
     intercept(s"$sql as x tablesample(bucket 4 out of 10 on x)",
       "TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported")
     intercept(s"$sql as x tablesample(bucket 11 out of 10)",
@@ -357,10 +357,11 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select id from ((((((t0))))))", plan)
     assertEqual(
       "(select * from t1) union distinct (select * from t2)",
-      Distinct(table("t1").select(all()).unionAll(table("t2").select(all()))))
+      Distinct(table("t1").select(star()).unionAll(table("t2").select(star()))))
     assertEqual(
       "select * from ((select * from t1) union (select * from t2)) t",
-      Distinct(table("t1").select(all()).unionAll(table("t2").select(all()))).as("t").select(all()))
+      Distinct(
+        table("t1").select(star()).unionAll(table("t2").select(star()))).as("t").select(star()))
     assertEqual(
       """select  id
         |from (((select id from t0)
@@ -378,7 +379,7 @@ class PlanParserSuite extends PlanTest {
       table("t").select(ScalarSubquery(table("s").select('max.function('b))).as("ss")))
     assertEqual(
       "select * from t where a = (select b from s)",
-      table("t").where('a === ScalarSubquery(table("s").select('b))).select(all()))
+      table("t").where('a === ScalarSubquery(table("s").select('b))).select(star()))
     assertEqual(
       "select g from t group by g having a > (select b from s)",
       table("t").groupBy('g)('g).where('a > ScalarSubquery(table("s").select('b))))

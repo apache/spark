@@ -161,7 +161,7 @@ package object dsl {
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
     def abs(e: Expression): Expression = Abs(e)
-    def all(names: String*): Expression = names match {
+    def star(names: String*): Expression = names match {
       case Seq() => UnresolvedStar(None)
       case target => UnresolvedStar(Option(target))
     }
