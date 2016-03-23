@@ -601,8 +601,8 @@ public abstract class AbstractBytesToBytesMapSuite {
         final long[] arr = new long[]{i};
         final BytesToBytesMap.Location loc = map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8);
         assert loc.isDefined();
-        assert loc.next();
-        assert !loc.next();
+        assert loc.nextPairWithMatchingKey();
+        assert !loc.nextPairWithMatchingKey();
       }
       BytesToBytesMap.MapIterator iter = map.iterator();
       for (i = 0; i < 2048; i++) {

@@ -169,7 +169,7 @@ private[joins] class UnsafeHashedRelation(
       val row = new UnsafeRow(numFields)
       row.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       buffer += row
-      while (loc.next()) {
+      while (loc.nextPairWithMatchingKey()) {
         val row = new UnsafeRow(numFields)
         row.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
         buffer += row
@@ -264,8 +264,8 @@ private[joins] class UnsafeHashedRelation(
  * A HashedRelation for UnsafeRow with unique keys.
  */
 private[joins] final class UniqueUnsafeHashedRelation(
-  private var numFields: Int,
-  private var binaryMap: BytesToBytesMap)
+    private var numFields: Int,
+    private var binaryMap: BytesToBytesMap)
   extends UnsafeHashedRelation(numFields, binaryMap) with UniqueHashedRelation {
   def getValue(key: InternalRow): InternalRow = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]

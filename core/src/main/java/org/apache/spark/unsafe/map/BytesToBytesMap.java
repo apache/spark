@@ -576,7 +576,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     /**
      * Find the next pair that has the same key as current one.
      */
-    public boolean next() {
+    public boolean nextPairWithMatchingKey() {
       pos = (pos + step++) & mask;
       // Remember the current key
       Object keyBase = getKeyBase();

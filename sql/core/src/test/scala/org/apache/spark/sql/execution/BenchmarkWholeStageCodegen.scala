@@ -184,10 +184,10 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /**
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Join w 2 longs:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Join w 2 longs:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Join w 2 longs codegen=false              7877 / 8358         13.3          75.1       1.0X
-    Join w 2 longs codegen=true               3877 / 3937         27.0          37.0       2.0X
+    Join w 2 longs codegen=false           12850 / 14448          8.2         122.5       1.0X
+    Join w 2 longs codegen=true              6095 / 6322         17.2          58.1       2.1X
       */
     runBenchmark("outer join w long", N) {
       sqlContext.range(N).join(dim, (col("id") bitwiseAND M) === col("k"), "left").count()
