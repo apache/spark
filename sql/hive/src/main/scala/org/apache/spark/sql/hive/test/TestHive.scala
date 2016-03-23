@@ -164,6 +164,14 @@ class TestHiveContext private[hive](
 
   hiveconf.set("hive.plan.serialization.format", "javaXML")
 
+  // A snapshot of the entries in the starting SQLConf
+  // We save this because tests can mutate this singleton object if they want
+  val initialSQLConf: SQLConf = {
+    val snapshot = new SQLConf
+    conf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
+    snapshot
+  }
+
   val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
