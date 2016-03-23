@@ -34,7 +34,6 @@ class JavaWrapper(Params):
 
     __metaclass__ = ABCMeta
 
-
     def __init__(self):
         """
         Initialize the wrapped java object to None
