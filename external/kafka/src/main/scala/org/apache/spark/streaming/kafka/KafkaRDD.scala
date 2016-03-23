@@ -212,8 +212,7 @@ class KafkaRDD[
 
           val copiedBuffer = ByteBuffer.wrap(deepCopy)
           val copiedMessage = new Message(copiedBuffer)
-          MessageAndOffset(copiedMessage, m.offset)
-        }
+          MessageAndOffset(copiedMessage, m.offset)}
         }
       } else {
         it
