@@ -21,8 +21,9 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{Logging, SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.Serializer
@@ -90,7 +91,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
       // the disk, so should be included in the shuffle write time.
-      writeMetrics.incShuffleWriteTime(System.nanoTime - openStartTime)
+      writeMetrics.incWriteTime(System.nanoTime - openStartTime)
 
       override def releaseWriters(success: Boolean) {
         shuffleState.completedMapTasks.add(mapId)

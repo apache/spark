@@ -28,8 +28,10 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.Filter
 import org.apache.spark.util.Utils
 
 /**
@@ -64,13 +66,6 @@ private[sql] trait SQLTestUtils
    */
   protected object testImplicits extends SQLImplicits {
     protected override def _sqlContext: SQLContext = self.sqlContext
-
-    // This must live here to preserve binary compatibility with Spark < 1.5.
-    implicit class StringToColumn(val sc: StringContext) {
-      def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args: _*))
-      }
-    }
   }
 
   /**
@@ -140,7 +135,13 @@ private[sql] trait SQLTestUtils
    * Drops temporary table `tableName` after calling `f`.
    */
   protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
-    try f finally tableNames.foreach(sqlContext.dropTempTable)
+    try f finally {
+      // If the test failed part way, we don't want to mask the failure by failing to remove
+      // temp tables that never got created.
+      try tableNames.foreach(sqlContext.dropTempTable) catch {
+        case _: NoSuchTableException =>
+      }
+    }
   }
 
   /**
@@ -155,8 +156,21 @@ private[sql] trait SQLTestUtils
   }
 
   /**
+   * Drops view `viewName` after calling `f`.
+   */
+  protected def withView(viewNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      viewNames.foreach { name =>
+        sqlContext.sql(s"DROP VIEW IF EXISTS $name")
+      }
+    }
+  }
+
+  /**
    * Creates a temporary database and switches current database to it before executing `f`.  This
    * database is dropped after `f` returns.
+   *
+   * Note that this method doesn't switch current database before executing `f`.
    */
   protected def withTempDatabase(f: String => Unit): Unit = {
     val dbName = s"db_${UUID.randomUUID().toString.replace('-', '_')}"
@@ -175,8 +189,8 @@ private[sql] trait SQLTestUtils
    * `f` returns.
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
-    sqlContext.sql(s"USE $db")
-    try f finally sqlContext.sql(s"USE default")
+    sqlContext.sessionState.catalog.setCurrentDatabase(db)
+    try f finally sqlContext.sessionState.catalog.setCurrentDatabase("default")
   }
 
   /**
@@ -184,12 +198,13 @@ private[sql] trait SQLTestUtils
    */
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
-    val childRDD = df
-      .queryExecution
-      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
-      .child
+    val withoutFilters = df.queryExecution.sparkPlan transform {
+      case Filter(_, child) => child
+    }
+
+    val childRDD = withoutFilters
       .execute()
-      .map(row => Row.fromSeq(row.toSeq(schema)))
+      .map(row => Row.fromSeq(row.copy().toSeq(schema)))
 
     sqlContext.createDataFrame(childRDD, schema)
   }
@@ -199,7 +214,21 @@ private[sql] trait SQLTestUtils
    * way to construct [[DataFrame]] directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
-    DataFrame(sqlContext, plan)
+    Dataset.ofRows(sqlContext, plan)
+  }
+
+  /**
+   * Disable stdout and stderr when running the test. To not output the logs to the console,
+   * ConsoleAppender's `follow` should be set to `true` so that it will honors reassignments of
+   * System.out or System.err. Otherwise, ConsoleAppender will still output to the console even if
+   * we change System.out and System.err.
+   */
+  protected def testQuietly(name: String)(f: => Unit): Unit = {
+    test(name) {
+      quietly {
+        f
+      }
+    }
   }
 }
 

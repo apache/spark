@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.rdd.SqlNewHadoopRDDState
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -35,7 +35,7 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def dataType: DataType = StringType
 
-  override val prettyName = "INPUT_FILE_NAME"
+  override def prettyName: String = "input_file_name"
 
   override protected def initInternal(): Unit = {}
 
@@ -43,11 +43,9 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
     SqlNewHadoopRDDState.getInputFileName()
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     ev.isNull = "false"
     s"final ${ctx.javaType(dataType)} ${ev.value} = " +
       "org.apache.spark.rdd.SqlNewHadoopRDDState.getInputFileName();"
   }
-
-  override def sql: String = prettyName
 }

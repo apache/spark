@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
 
@@ -39,7 +39,7 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   // in that batch's checkpoint data
   @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time]
 
-  @transient private var fileSystem : FileSystem = null
+  @transient private var fileSystem: FileSystem = null
   protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]]
 
   /**

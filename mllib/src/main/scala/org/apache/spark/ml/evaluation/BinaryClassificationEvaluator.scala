@@ -29,6 +29,8 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * :: Experimental ::
  * Evaluator for binary classification, which expects two input columns: rawPrediction and label.
+ * The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label 1)
+ * or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
  */
 @Since("1.2.0")
 @Experimental
@@ -78,14 +80,14 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("1.2.0")
   override def evaluate(dataset: DataFrame): Double = {
     val schema = dataset.schema
-    SchemaUtils.checkColumnType(schema, $(rawPredictionCol), new VectorUDT)
+    SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
     SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
-    val scoreAndLabels = dataset.select($(rawPredictionCol), $(labelCol))
-      .map { case Row(rawPrediction: Vector, label: Double) =>
-        (rawPrediction(1), label)
-      }
+    val scoreAndLabels = dataset.select($(rawPredictionCol), $(labelCol)).rdd.map {
+      case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
+      case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
+    }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val metric = $(metricName) match {
       case "areaUnderROC" => metrics.areaUnderROC()

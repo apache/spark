@@ -31,6 +31,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.storage.StorageLevel
@@ -147,7 +148,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
   }
 
-  test("start with non-seriazable DStream checkpoints") {
+  test("start with non-serializable DStream checkpoints") {
     val checkpointDir = Utils.createTempDir()
     ssc = new StreamingContext(conf, batchDuration)
     ssc.checkpoint(checkpointDir.getAbsolutePath)
@@ -896,7 +897,7 @@ object SlowTestReceiver {
 package object testPackage extends Assertions {
   def test() {
     val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
-    val ssc = new StreamingContext(conf , Milliseconds(100))
+    val ssc = new StreamingContext(conf, Milliseconds(100))
     try {
       val inputStream = ssc.receiverStream(new TestReceiver)
 

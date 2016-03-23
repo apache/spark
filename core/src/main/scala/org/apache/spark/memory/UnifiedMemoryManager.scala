@@ -17,10 +17,8 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockId, BlockStatus}
+import org.apache.spark.storage.BlockId
 
 /**
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
@@ -133,10 +131,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
     }
   }
 
-  override def acquireStorageMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
     assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
     assert(numBytes >= 0)
     if (numBytes > maxStorageMemory) {
@@ -152,14 +147,11 @@ private[spark] class UnifiedMemoryManager private[memory] (
       onHeapExecutionMemoryPool.decrementPoolSize(memoryBorrowedFromExecution)
       storageMemoryPool.incrementPoolSize(memoryBorrowedFromExecution)
     }
-    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+    storageMemoryPool.acquireMemory(blockId, numBytes)
   }
 
-  override def acquireUnrollMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    acquireStorageMemory(blockId, numBytes, evictedBlocks)
+  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
+    acquireStorageMemory(blockId, numBytes)
   }
 }
 
@@ -191,7 +183,17 @@ object UnifiedMemoryManager {
     val minSystemMemory = reservedMemory * 1.5
     if (systemMemory < minSystemMemory) {
       throw new IllegalArgumentException(s"System memory $systemMemory must " +
-        s"be at least $minSystemMemory. Please use a larger heap size.")
+        s"be at least $minSystemMemory. Please increase heap size using the --driver-memory " +
+        s"option or spark.driver.memory in Spark configuration.")
+    }
+    // SPARK-12759 Check executor memory to fail fast if memory is insufficient
+    if (conf.contains("spark.executor.memory")) {
+      val executorMemory = conf.getSizeAsBytes("spark.executor.memory")
+      if (executorMemory < minSystemMemory) {
+        throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
+          s"$minSystemMemory. Please increase executor memory using the " +
+          s"--executor-memory option or spark.executor.memory in Spark configuration.")
+      }
     }
     val usableMemory = systemMemory - reservedMemory
     val memoryFraction = conf.getDouble("spark.memory.fraction", 0.75)

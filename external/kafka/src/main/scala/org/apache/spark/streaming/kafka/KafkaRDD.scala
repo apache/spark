@@ -27,7 +27,8 @@ import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
-import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.{Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.NextIterator
@@ -79,7 +80,7 @@ class KafkaRDD[
       .map(_.asInstanceOf[KafkaRDDPartition])
       .filter(_.count > 0)
 
-    if (num < 1 || nonEmptyPartitions.size < 1) {
+    if (num < 1 || nonEmptyPartitions.isEmpty) {
       return new Array[R](0)
     }
 
@@ -156,7 +157,7 @@ class KafkaRDD[
     var requestOffset = part.fromOffset
     var iter: Iterator[MessageAndOffset] = null
 
-    // The idea is to use the provided preferred host, except on task retry atttempts,
+    // The idea is to use the provided preferred host, except on task retry attempts,
     // to minimize number of kafka metadata requests
     private def connectLeader: SimpleConsumer = {
       if (context.attemptNumber > 0) {

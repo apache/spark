@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -29,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -114,44 +116,56 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new MyDenseVectorUDT()
   ).filter(supportsDataType)
 
-  for (dataType <- supportedDataTypes) {
-    test(s"test all data types - $dataType") {
-      withTempPath { file =>
-        val path = file.getCanonicalPath
+  try {
+    for (dataType <- supportedDataTypes) {
+      for (parquetDictionaryEncodingEnabled <- Seq(true, false)) {
+        test(s"test all data types - $dataType with parquet.enable.dictionary = " +
+          s"$parquetDictionaryEncodingEnabled") {
 
-        val dataGenerator = RandomDataGenerator.forType(
-          dataType = dataType,
-          nullable = true,
-          seed = Some(System.nanoTime())
-        ).getOrElse {
-          fail(s"Failed to create data generator for schema $dataType")
+          hadoopConfiguration.setBoolean("parquet.enable.dictionary",
+            parquetDictionaryEncodingEnabled)
+
+          withTempPath { file =>
+            val path = file.getCanonicalPath
+
+            val dataGenerator = RandomDataGenerator.forType(
+              dataType = dataType,
+              nullable = true,
+              new Random(System.nanoTime())
+            ).getOrElse {
+              fail(s"Failed to create data generator for schema $dataType")
+            }
+
+            // Create a DF for the schema with random data. The index field is used to sort the
+            // DataFrame.  This is a workaround for SPARK-10591.
+            val schema = new StructType()
+              .add("index", IntegerType, nullable = false)
+              .add("col", dataType, nullable = true)
+            val rdd =
+              sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
+            val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+
+            df.write
+              .mode("overwrite")
+              .format(dataSourceName)
+              .option("dataSchema", df.schema.json)
+              .save(path)
+
+            val loadedDF = sqlContext
+              .read
+              .format(dataSourceName)
+              .option("dataSchema", df.schema.json)
+              .schema(df.schema)
+              .load(path)
+              .orderBy("index")
+
+            checkAnswer(loadedDF, df)
+          }
         }
-
-        // Create a DF for the schema with random data. The index field is used to sort the
-        // DataFrame.  This is a workaround for SPARK-10591.
-        val schema = new StructType()
-          .add("index", IntegerType, nullable = false)
-          .add("col", dataType, nullable = true)
-        val rdd = sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
-        val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
-
-        df.write
-          .mode("overwrite")
-          .format(dataSourceName)
-          .option("dataSchema", df.schema.json)
-          .save(path)
-
-        val loadedDF = sqlContext
-          .read
-          .format(dataSourceName)
-          .option("dataSchema", df.schema.json)
-          .schema(df.schema)
-          .load(path)
-          .orderBy("index")
-
-        checkAnswer(loadedDF, df)
       }
     }
+  } finally {
+    hadoopConfiguration.unset("parquet.enable.dictionary")
   }
 
   test("save()/load() - non-partitioned table - Overwrite") {
@@ -500,8 +514,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       }
 
       val actualPaths = df.queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: HadoopFsRelation, _) =>
-          relation.paths.toSet
+        case LogicalRelation(relation: HadoopFsRelation, _, _) =>
+          relation.location.paths.map(_.toString).toSet
       }.getOrElse {
         fail("Expect an FSBasedRelation, but none could be found")
       }
@@ -558,7 +572,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), df.select('b, 'c, 'a).collect())
+      checkAnswer(sqlContext.table("t").select('b, 'c, 'a), df.select('b, 'c, 'a).collect())
     }
   }
 
@@ -671,7 +685,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           classOf[AlwaysFailOutputCommitter].getName)
 
         // Code below shouldn't throw since customized output committer should be disabled.
-        val df = sqlContext.range(10).coalesce(1)
+        val df = sqlContext.range(10).toDF().coalesce(1)
         df.write.format(dataSourceName).save(dir.getCanonicalPath)
         checkAnswer(
           sqlContext

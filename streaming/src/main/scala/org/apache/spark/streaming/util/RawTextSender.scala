@@ -23,7 +23,8 @@ import java.nio.ByteBuffer
 
 import scala.io.Source
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.IntParam
 

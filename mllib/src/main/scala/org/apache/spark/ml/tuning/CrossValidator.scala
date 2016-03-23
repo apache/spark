@@ -22,8 +22,9 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.OneVsRestParams
 import org.apache.spark.ml.evaluation.Evaluator
@@ -128,19 +129,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   }
 
   @Since("1.4.0")
-  override def transformSchema(schema: StructType): StructType = {
-    validateParams()
-    $(estimator).transformSchema(schema)
-  }
-
-  @Since("1.4.0")
-  override def validateParams(): Unit = {
-    super.validateParams()
-    val est = $(estimator)
-    for (paramMap <- $(estimatorParamMaps)) {
-      est.copy(paramMap).validateParams()
-    }
-  }
+  override def transformSchema(schema: StructType): StructType = transformSchemaImpl(schema)
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidator = {
@@ -196,6 +185,123 @@ object CrossValidator extends MLReadable[CrossValidator] {
         .setNumFolds(numFolds)
     }
   }
+
+  private object CrossValidatorReader {
+    /**
+     * Examine the given estimator (which may be a compound estimator) and extract a mapping
+     * from UIDs to corresponding [[Params]] instances.
+     */
+    def getUidMap(instance: Params): Map[String, Params] = {
+      val uidList = getUidMapImpl(instance)
+      val uidMap = uidList.toMap
+      if (uidList.size != uidMap.size) {
+        throw new RuntimeException("CrossValidator.load found a compound estimator with stages" +
+          s" with duplicate UIDs.  List of UIDs: ${uidList.map(_._1).mkString(", ")}")
+      }
+      uidMap
+    }
+
+    def getUidMapImpl(instance: Params): List[(String, Params)] = {
+      val subStages: Array[Params] = instance match {
+        case p: Pipeline => p.getStages.asInstanceOf[Array[Params]]
+        case pm: PipelineModel => pm.stages.asInstanceOf[Array[Params]]
+        case v: ValidatorParams => Array(v.getEstimator, v.getEvaluator)
+        case ovr: OneVsRestParams =>
+          // TODO: SPARK-11892: This case may require special handling.
+          throw new UnsupportedOperationException("CrossValidator write will fail because it" +
+            " cannot yet handle an estimator containing type: ${ovr.getClass.getName}")
+        case rformModel: RFormulaModel => Array(rformModel.pipelineModel)
+        case _: Params => Array()
+      }
+      val subStageMaps = subStages.map(getUidMapImpl).foldLeft(List.empty[(String, Params)])(_ ++ _)
+      List((instance.uid, instance)) ++ subStageMaps
+    }
+  }
+
+  private[tuning] object SharedReadWrite {
+
+    /**
+     * Check that [[CrossValidator.evaluator]] and [[CrossValidator.estimator]] are Writable.
+     * This does not check [[CrossValidator.estimatorParamMaps]].
+     */
+    def validateParams(instance: ValidatorParams): Unit = {
+      def checkElement(elem: Params, name: String): Unit = elem match {
+        case stage: MLWritable => // good
+        case other =>
+          throw new UnsupportedOperationException("CrossValidator write will fail " +
+            s" because it contains $name which does not implement Writable." +
+            s" Non-Writable $name: ${other.uid} of type ${other.getClass}")
+      }
+      checkElement(instance.getEvaluator, "evaluator")
+      checkElement(instance.getEstimator, "estimator")
+      // Check to make sure all Params apply to this estimator.  Throw an error if any do not.
+      // Extraneous Params would cause problems when loading the estimatorParamMaps.
+      val uidToInstance: Map[String, Params] = CrossValidatorReader.getUidMap(instance)
+      instance.getEstimatorParamMaps.foreach { case pMap: ParamMap =>
+        pMap.toSeq.foreach { case ParamPair(p, v) =>
+          require(uidToInstance.contains(p.parent), s"CrossValidator save requires all Params in" +
+            s" estimatorParamMaps to apply to this CrossValidator, its Estimator, or its" +
+            s" Evaluator.  An extraneous Param was found: $p")
+        }
+      }
+    }
+
+    private[tuning] def saveImpl(
+        path: String,
+        instance: CrossValidatorParams,
+        sc: SparkContext,
+        extraMetadata: Option[JObject] = None): Unit = {
+      import org.json4s.JsonDSL._
+
+      val estimatorParamMapsJson = compact(render(
+        instance.getEstimatorParamMaps.map { case paramMap =>
+          paramMap.toSeq.map { case ParamPair(p, v) =>
+            Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v))
+          }
+        }.toSeq
+      ))
+      val jsonParams = List(
+        "numFolds" -> parse(instance.numFolds.jsonEncode(instance.getNumFolds)),
+        "estimatorParamMaps" -> parse(estimatorParamMapsJson)
+      )
+      DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+
+      val evaluatorPath = new Path(path, "evaluator").toString
+      instance.getEvaluator.asInstanceOf[MLWritable].save(evaluatorPath)
+      val estimatorPath = new Path(path, "estimator").toString
+      instance.getEstimator.asInstanceOf[MLWritable].save(estimatorPath)
+    }
+
+    private[tuning] def load[M <: Model[M]](
+        path: String,
+        sc: SparkContext,
+        expectedClassName: String): (Metadata, Estimator[M], Evaluator, Array[ParamMap], Int) = {
+
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
+
+      implicit val format = DefaultFormats
+      val evaluatorPath = new Path(path, "evaluator").toString
+      val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, sc)
+      val estimatorPath = new Path(path, "estimator").toString
+      val estimator = DefaultParamsReader.loadParamsInstance[Estimator[M]](estimatorPath, sc)
+
+      val uidToParams = Map(evaluator.uid -> evaluator) ++ CrossValidatorReader.getUidMap(estimator)
+
+      val numFolds = (metadata.params \ "numFolds").extract[Int]
+      val estimatorParamMaps: Array[ParamMap] =
+        (metadata.params \ "estimatorParamMaps").extract[Seq[Seq[Map[String, String]]]].map {
+          pMap =>
+            val paramPairs = pMap.map { case pInfo: Map[String, String] =>
+              val est = uidToParams(pInfo("parent"))
+              val param = est.getParam(pInfo("name"))
+              val value = param.jsonDecode(pInfo("value"))
+              param -> value
+            }
+            ParamMap(paramPairs: _*)
+        }.toArray
+      (metadata, estimator, evaluator, estimatorParamMaps, numFolds)
+    }
+  }
 }
 
 /**
@@ -215,11 +321,6 @@ class CrossValidatorModel private[ml] (
   extends Model[CrossValidatorModel] with CrossValidatorParams with MLWritable {
 
   @Since("1.4.0")
-  override def validateParams(): Unit = {
-    bestModel.validateParams()
-  }
-
-  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
@@ -227,7 +328,6 @@ class CrossValidatorModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     bestModel.transformSchema(schema)
   }
 

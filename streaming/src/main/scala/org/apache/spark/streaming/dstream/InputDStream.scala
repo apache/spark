@@ -23,7 +23,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 import org.apache.spark.streaming.scheduler.RateController
-import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.Utils
 
 /**
@@ -38,10 +37,10 @@ import org.apache.spark.util.Utils
  * that requires running a receiver on the worker nodes, use
  * [[org.apache.spark.streaming.dstream.ReceiverInputDStream]] as the parent class.
  *
- * @param ssc_ Streaming context that will execute this input stream
+ * @param _ssc Streaming context that will execute this input stream
  */
-abstract class InputDStream[T: ClassTag] (ssc_ : StreamingContext)
-  extends DStream[T](ssc_) {
+abstract class InputDStream[T: ClassTag] (_ssc: StreamingContext)
+  extends DStream[T](_ssc) {
 
   private[streaming] var lastValidTime: Time = null
 

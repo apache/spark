@@ -27,7 +27,6 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
-
 /**
   * An optimized CartesianRDD for UnsafeRow, which will cache the rows from second child RDD,
   * will be much faster than building the right partition for every row in left RDD, it also
@@ -42,6 +41,7 @@ class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numField
     val sorter = UnsafeExternalSorter.create(
       context.taskMemoryManager(),
       SparkEnv.get.blockManager,
+      SparkEnv.get.serializerManager,
       context,
       null,
       null,
@@ -82,23 +82,13 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numLeftRows = longMetric("numLeftRows")
-    val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
-    val leftResults = left.execute().map { row =>
-      numLeftRows += 1
-      row.asInstanceOf[UnsafeRow]
-    }
-    val rightResults = right.execute().map { row =>
-      numRightRows += 1
-      row.asInstanceOf[UnsafeRow]
-    }
+    val leftResults = left.execute().asInstanceOf[RDD[UnsafeRow]]
+    val rightResults = right.execute().asInstanceOf[RDD[UnsafeRow]]
 
     val pair = new UnsafeCartesianRDD(leftResults, rightResults, right.output.size)
     pair.mapPartitionsInternal { iter =>

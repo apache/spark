@@ -182,7 +182,7 @@ class StateMapSuite extends SparkFunSuite {
      *
      * - These operations are done on a test map in "sets". After each set, the map is "copied"
      *   to create a new map, and the next set of operations are done on the new one. This tests
-     *   whether the map data persistes correctly across copies.
+     *   whether the map data persist correctly across copies.
      *
      * - Within each set, there are a number of operations to test whether the map correctly
      *   updates and removes data without affecting the parent state map.
@@ -280,7 +280,7 @@ class StateMapSuite extends SparkFunSuite {
     testSerialization(new KryoSerializer(conf), map, msg)
   }
 
-  private def testSerialization[T : ClassTag](
+  private def testSerialization[T: ClassTag](
       serializer: Serializer,
       map: OpenHashMapBasedStateMap[T, T],
       msg: String): OpenHashMapBasedStateMap[T, T] = {

@@ -35,8 +35,9 @@ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifie
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -45,7 +46,7 @@ import org.apache.spark.util.Utils
  */
 @DeveloperApi
 class SparkHadoopUtil extends Logging {
-  private val sparkConf = new SparkConf()
+  private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
 
@@ -369,6 +370,14 @@ object SparkHadoopUtil {
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
 
   val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
+
+  /**
+   * Number of records to update input metrics when reading from HadoopRDDs.
+   *
+   * Each update is potentially expensive because we need to use reflection to access the
+   * Hadoop FileSystem API of interest (only available in 2.5), so we should do this sparingly.
+   */
+  private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 
   def get: SparkHadoopUtil = {
     // Check each time to support changing to/from YARN

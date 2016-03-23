@@ -25,6 +25,7 @@ import scala.language.existentials
 import scala.util.{Failure, Success}
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
@@ -131,7 +132,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   // Track the active receiver job number. When a receiver job exits ultimately, countDown will
   // be called.
-  private val receiverJobExitLatch = new CountDownLatch(receiverInputStreams.size)
+  private val receiverJobExitLatch = new CountDownLatch(receiverInputStreams.length)
 
   /**
    * Track all receivers' information. The key is the receiver id, the value is the receiver info.

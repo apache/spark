@@ -6,5 +6,7 @@
   url: ml-classification-regression.html
 - text: Clustering
   url: ml-clustering.html
+- text: Collaborative filtering
+  url: ml-collaborative-filtering.html
 - text: Advanced topics
   url: ml-advanced.html

@@ -23,7 +23,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
 class ExamplePoint(val x: Double, val y: Double) extends Serializable {
@@ -48,14 +47,11 @@ class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
   override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 
-  override def serialize(obj: Any): GenericArrayData = {
-    obj match {
-      case p: ExamplePoint =>
-        val output = new Array[Any](2)
-        output(0) = p.x
-        output(1) = p.y
-        new GenericArrayData(output)
-    }
+  override def serialize(p: ExamplePoint): GenericArrayData = {
+    val output = new Array[Any](2)
+    output(0) = p.x
+    output(1) = p.y
+    new GenericArrayData(output)
   }
 
   override def deserialize(datum: Any): ExamplePoint = {

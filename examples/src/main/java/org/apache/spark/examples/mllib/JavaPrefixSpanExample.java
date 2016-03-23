@@ -51,5 +51,7 @@ public class JavaPrefixSpanExample {
       System.out.println(freqSeq.javaSequence() + ", " + freqSeq.freq());
     }
     // $example off$
+
+    sc.stop();
   }
 }

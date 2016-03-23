@@ -30,6 +30,7 @@ import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, Tree
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 
@@ -188,6 +189,10 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(bins.length === 2)
     assert(splits(0).length === 3)
     assert(bins(0).length === 0)
+    assert(metadata.numSplits(0) === 3)
+    assert(metadata.numBins(0) === 3)
+    assert(metadata.numSplits(1) === 3)
+    assert(metadata.numBins(1) === 3)
 
     // Expecting 2^2 - 1 = 3 bins/splits
     assert(splits(0)(0).feature === 0)
@@ -335,6 +340,35 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(topNode.rightNode.get.predict.predict === 1.0)
     assert(topNode.leftNode.get.impurity === 0.0)
     assert(topNode.rightNode.get.impurity === 0.0)
+  }
+
+  test("Use soft prediction for binary classification with ordered categorical features") {
+    // The following dataset is set up such that the best split is {1} vs. {0, 2}.
+    // If the hard prediction is used to order the categories, then {0} vs. {1, 2} is chosen.
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(2.0)))
+    val input = sc.parallelize(arr)
+
+    // Must set maxBins s.t. the feature will be treated as an ordered categorical feature.
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 1,
+      numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3), maxBins = 3)
+
+    val model = new DecisionTree(strategy).run(input)
+    model.topNode.split.get match {
+      case Split(_, _, _, categories: List[Double]) =>
+        assert(categories === List(1.0))
+    }
   }
 
   test("Second level node building with vs. without groups") {
@@ -1045,7 +1079,7 @@ object DecisionTreeSuite extends SparkFunSuite {
     assert(a.isLeaf === b.isLeaf)
     assert(a.split === b.split)
     (a.stats, b.stats) match {
-      // TODO: Check other fields besides the infomation gain.
+      // TODO: Check other fields besides the information gain.
       case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
       case (None, None) =>
       case _ => throw new AssertionError(
