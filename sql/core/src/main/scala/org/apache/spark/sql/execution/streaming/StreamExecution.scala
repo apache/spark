@@ -239,6 +239,12 @@ class StreamExecution(
       logInfo(s"Committed offsets for batch $currentBatchId.")
       true
     } else {
+      noNewData = true
+      awaitBatchLock.synchronized {
+        // Wake up any threads that are waiting for the stream to progress.
+        awaitBatchLock.notifyAll()
+      }
+
       false
     }
   }
@@ -332,6 +338,18 @@ class StreamExecution(
       awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
     logDebug(s"Unblocked at $newOffset for $source")
+  }
+
+  /** A flag to indicate that a batch has completed with no new data available. */
+  @volatile private var noNewData = false
+
+  override def processAllAvailable(): Unit = {
+    noNewData = false
+    while (!noNewData) {
+      awaitBatchLock.synchronized { awaitBatchLock.wait(10000) }
+      if (streamDeathCause != null) { throw streamDeathCause }
+    }
+    if (streamDeathCause != null) { throw streamDeathCause }
   }
 
   override def awaitTermination(): Unit = {
