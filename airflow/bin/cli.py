@@ -677,7 +677,7 @@ class CLIFactory(object):
                 'dag_id', 'task_id', 'execution_date', 'subdir', 'dry_run',
                 'task_params'),
         }, {
-            'func': scheduler,
+            'func': webserver,
             'help': "Start a Airflow webserver instance",
             'args': ('port', 'workers', 'workerclass', 'hostname', 'debug'),
         }, {
