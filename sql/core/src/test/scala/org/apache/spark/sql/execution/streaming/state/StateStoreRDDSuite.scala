@@ -23,6 +23,9 @@ import java.nio.file.Files
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
+
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
@@ -121,9 +124,12 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
         val coordinatorRef = sqlContext.streams.stateStoreCoordinator
         coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 0), "host1", "exec1")
         coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 1), "host2", "exec2")
-        assert(
-          coordinatorRef.getLocation(StateStoreId(path, opId, 0)) ===
-            Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
+
+        eventually(timeout(10 seconds)) {
+          assert(
+            coordinatorRef.getLocation(StateStoreId(path, opId, 0)) ===
+              Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
+        }
 
         val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
           increment, path, opId, storeVersion = 0, keySchema, valueSchema)
