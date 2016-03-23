@@ -327,7 +327,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(newTbl1.properties.get("toh") == Some("frem"))
     // Alter table without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
-    sessionCatalog.alterTable(tbl1.copy(name = TableIdentifier("tbl1")))
+    sessionCatalog.alterTable(tbl1.copy(identifier = TableIdentifier("tbl1")))
     val newestTbl1 = externalCatalog.getTable("db2", "tbl1")
     assert(newestTbl1 == tbl1)
   }
@@ -826,7 +826,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.createFunction(newFunc("func1", Some("db2")))
     sessionCatalog.renameFunction(FunctionIdentifier("func1"), FunctionIdentifier("func4"))
     assert(sessionCatalog.getTempFunction("func4") ==
-      Some(tempFunc.copy(name = FunctionIdentifier("func4"))))
+      Some(tempFunc.copy(identifier = FunctionIdentifier("func4"))))
     assert(sessionCatalog.getTempFunction("func1") == None)
     assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func1", "func3"))
     // Then, if no such temporary function exist, rename the function in the current database
