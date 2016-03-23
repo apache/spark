@@ -623,7 +623,7 @@ class CliTests(unittest.TestCase):
         configuration.test_mode()
         app = application.create_app()
         app.config['TESTING'] = True
-        self.parser = cli.get_parser()
+        self.parser = cli.CLIFactory.get_parser()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
 

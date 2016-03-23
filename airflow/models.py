@@ -2610,6 +2610,15 @@ class DAG(LoggingMixin):
             pool=pool)
         job.run()
 
+    def cli(self):
+        """
+        Exposes a CLI specific to this DAG
+        """
+        from airflow.bin import cli
+        parser = cli.CLIFactory.get_parser(dag_parser=True)
+        args = parser.parse_args()
+        args.func(args, self)
+
 
 class Chart(Base):
     __tablename__ = "chart"
