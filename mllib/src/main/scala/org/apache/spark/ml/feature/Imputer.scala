@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
+import org.apache.spark.SparkException
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
@@ -25,6 +26,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -64,9 +66,13 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
   /** @group getParam */
   def getMissingValue: Double = $(missingValue)
 
+  private[feature] def isMissingValue(value: Double): Boolean = {
+    val miss = $(missingValue)
+    value == miss || (value.isNaN && miss.isNaN)
+  }
+
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT] || inputType.isInstanceOf[DoubleType],
       s"Input column ${$(inputCol)} must of type Vector or Double")
@@ -111,42 +117,54 @@ class Imputer @Since("2.0.0")(override val uid: String)
   override def fit(dataset: DataFrame): ImputerModel = {
     val alternate = dataset.select($(inputCol)).schema.fields(0).dataType match {
       case DoubleType =>
-        Vectors.dense(getColStatistics(dataset, $(inputCol)))
+        val doubleRDD = dataset.select($(inputCol)).rdd.map(_.getDouble(0))
+        Vectors.dense(getColStatistics(doubleRDD))
       case _: VectorUDT =>
+        val filteredDF = dataset.where(s"${$(inputCol)} IS NOT NULL").select($(inputCol))
+        val vectorRDD = filteredDF.rdd.map(_.getAs[Vector](0)).cache()
         val vl = dataset.first().getAs[Vector]($(inputCol)).size
-        val statisticsArray = new Array[Double](vl)
-        (0 until vl).foreach(i => {
-          val getI = udf((v: Vector) => v(i))
-          val tempColName = $(inputCol) + i
-          val tempData = dataset.where(s"${$(inputCol)} IS NOT NULL")
-            .select($(inputCol)).withColumn(tempColName, getI(col($(inputCol))))
-          statisticsArray(i) = getColStatistics(tempData, tempColName)
-        })
-        Vectors.dense(statisticsArray)
+        $(strategy) match {
+          case "mean" =>
+            val summary = vectorRDD.treeAggregate((new Array[Double](vl), new Array[Int](vl)))(
+              (prev, data) => (prev, data) match { case ((mean, count), data) =>
+                  var i = 0
+                  while (i < mean.length) {
+                    if (data(i) != 0 && !data(i).isNaN){
+                      count(i) += 1
+                      mean(i) = mean(i) + (data(i) - mean(i)) / count(i)
+                    }
+                    i += 1
+                  }
+                  (mean, count)
+              }, (aggregator1, aggregator2) => (aggregator1, aggregator2) match {
+                case ((mean1, c1), (mean2, c2)) =>
+                  (0 until mean1.length).foreach{ i =>
+                    mean1(i) = mean1(i) + (mean2(i) - mean1(i)) * c2(i) / (c1(i) + c2(i))
+                    c1(i) += c2(i)
+                  }
+                  (mean1, c1)
+              })
+            Vectors.dense(summary._1)
+          case _ =>
+            val statisticsArray = new Array[Double](vl)
+            (0 until vl).foreach(i => {
+              statisticsArray(i) = getColStatistics(vectorRDD.map(v => v(i)))
+            })
+            Vectors.dense(statisticsArray)
+        }
     }
     copyValues(new ImputerModel(uid, alternate).setParent(this))
   }
 
   /** Extract the statistics info from a Double column according to the strategy */
-  private def getColStatistics(dataset: DataFrame, colName: String): Double = {
-    val missValue = $(missingValue) match {
-      case Double.NaN => "NaN"
-      case _ => $(missingValue).toString
-    }
-    val filteredDF = dataset.select(colName).where(s"$colName != '$missValue'")
+  private def getColStatistics(data: RDD[Double]): Double = {
+    val filteredRDD = data.filter(!isMissingValue(_))
     val colStatistics = $(strategy) match {
-      case "mean" =>
-        filteredDF.selectExpr(s"avg($colName)").first().getDouble(0)
-      case "median" =>
-        // TODO: optimize the sort with quick-select or Percentile(Hive) if required
-        val rddDouble = filteredDF.rdd.map(_.getDouble(0))
-        rddDouble.sortBy(d => d).zipWithIndex().map {
-          case (v, idx) => (idx, v)
-        }.lookup(rddDouble.count() / 2).head
-      case "most" =>
-        val input = filteredDF.rdd.map(_.getDouble(0))
-        val most = input.map(d => (d, 1)).reduceByKey(_ + _).sortBy(-_._2).first()._1
-        most
+      case "mean" => filteredRDD.mean()
+      case "median" => filteredRDD.sortBy(d => d).zipWithIndex()
+        .map(p => (p._2, p._1)).lookup(filteredRDD.count() / 2).head
+      case "most" => filteredRDD.map(d => (d, 1)).reduceByKey(_ + _).sortBy(-_._2).first()._1
+      case _ => throw new SparkException(s"unsupported impute strategy: ${$(strategy)}")
     }
     colStatistics
   }
@@ -191,11 +209,6 @@ class ImputerModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  private def isMissingValue(value: Double): Boolean = {
-    val miss = $(missingValue)
-    value == miss || (value.isNaN && miss.isNaN)
-  }
-
   override def transform(dataset: DataFrame): DataFrame = {
     dataset.select($(inputCol)).schema.fields(0).dataType match {
       case DoubleType =>
@@ -210,14 +223,11 @@ class ImputerModel private[ml] (
           }
           else {
             val vCopy = vector.copy
-            // TODO replace with update() since this hacks the internal implementation of Vector.
             vCopy match {
               case d: DenseVector =>
                 var iter = 0
                 while(iter < d.size) {
-                  if (isMissingValue(vCopy(iter))) {
-                    d.values(iter) = alternate(iter)
-                  }
+                  if (isMissingValue(vCopy(iter))) { d.values(iter) = alternate(iter) }
                   iter += 1
                 }
               case s: SparseVector =>
