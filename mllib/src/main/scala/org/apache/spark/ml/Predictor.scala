@@ -121,10 +121,7 @@ abstract class Predictor[
    * and put it in an RDD with strong types.
    */
   protected def extractLabeledPoints(dataset: DataFrame): RDD[LabeledPoint] = {
-    dataset.select($(labelCol), $(featuresCol)).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
-    }
+    dataset.select($(labelCol), $(featuresCol)).as[LabeledPoint].rdd
   }
 }
 
@@ -177,6 +174,8 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
     if ($(predictionCol).nonEmpty) {
       transformImpl(dataset)
     } else {
+      // The message appears spurious, i.e. predictionCol is mandatory
+      // Or nonEmpty means that are values already?
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")
       dataset
