@@ -382,10 +382,10 @@ class Analyzer(
       case p: LogicalPlan if !p.childrenResolved => p
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
-        p.copy(projectList = buildExpandedProjectList(p.projectList, p))
+        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a))
+        a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
       // If the script transformation input contains Stars, expand it.
       case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(
@@ -403,13 +403,13 @@ class Analyzer(
      */
     private def buildExpandedProjectList(
         exprs: Seq[NamedExpression],
-        plan: UnaryNode): Seq[NamedExpression] = {
+        plan: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
-        case s: Star => s.expand(plan.child, resolver)
+        case s: Star => s.expand(plan, resolver)
         // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
-        case UnresolvedAlias(s: Star, _) => s.expand(plan.child, resolver)
-        case o if containsStar(o :: Nil) => expandStarExpression(o, plan.child) :: Nil
+        case UnresolvedAlias(s: Star, _) => s.expand(plan, resolver)
+        case o if containsStar(o :: Nil) => expandStarExpression(o, plan) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
     }
