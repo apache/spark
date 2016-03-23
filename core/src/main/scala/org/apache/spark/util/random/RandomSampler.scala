@@ -39,7 +39,8 @@ import org.apache.spark.annotation.DeveloperApi
 trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable {
 
   /** take a random sample */
-  def sample(items: Iterator[T]): Iterator[U]
+  def sample(items: Iterator[T]): Iterator[U] =
+    items.filter(_ => sample > 0).asInstanceOf[Iterator[U]]
 
   /**
    * Whether to sample the next item or not.
@@ -127,17 +128,7 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
     if (ub - lb <= 0.0) {
       if (complement) items else Iterator.empty
     } else {
-      if (complement) {
-        items.filter { item => {
-          val x = rng.nextDouble()
-          (x < lb) || (x >= ub)
-        }}
-      } else {
-        items.filter { item => {
-          val x = rng.nextDouble()
-          (x >= lb) && (x < ub)
-        }}
-      }
+      items.filter(_ => sample > 0)
     }
   }
 
@@ -196,7 +187,7 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
     } else if (fraction >= 1.0) {
       items
     } else if (fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
-      new GapSamplingIterator(items, fraction, rng, RandomSampler.rngEpsilon)
+      items.filter(_ => sample > 0)
     } else {
       items.filter { _ => rng.nextDouble() <= fraction }
     }
@@ -253,12 +244,12 @@ class PoissonSampler[T: ClassTag](
   override def sample(items: Iterator[T]): Iterator[T] = {
     if (fraction <= 0.0) {
       Iterator.empty
-    } else if (useGapSamplingIfPossible &&
-               fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
-      new GapSamplingReplacementIterator(items, fraction, rngGap, RandomSampler.rngEpsilon)
     } else {
+      val useGapSampling = useGapSamplingIfPossible &&
+        fraction <= RandomSampler.defaultMaxGapSamplingFraction
+
       items.flatMap { item =>
-        val count = rng.sample()
+        val count = if (useGapSamplingIfPossible) gapSamplingReplacement.sample() else rng.sample()
         if (count == 0) Iterator.empty else Iterator.fill(count)(item)
       }
     }
@@ -267,60 +258,6 @@ class PoissonSampler[T: ClassTag](
   override def clone: PoissonSampler[T] = new PoissonSampler[T](fraction, useGapSamplingIfPossible)
 }
 
-
-private[spark]
-class GapSamplingIterator[T: ClassTag](
-    var data: Iterator[T],
-    f: Double,
-    rng: Random = RandomSampler.newDefaultRNG,
-    epsilon: Double = RandomSampler.rngEpsilon) extends Iterator[T] {
-
-  require(f > 0.0  &&  f < 1.0, s"Sampling fraction ($f) must reside on open interval (0, 1)")
-  require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
-
-  /** implement efficient linear-sequence drop until Scala includes fix for jira SI-8835. */
-  private val iterDrop: Int => Unit = {
-    val arrayClass = Array.empty[T].iterator.getClass
-    val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
-    data.getClass match {
-      case `arrayClass` =>
-        (n: Int) => { data = data.drop(n) }
-      case `arrayBufferClass` =>
-        (n: Int) => { data = data.drop(n) }
-      case _ =>
-        (n: Int) => {
-          var j = 0
-          while (j < n && data.hasNext) {
-            data.next()
-            j += 1
-          }
-        }
-    }
-  }
-
-  override def hasNext: Boolean = data.hasNext
-
-  override def next(): T = {
-    val r = data.next()
-    advance()
-    r
-  }
-
-  private val lnq = math.log1p(-f)
-
-  /** skip elements that won't be sampled, according to geometric dist P(k) = (f)(1-f)^k. */
-  private def advance(): Unit = {
-    val u = math.max(rng.nextDouble(), epsilon)
-    val k = (math.log(u) / lnq).toInt
-    iterDrop(k)
-  }
-
-  /** advance to first sample as part of object construction. */
-  advance()
-  // Attempting to invoke this closer to the top with other object initialization
-  // was causing it to break in strange ways, so I'm invoking it last, which seems to
-  // work reliably.
-}
 
 private[spark]
 class GapSampling(
@@ -357,7 +294,11 @@ class GapSampling(
 
   /** advance to first sample as part of object construction. */
   advance()
+  // Attempting to invoke this closer to the top with other object initialization
+  // was causing it to break in strange ways, so I'm invoking it last, which seems to
+  // work reliably.
 }
+
 
 private[spark]
 trait PoissonGE {
@@ -387,71 +328,6 @@ trait PoissonGE {
   }
 }
 
-private[spark]
-class GapSamplingReplacementIterator[T: ClassTag](
-    var data: Iterator[T],
-    val f: Double,
-    val rng: Random = RandomSampler.newDefaultRNG,
-    epsilon: Double = RandomSampler.rngEpsilon) extends Iterator[T] with PoissonGE {
-
-  require(f > 0.0, s"Sampling fraction ($f) must be > 0")
-  require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
-
-  /** implement efficient linear-sequence drop until scala includes fix for jira SI-8835. */
-  private val iterDrop: Int => Unit = {
-    val arrayClass = Array.empty[T].iterator.getClass
-    val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
-    data.getClass match {
-      case `arrayClass` =>
-        (n: Int) => { data = data.drop(n) }
-      case `arrayBufferClass` =>
-        (n: Int) => { data = data.drop(n) }
-      case _ =>
-        (n: Int) => {
-          var j = 0
-          while (j < n && data.hasNext) {
-            data.next()
-            j += 1
-          }
-        }
-    }
-  }
-
-  /** current sampling value, and its replication factor, as we are sampling with replacement. */
-  private var v: T = _
-  private var rep: Int = 0
-
-  override def hasNext: Boolean = data.hasNext || rep > 0
-
-  override def next(): T = {
-    val r = v
-    rep -= 1
-    if (rep <= 0) advance()
-    r
-  }
-
-  /**
-   * Skip elements with replication factor zero (i.e. elements that won't be sampled).
-   * Samples 'k' from geometric distribution  P(k) = (1-q)(q)^k, where q = e^(-f), that is
-   * q is the probability of Poisson(0; f)
-   */
-  private def advance(): Unit = {
-    val u = math.max(rng.nextDouble(), epsilon)
-    val k = (math.log(u) / (-f)).toInt
-    iterDrop(k)
-    // set the value and replication factor for the next value
-    if (data.hasNext) {
-      v = data.next()
-      rep = poissonGE1
-    }
-  }
-
-  /** advance to first sample as part of object construction. */
-  advance()
-  // Attempting to invoke this closer to the top with other object initialization
-  // was causing it to break in strange ways, so I'm invoking it last, which seems to
-  // work reliably.
-}
 
 private[spark]
 class GapSamplingReplacement(
