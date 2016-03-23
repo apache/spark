@@ -102,7 +102,7 @@ private[hive] object HiveSerDe {
  * Legacy catalog for interacting with the Hive metastore.
  *
  * This is still used for things like creating data source tables, but in the future will be
- * cleaned up to integrate more nicely with [[HiveCatalog]].
+ * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
 private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveContext)
   extends Logging {
