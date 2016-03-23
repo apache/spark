@@ -18,8 +18,8 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.SparkException
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -129,7 +129,7 @@ class Imputer @Since("2.0.0")(override val uid: String)
               (prev, data) => (prev, data) match { case ((mean, count), data) =>
                   var i = 0
                   while (i < mean.length) {
-                    if (data(i) != 0 && !data(i).isNaN){
+                    if (data(i) != 0 && !data(i).isNaN) {
                       count(i) += 1
                       mean(i) = mean(i) + (data(i) - mean(i)) / count(i)
                     }
