@@ -681,8 +681,6 @@ class Analyzer(
                 throw new UnresolvedException(a,
                   s"Group by position: the '$index'th column in the select contains an " +
                   s"aggregate function: ${e.sql}. Aggregate functions are not allowed in GROUP BY")
-              // Group by clause is unable to use the alias defined in aggregateExpressions
-              case Alias(c, _) => c
               case o => o
             }
           case IntegerIndex(index) =>
@@ -702,11 +700,10 @@ class Analyzer(
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s: Sort if !s.child.resolved => s
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if !s.resolved =>
+      case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)

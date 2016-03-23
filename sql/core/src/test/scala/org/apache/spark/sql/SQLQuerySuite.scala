@@ -481,8 +481,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
 
     checkAnswer(
-      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"),
-      Seq(Row(1, 3, 1), Row(1, 4, 1), Row(2, 3, 1), Row(2, 4, 1), Row(3, 3, 1), Row(3, 4, 1)))
+      sql("SELECT a, b + 2 as c, count(2) FROM testData2 GROUP BY a, 2"),
+      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
   }
 
   test("Group By Ordinal - non-foldable constant expression") {
