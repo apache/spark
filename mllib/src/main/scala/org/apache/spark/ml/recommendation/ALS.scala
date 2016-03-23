@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.Partitioner
+import org.apache.spark.{Dependency, Partitioner, ShuffleDependency}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -656,7 +656,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
         if (shouldCheckpoint(iter)) {
-          itemFactors.checkpoint() // itemFactors gets materialized in computeFactors.
+          ALS.checkpointAndCleanParents(itemFactors) // itemFactors gets materialized in computeFactors.
         }
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
@@ -1305,4 +1305,35 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * satisfies this requirement, we simply use a type alias here.
    */
   private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner
+
+  /**
+   * Private function to checkpoint the RDD and clean up its
+   * all of its parents shuffles eagerly.
+   */
+  private[spark] def checkpointAndCleanParents[T](rdd: RDD[T], blocking: Boolean = false): Unit = {
+    val sc = rdd.sparkContext
+    // If there is no reference tracking we skip clean up.
+    if (sc.cleaner.isEmpty) {
+      return rdd.checkpoint()
+    }
+    val cleaner = sc.cleaner.get
+    /**
+     * Clean the shuffles & uncache this dependency and any of its parents.
+     */
+    def cleanEagerly(dep: Dependency[_]): Unit = {
+      if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
+        val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
+        cleaner.doCleanupShuffle(shuffleId, blocking)
+      }
+      val rdd = dep.rdd
+      cleaner.doCleanupRDD(rdd.id, blocking)
+      if (rdd.dependencies != null) {
+        rdd.dependencies.foreach(cleanEagerly)
+      }
+    }
+    val deps = rdd.dependencies
+    rdd.checkpoint()
+    rdd.count()
+    deps.foreach(cleanEagerly)
+  }
 }

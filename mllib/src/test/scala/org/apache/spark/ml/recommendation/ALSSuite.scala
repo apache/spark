@@ -17,15 +17,20 @@
 
 package org.apache.spark.ml.recommendation
 
+import java.io.File
 import java.util.Random
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConverters._
 import scala.language.existentials
+
+import org.apache.commons.io.FileUtils
+import org.apache.commons.io.filefilter.TrueFileFilter
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, ShuffleDependency}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -33,7 +38,10 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.storage._
+import org.apache.spark.util.Utils
 
 class ALSSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
@@ -511,6 +519,36 @@ class ALSSuite
     }
     assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
     assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
+  }
+}
+
+class ALSUtilsSuite extends SparkFunSuite {
+  test("checkpointAndCleanParents") {
+    val conf = new SparkConf()
+    val localDir = Utils.createTempDir()
+    val tempDir = Utils.createTempDir()
+    try {
+      conf.set("spark.local.dir", localDir.getAbsolutePath)
+      conf.set("spark.shuffle.manager", "sort")
+      val sc = new SparkContext("local[2]", "test", conf)
+      sc.setCheckpointDir(tempDir.getAbsolutePath)
+      // Test checkpoint and clean parents
+      def getAllFiles: Set[File] =
+        FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+      val filesBefore = getAllFiles
+      val input = sc.parallelize(1 to 1000)
+      val keyed = input.map(x => (x % 20, 1))
+      val shuffled = keyed.reduceByKey(_ + _)
+      val keysOnly = shuffled.map{case (x, _) => x}
+      ALS.checkpointAndCleanParents(keysOnly, true)
+      keysOnly.count()
+      assert(keysOnly.isCheckpointed)
+      val resultingFiles = getAllFiles -- filesBefore
+      assert(resultingFiles === Set())
+    } finally {
+      Utils.deleteRecursively(localDir)
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
 
