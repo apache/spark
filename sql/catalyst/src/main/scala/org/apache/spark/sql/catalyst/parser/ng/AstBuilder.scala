@@ -162,7 +162,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
         withQuerySpecification(body.querySpecification, from).
           // Add organization statements.
-          optionalMap(body.queryOrganization)(withQueryOrganization).
+          optionalMap(body.queryOrganization)(withQueryResultClauses).
           // Add insert.
           optionalMap(body.insertInto())(withInsertInto)
     }
@@ -181,7 +181,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
     plan(ctx.queryTerm).
       // Add organization statements.
-      optionalMap(ctx.queryOrganization)(withQueryOrganization).
+      optionalMap(ctx.queryOrganization)(withQueryResultClauses).
       // Add insert.
       optionalMap(ctx.insertInto())(withInsertInto)
   }
@@ -236,9 +236,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Add ORDER BY/SORT BY/CLUSTER BY/DISTRIBUTE BY/LIMIT/WINDOWS clauses to the logical plan.
+   * Add ORDER BY/SORT BY/CLUSTER BY/DISTRIBUTE BY/LIMIT/WINDOWS clauses to the logical plan. These
+   * clauses determine the shape (ordering/partitioning/rows) of the query result.
    */
-  private def withQueryOrganization(
+  private def withQueryResultClauses(
       ctx: QueryOrganizationContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     import ctx._

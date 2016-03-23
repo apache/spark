@@ -27,9 +27,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CatalystQlSuite extends PlanTest {
-  val parser = CatalystSqlParser
+  val parser = new CatalystQl()
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
+
+  val star = UnresolvedAlias(UnresolvedStar(None))
 
   test("test case insensitive") {
     val result = OneRowRelation.select(1)
@@ -49,14 +51,15 @@ class CatalystQlSuite extends PlanTest {
       "SELECT * FROM t0 UNION SELECT * FROM t1")
     val parsed2 = parser.parsePlan(
       "SELECT * FROM t0 UNION DISTINCT SELECT * FROM t1")
-    val expected = Distinct(Union(table("t0").select(all()), table("t1").select(all())))
+    val expected = Distinct(Union(table("t0").select(star), table("t1").select(star)))
+      .as("u_1").select(star)
     comparePlans(parsed1, expected)
     comparePlans(parsed2, expected)
   }
 
   test("test Union All operator") {
     val parsed = parser.parsePlan("SELECT * FROM t0 UNION ALL SELECT * FROM t1")
-    val expected = Union(table("t0").select(all()), table("t1").select(all()))
+    val expected = Union(table("t0").select(star), table("t1").select(star)).as("u_1").select(star)
     comparePlans(parsed, expected)
   }
 
@@ -210,11 +213,11 @@ class CatalystQlSuite extends PlanTest {
     // (2) Qualified columns in using
     // (3) Both on and using clause
     var error = intercept[AnalysisException](parser.parsePlan("select * from t1 join t2 using ()"))
-    assert(error.message.contains("no viable alternative at input ')'"))
+    assert(error.message.contains("cannot recognize input near ')'"))
     error = intercept[AnalysisException](parser.parsePlan("select * from t1 join t2 using (t1.c1)"))
     assert(error.message.contains("mismatched input '.'"))
     error = intercept[AnalysisException](parser.parsePlan("select * from t1" +
       " join t2 using (c1) on t1.c1 = t2.c1"))
-    assert(error.message.contains("extraneous input 'on' expecting"))
+    assert(error.message.contains("missing EOF at 'on' near ')'"))
   }
 }
