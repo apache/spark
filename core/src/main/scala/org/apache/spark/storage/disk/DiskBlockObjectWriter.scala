@@ -19,7 +19,7 @@ package org.apache.spark.storage.disk
 
 import java.io.{File, OutputStream}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.Utils

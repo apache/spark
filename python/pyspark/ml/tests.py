@@ -37,7 +37,7 @@ else:
 from shutil import rmtree
 import tempfile
 
-from pyspark.ml import Estimator, Model, Pipeline, Transformer
+from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import RegressionEvaluator
@@ -47,6 +47,7 @@ from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
+from pyspark.ml.wrapper import JavaWrapper
 from pyspark.mllib.linalg import DenseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
@@ -498,6 +499,112 @@ class PersistenceTest(PySparkTestCase):
             rmtree(path)
         except OSError:
             pass
+
+    def test_logistic_regression(self):
+        lr = LogisticRegression(maxIter=1)
+        path = tempfile.mkdtemp()
+        lr_path = path + "/logreg"
+        lr.save(lr_path)
+        lr2 = LogisticRegression.load(lr_path)
+        self.assertEqual(lr2.uid, lr2.maxIter.parent,
+                         "Loaded LogisticRegression instance uid (%s) "
+                         "did not match Param's uid (%s)"
+                         % (lr2.uid, lr2.maxIter.parent))
+        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
+                         "Loaded LogisticRegression instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+    def _compare_pipelines(self, m1, m2):
+        """
+        Compare 2 ML types, asserting that they are equivalent.
+        This currently supports:
+         - basic types
+         - Pipeline, PipelineModel
+        This checks:
+         - uid
+         - type
+         - Param values and parents
+        """
+        self.assertEqual(m1.uid, m2.uid)
+        self.assertEqual(type(m1), type(m2))
+        if isinstance(m1, JavaWrapper):
+            self.assertEqual(len(m1.params), len(m2.params))
+            for p in m1.params:
+                self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
+                self.assertEqual(p.parent, m2.getParam(p.name).parent)
+        elif isinstance(m1, Pipeline):
+            self.assertEqual(len(m1.getStages()), len(m2.getStages()))
+            for s1, s2 in zip(m1.getStages(), m2.getStages()):
+                self._compare_pipelines(s1, s2)
+        elif isinstance(m1, PipelineModel):
+            self.assertEqual(len(m1.stages), len(m2.stages))
+            for s1, s2 in zip(m1.stages, m2.stages):
+                self._compare_pipelines(s1, s2)
+        else:
+            raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
+
+    def test_pipeline_persistence(self):
+        """
+        Pipeline[HashingTF, PCA]
+        """
+        sqlContext = SQLContext(self.sc)
+        temp_path = tempfile.mkdtemp()
+
+        try:
+            df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
+            tf = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
+            pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+            pl = Pipeline(stages=[tf, pca])
+            model = pl.fit(df)
+
+            pipeline_path = temp_path + "/pipeline"
+            pl.save(pipeline_path)
+            loaded_pipeline = Pipeline.load(pipeline_path)
+            self._compare_pipelines(pl, loaded_pipeline)
+
+            model_path = temp_path + "/pipeline-model"
+            model.save(model_path)
+            loaded_model = PipelineModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+        finally:
+            try:
+                rmtree(temp_path)
+            except OSError:
+                pass
+
+    def test_nested_pipeline_persistence(self):
+        """
+        Pipeline[HashingTF, Pipeline[PCA]]
+        """
+        sqlContext = SQLContext(self.sc)
+        temp_path = tempfile.mkdtemp()
+
+        try:
+            df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
+            tf = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
+            pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+            p0 = Pipeline(stages=[pca])
+            pl = Pipeline(stages=[tf, p0])
+            model = pl.fit(df)
+
+            pipeline_path = temp_path + "/pipeline"
+            pl.save(pipeline_path)
+            loaded_pipeline = Pipeline.load(pipeline_path)
+            self._compare_pipelines(pl, loaded_pipeline)
+
+            model_path = temp_path + "/pipeline-model"
+            model.save(model_path)
+            loaded_model = PipelineModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+        finally:
+            try:
+                rmtree(temp_path)
+            except OSError:
+                pass
 
 
 class HasThrowableProperty(Params):

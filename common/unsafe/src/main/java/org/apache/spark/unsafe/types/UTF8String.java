@@ -21,6 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -105,15 +106,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Creates an UTF8String from String.
    */
   public static UTF8String fromString(String str) {
-    if (str == null) return null;
-    try {
-      return fromBytes(str.getBytes("utf-8"));
-    } catch (UnsupportedEncodingException e) {
-      // Turn the exception into unchecked so we can find out about it at runtime, but
-      // don't need to add lots of boilerplate code everywhere.
-      throwException(e);
-      return null;
-    }
+    return str == null ? null : fromBytes(str.getBytes(StandardCharsets.UTF_8));
   }
 
   /**
@@ -825,14 +818,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public String toString() {
-    try {
-      return new String(getBytes(), "utf-8");
-    } catch (UnsupportedEncodingException e) {
-      // Turn the exception into unchecked so we can find out about it at runtime, but
-      // don't need to add lots of boilerplate code everywhere.
-      throwException(e);
-      return "unknown";  // we will never reach here.
-    }
+    return new String(getBytes(), StandardCharsets.UTF_8);
   }
 
   @Override

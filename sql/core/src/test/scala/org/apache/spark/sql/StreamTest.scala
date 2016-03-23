@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 
 import org.scalatest.Assertions
 import org.scalatest.concurrent.{Eventually, Timeouts}
+import org.scalatest.concurrent.Eventually.timeout
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
@@ -37,6 +38,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ro
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.util.Utils
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -64,6 +66,19 @@ import org.apache.spark.sql.execution.streaming._
  */
 trait StreamTest extends QueryTest with Timeouts {
 
+  implicit class RichContinuousQuery(cq: ContinuousQuery) {
+    def stopQuietly(): Unit = quietly {
+      try {
+        failAfter(10.seconds) {
+          cq.stop()
+        }
+      } catch {
+        case e: TestFailedDueToTimeoutException =>
+          logError(e.getMessage(), e)
+      }
+    }
+  }
+
   implicit class RichSource(s: Source) {
     def toDF(): DataFrame = Dataset.newDataFrame(sqlContext, StreamingRelation(s))
 
@@ -80,7 +95,7 @@ trait StreamTest extends QueryTest with Timeouts {
   trait StreamMustBeRunning
 
   /**
-   * Adds the given data to the stream.  Subsuquent check answers will block until this data has
+   * Adds the given data to the stream. Subsequent check answers will block until this data has
    * been processed.
    */
   object AddData {
@@ -109,7 +124,7 @@ trait StreamTest extends QueryTest with Timeouts {
 
   /**
    * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
-   * This operation automatically blocks untill all added data has been processed.
+   * This operation automatically blocks until all added data has been processed.
    */
   object CheckAnswer {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
@@ -125,8 +140,6 @@ trait StreamTest extends QueryTest with Timeouts {
       extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"CheckAnswer: ${expectedAnswer.mkString(",")}"
   }
-
-  case class DropBatches(num: Int) extends StreamAction
 
   /** Stops the stream.  It must currently be running. */
   case object StopStream extends StreamAction with StreamMustBeRunning
@@ -202,7 +215,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }.mkString("\n")
 
     def currentOffsets =
-      if (currentStream != null) currentStream.streamProgress.toString else "not started"
+      if (currentStream != null) currentStream.committedOffsets.toString else "not started"
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
@@ -266,6 +279,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }
 
     val testThread = Thread.currentThread()
+    val metadataRoot = Utils.createTempDir("streaming.metadata").getCanonicalPath
 
     try {
       startedTest.foreach { action =>
@@ -276,7 +290,7 @@ trait StreamTest extends QueryTest with Timeouts {
             currentStream =
               sqlContext
                 .streams
-                .startQuery(StreamExecution.nextName, stream, sink)
+                .startQuery(StreamExecution.nextName, metadataRoot, stream, sink)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
@@ -307,10 +321,6 @@ trait StreamTest extends QueryTest with Timeouts {
               lastStream = currentStream
               currentStream = null
             }
-
-          case DropBatches(num) =>
-            verify(currentStream == null, "dropping batches while running leads to corruption")
-            sink.dropBatches(num)
 
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")

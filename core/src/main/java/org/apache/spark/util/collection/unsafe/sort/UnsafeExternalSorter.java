@@ -293,7 +293,18 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       long used = inMemSorter.getMemoryUsage();
-      LongArray array = allocateArray(used / 8 * 2);
+      LongArray array;
+      try {
+        // could trigger spilling
+        array = allocateArray(used / 8 * 2);
+      } catch (OutOfMemoryError e) {
+        // should have trigger spilling
+        if (!inMemSorter.hasSpaceForAnotherRecord()) {
+          logger.error("Unable to grow the pointer array");
+          throw e;
+        }
+        return;
+      }
       // check if spilling is triggered or not
       if (inMemSorter.hasSpaceForAnotherRecord()) {
         freeArray(array);
@@ -421,7 +432,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private boolean loaded = false;
     private int numRecords = 0;
 
-    public SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
+    SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
       this.upstream = inMemIterator;
       this.numRecords = inMemIterator.getNumRecords();
     }
@@ -556,7 +567,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private UnsafeSorterIterator current;
     private int numRecords;
 
-    public ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
+    ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
       assert iterators.size() > 0;
       this.numRecords = 0;
       for (UnsafeSorterIterator iter: iterators) {

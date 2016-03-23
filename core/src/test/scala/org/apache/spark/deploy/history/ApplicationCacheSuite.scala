@@ -36,7 +36,8 @@ import org.mockito.stubbing.Answer
 import org.scalatest.Matchers
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, ManualClock, Utils}
@@ -219,7 +220,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val cacheEntry = cache.lookupCacheEntry(app1, None)
     assert(1 === cacheEntry.probeTime)
     assert(cacheEntry.completed)
-    // assert about queries made of the opereations
+    // assert about queries made of the operations
     assert(1 === operations.getAppUICount, "getAppUICount")
     assert(1 === operations.attachCount, "attachCount")
 
@@ -338,7 +339,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
   }
 
   /**
-   * Look up the cache entry and assert that it maches in the expected value.
+   * Look up the cache entry and assert that it matches in the expected value.
    * This assertion works if the two CacheEntries are different -it looks at the fields.
    * UI are compared on object equality; the timestamp and completed flags directly.
    * @param appId application ID
@@ -384,7 +385,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val operations = new StubCacheOperations()
     val clock = new ManualClock(0)
     val size = 5
-    // only two entries are retained, so we expect evictions to occurr on lookups
+    // only two entries are retained, so we expect evictions to occur on lookups
     implicit val cache: ApplicationCache = new TestApplicationCache(operations,
       retainedApplications = size, clock = clock)
 

@@ -236,8 +236,8 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Sorts the map's records in place, spill them to disk, and returns an [[UnsafeKVExternalSorter]]
    *
-   * Note that the map will be reset for inserting new records, and the returned sorter can NOT be used
-   * to insert records.
+   * Note that the map will be reset for inserting new records, and the returned sorter can NOT be
+   * used to insert records.
    */
   public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
     return new UnsafeKVExternalSorter(

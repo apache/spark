@@ -85,7 +85,7 @@ public class JavaDeveloperApiExample {
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     Dataset<Row> results = model.transform(test);
     double sumPredictions = 0;
-    for (Row r : results.select("features", "label", "prediction").collectRows()) {
+    for (Row r : results.select("features", "label", "prediction").collectAsList()) {
       sumPredictions += r.getDouble(2);
     }
     if (sumPredictions != 0.0) {
@@ -107,11 +107,11 @@ public class JavaDeveloperApiExample {
 class MyJavaLogisticRegression
   extends Classifier<Vector, MyJavaLogisticRegression, MyJavaLogisticRegressionModel> {
 
-  public MyJavaLogisticRegression() {
+  MyJavaLogisticRegression() {
     init();
   }
 
-  public MyJavaLogisticRegression(String uid) {
+  MyJavaLogisticRegression(String uid) {
     this.uid_ = uid;
     init();
   }
@@ -177,7 +177,7 @@ class MyJavaLogisticRegressionModel
   private Vector coefficients_;
   public Vector coefficients() { return coefficients_; }
 
-  public MyJavaLogisticRegressionModel(String uid, Vector coefficients) {
+  MyJavaLogisticRegressionModel(String uid, Vector coefficients) {
     this.uid_ = uid;
     this.coefficients_ = coefficients;
   }

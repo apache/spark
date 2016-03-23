@@ -15,120 +15,40 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod
+import sys
 
+if sys.version > '3':
+    basestring = str
+
+from pyspark import SparkContext
 from pyspark import since
+from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import keyword_only
+from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader, MLReadable, MLWritable
+from pyspark.ml.wrapper import JavaWrapper
 from pyspark.mllib.common import inherit_doc
 
 
 @inherit_doc
-class Estimator(Params):
+class PipelineMLWriter(JavaMLWriter):
     """
-    Abstract class for estimators that fit models to data.
+    Private Pipeline utility class that can save ML instances through their Scala implementation.
 
-    .. versionadded:: 1.3.0
+    We can currently use JavaMLWriter, rather than MLWriter, since Pipeline implements _to_java.
     """
-
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def _fit(self, dataset):
-        """
-        Fits a model to the input dataset. This is called by the
-        default implementation of fit.
-
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :returns: fitted model
-        """
-        raise NotImplementedError()
-
-    @since("1.3.0")
-    def fit(self, dataset, params=None):
-        """
-        Fits a model to the input dataset with optional parameters.
-
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :param params: an optional param map that overrides embedded
-                       params. If a list/tuple of param maps is given,
-                       this calls fit on each param map and returns a
-                       list of models.
-        :returns: fitted model(s)
-        """
-        if params is None:
-            params = dict()
-        if isinstance(params, (list, tuple)):
-            return [self.fit(dataset, paramMap) for paramMap in params]
-        elif isinstance(params, dict):
-            if params:
-                return self.copy(params)._fit(dataset)
-            else:
-                return self._fit(dataset)
-        else:
-            raise ValueError("Params must be either a param map or a list/tuple of param maps, "
-                             "but got %s." % type(params))
 
 
 @inherit_doc
-class Transformer(Params):
+class PipelineMLReader(JavaMLReader):
     """
-    Abstract class for transformers that transform one dataset into
-    another.
+    Private utility class that can load Pipeline instances through their Scala implementation.
 
-    .. versionadded:: 1.3.0
+    We can currently use JavaMLReader, rather than MLReader, since Pipeline implements _from_java.
     """
-
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def _transform(self, dataset):
-        """
-        Transforms the input dataset.
-
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :returns: transformed dataset
-        """
-        raise NotImplementedError()
-
-    @since("1.3.0")
-    def transform(self, dataset, params=None):
-        """
-        Transforms the input dataset with optional parameters.
-
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :param params: an optional param map that overrides embedded
-                       params.
-        :returns: transformed dataset
-        """
-        if params is None:
-            params = dict()
-        if isinstance(params, dict):
-            if params:
-                return self.copy(params,)._transform(dataset)
-            else:
-                return self._transform(dataset)
-        else:
-            raise ValueError("Params must be either a param map but got %s." % type(params))
 
 
 @inherit_doc
-class Model(Transformer):
-    """
-    Abstract class for models that are fitted by estimators.
-
-    .. versionadded:: 1.4.0
-    """
-
-    __metaclass__ = ABCMeta
-
-
-@inherit_doc
-class Pipeline(Estimator):
+class Pipeline(Estimator, MLReadable, MLWritable):
     """
     A simple pipeline, which acts as an estimator. A Pipeline consists
     of a sequence of stages, each of which is either an
@@ -232,9 +152,78 @@ class Pipeline(Estimator):
         stages = [stage.copy(extra) for stage in that.getStages()]
         return that.setStages(stages)
 
+    @since("2.0.0")
+    def write(self):
+        """Returns an JavaMLWriter instance for this ML instance."""
+        return PipelineMLWriter(self)
+
+    @since("2.0.0")
+    def save(self, path):
+        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
+        self.write().save(path)
+
+    @classmethod
+    @since("2.0.0")
+    def read(cls):
+        """Returns an MLReader instance for this class."""
+        return PipelineMLReader(cls)
+
+    @classmethod
+    def _from_java(cls, java_stage):
+        """
+        Given a Java Pipeline, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+        # Create a new instance of this stage.
+        py_stage = cls()
+        # Load information from java_stage to the instance.
+        py_stages = [JavaWrapper._from_java(s) for s in java_stage.getStages()]
+        py_stage.setStages(py_stages)
+        py_stage._resetUid(java_stage.uid())
+        return py_stage
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java Pipeline.  Used for ML persistence.
+
+        :return: Java object equivalent to this instance.
+        """
+
+        gateway = SparkContext._gateway
+        cls = SparkContext._jvm.org.apache.spark.ml.PipelineStage
+        java_stages = gateway.new_array(cls, len(self.getStages()))
+        for idx, stage in enumerate(self.getStages()):
+            java_stages[idx] = stage._to_java()
+
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.Pipeline", self.uid)
+        _java_obj.setStages(java_stages)
+
+        return _java_obj
+
 
 @inherit_doc
-class PipelineModel(Model):
+class PipelineModelMLWriter(JavaMLWriter):
+    """
+    Private PipelineModel utility class that can save ML instances through their Scala
+    implementation.
+
+    We can (currently) use JavaMLWriter, rather than MLWriter, since PipelineModel implements
+    _to_java.
+    """
+
+
+@inherit_doc
+class PipelineModelMLReader(JavaMLReader):
+    """
+    Private utility class that can load PipelineModel instances through their Scala implementation.
+
+    We can currently use JavaMLReader, rather than MLReader, since PipelineModel implements
+    _from_java.
+    """
+
+
+@inherit_doc
+class PipelineModel(Model, MLReadable, MLWritable):
     """
     Represents a compiled pipeline with transformers and fitted models.
 
@@ -262,3 +251,50 @@ class PipelineModel(Model):
             extra = dict()
         stages = [stage.copy(extra) for stage in self.stages]
         return PipelineModel(stages)
+
+    @since("2.0.0")
+    def write(self):
+        """Returns an JavaMLWriter instance for this ML instance."""
+        return PipelineModelMLWriter(self)
+
+    @since("2.0.0")
+    def save(self, path):
+        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
+        self.write().save(path)
+
+    @classmethod
+    @since("2.0.0")
+    def read(cls):
+        """Returns an JavaMLReader instance for this class."""
+        return PipelineModelMLReader(cls)
+
+    @classmethod
+    def _from_java(cls, java_stage):
+        """
+        Given a Java PipelineModel, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+        # Load information from java_stage to the instance.
+        py_stages = [JavaWrapper._from_java(s) for s in java_stage.stages()]
+        # Create a new instance of this stage.
+        py_stage = cls(py_stages)
+        py_stage._resetUid(java_stage.uid())
+        return py_stage
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java PipelineModel.  Used for ML persistence.
+
+        :return: Java object equivalent to this instance.
+        """
+
+        gateway = SparkContext._gateway
+        cls = SparkContext._jvm.org.apache.spark.ml.Transformer
+        java_stages = gateway.new_array(cls, len(self.stages))
+        for idx, stage in enumerate(self.stages):
+            java_stages[idx] = stage._to_java()
+
+        _java_obj =\
+            JavaWrapper._new_java_obj("org.apache.spark.ml.PipelineModel", self.uid, java_stages)
+
+        return _java_obj

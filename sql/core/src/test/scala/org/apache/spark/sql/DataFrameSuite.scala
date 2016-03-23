@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 import scala.language.postfixOps
 import scala.util.Random
@@ -25,7 +26,8 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.exchange.{BroadcastExchange, ReusedExchange, ShuffleExchange}
 import org.apache.spark.sql.functions._
@@ -164,22 +166,43 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("SPARK-8930: explode should fail with a meaningful message if it takes a star") {
+  test("Star Expansion - CreateStruct and CreateArray") {
+    val structDf = testData2.select("a", "b").as("record")
+    // CreateStruct and CreateArray in aggregateExpressions
+    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).first() == Row(3, Row(3, 1)))
+    assert(structDf.groupBy($"a").agg(min(array($"record.*"))).first() == Row(3, Seq(3, 1)))
+
+    // CreateStruct and CreateArray in project list (unresolved alias)
+    assert(structDf.select(struct($"record.*")).first() == Row(Row(1, 1)))
+    assert(structDf.select(array($"record.*")).first().getAs[Seq[Int]](0) === Seq(1, 1))
+
+    // CreateStruct and CreateArray in project list (alias)
+    assert(structDf.select(struct($"record.*").as("a")).first() == Row(Row(1, 1)))
+    assert(structDf.select(array($"record.*").as("a")).first().getAs[Seq[Int]](0) === Seq(1, 1))
+  }
+
+  test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
     val e = intercept[AnalysisException] {
       df.explode($"*") { case Row(prefix: String, csv: String) =>
         csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
       }.queryExecution.assertAnalyzed()
     }
-    assert(e.getMessage.contains(
-      "Cannot explode *, explode can only be applied on a specific column."))
+    assert(e.getMessage.contains("Invalid usage of '*' in explode/json_tuple/UDTF"))
 
-    df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
-      csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
-    }.queryExecution.assertAnalyzed()
+    checkAnswer(
+      df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      },
+      Row("1", "1,2", "1:1") ::
+        Row("1", "1,2", "1:2") ::
+        Row("2", "4", "2:4") ::
+        Row("3", "7,8,9", "3:7") ::
+        Row("3", "7,8,9", "3:8") ::
+        Row("3", "7,8,9", "3:9") :: Nil)
   }
 
-  test("explode alias and star") {
+  test("Star Expansion - explode alias and star") {
     val df = Seq((Array("a"), 1)).toDF("a", "b")
 
     checkAnswer(
@@ -342,7 +365,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
     checkAnswer(
-      sqlContext.range(2).limit(2147483638),
+      sqlContext.range(2).toDF().limit(2147483638),
       Row(0) :: Row(1) :: Nil
     )
   }
@@ -610,7 +633,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = """+---------------------+
-                                   ||_1                   |
+                                   ||value                |
                                    |+---------------------+
                                    ||1                    |
                                    ||111111111111111111111|
@@ -618,7 +641,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                                    |""".stripMargin
     assert(df.showString(10, false) === expectedAnswerForFalse)
     val expectedAnswerForTrue = """+--------------------+
-                                  ||                  _1|
+                                  ||               value|
                                   |+--------------------+
                                   ||                   1|
                                   ||11111111111111111...|
@@ -664,8 +687,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("showString: binary") {
     val df = Seq(
-      ("12".getBytes, "ABC.".getBytes),
-      ("34".getBytes, "12346".getBytes)
+      ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
+      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
     ).toDF()
     val expectedAnswer = """+-------+----------------+
                            ||     _1|              _2|
@@ -1310,7 +1333,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("reuse exchange") {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "2") {
-      val df = sqlContext.range(100)
+      val df = sqlContext.range(100).toDF()
       val join = df.join(df, "id")
       val plan = join.queryExecution.executedPlan
       checkAnswer(join, df)
@@ -1365,5 +1388,29 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException](df.registerTempTable("#$@sum"))
     // another invalid table name test as below
     intercept[AnalysisException](df.registerTempTable("table!#"))
+  }
+
+  test("assertAnalyzed shouldn't replace original stack trace") {
+    val e = intercept[AnalysisException] {
+      sqlContext.range(1).select('id as 'a, 'id as 'b).groupBy('a).agg('b)
+    }
+
+    assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
+  }
+
+  test("SPARK-13774: Check error message for non existent path without globbed paths") {
+    val e = intercept[AnalysisException] (sqlContext.read.format("csv").
+      load("/xyz/file2", "/xyz/file21", "/abc/files555", "a")).getMessage()
+    assert(e.startsWith("Path does not exist"))
+   }
+
+  test("SPARK-13774: Check error message for not existent globbed paths") {
+    val e = intercept[AnalysisException] (sqlContext.read.format("text").
+      load( "/xyz/*")).getMessage()
+    assert(e.startsWith("Path does not exist"))
+
+    val e1 = intercept[AnalysisException] (sqlContext.read.json("/mnt/*/*-xyz.json").rdd).
+      getMessage()
+    assert(e1.startsWith("Path does not exist"))
   }
 }

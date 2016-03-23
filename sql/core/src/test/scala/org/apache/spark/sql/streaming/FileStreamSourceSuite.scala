@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{ByteArrayInputStream, File, FileNotFoundException, InputStream}
-
-import com.google.common.base.Charsets.UTF_8
+import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.FileStreamSource._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -321,16 +318,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("fault tolerance") {
-    def assertBatch(batch1: Option[Batch], batch2: Option[Batch]): Unit = {
-      (batch1, batch2) match {
-        case (Some(b1), Some(b2)) =>
-          assert(b1.end === b2.end)
-          assert(b1.data.as[String].collect() === b2.data.as[String].collect())
-        case (None, None) =>
-        case _ => fail(s"batch ($batch1) is not equal to batch ($batch2)")
-      }
-    }
-
     val src = Utils.createTempDir("streaming.src")
     val tmp = Utils.createTempDir("streaming.tmp")
 
@@ -348,71 +335,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
     )
 
-    val textSource2 = createFileStreamSource("text", src.getCanonicalPath)
-    assert(textSource2.currentOffset === textSource.currentOffset)
-    assertBatch(textSource2.getNextBatch(None), textSource.getNextBatch(None))
-    for (f <- 0L to textSource.currentOffset.offset) {
-      val offset = LongOffset(f)
-      assertBatch(textSource2.getNextBatch(Some(offset)), textSource.getNextBatch(Some(offset)))
-    }
-
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
   }
 
-  test("fault tolerance with corrupted metadata file") {
-    val src = Utils.createTempDir("streaming.src")
-    assert(new File(src, "_metadata").mkdirs())
-    stringToFile(
-      new File(src, "_metadata/0"),
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
-    stringToFile(new File(src, "_metadata/1"), s"${FileStreamSource.VERSION}\nSTART\n-")
-
-    val textSource = createFileStreamSource("text", src.getCanonicalPath)
-    // the metadata file of batch is corrupted, so currentOffset should be 0
-    assert(textSource.currentOffset === LongOffset(0))
-
-    Utils.deleteRecursively(src)
-  }
-
-  test("fault tolerance with normal metadata file") {
-    val src = Utils.createTempDir("streaming.src")
-    assert(new File(src, "_metadata").mkdirs())
-    stringToFile(
-      new File(src, "_metadata/0"),
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
-    stringToFile(
-      new File(src, "_metadata/1"),
-      s"${FileStreamSource.VERSION}\nSTART\n-/x/y/z\nEND\n")
-
-    val textSource = createFileStreamSource("text", src.getCanonicalPath)
-    assert(textSource.currentOffset === LongOffset(1))
-
-    Utils.deleteRecursively(src)
-  }
-
-  test("readBatch") {
-    def stringToStream(str: String): InputStream = new ByteArrayInputStream(str.getBytes(UTF_8))
-
-    // Invalid metadata
-    assert(readBatch(stringToStream("")) === Nil)
-    assert(readBatch(stringToStream(FileStreamSource.VERSION)) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\n")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEN")) === Nil)
-
-    // Valid metadata
-    assert(readBatch(stringToStream(
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEND")) === Seq("/a/b/c"))
-    assert(readBatch(stringToStream(
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEND\n")) === Seq("/a/b/c"))
-    assert(readBatch(stringToStream(
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n"))
-      === Seq("/a/b/c", "/e/f/g"))
-  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQLContext {

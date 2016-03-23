@@ -607,7 +607,7 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 
 #' @rdname showDF
 #' @export
-setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
+setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
 
 # @rdname subset
 # @export
@@ -615,7 +615,7 @@ setGeneric("subset", function(x, ...) { standardGeneric("subset") })
 
 #' @rdname agg
 #' @export
-setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
+setGeneric("summarize", function(x, ...) { standardGeneric("summarize") })
 
 #' @rdname summary
 #' @export
@@ -1175,3 +1175,7 @@ setGeneric("kmeans")
 #' @rdname fitted
 #' @export
 setGeneric("fitted")
+
+#' @rdname naiveBayes
+#' @export
+setGeneric("naiveBayes", function(formula, data, ...) { standardGeneric("naiveBayes") })
