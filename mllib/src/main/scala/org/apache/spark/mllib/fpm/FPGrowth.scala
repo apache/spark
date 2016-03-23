@@ -193,7 +193,7 @@ class FPGrowth private (
   @Since("1.3.0")
   def setNumPartitions(numPartitions: Int): this.type = {
     require(numPartitions > 0,
-      s"Number of partitions must be greater than 0 but got ${numPartitions}")
+      s"Number of partitions must be positive but got ${numPartitions}")
     this.numPartitions = numPartitions
     this
   }

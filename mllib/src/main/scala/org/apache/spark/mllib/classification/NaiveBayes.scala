@@ -327,7 +327,7 @@ class NaiveBayes private (
   @Since("0.9.0")
   def setLambda(lambda: Double): NaiveBayes = {
     require(lambda > 0,
-      s"Smoothing parameter must be greater than 0 but got ${lambda}")
+      s"Smoothing parameter must be positive but got ${lambda}")
     this.lambda = lambda
     this
   }
