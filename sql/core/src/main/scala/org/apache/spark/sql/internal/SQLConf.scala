@@ -524,6 +524,19 @@ object SQLConf {
     doc = "When true, the planner will try to find out duplicated exchanges and re-use them.",
     isPublic = false)
 
+  val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT = intConf(
+    "spark.sql.streaming.stateStore.minDeltasForSnapshot",
+    defaultValue = Some(10),
+    doc = "Minimum number of state store delta files that needs to be generated before they " +
+      "consolidated into snapshots.",
+    isPublic = false)
+
+  val STATE_STORE_MIN_VERSIONS_TO_RETAIN = intConf(
+    "spark.sql.streaming.stateStore.minBatchesToRetain",
+    defaultValue = Some(2),
+    doc = "Minimum number of versions of a state store's data to retain after cleaning.",
+    isPublic = false)
+
   val CHECKPOINT_LOCATION = stringConf("spark.sql.streaming.checkpointLocation",
     defaultValue = None,
     doc = "The default location for storing checkpoint data for continuously executing queries.",

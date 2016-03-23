@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.execution.streaming.{ContinuousQueryListenerBus, Sink, StreamExecution}
+import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.util.ContinuousQueryListener
 
 /**
@@ -33,6 +34,8 @@ import org.apache.spark.sql.util.ContinuousQueryListener
 @Experimental
 class ContinuousQueryManager(sqlContext: SQLContext) {
 
+  private[sql] val stateStoreCoordinator =
+    StateStoreCoordinatorRef.forDriver(sqlContext.sparkContext.env)
   private val listenerBus = new ContinuousQueryListenerBus(sqlContext.sparkContext.listenerBus)
   private val activeQueries = new mutable.HashMap[String, ContinuousQuery]
   private val activeQueriesLock = new Object
