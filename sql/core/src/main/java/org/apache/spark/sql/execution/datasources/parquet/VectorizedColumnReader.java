@@ -213,6 +213,9 @@ public class VectorizedColumnReader {
           case INT64:
             readLongBatch(rowId, num, column);
             break;
+          case INT96:
+            readBinaryBatch(rowId, num, column);
+            break;
           case FLOAT:
             readFloatBatch(rowId, num, column);
             break;
@@ -249,7 +252,17 @@ public class VectorizedColumnReader {
       case BINARY:
         column.setDictionary(dictionary);
         break;
-
+      case INT96:
+        if (column.dataType() == DataTypes.TimestampType) {
+          for (int i = rowId; i < rowId + num; ++i) {
+            // TODO: Convert dictionary of Binaries to dictionary of Longs
+            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+            column.putLong(i, CatalystRowConverter.binaryToSQLTimestamp(v));
+          }
+        } else {
+          throw new NotImplementedException();
+        }
+        break;
       case FIXED_LEN_BYTE_ARRAY:
         // DecimalType written in the legacy mode
         if (DecimalType.is32BitDecimalType(column.dataType())) {
@@ -342,9 +355,19 @@ public class VectorizedColumnReader {
   private void readBinaryBatch(int rowId, int num, ColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
+    VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
     if (column.isArray()) {
-      defColumn.readBinarys(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+      defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
+    } else if (column.dataType() == DataTypes.TimestampType) {
+      for (int i = 0; i < num; i++) {
+        if (defColumn.readInteger() == maxDefLevel) {
+          column.putLong(rowId + i,
+              // Read 12 bytes for INT96
+              CatalystRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
+        } else {
+          column.putNull(rowId + i);
+        }
+      }
     } else {
       throw new NotImplementedException("Unimplemented type: " + column.dataType());
     }
