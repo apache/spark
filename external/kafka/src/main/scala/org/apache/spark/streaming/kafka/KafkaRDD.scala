@@ -17,13 +17,18 @@
 
 package org.apache.spark.streaming.kafka
 
+import java.nio.ByteBuffer
+import java.util.Arrays
+
+import org.apache.spark.storage.StorageLevel
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
 import kafka.api.{FetchRequestBuilder, FetchResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
 import kafka.consumer.SimpleConsumer
-import kafka.message.{MessageAndMetadata, MessageAndOffset}
+import kafka.message.{MessageAndMetadata, MessageAndOffset, Message}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
@@ -193,9 +198,26 @@ class KafkaRDD[
       val resp = consumer.fetch(req)
       handleFetchErr(resp)
       // kafka may return a batch that starts before the requested offset
-      resp.messageSet(part.topic, part.partition)
+      val it = resp.messageSet(part.topic, part.partition)
         .iterator
         .dropWhile(_.offset < requestOffset)
+
+      if (getStorageLevel != StorageLevel.NONE) {
+        it.map { m => {
+          val messageByteBuffer = m.message.buffer
+          val deepCopy = Arrays.copyOfRange(
+            messageByteBuffer.array(),
+            messageByteBuffer.arrayOffset(),
+            messageByteBuffer.capacity())
+
+          val copiedBuffer = ByteBuffer.wrap(deepCopy)
+          val copiedMessage = new Message(copiedBuffer)
+          MessageAndOffset(copiedMessage, m.offset)
+        }
+        }
+      } else {
+        it
+      }
     }
 
     override def close(): Unit = {
