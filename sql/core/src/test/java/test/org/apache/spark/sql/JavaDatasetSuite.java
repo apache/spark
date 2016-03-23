@@ -204,7 +204,7 @@ public class JavaDatasetSuite implements Serializable {
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped.collectAsList()));
 
-    Dataset<Tuple2<Integer, String>> reduced = grouped.reduce(new ReduceFunction<String>() {
+    Dataset<Tuple2<Integer, String>> reduced = grouped.reduceGroups(new ReduceFunction<String>() {
       @Override
       public String call(String v1, String v2) throws Exception {
         return v1 + v2;
@@ -300,7 +300,7 @@ public class JavaDatasetSuite implements Serializable {
       Arrays.asList("abc", "abc", "xyz", "xyz", "foo", "foo", "abc", "abc", "xyz"),
       unioned.collectAsList());
 
-    Dataset<String> subtracted = ds.subtract(ds2);
+    Dataset<String> subtracted = ds.except(ds2);
     Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
   }
 
@@ -309,6 +309,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @SafeVarargs
+  @SuppressWarnings("varargs")
   private static <T> Set<T> asSet(T... records) {
     return toSet(Arrays.asList(records));
   }

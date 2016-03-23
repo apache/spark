@@ -26,7 +26,8 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryManager
-import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel}
+import org.apache.spark.serializer.SerializerManager
+import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -44,14 +45,33 @@ private case class SerializedMemoryEntry[T](
     size: Long,
     classTag: ClassTag[T]) extends MemoryEntry[T]
 
+private[storage] trait BlockEvictionHandler {
+  /**
+   * Drop a block from memory, possibly putting it on disk if applicable. Called when the memory
+   * store reaches its limit and needs to free up space.
+   *
+   * If `data` is not put on disk, it won't be created.
+   *
+   * The caller of this method must hold a write lock on the block before calling this method.
+   * This method does not release the write lock.
+   *
+   * @return the block's new effective StorageLevel.
+   */
+  private[storage] def dropFromMemory[T: ClassTag](
+      blockId: BlockId,
+      data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel
+}
+
 /**
  * Stores blocks in memory, either as Arrays of deserialized Java objects or as
  * serialized ByteBuffers.
  */
 private[spark] class MemoryStore(
     conf: SparkConf,
-    blockManager: BlockManager,
-    memoryManager: MemoryManager)
+    blockInfoManager: BlockInfoManager,
+    serializerManager: SerializerManager,
+    memoryManager: MemoryManager,
+    blockEvictionHandler: BlockEvictionHandler)
   extends Logging {
 
   // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
@@ -117,7 +137,7 @@ private[spark] class MemoryStore(
         entries.put(blockId, entry)
       }
       logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
-        blockId, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
+        blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
       true
     } else {
       false
@@ -201,7 +221,7 @@ private[spark] class MemoryStore(
       val entry = if (level.deserialized) {
         new DeserializedMemoryEntry[T](arrayValues, SizeEstimator.estimate(arrayValues), classTag)
       } else {
-        val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)(classTag)
+        val bytes = serializerManager.dataSerialize(blockId, arrayValues.iterator)(classTag)
         new SerializedMemoryEntry[T](bytes, bytes.size, classTag)
       }
       val size = entry.size
@@ -237,7 +257,10 @@ private[spark] class MemoryStore(
         }
         val bytesOrValues = if (level.deserialized) "values" else "bytes"
         logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
-          blockId, bytesOrValues, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
+          blockId,
+          bytesOrValues,
+          Utils.bytesToString(size),
+          Utils.bytesToString(maxMemory - blocksMemoryUsed)))
         Right(size)
       } else {
         assert(currentUnrollMemoryForThisTask >= currentUnrollMemoryForThisTask,
@@ -284,7 +307,7 @@ private[spark] class MemoryStore(
     }
     if (entry != null) {
       memoryManager.releaseStorageMemory(entry.size)
-      logDebug(s"Block $blockId of size ${entry.size} dropped " +
+      logInfo(s"Block $blockId of size ${entry.size} dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")
       true
     } else {
@@ -346,15 +369,15 @@ private[spark] class MemoryStore(
         case SerializedMemoryEntry(buffer, _, _) => Right(buffer)
       }
       val newEffectiveStorageLevel =
-        blockManager.dropFromMemory(blockId, () => data)(entry.classTag)
+        blockEvictionHandler.dropFromMemory(blockId, () => data)(entry.classTag)
       if (newEffectiveStorageLevel.isValid) {
         // The block is still present in at least one store, so release the lock
         // but don't delete the block info
-        blockManager.releaseLock(blockId)
+        blockInfoManager.unlock(blockId)
       } else {
         // The block isn't present in any store, so delete the block info so that the
         // block can be stored again
-        blockManager.blockInfoManager.removeBlock(blockId)
+        blockInfoManager.removeBlock(blockId)
       }
     }
 
@@ -373,7 +396,7 @@ private[spark] class MemoryStore(
             // We don't want to evict blocks which are currently being read, so we need to obtain
             // an exclusive write lock on blocks which are candidates for eviction. We perform a
             // non-blocking "tryLock" here in order to ignore blocks which are locked for reading:
-            if (blockManager.blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
+            if (blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
               selectedBlocks += blockId
               freedMemory += pair.getValue.size
             }
@@ -382,14 +405,14 @@ private[spark] class MemoryStore(
       }
 
       if (freedMemory >= requestedSpace) {
-        logInfo(s"${selectedBlocks.size} blocks selected for dropping")
+        logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
+          s"(${Utils.bytesToString(freedMemory)} bytes)")
       } else {
         blockId.foreach { id =>
-          logInfo(s"Will not store $id as it would require dropping another block " +
-            "from the same RDD")
+          logInfo(s"Will not store $id")
         }
         selectedBlocks.foreach { id =>
-          blockManager.releaseLock(id)
+          blockInfoManager.unlock(id)
         }
         selectedBlocks.clear()
         freedMemory = 0
