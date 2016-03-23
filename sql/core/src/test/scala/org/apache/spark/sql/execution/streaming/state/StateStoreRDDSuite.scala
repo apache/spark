@@ -26,7 +26,6 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.rdd.RDD
