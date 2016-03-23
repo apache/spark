@@ -288,7 +288,7 @@ class StreamExecution(
     val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
     logDebug(s"Optimized batch in ${optimizerTime}ms")
 
-    val nextBatch = Dataset.newDataFrame(sqlContext, newPlan)
+    val nextBatch = Dataset.ofRows(sqlContext, newPlan)
     sink.addBatch(currentBatchId - 1, nextBatch)
 
     awaitBatchLock.synchronized {

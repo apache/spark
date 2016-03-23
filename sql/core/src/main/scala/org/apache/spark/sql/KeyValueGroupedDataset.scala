@@ -59,7 +59,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   private def groupedData = {
     new RelationalGroupedDataset(
-      Dataset.newDataFrame(sqlContext, logicalPlan),
+      Dataset.ofRows(sqlContext, logicalPlan),
       groupingAttributes,
       RelationalGroupedDataset.GroupByType)
   }
