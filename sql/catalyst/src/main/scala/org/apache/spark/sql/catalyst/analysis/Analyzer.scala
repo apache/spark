@@ -408,7 +408,7 @@ class Analyzer(
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
         case s: Star => s.expand(plan.child, resolver)
         // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
-        case UnresolvedAlias(s: Star, _) => expandStarExpression(s, plan.child) :: Nil
+        case UnresolvedAlias(s: Star, _) => s.expand(plan.child, resolver)
         case o if containsStar(o :: Nil) => expandStarExpression(o, plan.child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
