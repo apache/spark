@@ -139,22 +139,6 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }
   }
 
-  test("upload metrics.properties to distributed cache in client mode") {
-    testLocalResource(true, "metrics.properties", METRICS_CONF)
-  }
-
-  test("upload metrics.properties to distributed cache in cluster mode") {
-    testLocalResource(false, "metrics.properties", METRICS_CONF)
-  }
-
-  test("upload log4j.properties to distributed cache in client mode") {
-    testLocalResource(true, "log4j.properties", LOG4J_CONF)
-  }
-
-  test("upload log4j.properties to distributed cache in cluster mode") {
-    testLocalResource(false, "log4j.properties", LOG4J_CONF)
-  }
-
   private def testBasicYarnApp(clientMode: Boolean): Unit = {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
@@ -203,13 +187,12 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   private def testUseClassPathFirst(clientMode: Boolean): Unit = {
     // Create a jar file that contains a different version of "test.resource".
-    val resource = "test.resource"
     val originalJar = TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
     val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
-      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath(), resource),
+      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
       extraClassPath = Seq(originalJar.getPath()),
       extraJars = Seq("local:" + userJar.getPath()),
       extraConf = Map(
@@ -219,14 +202,6 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, executorResult, "OVERRIDDEN")
   }
 
-  private def testLocalResource(clientMode: Boolean, resource: String, result: String): Unit = {
-    val driverResult = File.createTempFile("driver", null, tempDir)
-    val executorResult = File.createTempFile("executor", null, tempDir)
-    val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
-      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath(), resource))
-    checkResult(finalState, driverResult, result)
-    checkResult(finalState, executorResult, result)
-  }
 }
 
 private[spark] class SaveExecutorInfo extends SparkListener {
@@ -319,36 +294,36 @@ private object YarnClasspathTest extends Logging {
   }
 
   def main(args: Array[String]): Unit = {
-    if (args.length != 3) {
+    if (args.length != 2) {
       error(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: YarnClasspathTest [driver result file] [executor result file] [resource name]
+        |Usage: YarnClasspathTest [driver result file] [executor result file]
         """.stripMargin)
       // scalastyle:on println
     }
 
-    readResource(args(0), args(2))
+    readResource(args(0))
     val sc = new SparkContext(new SparkConf())
     try {
-      sc.parallelize(Seq(1)).foreach { x => readResource(args(1), args(2)) }
+      sc.parallelize(Seq(1)).foreach { x => readResource(args(1)) }
     } finally {
       sc.stop()
     }
     System.exit(exitCode)
   }
 
-  private def readResource(resultPath: String, resourceName: String): Unit = {
+  private def readResource(resultPath: String): Unit = {
     var result = "failure"
     try {
       val ccl = Thread.currentThread().getContextClassLoader()
-      val resource = ccl.getResourceAsStream(resourceName)
+      val resource = ccl.getResourceAsStream("test.resource")
       val bytes = ByteStreams.toByteArray(resource)
       result = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     } catch {
       case t: Throwable =>
-        error(s"loading $resourceName to $resultPath", t)
+        error(s"loading test.resource to $resultPath", t)
         // set the exit code if not yet set
         exitCode = 2
     } finally {

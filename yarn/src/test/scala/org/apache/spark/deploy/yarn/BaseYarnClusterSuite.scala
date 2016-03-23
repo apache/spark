@@ -56,17 +56,11 @@ abstract class BaseYarnClusterSuite
     |log4j.logger.org.spark-project.jetty=WARN
     """.stripMargin
 
-  protected val METRICS_CONF =
-    """
-      |*.source.jvm.class=org.apache.spark.metrics.source.JvmSource
-    """.stripMargin
-
   private var yarnCluster: MiniYARNCluster = _
   protected var tempDir: File = _
   private var fakeSparkJar: File = _
   protected var hadoopConfDir: File = _
   private var logConfDir: File = _
-  private var metricsConfDir: File = _
 
   var oldSystemProperties: Properties = null
 
@@ -83,11 +77,6 @@ abstract class BaseYarnClusterSuite
 
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
-
-    metricsConfDir = new File(tempDir, "metrics")
-    metricsConfDir.mkdir()
-    val metricsConfFile = new File(metricsConfDir, "metrics.properties")
-    Files.write(METRICS_CONF, metricsConfFile, StandardCharsets.UTF_8)
 
     // Disable the disk utilization check to avoid the test hanging when people's disks are
     // getting full.
@@ -220,8 +209,6 @@ abstract class BaseYarnClusterSuite
     val testClasspath = new TestClasspathBuilder()
       .buildClassPath(
         logConfDir.getAbsolutePath() +
-        File.pathSeparator +
-        metricsConfDir.getAbsolutePath() +
         File.pathSeparator +
         extraClassPath.mkString(File.pathSeparator))
       .asScala
