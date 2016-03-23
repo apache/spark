@@ -23,7 +23,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import javax.annotation.Nullable;
 
-import org.apache.spark.storage.disk.DiskBlockObjectWriter;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -47,6 +46,7 @@ import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.*;
+import org.apache.spark.storage.disk.DiskBlockObjectWriter;
 import org.apache.spark.util.Utils;
 
 /**
