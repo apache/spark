@@ -64,7 +64,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
   /** A strategy that runs until fix point or maxIterations times, whichever comes first. */
   case class FixedPoint(maxIterations: Int) extends Strategy {
-    override val throwsExceptionUponMaxIterations: Boolean = if (Utils.isTesting) true else false
+    override val throwsExceptionUponMaxIterations: Boolean = Utils.isTesting
   }
   /** A batch of rules. */
   protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)

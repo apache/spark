@@ -78,7 +78,6 @@ private[sql] trait SQLTestUtils
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    System.setProperty("spark.testing", "true")
     if (loadTestDataBeforeTests) {
       loadTestData()
     }

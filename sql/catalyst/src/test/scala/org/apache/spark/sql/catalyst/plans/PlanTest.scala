@@ -27,8 +27,6 @@ import org.apache.spark.sql.catalyst.util._
  */
 abstract class PlanTest extends SparkFunSuite with PredicateHelper {
 
-  System.setProperty("spark.testing", "true")
-
   /**
    * Since attribute references are given globally unique ids during analysis,
    * we must normalize them to check if two different queries are identical.
