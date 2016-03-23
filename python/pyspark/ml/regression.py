@@ -466,7 +466,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 
 @inherit_doc
-class DecisionTreeModel(JavaModel, MLWritable, MLReadable):
+class DecisionTreeModel(JavaModel):
     """Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
@@ -506,7 +506,7 @@ class TreeEnsembleModels(JavaModel):
 
 
 @inherit_doc
-class DecisionTreeRegressionModel(DecisionTreeModel):
+class DecisionTreeRegressionModel(DecisionTreeModel, MLWritable, MLReadable):
     """
     Model fitted by DecisionTreeRegressor.
 
