@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.linalg.{DenseMatrix, Vector, Vectors}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.{axpy, gemm, scal}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -228,7 +228,7 @@ class KMeans private (
   def run(data: RDD[Vector]): KMeansModel = {
 
     if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data is not directly cached, which may hurt performance if its"
+      logWarning("The users input data is not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }
 
@@ -252,6 +252,9 @@ class KMeans private (
 
     val samplePoint = data.first()
     val dims = samplePoint.size
+    if (samplePoint.isInstanceOf[SparseVector]) {
+      logWarning("KMeans will be inefficient if the input data is Sparse Vector.")
+    }
 
     val blockData = zippedData.mapPartitions { iter =>
       iter.grouped(blockSize).map { points =>
@@ -278,7 +281,7 @@ class KMeans private (
 
     // Warn at the end of the run as well, for increased visibility.
     if (blockData.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data was not directly cached, which may hurt performance if its"
+      logWarning("The users input data was not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }
     model
@@ -309,7 +312,7 @@ class KMeans private (
 
       val costAccums = sc.accumulator(0.0)
 
-      // Construct centers array and broadcast them
+      // Construct centers array and broadcast it
       val centersArray = new Array[Double](k * dims)
       val centersNormArray = new Array[Double](k)
       var i = 0
@@ -335,7 +338,7 @@ class KMeans private (
         // Construct centers matrix
         val centerMatrix = new DenseMatrix(dims, k, thisCentersArray)
 
-        // Construct a^2 + b^2 matrix
+        // Construct point^2 + center^2 matrix
         val a2b2 = new Array[Double](numRows * k)
         var i = 0
         while (i < k) {
@@ -422,8 +425,7 @@ class KMeans private (
    */
   private def initRandom(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
     // Sample cluster centers in one pass
-    val sample = data.takeSample(true, k, new XORShiftRandom(this.seed).nextInt()).toSeq
-    sample.map { v => new VectorWithNorm(Vectors.dense(v.vector.toArray), v.norm) }.toArray
+    data.takeSample(true, k, new XORShiftRandom(this.seed).nextInt()).toSeq.toArray
   }
 
   /**
