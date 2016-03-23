@@ -428,6 +428,8 @@ private[spark] class MemoryStore(
       dropBlock(blockId, entry)
     }
 
+    logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
+      s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
     freedMemory
   }
 
