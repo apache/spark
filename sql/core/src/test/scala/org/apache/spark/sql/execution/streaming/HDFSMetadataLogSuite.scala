@@ -27,6 +27,8 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
+  private implicit def toOption[A](a: A): Option[A] = Option(a)
+
   test("basic") {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
