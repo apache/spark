@@ -238,7 +238,6 @@
              <configuration>
                <sources>
                  <source>v${hive.version.short}/src/main/scala</source>
-                 <source>${project.build.directory}/generated-sources/antlr</source>
                </sources>
              </configuration>
            </execution>
