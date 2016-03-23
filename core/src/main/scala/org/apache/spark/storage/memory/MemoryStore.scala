@@ -322,13 +322,15 @@ private[spark] class MemoryStore(
     * RDDs that don't fit into memory that we want to avoid).
     *
     * @param blockId the ID of the block we are freeing space for, if any
-    * @param space the size of this block
+    * @param requestedSpace the amount of memory which should be freed via block eviction
     * @return the total size (in bytes) of the blocks evicted from the MemoryStore. This memory is
     *         not released with the memory manager, so it's the caller's responsibility to perform
     *         the appropriate bookkeeping calls.
     */
-  private[spark] def evictBlocksToFreeSpace(blockId: Option[BlockId], space: Long): Long = {
-    assert(space > 0)
+  private[spark] def evictBlocksToFreeSpace(
+      blockId: Option[BlockId],
+      requestedSpace: Long): Long = {
+    assert(requestedSpace > 0)
 
     var freedMemory = 0L
     val rddToAdd = blockId.flatMap(getRddId)
@@ -364,7 +366,7 @@ private[spark] class MemoryStore(
       // can lead to exceptions.
       entries.synchronized {
         val iterator = entries.entrySet().iterator()
-        while (freedMemory < space && iterator.hasNext) {
+        while (freedMemory < requestedSpace && iterator.hasNext) {
           val pair = iterator.next()
           val blockId = pair.getKey
           if (blockIsEvictable(blockId)) {
@@ -379,7 +381,7 @@ private[spark] class MemoryStore(
         }
       }
 
-      if (freedMemory >= space) {
+      if (freedMemory >= requestedSpace) {
         logInfo(s"${selectedBlocks.size} blocks selected for dropping")
       } else {
         blockId.foreach { id =>
