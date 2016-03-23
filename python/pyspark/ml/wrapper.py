@@ -34,6 +34,7 @@ class JavaWrapper(Params):
 
     __metaclass__ = ABCMeta
 
+
     def __init__(self):
         """
         Initialize the wrapped java object to None
@@ -195,10 +196,24 @@ class JavaModel(Model, JavaTransformer):
         these wrappers depend on pyspark.ml.util (both directly and via
         other ML classes).
         """
+
+        # Must set an initial uid before calling Params constructor
+        self.initial_uid = java_model.uid() if java_model is not None else None
+
         super(JavaModel, self).__init__()
         if java_model is not None:
             self._java_obj = java_model
-            self.uid = java_model.uid()
+
+    def _getInitialUID(self):
+        """
+        Override method in Params to set initial UID to match that of the
+        model. If the java_model was created with an overridden UID value
+        then the Python model will also use that as the initial UID.
+        """
+        if self.initial_uid is not None:
+            return self.initial_uid
+        else:
+            return super(JavaModel, self)._getInitialUID()
 
     def copy(self, extra=None):
         """

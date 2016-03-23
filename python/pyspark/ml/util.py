@@ -59,10 +59,14 @@ class Identifiable(object):
 
     def __init__(self):
         #: A unique id for the object.
-        self.uid = self._randomUID()
+        self.uid = self._getInitialUID()
 
     def __repr__(self):
         return self.uid
+
+    def _getInitialUID(self):
+        # Override to set a different initial UID
+        return self._randomUID()
 
     @classmethod
     def _randomUID(cls):
