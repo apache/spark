@@ -26,13 +26,8 @@ little bit helps, and credit will always be given.
 
 Report bugs through Github
 
-If you are reporting a bug, you MUST provide all of the following or the bug will be closed :
+We now provide a [templated issue form](https://github.com/airbnb/airflow/blob/master/ISSUE_TEMPLATE.md). You must provide information for all required fields else the bug will be closed.
 
--   Version of Airflow (e.g. a release version, running your own fork, running off master -- provide a `git log` snippet)
--   Example code to reproduce the bug (as a code snipper in markdown)
--   Screen shots of your DAG's graph and tree views
--   Stack trace if applicable
--   Your operating system name and version
 
 ### Fix Bugs
 
