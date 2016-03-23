@@ -108,7 +108,7 @@ private[spark] object Benchmark {
 
   /**
    * This should return a user helpful JVM & OS information.
-   * This should return something like 
+   * This should return something like
    * "OpenJDK 64-Bit Server VM 1.8.0_65-b17 on Linux 4.1.13-100.fc21.x86_64"
    */
   def getJVMOSInfo(): String = {
