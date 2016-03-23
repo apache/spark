@@ -298,7 +298,7 @@ private[hive] class HiveClientImpl(
     logDebug(s"Looking up $dbName.$tableName")
     Option(client.getTable(dbName, tableName, false)).map { h =>
       CatalogTable(
-        name = TableIdentifier(h.getTableName, Option(h.getDbName)),
+        identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL_TABLE
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED_TABLE
@@ -544,13 +544,14 @@ private[hive] class HiveClientImpl(
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
-    val catalogFunc = getFunction(db, oldName).copy(name = FunctionIdentifier(newName, Some(db)))
+    val catalogFunc = getFunction(db, oldName)
+      .copy(identifier = FunctionIdentifier(newName, Some(db)))
     val hiveFunc = toHiveFunction(catalogFunc, db)
     client.alterFunction(db, oldName, hiveFunc)
   }
 
   override def alterFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    client.alterFunction(db, func.name.funcName, toHiveFunction(func, db))
+    client.alterFunction(db, func.identifier.funcName, toHiveFunction(func, db))
   }
 
   override def getFunctionOption(
@@ -611,7 +612,7 @@ private[hive] class HiveClientImpl(
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
     new HiveFunction(
-      f.name.funcName,
+      f.identifier.funcName,
       db,
       f.className,
       null,
@@ -639,7 +640,7 @@ private[hive] class HiveClientImpl(
   }
 
   private def toHiveTable(table: CatalogTable): HiveTable = {
-    val hiveTable = new HiveTable(table.database, table.name.table)
+    val hiveTable = new HiveTable(table.database, table.identifier.table)
     hiveTable.setTableType(table.tableType match {
       case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE
       case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE

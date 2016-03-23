@@ -107,7 +107,7 @@ case class CreateTempTableUsing(
     sqlContext.sessionState.catalog.createTempTable(
       tableIdent.table,
       Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
-      ignoreIfExists = true)
+      overrideIfExists = true)
 
     Seq.empty[Row]
   }
@@ -138,7 +138,7 @@ case class CreateTempTableUsingAsSelect(
     sqlContext.sessionState.catalog.createTempTable(
       tableIdent.table,
       Dataset.ofRows(sqlContext, LogicalRelation(result)).logicalPlan,
-      ignoreIfExists = true)
+      overrideIfExists = true)
 
     Seq.empty[Row]
   }
