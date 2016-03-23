@@ -48,7 +48,6 @@ Eclipse Public License 1.0
 
 The following components are provided under the Eclipse Public License 1.0. See project link for details.
 
-     (Eclipse Public License - Version 1.0) mqtt-client (org.eclipse.paho:mqtt-client:0.4.0 - http://www.eclipse.org/paho/mqtt-client)
      (Eclipse Public License v1.0) Eclipse JDT Core (org.eclipse.jdt:core:3.1.1 - http://www.eclipse.org/jdt/)
 
 ========================================================================
