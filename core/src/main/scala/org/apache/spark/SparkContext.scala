@@ -1750,8 +1750,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     if (shortForm == null || longForm == null) {
       val callSite = Utils.getCallSite()
-      shortForm = callSite.shortForm
-      longForm = callSite.longForm
+      shortForm = Option(shortForm).getOrElse(callSite.shortForm)
+      longForm = Option(longForm).getOrElse(callSite.longForm)
     }
 
     CallSite(shortForm, longForm)
