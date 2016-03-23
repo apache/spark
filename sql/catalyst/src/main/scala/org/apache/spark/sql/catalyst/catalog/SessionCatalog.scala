@@ -122,9 +122,9 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * If no such database is specified, create it in the current database.
    */
   def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
-    val db = tableDefinition.name.database.getOrElse(currentDb)
-    val table = formatTableName(tableDefinition.name.table)
-    val newTableDefinition = tableDefinition.copy(name = TableIdentifier(table, Some(db)))
+    val db = tableDefinition.identifier.database.getOrElse(currentDb)
+    val table = formatTableName(tableDefinition.identifier.table)
+    val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
   }
 
@@ -138,9 +138,9 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * this becomes a no-op.
    */
   def alterTable(tableDefinition: CatalogTable): Unit = {
-    val db = tableDefinition.name.database.getOrElse(currentDb)
-    val table = formatTableName(tableDefinition.name.table)
-    val newTableDefinition = tableDefinition.copy(name = TableIdentifier(table, Some(db)))
+    val db = tableDefinition.identifier.database.getOrElse(currentDb)
+    val table = formatTableName(tableDefinition.identifier.table)
+    val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     externalCatalog.alterTable(db, newTableDefinition)
   }
 
@@ -400,9 +400,9 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * If no such database is specified, create it in the current database.
    */
   def createFunction(funcDefinition: CatalogFunction): Unit = {
-    val db = funcDefinition.name.database.getOrElse(currentDb)
+    val db = funcDefinition.identifier.database.getOrElse(currentDb)
     val newFuncDefinition = funcDefinition.copy(
-      name = FunctionIdentifier(funcDefinition.name.funcName, Some(db)))
+      identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db)))
     externalCatalog.createFunction(db, newFuncDefinition)
   }
 
@@ -425,9 +425,9 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * this becomes a no-op.
    */
   def alterFunction(funcDefinition: CatalogFunction): Unit = {
-    val db = funcDefinition.name.database.getOrElse(currentDb)
+    val db = funcDefinition.identifier.database.getOrElse(currentDb)
     val newFuncDefinition = funcDefinition.copy(
-      name = FunctionIdentifier(funcDefinition.name.funcName, Some(db)))
+      identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db)))
     externalCatalog.alterFunction(db, newFuncDefinition)
   }
 
@@ -440,9 +440,9 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * This assumes no database is specified in `funcDefinition`.
    */
   def createTempFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
-    require(funcDefinition.name.database.isEmpty,
+    require(funcDefinition.identifier.database.isEmpty,
       "attempted to create a temporary function while specifying a database")
-    val name = funcDefinition.name.funcName
+    val name = funcDefinition.identifier.funcName
     if (tempFunctions.contains(name) && !ignoreIfExists) {
       throw new AnalysisException(s"Temporary function '$name' already exists.")
     }
@@ -481,7 +481,7 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
       externalCatalog.renameFunction(db, oldName.funcName, newName.funcName)
     } else {
       val func = tempFunctions(oldName.funcName)
-      val newFunc = func.copy(name = func.name.copy(funcName = newName.funcName))
+      val newFunc = func.copy(identifier = func.identifier.copy(funcName = newName.funcName))
       tempFunctions.remove(oldName.funcName)
       tempFunctions.put(newName.funcName, newFunc)
     }
