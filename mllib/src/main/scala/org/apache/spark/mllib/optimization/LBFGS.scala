@@ -52,8 +52,8 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
    * Restriction: numCorrections > 0
    */
   def setNumCorrections(corrections: Int): this.type = {
-    require(corrections > 0, s"Number of corrections must be greater than 0," +
-      s" but got ${corrections}")
+    require(corrections > 0,
+      s"Number of corrections must be greater than 0, but got ${corrections}")
     this.numCorrections = corrections
     this
   }
@@ -65,8 +65,8 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
    * and therefore generally cause more iterations to be run.
    */
   def setConvergenceTol(tolerance: Double): this.type = {
-    require(tolerance >= 0, s"Convergence tolerance must be no less than 0," +
-      s" but got ${tolerance}")
+    require(tolerance >= 0,
+      s"Convergence tolerance must be no less than 0, but got ${tolerance}")
     this.convergenceTol = tolerance
     this
   }
@@ -91,8 +91,8 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
    * Set the maximal number of iterations for L-BFGS. Default 100.
    */
   def setNumIterations(iters: Int): this.type = {
-    require(iters > 0, s"Maximum of iterations must be greater than 0," +
-      s" but got ${iters}")
+    require(iters > 0,
+      s"Maximum of iterations must be greater than 0, but got ${iters}")
     this.maxNumIterations = iters
     this
   }
@@ -108,8 +108,8 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
    * Set the regularization parameter. Default 0.0.
    */
   def setRegParam(regParam: Double): this.type = {
-    require(regParam >= 0, s"Regularization parameter must be no less than 0," +
-      s" but got ${regParam}")
+    require(regParam >= 0,
+      s"Regularization parameter must be no less than 0, but got ${regParam}")
     this.regParam = regParam
     this
   }
