@@ -53,7 +53,7 @@ private[sql] object StateStoreCoordinatorRef extends Logging {
    * Create a reference to a [[StateStoreCoordinator]], This can be called from driver as well as
    * executors.
    */
-  def apply(env: SparkEnv): StateStoreCoordinatorRef = synchronized {
+  def forDriver(env: SparkEnv): StateStoreCoordinatorRef = synchronized {
     try {
       val coordinator = new StateStoreCoordinator(env.rpcEnv)
       val coordinatorRef = env.rpcEnv.setupEndpoint(endpointName, coordinator)
@@ -61,10 +61,16 @@ private[sql] object StateStoreCoordinatorRef extends Logging {
       new StateStoreCoordinatorRef(coordinatorRef)
     } catch {
       case e: IllegalArgumentException =>
-        logDebug("Retrieving existing StateStoreCoordinator endpoint")
         val rpcEndpointRef = RpcUtils.makeDriverRef(endpointName, env.conf, env.rpcEnv)
+        logDebug("Retrieved existing StateStoreCoordinator endpoint")
         new StateStoreCoordinatorRef(rpcEndpointRef)
     }
+  }
+
+  def forExecutor(env: SparkEnv): StateStoreCoordinatorRef = synchronized {
+    val rpcEndpointRef = RpcUtils.makeDriverRef(endpointName, env.conf, env.rpcEnv)
+    logDebug("Retrieved existing StateStoreCoordinator endpoint")
+    new StateStoreCoordinatorRef(rpcEndpointRef)
   }
 }
 

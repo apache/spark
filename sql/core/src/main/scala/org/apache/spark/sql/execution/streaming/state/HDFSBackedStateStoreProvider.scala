@@ -583,6 +583,3 @@ private[state] class HDFSBackedStateStoreProvider(
   }
 }
 
-private[state] object HDFSBackedStateStoreProvider {
-
-}

@@ -94,7 +94,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   test("multiple references have same underlying coordinator") {
     withCoordinatorRef(sc) { coordRef1 =>
-      val coordRef2 = StateStoreCoordinatorRef(sc.env)
+      val coordRef2 = StateStoreCoordinatorRef.forDriver(sc.env)
 
       val id = StateStoreId("x", 0, 0)
 
@@ -114,7 +114,7 @@ object StateStoreCoordinatorSuite {
   def withCoordinatorRef(sc: SparkContext)(body: StateStoreCoordinatorRef => Unit): Unit = {
     var coordinatorRef: StateStoreCoordinatorRef = null
     try {
-      coordinatorRef = StateStoreCoordinatorRef(sc.env)
+      coordinatorRef = StateStoreCoordinatorRef.forDriver(sc.env)
       body(coordinatorRef)
     } finally {
       if (coordinatorRef != null) coordinatorRef.stop()

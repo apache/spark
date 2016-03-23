@@ -35,6 +35,7 @@ import org.apache.spark.util.ThreadUtils
 /** Unique identifier for a [[StateStore]] */
 case class StateStoreId(checkpointLocation: String, operatorId: Long, partitionId: Int)
 
+
 /**
  * Base trait for a versioned key-value store used for streaming aggregations
  */
@@ -84,6 +85,7 @@ trait StateStore {
   def hasCommitted: Boolean
 }
 
+
 /** Trait representing a provider of a specific version of a [[StateStore]]. */
 trait StateStoreProvider {
 
@@ -93,6 +95,7 @@ trait StateStoreProvider {
   /** Optional method for providers to allow for background maintenance */
   def doMaintenance(): Unit = { }
 }
+
 
 /** Trait representing updates made to a [[StateStore]]. */
 sealed trait StoreUpdate
@@ -118,7 +121,6 @@ private[state] object StateStore extends Logging {
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
 
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
-  private val maintenanceTimer = new Timer("StateStore Timer", true)
   private val maintenanceTaskExecutor =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("state-store-maintenance-task")
 
@@ -232,7 +234,7 @@ private[state] object StateStore extends Logging {
     val env = SparkEnv.get
     if (env != null) {
       if (_coordRef == null) {
-        _coordRef = StateStoreCoordinatorRef(env)
+        _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
       logDebug(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
       Some(_coordRef)
