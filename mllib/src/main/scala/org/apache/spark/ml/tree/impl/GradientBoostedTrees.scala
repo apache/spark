@@ -38,10 +38,10 @@ private[ml] object GradientBoostedTrees extends Logging {
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
    */
-  def run(input: RDD[LabeledPoint],
+  def run(
+      input: RDD[LabeledPoint],
       boostingStrategy: OldBoostingStrategy,
-      seed: Long
-      ): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      seed: Long): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
@@ -72,8 +72,7 @@ private[ml] object GradientBoostedTrees extends Logging {
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
       boostingStrategy: OldBoostingStrategy,
-      seed: Long
-      ): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      seed: Long): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
