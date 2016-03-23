@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.io._
-import java.nio.ByteBuffer
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -30,7 +29,6 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
-import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NettyManagedBuffer}
@@ -38,11 +36,11 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.serializer.{Serializer, SerializerInstance, SerializerManager}
+import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
 import org.apache.spark.util._
-import org.apache.spark.util.io.{ByteArrayChunkOutputStream, ChunkedByteBuffer}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
@@ -68,7 +66,7 @@ private[spark] class BlockManager(
     blockTransferService: BlockTransferService,
     securityManager: SecurityManager,
     numUsableCores: Int)
-  extends BlockDataManager with Logging {
+  extends BlockDataManager with BlockEvictionHandler with Logging {
 
   private[spark] val externalShuffleServiceEnabled =
     conf.getBoolean("spark.shuffle.service.enabled", false)
@@ -80,13 +78,15 @@ private[spark] class BlockManager(
     new DiskBlockManager(conf, deleteFilesOnStop)
   }
 
+  // Visible for testing
   private[storage] val blockInfoManager = new BlockInfoManager
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
   // Actual storage of where blocks are kept
-  private[spark] val memoryStore = new MemoryStore(conf, serializerManager, this, memoryManager)
+  private[spark] val memoryStore =
+    new MemoryStore(conf, blockInfoManager, serializerManager, memoryManager, this)
   private[spark] val diskStore = new DiskStore(conf, diskBlockManager)
   memoryManager.setMemoryStore(memoryStore)
 
@@ -126,14 +126,6 @@ private[spark] class BlockManager(
     blockTransferService
   }
 
-  // Whether to compress broadcast variables that are stored
-  private val compressBroadcast = conf.getBoolean("spark.broadcast.compress", true)
-  // Whether to compress shuffle output that are stored
-  private val compressShuffle = conf.getBoolean("spark.shuffle.compress", true)
-  // Whether to compress RDD partitions that are stored serialized
-  private val compressRdds = conf.getBoolean("spark.rdd.compress", false)
-  // Whether to compress shuffle output temporarily spilled to disk
-  private val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
   // Max number of failures before this block manager refreshes the block locations from the driver
   private val maxFailuresBeforeLocationRefresh =
     conf.getInt("spark.block.failures.beforeLocationRefresh", 5)
@@ -151,13 +143,6 @@ private[spark] class BlockManager(
   @volatile private var cachedPeers: Seq[BlockManagerId] = _
   private val peerFetchLock = new Object
   private var lastPeerFetchTime = 0L
-
-  /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
-   * the initialization of the compression codec until it is first used. The reason is that a Spark
-   * program could be using a user-defined codec in a third party jar, which is loaded in
-   * Executor.updateDependencies. When the BlockManager is initialized, user level jars hasn't been
-   * loaded yet. */
-  private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -286,7 +271,7 @@ private[spark] class BlockManager(
       shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       getLocalBytes(blockId) match {
-        case Some(buffer) => new BlockManagerManagedBuffer(this, blockId, buffer)
+        case Some(buffer) => new BlockManagerManagedBuffer(blockInfoManager, blockId, buffer)
         case None => throw new BlockNotFoundException(blockId.toString)
       }
     }
@@ -422,7 +407,8 @@ private[spark] class BlockManager(
           val iter: Iterator[Any] = if (level.deserialized) {
             memoryStore.getValues(blockId).get
           } else {
-            dataDeserialize(blockId, memoryStore.getBytes(blockId).get)(info.classTag)
+            serializerManager.dataDeserialize(
+              blockId, memoryStore.getBytes(blockId).get)(info.classTag)
           }
           val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
@@ -430,11 +416,11 @@ private[spark] class BlockManager(
           val iterToReturn: Iterator[Any] = {
             val diskBytes = diskStore.getBytes(blockId)
             if (level.deserialized) {
-              val diskValues = dataDeserialize(blockId, diskBytes)(info.classTag)
+              val diskValues = serializerManager.dataDeserialize(blockId, diskBytes)(info.classTag)
               maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
             } else {
               val bytes = maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes)
-              dataDeserialize(blockId, bytes)(info.classTag)
+              serializerManager.dataDeserialize(blockId, bytes)(info.classTag)
             }
           }
           val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, releaseLock(blockId))
@@ -486,7 +472,7 @@ private[spark] class BlockManager(
         diskStore.getBytes(blockId)
       } else if (level.useMemory && memoryStore.contains(blockId)) {
         // The block was not found on disk, so serialize an in-memory copy:
-        dataSerialize(blockId, memoryStore.getValues(blockId).get)
+        serializerManager.dataSerialize(blockId, memoryStore.getValues(blockId).get)
       } else {
         releaseLock(blockId)
         throw new SparkException(s"Block $blockId was not found even though it's read-locked")
@@ -510,7 +496,8 @@ private[spark] class BlockManager(
    */
   private def getRemoteValues(blockId: BlockId): Option[BlockResult] = {
     getRemoteBytes(blockId).map { data =>
-      new BlockResult(dataDeserialize(blockId, data), DataReadMethod.Network, data.size)
+      new BlockResult(
+        serializerManager.dataDeserialize(blockId, data), DataReadMethod.Network, data.size)
     }
   }
 
@@ -699,7 +686,8 @@ private[spark] class BlockManager(
       serializerInstance: SerializerInstance,
       bufferSize: Int,
       writeMetrics: ShuffleWriteMetrics): DiskBlockObjectWriter = {
-    val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
+    val compressStream: OutputStream => OutputStream =
+      serializerManager.wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(file, serializerInstance, bufferSize, compressStream,
       syncWrites, writeMetrics, blockId)
@@ -757,7 +745,7 @@ private[spark] class BlockManager(
         // Put it in memory first, even if it also has useDisk set to true;
         // We will drop it to disk later if the memory store can't hold it.
         val putSucceeded = if (level.deserialized) {
-          val values = dataDeserialize(blockId, bytes)(classTag)
+          val values = serializerManager.dataDeserialize(blockId, bytes)(classTag)
           memoryStore.putIteratorAsValues(blockId, values, classTag) match {
             case Right(_) => true
             case Left(iter) =>
@@ -897,7 +885,7 @@ private[spark] class BlockManager(
               if (level.useDisk) {
                 logWarning(s"Persisting block $blockId to disk instead.")
                 diskStore.put(blockId) { fileOutputStream =>
-                  dataSerializeStream(blockId, fileOutputStream, iter)(classTag)
+                  serializerManager.dataSerializeStream(blockId, fileOutputStream, iter)(classTag)
                 }
                 size = diskStore.getSize(blockId)
               } else {
@@ -924,7 +912,7 @@ private[spark] class BlockManager(
 
       } else if (level.useDisk) {
         diskStore.put(blockId) { fileOutputStream =>
-          dataSerializeStream(blockId, fileOutputStream, iterator())(classTag)
+          serializerManager.dataSerializeStream(blockId, fileOutputStream, iterator())(classTag)
         }
         size = diskStore.getSize(blockId)
       }
@@ -1186,7 +1174,7 @@ private[spark] class BlockManager(
    *
    * @return the block's new effective StorageLevel.
    */
-  private[storage] def dropFromMemory[T: ClassTag](
+  private[storage] override def dropFromMemory[T: ClassTag](
       blockId: BlockId,
       data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
     logInfo(s"Dropping block $blockId from memory")
@@ -1200,7 +1188,7 @@ private[spark] class BlockManager(
       data() match {
         case Left(elements) =>
           diskStore.put(blockId) { fileOutputStream =>
-            dataSerializeStream(
+            serializerManager.dataSerializeStream(
               blockId,
               fileOutputStream,
               elements.toIterator)(info.classTag.asInstanceOf[ClassTag[T]])
@@ -1281,70 +1269,6 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, info, status)
         }
     }
-  }
-
-  private def shouldCompress(blockId: BlockId): Boolean = {
-    blockId match {
-      case _: ShuffleBlockId => compressShuffle
-      case _: BroadcastBlockId => compressBroadcast
-      case _: RDDBlockId => compressRdds
-      case _: TempLocalBlockId => compressShuffleSpill
-      case _: TempShuffleBlockId => compressShuffle
-      case _ => false
-    }
-  }
-
-  /**
-   * Wrap an output stream for compression if block compression is enabled for its block type
-   */
-  def wrapForCompression(blockId: BlockId, s: OutputStream): OutputStream = {
-    if (shouldCompress(blockId)) compressionCodec.compressedOutputStream(s) else s
-  }
-
-  /**
-   * Wrap an input stream for compression if block compression is enabled for its block type
-   */
-  def wrapForCompression(blockId: BlockId, s: InputStream): InputStream = {
-    if (shouldCompress(blockId)) compressionCodec.compressedInputStream(s) else s
-  }
-
-  /** Serializes into a stream. */
-  def dataSerializeStream[T: ClassTag](
-      blockId: BlockId,
-      outputStream: OutputStream,
-      values: Iterator[T]): Unit = {
-    val byteStream = new BufferedOutputStream(outputStream)
-    val ser = serializerManager.getSerializer(implicitly[ClassTag[T]]).newInstance()
-    ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
-  }
-
-  /** Serializes into a chunked byte buffer. */
-  def dataSerialize[T: ClassTag](blockId: BlockId, values: Iterator[T]): ChunkedByteBuffer = {
-    val byteArrayChunkOutputStream = new ByteArrayChunkOutputStream(1024 * 1024 * 4)
-    dataSerializeStream(blockId, byteArrayChunkOutputStream, values)
-    new ChunkedByteBuffer(byteArrayChunkOutputStream.toArrays.map(ByteBuffer.wrap))
-  }
-
-  /**
-   * Deserializes a ByteBuffer into an iterator of values and disposes of it when the end of
-   * the iterator is reached.
-   */
-  def dataDeserialize[T: ClassTag](blockId: BlockId, bytes: ChunkedByteBuffer): Iterator[T] = {
-    dataDeserializeStream[T](blockId, bytes.toInputStream(dispose = true))
-  }
-
-  /**
-   * Deserializes a InputStream into an iterator of values and disposes of it when the end of
-   * the iterator is reached.
-   */
-  def dataDeserializeStream[T: ClassTag](
-      blockId: BlockId,
-      inputStream: InputStream): Iterator[T] = {
-    val stream = new BufferedInputStream(inputStream)
-    serializerManager.getSerializer(implicitly[ClassTag[T]])
-      .newInstance()
-      .deserializeStream(wrapForCompression(blockId, stream))
-      .asIterator.asInstanceOf[Iterator[T]]
   }
 
   def stop(): Unit = {

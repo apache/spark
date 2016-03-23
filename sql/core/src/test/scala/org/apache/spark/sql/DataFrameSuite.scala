@@ -956,7 +956,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      Dataset.newDataFrame(sqlContext, OneRowRelation).registerTempTable("one_row")
+      Dataset.ofRows(sqlContext, OneRowRelation).registerTempTable("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
@@ -1396,5 +1396,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
 
     assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
+  }
+
+  test("SPARK-13774: Check error message for non existent path without globbed paths") {
+    val e = intercept[AnalysisException] (sqlContext.read.format("csv").
+      load("/xyz/file2", "/xyz/file21", "/abc/files555", "a")).getMessage()
+    assert(e.startsWith("Path does not exist"))
+   }
+
+  test("SPARK-13774: Check error message for not existent globbed paths") {
+    val e = intercept[AnalysisException] (sqlContext.read.format("text").
+      load( "/xyz/*")).getMessage()
+    assert(e.startsWith("Path does not exist"))
+
+    val e1 = intercept[AnalysisException] (sqlContext.read.json("/mnt/*/*-xyz.json").rdd).
+      getMessage()
+    assert(e1.startsWith("Path does not exist"))
   }
 }

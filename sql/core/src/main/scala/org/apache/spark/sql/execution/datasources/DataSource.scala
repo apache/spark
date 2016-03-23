@@ -154,7 +154,7 @@ case class DataSource(
         }
 
         def dataFrameBuilder(files: Array[String]): DataFrame = {
-          Dataset.newDataFrame(
+          Dataset.ofRows(
             sqlContext,
             LogicalRelation(
               DataSource(
@@ -162,7 +162,8 @@ case class DataSource(
                 paths = files,
                 userSpecifiedSchema = Some(dataSchema),
                 className = className,
-                options = options.filterKeys(_ != "path")).resolveRelation()))
+                options =
+                  new CaseInsensitiveMap(options.filterKeys(_ != "path"))).resolveRelation()))
         }
 
         new FileStreamSource(
@@ -205,7 +206,16 @@ case class DataSource(
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          SparkHadoopUtil.get.globPathIfNecessary(qualified)
+          val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
+
+          if (globPath.isEmpty) {
+            throw new AnalysisException(s"Path does not exist: $qualified")
+          }
+          // Sufficient to check head of the globPath seq for non-glob scenario
+          if (!fs.exists(globPath.head)) {
+            throw new AnalysisException(s"Path does not exist: ${globPath.head}")
+          }
+          globPath
         }.toArray
 
         // If they gave a schema, then we try and figure out the types of the partition columns
@@ -232,7 +242,6 @@ case class DataSource(
             s"Unable to infer schema for $format at ${allPaths.take(2).mkString(",")}. " +
             "It must be specified manually")
         }
-
 
         HadoopFsRelation(
           sqlContext,
