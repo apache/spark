@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StructType
 
 
 class HiveSessionCatalog(
-    externalCatalog: HiveCatalog,
+    externalCatalog: HiveExternalCatalog,
     client: HiveClient,
     context: HiveContext,
     conf: SQLConf)
