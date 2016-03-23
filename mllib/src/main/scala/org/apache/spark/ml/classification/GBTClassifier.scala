@@ -96,10 +96,7 @@ final class GBTClassifier @Since("1.4.0") (
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
   @Since("1.4.0")
-  override def setSeed(value: Long): this.type = {
-    logWarning("The 'seed' parameter is currently ignored by Gradient Boosting.")
-    super.setSeed(value)
-  }
+  override def setSeed(value: Long): this.type = super.setSeed(value)
 
   // Parameters from GBTParams:
 
@@ -158,7 +155,8 @@ final class GBTClassifier @Since("1.4.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
-    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy)
+    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
+      $(seed))
     new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 
