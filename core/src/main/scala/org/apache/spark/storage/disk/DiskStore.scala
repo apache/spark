@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.storage.disk
 
 import java.io.{FileOutputStream, IOException, RandomAccessFile}
 import java.nio.ByteBuffer
@@ -25,6 +25,7 @@ import com.google.common.io.Closeables
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.storage.BlockId
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -35,6 +36,9 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
 
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
 
+  /**
+   * Return the size of a block in bytes.
+   */
   def getSize(blockId: BlockId): Long = {
     diskManager.getFile(blockId.name).length
   }
@@ -107,6 +111,13 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
     }
   }
 
+  /**
+   * Remove a block, if it exists.
+   *
+   * @param blockId the block to remove.
+   * @return True if the block was found and removed, False otherwise.
+   * @throws IllegalStateException if the block is pinned by a task.
+   */
   def remove(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     if (file.exists()) {

@@ -30,7 +30,8 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer._
-import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
+import org.apache.spark.storage.BlockId
+import org.apache.spark.storage.disk._
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner

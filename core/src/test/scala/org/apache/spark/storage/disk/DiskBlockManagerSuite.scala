@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.storage.disk
 
 import java.io.{File, FileWriter}
 
@@ -24,6 +24,7 @@ import scala.language.reflectiveCalls
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.storage.{BlockManager, TestBlockId}
 import org.apache.spark.util.Utils
 
 class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {

@@ -28,6 +28,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
+import org.apache.spark.storage.disk._
 import org.apache.spark.util.Utils
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */

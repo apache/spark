@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.storage.disk
 
 import java.io.{File, IOException}
 import java.util.UUID
@@ -23,6 +23,7 @@ import java.util.UUID
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.Logging
+import org.apache.spark.storage.{BlockId, BlockManager, TempLocalBlockId, TempShuffleBlockId}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**

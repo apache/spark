@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.storage.disk
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
 import java.nio.channels.FileChannel
 
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.serializer.{SerializationStream, SerializerInstance}
+import org.apache.spark.storage.TimeTrackingOutputStream
 import org.apache.spark.util.Utils
 
 /**
@@ -33,16 +33,14 @@ import org.apache.spark.util.Utils
  * This class does not support concurrent writes. Also, once the writer has been opened it cannot be
  * reopened again.
  */
-private[spark] class DiskBlockObjectWriter(
+private[spark] class DiskBlockWriter(
     val file: File,
-    serializerInstance: SerializerInstance,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
-    syncWrites: Boolean,
-    // These write metrics concurrently shared with other active DiskBlockObjectWriters who
+    val syncWrites: Boolean,
+    // These write metrics concurrently shared with other active DiskBlockWriters who
     // are themselves performing writes. All updates must be relative.
-    writeMetrics: ShuffleWriteMetrics,
-    val blockId: BlockId = null)
+    writeMetrics: ShuffleWriteMetrics)
   extends OutputStream
   with Logging {
 
@@ -51,7 +49,6 @@ private[spark] class DiskBlockObjectWriter(
   private var bs: OutputStream = null
   private var fos: FileOutputStream = null
   private var ts: TimeTrackingOutputStream = null
-  private var objOut: SerializationStream = null
   private var initialized = false
   private var hasBeenClosed = false
   private var commitAndCloseHasBeenCalled = false
@@ -59,11 +56,15 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Cursors used to represent positions in the file.
    *
+   * {{{
+   *
    * xxxxxxxx|--------|---       |
    *         ^        ^          ^
    *         |        |        finalPosition
    *         |      reportedPosition
    *       initialPosition
+   *
+   * }}}
    *
    * initialPosition: Offset in the file where we start writing. Immutable.
    * reportedPosition: Position at the time of the last update to the write metrics.
@@ -81,7 +82,7 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsWritten = 0
 
-  def open(): DiskBlockObjectWriter = {
+  def open(): DiskBlockWriter = {
     if (hasBeenClosed) {
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
     }
@@ -89,7 +90,6 @@ private[spark] class DiskBlockObjectWriter(
     ts = new TimeTrackingOutputStream(writeMetrics, fos)
     channel = fos.getChannel()
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
-    objOut = serializerInstance.serializeStream(bs)
     initialized = true
     this
   }
@@ -99,35 +99,28 @@ private[spark] class DiskBlockObjectWriter(
       Utils.tryWithSafeFinally {
         if (syncWrites) {
           // Force outstanding writes to disk and track how long it takes
-          objOut.flush()
           val start = System.nanoTime()
           fos.getFD.sync()
           writeMetrics.incWriteTime(System.nanoTime() - start)
         }
       } {
-        objOut.close()
+        bs.close()
       }
 
       channel = null
       bs = null
       fos = null
       ts = null
-      objOut = null
       initialized = false
       hasBeenClosed = true
     }
   }
-
-  def isOpen: Boolean = objOut != null
 
   /**
    * Flush the partial writes and commit them as a single atomic block.
    */
   def commitAndClose(): Unit = {
     if (initialized) {
-      // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
-      //       serializer stream and the lower level stream.
-      objOut.flush()
       bs.flush()
       close()
       finalPosition = file.length()
@@ -145,7 +138,7 @@ private[spark] class DiskBlockObjectWriter(
    * when there are runtime exceptions. This method will not throw, though it may be
    * unsuccessful in truncating written data.
    *
-   * @return the file that this DiskBlockObjectWriter wrote to.
+   * @return the file that this DiskBlockWriter wrote to.
    */
   def revertPartialWritesAndClose(): File = {
     // Discard current writes. We do this by flushing the outstanding writes and then
@@ -154,7 +147,6 @@ private[spark] class DiskBlockObjectWriter(
       if (initialized) {
         writeMetrics.decBytesWritten(reportedPosition - initialPosition)
         writeMetrics.decRecordsWritten(numRecordsWritten)
-        objOut.flush()
         bs.flush()
         close()
       }
@@ -171,19 +163,6 @@ private[spark] class DiskBlockObjectWriter(
         logError("Uncaught exception while reverting partial writes to file " + file, e)
         file
     }
-  }
-
-  /**
-   * Writes a key-value pair.
-   */
-  def write(key: Any, value: Any) {
-    if (!initialized) {
-      open()
-    }
-
-    objOut.writeKey(key)
-    objOut.writeValue(value)
-    recordWritten()
   }
 
   override def write(b: Int): Unit = throw new UnsupportedOperationException()
@@ -233,7 +212,8 @@ private[spark] class DiskBlockObjectWriter(
 
   // For testing
   private[spark] override def flush() {
-    objOut.flush()
-    bs.flush()
+    if (bs != null) {
+      bs.flush()
+    }
   }
 }

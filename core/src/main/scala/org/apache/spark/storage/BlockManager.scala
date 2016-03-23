@@ -40,6 +40,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.serializer.{Serializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.storage.disk._
 import org.apache.spark.storage.memory._
 import org.apache.spark.util._
 import org.apache.spark.util.io.{ByteArrayChunkOutputStream, ChunkedByteBuffer}
@@ -699,10 +700,23 @@ private[spark] class BlockManager(
       serializerInstance: SerializerInstance,
       bufferSize: Int,
       writeMetrics: ShuffleWriteMetrics): DiskBlockObjectWriter = {
+    val diskBlockWriter = getDiskWriter(blockId, file, bufferSize, writeMetrics)
+    new DiskBlockObjectWriter(diskBlockWriter, serializerInstance, blockId)
+  }
+
+  /**
+   * A short circuited method to get a block writer that can write data directly to disk.
+   * The Block will be appended to the File specified by filename. Callers should handle error
+   * cases.
+   */
+  def getDiskWriter(
+      blockId: BlockId,
+      file: File,
+      bufferSize: Int,
+      writeMetrics: ShuffleWriteMetrics): DiskBlockWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
-    new DiskBlockObjectWriter(file, serializerInstance, bufferSize, compressStream,
-      syncWrites, writeMetrics, blockId)
+    new DiskBlockWriter(file, bufferSize, compressStream, syncWrites, writeMetrics)
   }
 
   /**

@@ -23,7 +23,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle._
-import org.apache.spark.storage.DiskBlockObjectWriter
+import org.apache.spark.storage.disk.DiskBlockObjectWriter
 
 private[spark] class HashShuffleWriter[K, V](
     shuffleBlockResolver: FileShuffleBlockResolver,
