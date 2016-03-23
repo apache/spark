@@ -19,6 +19,7 @@ import sys
 if sys.version > '3':
     basestring = str
     xrange = range
+    unicode = str
 
 from abc import ABCMeta
 import copy
@@ -106,8 +107,7 @@ class TypeConverters(object):
     @staticmethod
     def _can_convert_to_string(value):
         vtype = type(value)
-        is_string = isinstance(value, basestring) or vtype in [np.unicode_, np.string_, np.str_]
-        return is_string and all(ord(c) < 128 for c in value)  # safe unicode to str
+        return isinstance(value, basestring) or vtype in [np.unicode_, np.string_, np.str_]
 
     @staticmethod
     def identity(value):
@@ -160,7 +160,7 @@ class TypeConverters(object):
         if TypeConverters._can_convert_to_list(value):
             value = TypeConverters.toList(value)
             if all(map(lambda v: TypeConverters._can_convert_to_string(v), value)):
-                return [str(v) for v in value]
+                return [TypeConverters.toString(v) for v in value]
         raise TypeError("Could not convert %s to list of strings" % value)
 
     @staticmethod
@@ -201,10 +201,14 @@ class TypeConverters(object):
         """
         Convert a value to a string, if possible.
         """
-        if TypeConverters._can_convert_to_string(value):
+        if isinstance(value, basestring):
+            return value
+        elif type(value) in [np.string_, np.str_]:
             return str(value)
+        elif type(value) == np.unicode_:
+            return unicode(value)
         else:
-            raise TypeError("Could not convert value of type %s to string" % type(value).__name__)
+            raise TypeError("Could not convert %s to string type" % type(value))
 
     @staticmethod
     def toBoolean(value):
@@ -214,8 +218,7 @@ class TypeConverters(object):
         if type(value) == bool:
             return value
         else:
-            raise TypeError("Boolean Param requires value of type bool. Found type %s."
-                            % type(value).__name__)
+            raise TypeError("Boolean Param requires value of type bool. Found %s." % type(value))
 
 
 class Params(Identifiable):

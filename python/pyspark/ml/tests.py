@@ -155,7 +155,6 @@ class ParamTypeConversionTests(PySparkTestCase):
         for labels in [np.array(['a', u'b']), ['a', u'b'], np.array(['a', 'b'])]:
             idx_to_string = IndexToString(labels=labels)
             self.assertListEqual(idx_to_string.getLabels(), ['a', 'b'])
-            self.assertTrue(all(map(lambda x: type(x) == str, idx_to_string.getLabels())))
         self.assertRaises(TypeError, lambda: IndexToString(labels=['a', 2]))
 
     def test_string(self):
@@ -163,7 +162,6 @@ class ParamTypeConversionTests(PySparkTestCase):
         for col in ['features', u'features', np.str_('features')]:
             lr.setFeaturesCol(col)
             self.assertEqual(lr.getFeaturesCol(), 'features')
-            self.assertTrue(type(lr.getFeaturesCol() == str))
         self.assertRaises(TypeError, lambda: LogisticRegression(featuresCol=2.3))
 
     def test_bool(self):
