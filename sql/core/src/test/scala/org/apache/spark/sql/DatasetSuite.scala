@@ -305,7 +305,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy function, reduce") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val agged = ds.groupByKey(_.length).reduce(_ + _)
+    val agged = ds.groupByKey(_.length).reduceGroups(_ + _)
 
     checkDataset(
       agged,

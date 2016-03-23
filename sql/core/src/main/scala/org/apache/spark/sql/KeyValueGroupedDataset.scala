@@ -59,7 +59,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   private def groupedData = {
     new RelationalGroupedDataset(
-      Dataset.newDataFrame(sqlContext, logicalPlan),
+      Dataset.ofRows(sqlContext, logicalPlan),
       groupingAttributes,
       RelationalGroupedDataset.GroupByType)
   }
@@ -190,7 +190,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def reduce(f: (V, V) => V): Dataset[(K, V)] = {
+  def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
     val func = (key: K, it: Iterator[V]) => Iterator((key, it.reduce(f)))
 
     implicit val resultEncoder = ExpressionEncoder.tuple(unresolvedKEncoder, unresolvedVEncoder)
@@ -203,14 +203,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def reduce(f: ReduceFunction[V]): Dataset[(K, V)] = {
-    reduce(f.call _)
+  def reduceGroups(f: ReduceFunction[V]): Dataset[(K, V)] = {
+    reduceGroups(f.call _)
   }
-
-  // This is here to prevent us from adding overloads that would be ambiguous.
-  @scala.annotation.varargs
-  private def agg(exprs: Column*): DataFrame =
-    groupedData.agg(withEncoder(exprs.head), exprs.tail.map(withEncoder): _*)
 
   private def withEncoder(c: Column): Column = c match {
     case tc: TypedColumn[_, _] =>

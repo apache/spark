@@ -106,7 +106,7 @@ case class CreateTempTableUsing(
       options = options)
     sqlContext.sessionState.catalog.createTempTable(
       tableIdent.table,
-      Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
+      Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
       ignoreIfExists = true)
 
     Seq.empty[Row]
@@ -127,7 +127,7 @@ case class CreateTempTableUsingAsSelect(
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val df = Dataset.newDataFrame(sqlContext, query)
+    val df = Dataset.ofRows(sqlContext, query)
     val dataSource = DataSource(
       sqlContext,
       className = provider,
@@ -137,7 +137,7 @@ case class CreateTempTableUsingAsSelect(
     val result = dataSource.write(mode, df)
     sqlContext.sessionState.catalog.createTempTable(
       tableIdent.table,
-      Dataset.newDataFrame(sqlContext, LogicalRelation(result)).logicalPlan,
+      Dataset.ofRows(sqlContext, LogicalRelation(result)).logicalPlan,
       ignoreIfExists = true)
 
     Seq.empty[Row]
@@ -159,7 +159,7 @@ case class RefreshTable(tableIdent: TableIdentifier)
     if (isCached) {
       // Create a data frame to represent the table.
       // TODO: Use uncacheTable once it supports database name.
-      val df = Dataset.newDataFrame(sqlContext, logicalPlan)
+      val df = Dataset.ofRows(sqlContext, logicalPlan)
       // Uncache the logicalPlan.
       sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
       // Cache it again.
