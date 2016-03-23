@@ -38,7 +38,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel',
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
-                         HasWeightCol, MLWritable, MLReadable):
+                         HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
     Logistic regression.
     Currently, this class only supports binary classification.
@@ -198,7 +198,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
 
-class LogisticRegressionModel(JavaModel, MLWritable, MLReadable):
+class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by LogisticRegression.
 
@@ -601,7 +601,7 @@ class GBTClassificationModel(TreeEnsembleModels):
 
 @inherit_doc
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
-                 HasRawPredictionCol, MLWritable, MLReadable):
+                 HasRawPredictionCol, JavaMLWritable, JavaMLReadable):
     """
     Naive Bayes Classifiers.
     It supports both Multinomial and Bernoulli NB. Multinomial NB
@@ -720,7 +720,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel, MLWritable, MLReadable):
+class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by NaiveBayes.
 

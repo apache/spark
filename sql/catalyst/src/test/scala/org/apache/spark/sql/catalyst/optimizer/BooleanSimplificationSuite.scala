@@ -99,6 +99,34 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(('b || !'a ) && 'a, 'b && 'a)
   }
 
+  test("a < 1 && (!(a < 1) || b)") {
+    checkCondition('a < 1 && (!('a < 1) || 'b), ('a < 1) && 'b)
+    checkCondition('a < 1 && ('b || !('a < 1)), ('a < 1) && 'b)
+
+    checkCondition('a <= 1 && (!('a <= 1) || 'b), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && ('b || !('a <= 1)), ('a <= 1) && 'b)
+
+    checkCondition('a > 1 && (!('a > 1) || 'b), ('a > 1) && 'b)
+    checkCondition('a > 1 && ('b || !('a > 1)), ('a > 1) && 'b)
+
+    checkCondition('a >= 1 && (!('a >= 1) || 'b), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && ('b || !('a >= 1)), ('a >= 1) && 'b)
+  }
+
+  test("a < 1 && ((a >= 1) || b)") {
+    checkCondition('a < 1 && ('a >= 1 || 'b ), ('a < 1) && 'b)
+    checkCondition('a < 1 && ('b || 'a >= 1), ('a < 1) && 'b)
+
+    checkCondition('a <= 1 && ('a > 1 || 'b ), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && ('b || 'a > 1), ('a <= 1) && 'b)
+
+    checkCondition('a > 1 && (('a <= 1) || 'b), ('a > 1) && 'b)
+    checkCondition('a > 1 && ('b || ('a <= 1)), ('a > 1) && 'b)
+
+    checkCondition('a >= 1 && (('a < 1) || 'b), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && ('b || ('a < 1)), ('a >= 1) && 'b)
+  }
+
   test("DeMorgan's law") {
     checkCondition(!('a && 'b), !'a || !'b)
 
@@ -110,7 +138,10 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   }
 
   private val caseInsensitiveAnalyzer =
-    new Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(false))
+    new Analyzer(
+      EmptyCatalog,
+      EmptyFunctionRegistry,
+      new SimpleCatalystConf(caseSensitiveAnalysis = false))
 
   test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
     val plan = caseInsensitiveAnalyzer.execute(

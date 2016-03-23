@@ -198,7 +198,7 @@ public final class UnsafeKVExternalSorter {
     private final UnsafeRow row2;
     private final int numKeyFields;
 
-    public KVComparator(BaseOrdering ordering, int numKeyFields) {
+    KVComparator(BaseOrdering ordering, int numKeyFields) {
       this.numKeyFields = numKeyFields;
       this.row1 = new UnsafeRow(numKeyFields);
       this.row2 = new UnsafeRow(numKeyFields);

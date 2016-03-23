@@ -67,24 +67,24 @@ private[sql] object Dataset {
  *
  * Operations available on Datasets are divided into transformations and actions. Transformations
  * are the ones that produce new Datasets, and actions are the ones that trigger computation and
- * return results. Example transformations include map, filter, select, aggregate (groupBy).
+ * return results. Example transformations include map, filter, select, and aggregate (`groupBy`).
  * Example actions count, show, or writing data out to file systems.
  *
  * Datasets are "lazy", i.e. computations are only triggered when an action is invoked. Internally,
  * a Dataset represents a logical plan that describes the computation required to produce the data.
  * When an action is invoked, Spark's query optimizer optimizes the logical plan and generates a
- * physical plan for efficient execution in a parallel or distributed manner. To explore the
+ * physical plan for efficient execution in a parallel and distributed manner. To explore the
  * logical plan as well as optimized physical plan, use the `explain` function.
  *
  * To efficiently support domain-specific objects, an [[Encoder]] is required. The encoder maps
- * the domain specific type T to Spark's internal type system. For example, given a class Person
- * with two fields, name (string) and age (int), an encoder is used to tell Spark to generate code
- * at runtime to serialize the Person object into a binary structure. This binary structure often
- * has much lower memory footprint as well as are optimized for efficiency in data processing
+ * the domain specific type `T` to Spark's internal type system. For example, given a class `Person`
+ * with two fields, `name` (string) and `age` (int), an encoder is used to tell Spark to generate
+ * code at runtime to serialize the `Person` object into a binary structure. This binary structure
+ * often has much lower memory footprint as well as are optimized for efficiency in data processing
  * (e.g. in a columnar format). To understand the internal binary representation for data, use the
  * `schema` function.
  *
- * There are typically two ways to create a Dataset. The most common way to by pointing Spark
+ * There are typically two ways to create a Dataset. The most common way is by pointing Spark
  * to some files on storage systems, using the `read` function available on a `SparkSession`.
  * {{{
  *   val people = session.read.parquet("...").as[Person]  // Scala
@@ -98,7 +98,7 @@ private[sql] object Dataset {
  *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING)  // in Java 8
  * }}}
  *
- * Dataset operations can also be untyped, through the various domain-specific-language (DSL)
+ * Dataset operations can also be untyped, through various domain-specific-language (DSL)
  * functions defined in: [[Dataset]] (this class), [[Column]], and [[functions]]. These operations
  * are very similar to the operations available in the data frame abstraction in R or Python.
  *
@@ -118,8 +118,8 @@ private[sql] object Dataset {
  * A more concrete example in Scala:
  * {{{
  *   // To create Dataset[Row] using SQLContext
- *   val people = sqlContext.read.parquet("...")
- *   val department = sqlContext.read.parquet("...")
+ *   val people = session.read.parquet("...")
+ *   val department = session.read.parquet("...")
  *
  *   people.filter("age > 30")
  *     .join(department, people("deptId") === department("id"))
@@ -130,8 +130,8 @@ private[sql] object Dataset {
  * and in Java:
  * {{{
  *   // To create Dataset<Row> using SQLContext
- *   Dataset<Row> people = sqlContext.read().parquet("...");
- *   Dataset<Row> department = sqlContext.read().parquet("...");
+ *   Dataset<Row> people = session.read().parquet("...");
+ *   Dataset<Row> department = session.read().parquet("...");
  *
  *   people.filter("age".gt(30))
  *     .join(department, people.col("deptId").equalTo(department("id")))
@@ -1106,7 +1106,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Groups the [[Dataset]] using the specified columns, so we can run aggregation on them.
+   * Groups the [[Dataset]] using the specified columns, so that we can run aggregation on them.
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * This is a variant of groupBy that can only group by existing columns using column names
@@ -1341,7 +1341,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] containing union of rows in this frame and another frame.
+   * Returns a new [[Dataset]] containing union of rows in this Dataset and another Dataset.
    * This is equivalent to `UNION ALL` in SQL.
    *
    * To do a SQL-style set union (that does deduplication of elements), use this function followed
@@ -1350,23 +1350,27 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def unionAll(other: Dataset[T]): Dataset[T] = withTypedPlan {
+  @deprecated("use union()", "2.0.0")
+  def unionAll(other: Dataset[T]): Dataset[T] = union(other)
+
+  /**
+   * Returns a new [[Dataset]] containing union of rows in this Dataset and another Dataset.
+   * This is equivalent to `UNION ALL` in SQL.
+   *
+   * To do a SQL-style set union (that does deduplication of elements), use this function followed
+   * by a [[distinct]].
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def union(other: Dataset[T]): Dataset[T] = withTypedPlan {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
     CombineUnions(Union(logicalPlan, other.logicalPlan))
   }
 
   /**
-   * Returns a new [[Dataset]] containing union of rows in this frame and another frame.
-   * This is equivalent to `UNION ALL` in SQL.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  def union(other: Dataset[T]): Dataset[T] = unionAll(other)
-
-  /**
-   * Returns a new [[Dataset]] containing rows only in both this frame and another frame.
+   * Returns a new [[Dataset]] containing rows only in both this Dataset and another Dataset.
    * This is equivalent to `INTERSECT` in SQL.
    *
    * Note that, equality checking is performed directly on the encoded representation of the data
@@ -1380,7 +1384,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] containing rows in this frame but not in another frame.
+   * Returns a new [[Dataset]] containing rows in this Dataset but not in another Dataset.
    * This is equivalent to `EXCEPT` in SQL.
    *
    * Note that, equality checking is performed directly on the encoded representation of the data
@@ -1392,15 +1396,6 @@ class Dataset[T] private[sql](
   def except(other: Dataset[T]): Dataset[T] = withTypedPlan {
     Except(logicalPlan, other.logicalPlan)
   }
-
-  /**
-   * Returns a new [[Dataset]] containing rows in this frame but not in another frame.
-   * This is equivalent to `EXCEPT` in SQL.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  def subtract(other: Dataset[T]): Dataset[T] = except(other)
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows.
@@ -1753,7 +1748,7 @@ class Dataset[T] private[sql](
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
 
-      val row = agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
+      val row = groupBy().agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
 
       // Pivot the data so each summary is one row
       row.grouped(outputCols.size).toSeq.zip(statistics).map { case (aggregation, (statistic, _)) =>
@@ -2193,14 +2188,12 @@ class Dataset[T] private[sql](
   def write: DataFrameWriter = new DataFrameWriter(toDF())
 
   /**
-   * Returns the content of the [[Dataset]] as a [[Dataset]] of JSON strings.
-   *
-   * @group basic
-   * @since 1.6.0
+   * Returns the content of the [[Dataset]] as a Dataset of JSON strings.
+   * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
-    val rdd = queryExecution.toRdd.mapPartitions { iter =>
+    val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
@@ -2222,8 +2215,8 @@ class Dataset[T] private[sql](
         }
       }
     }
-    import sqlContext.implicits._
-    rdd.toDS
+    import sqlContext.implicits.newStringEncoder
+    sqlContext.createDataset(rdd)
   }
 
   /**

@@ -22,7 +22,6 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.{Benchmark, Utils}
@@ -101,7 +100,7 @@ object ParquetReadBenchmark {
                 val numRows = batch.numRows()
                 var i = 0
                 while (i < numRows) {
-                  if (!col.getIsNull(i)) sum += col.getInt(i)
+                  if (!col.isNullAt(i)) sum += col.getInt(i)
                   i += 1
                 }
               }

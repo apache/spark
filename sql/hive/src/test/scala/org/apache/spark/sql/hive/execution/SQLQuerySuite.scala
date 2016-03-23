@@ -729,7 +729,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-5203 union with different decimal precision") {
-    Seq.empty[(Decimal, Decimal)]
+    Seq.empty[(java.math.BigDecimal, java.math.BigDecimal)]
       .toDF("d1", "d2")
       .select($"d1".cast(DecimalType(10, 5)).as("d"))
       .registerTempTable("dn")
@@ -738,20 +738,24 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .queryExecution.analyzed
   }
 
+  test("Star Expansion - script transform") {
+    val data = (1 to 100000).map { i => (i, i, i) }
+    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    assert(100000 === sql("SELECT TRANSFORM (*) USING 'cat' FROM script_trans").count())
+  }
+
   test("test script transform for stdout") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
     assert(100000 ===
-      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans")
-        .queryExecution.toRdd.count())
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans").count())
   }
 
   test("test script transform for stderr") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
     assert(0 ===
-      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans")
-        .queryExecution.toRdd.count())
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans").count())
   }
 
   test("test script transform data type") {
@@ -1720,6 +1724,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withTable("tbl10562") {
       val df = Seq(2012 -> "a").toDF("Year", "val")
       df.write.partitionBy("Year").saveAsTable("tbl10562")
+      checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
       checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
       checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
       checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
