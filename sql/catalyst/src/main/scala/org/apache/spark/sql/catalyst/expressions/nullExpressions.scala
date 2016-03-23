@@ -96,8 +96,6 @@ case class IsNaN(child: Expression) extends UnaryExpression
 
   override def nullable: Boolean = false
 
-  override def nullIntolerant: Boolean = false
-
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
@@ -185,8 +183,6 @@ case class NaNvl(left: Expression, right: Expression)
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
-  override def nullIntolerant: Boolean = false
-
   override def eval(input: InternalRow): Any = {
     child.eval(input) == null
   }
@@ -208,8 +204,6 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
 case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
-  override def nullIntolerant: Boolean = false
-
   override def eval(input: InternalRow): Any = {
     child.eval(input) != null
   }
@@ -230,7 +224,6 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
  */
 case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = false
-  override def nullIntolerant: Boolean = false
   override def foldable: Boolean = children.forall(_.foldable)
   override def toString: String = s"AtLeastNNulls(n, ${children.mkString(",")})"
 

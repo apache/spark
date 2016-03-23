@@ -46,17 +46,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
     // Currently we only propagate constraints if the condition consists of equality
     // and ranges. For all other cases, we return an empty set of constraints
-    constraints.map(scanNullIntolerantExpr)
-      .foldLeft(Set.empty[Expression])(_ union _.toSet)
+    constraints.flatMap(scanNullIntolerantExpr).map(IsNotNull(_))
   }
 
-  private def scanNullIntolerantExpr(expr: Expression): Set[Expression] = expr match {
-    case a: Attribute => Set(IsNotNull(a))
-    case IsNotNull(e) =>
-      // IsNotNull is null tolerant, but we need to explore for the attributes not null.
-      scanNullIntolerantExpr(e)
-    case e: Expression if e.nullIntolerant => e.children.flatMap(scanNullIntolerantExpr).toSet
-    case _ => Set.empty[Expression]
+  /**
+   * Recursively explores the expressions which are null intolerant and returns all attributes
+   * in these expressions.
+   */
+  private def scanNullIntolerantExpr(expr: Expression): Seq[Attribute] = expr match {
+    case a: Attribute => Seq(a)
+    case _: NullIntolerant | _: IsNotNull => expr.children.flatMap(scanNullIntolerantExpr)
+    case _ => Seq.empty[Attribute]
   }
 
   /**

@@ -90,7 +90,7 @@ trait PredicateHelper {
 
 
 case class Not(child: Expression)
-  extends UnaryExpression with Predicate with ImplicitCastInputTypes {
+  extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
   override def toString: String = s"NOT $child"
 
@@ -376,7 +376,8 @@ private[sql] object Equality {
 }
 
 
-case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
+case class EqualTo(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = AnyDataType
 
@@ -407,8 +408,6 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def symbol: String = "<=>"
 
   override def nullable: Boolean = false
-
-  override def nullIntolerant: Boolean = false
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -443,7 +442,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 }
 
 
-case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
+case class LessThan(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
@@ -455,7 +455,8 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 }
 
 
-case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+case class LessThanOrEqual(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
@@ -467,7 +468,8 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 }
 
 
-case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
+case class GreaterThan(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
@@ -479,7 +481,8 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 }
 
 
-case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+case class GreaterThanOrEqual(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
