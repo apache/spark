@@ -28,7 +28,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.types.DoubleType
 
 class LinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -1008,32 +1007,14 @@ class LinearRegressionSuite
       checkModelData)
   }
 
-  test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
-
-    val lr = new LinearRegression().setFeaturesCol("features")
-
-    val expected = lr.setLabelCol("label").fit(dfs(DoubleType))
-    dfs.keys.filter(_ != DoubleType).foreach { t =>
-      val actual = lr.setLabelCol("label").fit(dfs(t))
-      assert(expected.intercept === actual.intercept)
-      assert(expected.coefficients === actual.coefficients)
-    }
-  }
-
-  test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels =
-      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
-
+  test("should support all NumericType labels and not support other types") {
     val lr = new LinearRegression()
-      .setLabelCol("label")
-      .setFeaturesCol("features")
-
-    val thrown = intercept[IllegalArgumentException] {
-      lr.fit(dfWithStringLabels)
-    }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
+    MLTestingUtils.checkAcceptAllNumericTypes[LinearRegressionModel, LinearRegression](
+      lr, sqlContext) { (expected, actual) =>
+        assert(expected.intercept === actual.intercept)
+        assert(expected.coefficients === actual.coefficients)
+      }
+    MLTestingUtils.checkRejectNotNumericTypes(lr, sqlContext)
   }
 }
 
