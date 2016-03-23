@@ -202,6 +202,7 @@ class JavaModel(Model, JavaTransformer):
         super(JavaModel, self).__init__()
         if java_model is not None:
             self._java_obj = java_model
+            self._transfer_params_from_java()
 
     def _getInitialUID(self):
         """
