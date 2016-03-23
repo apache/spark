@@ -464,7 +464,7 @@ private[spark] class MesosClusterScheduler(
     val ShellSpecialChars = (""".*([ '<>&|\?\*;!#\\(\)"$`]).*""").r
     value match {
       case WrappedInQuotes(c) => value // The user quoted his args, don't touch it!
-      case ShellSpecialChars(c) => "\"" + value.replaceAll("""(["`\$])""", """\\$1""") + "\""
+      case ShellSpecialChars(c) => "\"" + value.replaceAll("""(["`\$\\])""", """\\$1""") + "\""
       case _: String => value // Don't touch harmless strings
     }
   }

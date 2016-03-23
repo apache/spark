@@ -162,9 +162,13 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(escape("shouldescape\"quote") === wrapped("shouldescape\\\"quote"))
     assert(escape("should escape this $ dollar") === wrapped("should escape this \\$ dollar"))
     assert(escape("should escape this ` backtick") === wrapped("should escape this \\` backtick"))
+    assert(escape("""should escape this \ backslash""")
+      === wrapped("""should escape this \\ backslash"""))
+    assert(escape("""\"?""") === wrapped("""\\\"?"""))
+
 
     // Special Chars no escape only wrap
-    List(" ", "'", "<", ">", "&", "|", "?", "*", ";", "!", "#", "\\", "(", ")").foreach(char => {
+    List(" ", "'", "<", ">", "&", "|", "?", "*", ";", "!", "#", "(", ")").foreach(char => {
       assert(escape(s"onlywrap${char}this") === wrapped(s"onlywrap${char}this"))
     })
   }
