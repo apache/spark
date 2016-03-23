@@ -23,15 +23,15 @@ import org.apache.spark.sql.hive.test.TestHive
 
 class HiveContextSuite extends SparkFunSuite {
 
-  // TODO: investigate; this passes locally but fails on Jenkins for some reason.
-  ignore("HiveContext can access `spark.sql.*` configs") {
+  test("HiveContext can access `spark.sql.*` configs") {
     // Avoid creating another SparkContext in the same JVM
     val sc = TestHive.sparkContext
+    val hiveContext = new HiveContext(sc)
     require(sc.conf.get("spark.sql.hive.metastore.barrierPrefixes") ==
       "org.apache.spark.sql.hive.execution.PairSerDe")
-    assert(TestHive.getConf("spark.sql.hive.metastore.barrierPrefixes") ==
+    assert(hiveContext.getConf("spark.sql.hive.metastore.barrierPrefixes") ==
       "org.apache.spark.sql.hive.execution.PairSerDe")
-    assert(TestHive.metadataHive.getConf("spark.sql.hive.metastore.barrierPrefixes", "") ==
+    assert(hiveContext.metadataHive.getConf("spark.sql.hive.metastore.barrierPrefixes", "") ==
       "org.apache.spark.sql.hive.execution.PairSerDe")
   }
 
