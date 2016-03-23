@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.random.PoissonSampler
 
@@ -126,9 +126,13 @@ case class Filter(condition: Expression, child: SparkPlan)
       } else {
         s""
       }
+      val filterCheck = ev.value match {
+        case x if x.startsWith("(!(") && x.endsWith("))") => x.substring(3, x.length - 2)
+        case y => s"!$y"
+      }
       s"""
          |${ev.code}
-         |if (${nullCheck}!${ev.value}) continue;
+         |if ($nullCheck$filterCheck) continue;
        """.stripMargin
     }.mkString("\n")
 
