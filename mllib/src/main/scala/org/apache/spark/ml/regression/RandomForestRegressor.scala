@@ -17,12 +17,17 @@
 
 package org.apache.spark.ml.regression
 
+import org.apache.hadoop.fs.Path
+import org.json4s.{DefaultFormats, JObject}
+import org.json4s.JsonDSL._
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeEnsembleModel, TreeRegressorParams}
+import org.apache.spark.ml.tree._
+import org.apache.spark.ml.tree.RandomForestModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
-import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -41,7 +46,7 @@ import org.apache.spark.sql.functions._
 @Experimental
 final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
-  with RandomForestParams with TreeRegressorParams {
+  with RandomForestRegressorParams with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("rfr"))
@@ -108,7 +113,7 @@ final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val 
 
 @Since("1.4.0")
 @Experimental
-object RandomForestRegressor {
+object RandomForestRegressor extends DefaultParamsReadable[RandomForestRegressor]{
   /** Accessor for supported impurity settings: variance */
   @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
@@ -117,13 +122,18 @@ object RandomForestRegressor {
   @Since("1.4.0")
   final val supportedFeatureSubsetStrategies: Array[String] =
     RandomForestParams.supportedFeatureSubsetStrategies
+
+  @Since("2.0.0")
+  override def load(path: String): RandomForestRegressor = super.load(path)
+
 }
 
 /**
  * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for regression.
  * It supports both continuous and categorical features.
- * @param _trees  Decision trees in the ensemble.
+  *
+  * @param _trees  Decision trees in the ensemble.
  * @param numFeatures  Number of features used by this model
  */
 @Since("1.4.0")
@@ -133,13 +143,14 @@ final class RandomForestRegressionModel private[ml] (
     private val _trees: Array[DecisionTreeRegressionModel],
     override val numFeatures: Int)
   extends PredictionModel[Vector, RandomForestRegressionModel]
-  with TreeEnsembleModel with Serializable {
+  with RandomForestRegressorParams with TreeEnsembleModel with MLWritable with Serializable {
 
   require(numTrees > 0, "RandomForestRegressionModel requires at least 1 tree.")
 
   /**
    * Construct a random forest regression model, with all trees weighted equally.
-   * @param trees  Component trees
+    *
+    * @param trees  Component trees
    */
   private[ml] def this(trees: Array[DecisionTreeRegressionModel], numFeatures: Int) =
     this(Identifiable.randomUID("rfr"), trees, numFeatures)
@@ -199,21 +210,71 @@ final class RandomForestRegressionModel private[ml] (
   private[ml] def toOld: OldRandomForestModel = {
     new OldRandomForestModel(OldAlgo.Regression, _trees.map(_.toOld))
   }
+
+  @Since("2.0.0")
+  override def write: MLWriter =
+    new RandomForestRegressionModel.RandomForestRegressionModelWriter(this)
 }
 
-private[ml] object RandomForestRegressionModel {
+@Since("2.0.0")
+object RandomForestRegressionModel extends MLReadable[RandomForestRegressionModel] {
 
-  /** (private[ml]) Convert a model from the old API */
-  def fromOld(
-      oldModel: OldRandomForestModel,
-      parent: RandomForestRegressor,
-      categoricalFeatures: Map[Int, Int],
-      numFeatures: Int = -1): RandomForestRegressionModel = {
-    require(oldModel.algo == OldAlgo.Regression, "Cannot convert RandomForestModel" +
-      s" with algo=${oldModel.algo} (old API) to RandomForestRegressionModel (new API).")
-    val newTrees = oldModel.trees.map { tree =>
-      // parent for each tree is null since there is no good way to set this.
-      DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
+    @Since("2.0.0")
+    override def read: MLReader[RandomForestRegressionModel] =
+      new RandomForestRegressionModelReader
+
+    @Since("2.0.0")
+    override def load(path: String): RandomForestRegressionModel = super.load(path)
+
+    private[RandomForestRegressionModel]
+    class RandomForestRegressionModelWriter(instance: RandomForestRegressionModel)
+      extends MLWriter {
+
+          override protected def saveImpl(path: String): Unit = {
+            val extraMetadata: JObject = Map(
+                "numFeatures" -> instance.numFeatures)
+            DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+            for ( treeIndex <- 1 to instance.getNumTrees) {
+              val (nodeData, _) = NodeData.build(instance.trees(treeIndex).rootNode, treeIndex, 0)
+              val dataPath = new Path(path, "data" + treeIndex).toString
+              sqlContext.createDataFrame(nodeData).write.parquet(dataPath)
+            }
+          }
+      }
+
+    private class RandomForestRegressionModelReader(instance: RandomForestRegressionModel)
+      extends MLReader[RandomForestRegressionModel] {
+
+          /** Checked against metadata when loading model */
+          private val className = classOf[RandomForestRegressionModel].getName
+
+          override def load(path: String): RandomForestRegressionModel = {
+            implicit val format = DefaultFormats
+            implicit val root: Seq[DecisionTreeRegressionModel] = Nil
+            for ( treeIndex <- 1 to instance.getNumTrees) {
+              val dataPath = new Path(path, "data" + treeIndex).toString
+              val metadata = DefaultParamsReader.
+                loadMetadata(dataPath, sc, className)
+              val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
+              root :+ loadTreeNodes(path, metadata, sqlContext)
+            }
+            val model = new RandomForestRegressionModel(metadata.uid, root, numFeatures)
+            DefaultParamsReader.getAndSetParams(model, metadata)
+            model
+          }
+      }
+
+    /** (private[ml]) Convert a model from the old API */
+    private[ml] def fromOld(
+        oldModel: OldRandomForestModel,
+        parent: RandomForestRegressor,
+        categoricalFeatures: Map[Int, Int],
+        numFeatures: Int = -1): RandomForestRegressionModel = {
+      require(oldModel.algo == OldAlgo.Regression, "Cannot convert RandomForestModel" +
+        s" with algo=${oldModel.algo} (old API) to RandomForestRegressionModel (new API).")
+      val newTrees = oldModel.trees.map { tree =>
+        // parent for each tree is null since there is no good way to set this.
+        DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     new RandomForestRegressionModel(parent.uid, newTrees, numFeatures)
   }
