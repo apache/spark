@@ -445,7 +445,7 @@ class SQLContext private[sql](
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
 
-    Dataset[T](this, plan)
+    Dataset.newNamedDataset(self, plan)
   }
 
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
@@ -454,7 +454,7 @@ class SQLContext private[sql](
     val encoded = data.map(d => enc.toRow(d))
     val plan = LogicalRDD(attributes, encoded)(self)
 
-    Dataset[T](this, plan)
+    Dataset.newNamedDataset(self, plan)
   }
 
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {

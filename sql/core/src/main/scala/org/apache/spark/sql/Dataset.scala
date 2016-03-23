@@ -54,6 +54,12 @@ private[sql] object Dataset {
     new Dataset(sqlContext, logicalPlan, implicitly[Encoder[T]])
   }
 
+  def newNamedDataset[T : Encoder](
+      sqlContext: SQLContext,
+      logicalPlan: LogicalPlan): Dataset[T] = {
+    apply(sqlContext, uniquelyAlias(logicalPlan))
+  }
+
   def newDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sqlContext.executePlan(logicalPlan)
     qe.assertAnalyzed()
@@ -61,12 +67,14 @@ private[sql] object Dataset {
   }
 
   def newNamedDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
-    newDataFrame(sqlContext, SubqueryAlias(newDataFrameName, logicalPlan))
+    newDataFrame(sqlContext, uniquelyAlias(logicalPlan))
   }
 
-  private[this] val nextDataFrameId = new AtomicLong(0)
+  private[this] val nextDatasetId = new AtomicLong(0)
 
-  private def newDataFrameName: String = s"dataframe_${nextDataFrameId.getAndIncrement()}"
+  private def uniquelyAlias(plan: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(s"dataset_${nextDatasetId.getAndIncrement()}", plan)
+  }
 }
 
 /**
