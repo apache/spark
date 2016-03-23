@@ -45,6 +45,11 @@ abstract class DatabaseOnDocker {
   val env: Map[String, String]
 
   /**
+   * Wheather or not to use ipc mode for shared memory when starting docker image
+   */
+  val usesIpc: Boolean
+
+  /**
    * The container-internal JDBC port that the database listens on.
    */
   val jdbcPort: Int
@@ -102,6 +107,7 @@ abstract class DockerJDBCIntegrationSuite
       val dockerIp = DockerUtils.getDockerIp()
       val hostConfig: HostConfig = HostConfig.builder()
         .networkMode("bridge")
+        .ipcMode(if (db.usesIpc) "host" else "")
         .portBindings(
           Map(s"${db.jdbcPort}/tcp" -> List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
         .build()

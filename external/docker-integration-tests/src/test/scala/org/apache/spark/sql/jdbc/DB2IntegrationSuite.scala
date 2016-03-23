@@ -24,13 +24,14 @@ import java.util.Properties
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-class Db2IntegrationSuite extends DockerJDBCIntegrationSuite {
+class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
     override val imageName = "lresende/db2express-c:10.5.0.5-3.10.0"
     override val env = Map(
       "DB2INST1_PASSWORD" -> "rootpass",
       "LICENSE" -> "accept"
     )
+    override val usesIpc = true
     override val jdbcPort: Int = 50000
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;"

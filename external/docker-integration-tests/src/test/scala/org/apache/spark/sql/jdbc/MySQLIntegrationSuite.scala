@@ -30,6 +30,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
+    override val usesIpc = false
     override val jdbcPort: Int = 3306
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
