@@ -170,11 +170,12 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
     }
   }
 
-  override def get(startId: Option[Long], endId: Long): Array[(Long, T)] = {
-    val batchIds = fc.util().listStatus(metadataPath, batchFilesFilter)
+  override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, T)] = {
+    val files = fc.util().listStatus(metadataPath, batchFilesFilter)
+    val batchIds = files
       .map(_.getPath.getName.toLong)
       .filter { batchId =>
-      batchId <= endId && (startId.isEmpty || batchId >= startId.get)
+        (endId.isEmpty || batchId <= endId.get) && (startId.isEmpty || batchId >= startId.get)
     }
     batchIds.sorted.map(batchId => (batchId, get(batchId))).filter(_._2.isDefined).map {
       case (batchId, metadataOption) =>
