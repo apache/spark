@@ -279,6 +279,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         StructType.fromAttributes(partitionOutput),
         StructType.fromAttributes(dataOutput),
         SparkEnv.get.blockManager,
+        SparkEnv.get.serializerManager,
         TaskContext.get().taskMemoryManager().pageSizeBytes)
 
       while (iterator.hasNext) {

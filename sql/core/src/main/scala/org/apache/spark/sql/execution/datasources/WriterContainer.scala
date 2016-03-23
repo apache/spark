@@ -399,6 +399,7 @@ private[sql] class DynamicPartitionWriterContainer(
       sortingKeySchema,
       StructType.fromAttributes(dataColumns),
       SparkEnv.get.blockManager,
+      SparkEnv.get.serializerManager,
       TaskContext.get().taskMemoryManager().pageSizeBytes)
 
     while (iterator.hasNext) {

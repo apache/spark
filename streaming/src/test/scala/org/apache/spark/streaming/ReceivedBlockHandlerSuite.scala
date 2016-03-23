@@ -60,6 +60,7 @@ class ReceivedBlockHandlerSuite
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
   val shuffleManager = new HashShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
+  var serializerManager = new SerializerManager(serializer, conf)
   val manualClock = new ManualClock
   val blockManagerSize = 10000000
   val blockManagerBuffer = new ArrayBuffer[BlockManager]()
@@ -156,7 +157,7 @@ class ReceivedBlockHandlerSuite
           val reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
           val bytes = reader.read(fileSegment)
           reader.close()
-          blockManager.dataDeserialize(generateBlockId(), new ChunkedByteBuffer(bytes)).toList
+          serializerManager.dataDeserialize(generateBlockId(), new ChunkedByteBuffer(bytes)).toList
         }
         loggedData shouldEqual data
       }
@@ -265,7 +266,6 @@ class ReceivedBlockHandlerSuite
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
-    val serializerManager = new SerializerManager(serializer, conf)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
     memManager.setMemoryStore(blockManager.memoryStore)
@@ -335,7 +335,8 @@ class ReceivedBlockHandlerSuite
       }
     }
 
-    def dataToByteBuffer(b: Seq[String]) = blockManager.dataSerialize(generateBlockId, b.iterator)
+    def dataToByteBuffer(b: Seq[String]) =
+      serializerManager.dataSerialize(generateBlockId, b.iterator)
 
     val blocks = data.grouped(10).toSeq
 
@@ -367,8 +368,8 @@ class ReceivedBlockHandlerSuite
   /** Instantiate a WriteAheadLogBasedBlockHandler and run a code with it */
   private def withWriteAheadLogBasedBlockHandler(body: WriteAheadLogBasedBlockHandler => Unit) {
     require(WriteAheadLogUtils.getRollingIntervalSecs(conf, isDriver = false) === 1)
-    val receivedBlockHandler = new WriteAheadLogBasedBlockHandler(blockManager, 1,
-      storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)
+    val receivedBlockHandler = new WriteAheadLogBasedBlockHandler(blockManager, serializerManager,
+      1, storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)
     try {
       body(receivedBlockHandler)
     } finally {

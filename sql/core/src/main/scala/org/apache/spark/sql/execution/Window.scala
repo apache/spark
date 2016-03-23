@@ -339,6 +339,7 @@ case class Window(
                 sorter = UnsafeExternalSorter.create(
                   TaskContext.get().taskMemoryManager(),
                   SparkEnv.get.blockManager,
+                  SparkEnv.get.serializerManager,
                   TaskContext.get(),
                   null,
                   null,

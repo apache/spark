@@ -67,6 +67,7 @@ public final class UnsafeExternalRowSorter {
     sorter = UnsafeExternalSorter.create(
       taskContext.taskMemoryManager(),
       sparkEnv.blockManager(),
+      sparkEnv.serializerManager(),
       taskContext,
       new RowComparator(ordering, schema.length()),
       prefixComparator,

@@ -241,7 +241,11 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
     return new UnsafeKVExternalSorter(
-      groupingKeySchema, aggregationBufferSchema,
-      SparkEnv.get().blockManager(), map.getPageSizeBytes(), map);
+      groupingKeySchema,
+      aggregationBufferSchema,
+      SparkEnv.get().blockManager(),
+      SparkEnv.get().serializerManager(),
+      map.getPageSizeBytes(),
+      map);
   }
 }
