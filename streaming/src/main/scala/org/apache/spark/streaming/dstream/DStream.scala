@@ -20,12 +20,13 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{HashPartitioner, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
@@ -853,6 +854,19 @@ abstract class DStream[T: ClassTag] (
       slideDuration,
       numPartitions,
       (x: (T, Long)) => x._2 != 0L
+    )
+  }
+
+
+  def matchPatternByWindow(
+                            pattern: scala.util.matching.Regex,
+                            predicates: Map[String, (T, WindowMetric) => Boolean],
+                            windowDuration: Duration,
+                            slideDuration: Duration
+                            ): DStream[List[T]] = ssc.withScope {
+    new PatternMatchedDStream[T](
+      this, pattern, predicates,
+      windowDuration, slideDuration, new HashPartitioner(1)
     )
   }
 
