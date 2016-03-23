@@ -22,6 +22,11 @@
 #' @export
 setClass("PipelineModel", representation(model = "jobj"))
 
+#' @title S4 class that represents a NaiveBayesModel
+#' @param jobj a Java object reference to the backing Scala NaiveBayesWrapper
+#' @export
+setClass("NaiveBayesModel", representation(jobj = "jobj"))
+
 #' Fits a generalized linear model
 #'
 #' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
@@ -42,7 +47,7 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' @rdname glm
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' data(iris)
@@ -71,7 +76,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 #' @rdname predict
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- glm(y ~ x, trainingData)
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
@@ -79,6 +84,26 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 setMethod("predict", signature(object = "PipelineModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@model, "transform", newData@sdf)))
+          })
+
+#' Make predictions from a naive Bayes model
+#'
+#' Makes predictions from a model produced by naiveBayes(), similarly to R package e1071's predict.
+#'
+#' @param object A fitted naive Bayes model
+#' @param newData DataFrame for testing
+#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @rdname predict
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- naiveBayes(y ~ x, trainingData)
+#' predicted <- predict(model, testData)
+#' showDF(predicted)
+#'}
+setMethod("predict", signature(object = "NaiveBayesModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
 #' Get the summary of a model
@@ -97,7 +122,7 @@ setMethod("predict", signature(object = "PipelineModel"),
 #' @rdname summary
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- glm(y ~ x, trainingData)
 #' summary(model)
 #'}
@@ -140,6 +165,35 @@ setMethod("summary", signature(object = "PipelineModel"),
             }
           })
 
+#' Get the summary of a naive Bayes model
+#'
+#' Returns the summary of a naive Bayes model produced by naiveBayes(), similarly to R's summary().
+#'
+#' @param object A fitted MLlib model
+#' @return a list containing 'apriori', the label distribution, and 'tables', conditional
+#          probabilities given the target label
+#' @rdname summary
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- naiveBayes(y ~ x, trainingData)
+#' summary(model)
+#'}
+setMethod("summary", signature(object = "NaiveBayesModel"),
+          function(object, ...) {
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "features")
+            labels <- callJMethod(jobj, "labels")
+            apriori <- callJMethod(jobj, "apriori")
+            apriori <- t(as.matrix(unlist(apriori)))
+            colnames(apriori) <- unlist(labels)
+            tables <- callJMethod(jobj, "tables")
+            tables <- matrix(tables, nrow = length(labels))
+            rownames(tables) <- unlist(labels)
+            colnames(tables) <- unlist(features)
+            return(list(apriori = apriori, tables = tables))
+          })
+
 #' Fit a k-means model
 #'
 #' Fit a k-means model, similarly to R's kmeans().
@@ -152,7 +206,7 @@ setMethod("summary", signature(object = "PipelineModel"),
 #' @rdname kmeans
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- kmeans(x, centers = 2, algorithm="random")
 #'}
 setMethod("kmeans", signature(x = "DataFrame"),
@@ -173,7 +227,7 @@ setMethod("kmeans", signature(x = "DataFrame"),
 #' @rdname fitted
 #' @export
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' model <- kmeans(trainingData, 2)
 #' fitted.model <- fitted(model)
 #' showDF(fitted.model)
@@ -191,4 +245,31 @@ setMethod("fitted", signature(object = "PipelineModel"),
             } else {
               stop(paste("Unsupported model", modelName, sep = " "))
             }
+          })
+
+#' Fit a Bernoulli naive Bayes model
+#'
+#' Fit a Bernoulli naive Bayes model, similarly to R package e1071's naiveBayes() while only
+#' categorical features are supported. The input should be a DataFrame of observations instead of a
+#' contingency table.
+#'
+#' @param object A symbolic description of the model to be fitted. Currently only a few formula
+#'               operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param data DataFrame for training
+#' @param laplace Smoothing parameter
+#' @return a fitted naive Bayes model
+#' @rdname naiveBayes
+#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(sqlContext, infert)
+#' model <- naiveBayes(education ~ ., df, laplace = 0)
+#'}
+setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
+          function(formula, data, laplace = 0, ...) {
+            formula <- paste(deparse(formula), collapse = "")
+            jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
+                                 formula, data@sdf, laplace)
+            return(new("NaiveBayesModel", jobj = jobj))
           })

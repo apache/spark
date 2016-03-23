@@ -70,8 +70,9 @@ public class JavaMetastoreDataSourcesSuite {
     if (path.exists()) {
       path.delete();
     }
-    hiveManagedPath = new Path(sqlContext.sessionState().catalog().hiveDefaultTableFilePath(
-      new TableIdentifier("javaSavedTable")));
+    hiveManagedPath = new Path(
+      sqlContext.sessionState().catalog().hiveDefaultTableFilePath(
+        new TableIdentifier("javaSavedTable")));
     fs = hiveManagedPath.getFileSystem(sc.hadoopConfiguration());
     if (fs.exists(hiveManagedPath)){
       fs.delete(hiveManagedPath, true);

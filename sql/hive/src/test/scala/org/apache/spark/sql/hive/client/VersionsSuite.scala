@@ -171,10 +171,6 @@ class VersionsSuite extends SparkFunSuite with Logging {
       assert(client.listTables("default") === Seq("src"))
     }
 
-    test(s"$version: currentDatabase") {
-      assert(client.currentDatabase === "default")
-    }
-
     test(s"$version: getDatabase") {
       client.getDatabase("default")
     }
