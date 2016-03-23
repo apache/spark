@@ -421,6 +421,7 @@ private[storage] class BlockInfoManager extends Logging {
           infos.remove(blockId)
           blockInfo.readerCount = 0
           blockInfo.writerTask = BlockInfo.NO_WRITER
+          writeLocksByTask.removeBinding(currentTaskAttemptId, blockId)
         }
       case None =>
         throw new IllegalArgumentException(
