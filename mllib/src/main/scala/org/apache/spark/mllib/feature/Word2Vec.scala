@@ -130,7 +130,7 @@ class Word2Vec extends Serializable with Logging {
   @Since("1.1.0")
   def setNumIterations(numIterations: Int): this.type = {
     require(numIterations >= 0,
-      s"Number of iterations must be greater than 0 but got ${numIterations}")
+      s"Number of iterations must be no less than 0 but got ${numIterations}")
     this.numIterations = numIterations
     this
   }
@@ -161,8 +161,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.3.0")
   def setMinCount(minCount: Int): this.type = {
-    require(minCount > 0,
-      s"Minimum number of times must be greater than 0 but got ${minCount}")
+    require(minCount >= 0,
+      s"Minimum number of times must be no less than 0 but got ${minCount}")
     this.minCount = minCount
     this
   }
