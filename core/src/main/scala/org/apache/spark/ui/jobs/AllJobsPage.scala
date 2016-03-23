@@ -71,11 +71,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val jobId = jobUIData.jobId
       val status = jobUIData.status
       val (jobName, jobDescription) = getLastStageNameAndDescription(jobUIData)
-      val displayJobDescription = if (jobDescription.isEmpty) {
-        jobName
-      } else {
-        UIUtils.makeDescription(jobDescription, "", plainText = true).text
-      }
+      val displayJobDescription =
+        if (jobDescription.isEmpty) {
+          jobName
+        } else {
+          UIUtils.makeDescription(jobDescription, "", plainText = true).text
+        }
       val submissionTime = jobUIData.submissionTime.get
       val completionTimeOpt = jobUIData.completionTime
       val completionTime = completionTimeOpt.getOrElse(System.currentTimeMillis())
