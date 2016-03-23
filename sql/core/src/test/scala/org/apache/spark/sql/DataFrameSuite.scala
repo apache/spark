@@ -200,26 +200,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       structDf.select(hash($"a", $"record.*")))
   }
 
-  test("Star Expansion - concat") {
-    val structDf = testData2.select("a", "b").as("record")
-
-    checkAnswer(
-      structDf.groupBy($"a", $"b").agg(min(concat($"a", $"*"))),
-      structDf.groupBy($"a", $"b").agg(min(concat($"a", $"a", $"b"))))
-
-    checkAnswer(
-      structDf.groupBy($"a", $"b").agg(concat($"a", $"*")),
-      structDf.groupBy($"a", $"b").agg(concat($"a", $"a", $"b")))
-
-    checkAnswer(
-      structDf.select(concat($"*")),
-      structDf.select(concat($"record.*")))
-
-    checkAnswer(
-      structDf.select(concat($"a", $"*")),
-      structDf.select(concat($"a", $"record.*")))
-  }
-
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
     val e = intercept[AnalysisException] {
