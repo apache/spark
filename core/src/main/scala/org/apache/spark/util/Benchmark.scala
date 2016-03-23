@@ -103,7 +103,7 @@ private[spark] object Benchmark {
     } else {
       System.getenv("PROCESSOR_IDENTIFIER")
     }
-    s"${cpu}"
+    cpu
   }
 
   /**
