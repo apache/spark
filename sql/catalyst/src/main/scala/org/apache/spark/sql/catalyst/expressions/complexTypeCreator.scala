@@ -27,6 +27,9 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Returns an Array containing the evaluation of all children expressions.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(seq) - Returns an Array containing the evaluation of all children expressions",
+  extended = "> SELECT _FUNC_(1,2,3);\n[1,2,3]")
 case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -72,6 +75,10 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 /**
  * Returns a Row containing the evaluation of all children expressions.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(seq) - Returns a struct with the evaluation of all given expressions",
+  extended = """> SELECT _FUNC_(1,2,3);
+{"col1":1,"col2":2,"col3":3}""")
 case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -123,6 +130,11 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
  *
  * @param children Seq(name1, val1, name2, val2, ...)
  */
+@ExpressionDescription(
+  usage = "_FUNC_(seq) - Returns a struct with the given field names and values, given parameters" +
+    " with the format of Seq(name1, val1, name2, val2, ...)",
+  extended = """> SELECT _FUNC_('c1',1,'c2',2,'c3',3);
+{"c1":1,"c2":2,"c3":3}""")
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   /**

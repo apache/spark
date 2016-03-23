@@ -99,6 +99,9 @@ case class UserDefinedGenerator(
 /**
  * Given an input array produces a sequence of rows for each value in the array.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns a sequence of rows for each value from the input array or map",
+  extended = "> SELECT _FUNC_(Array(1,2,3));\n1\n2\n3")
 case class Explode(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
 
   override def children: Seq[Expression] = child :: Nil

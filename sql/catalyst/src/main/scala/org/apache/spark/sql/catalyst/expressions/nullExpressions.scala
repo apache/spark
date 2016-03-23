@@ -34,6 +34,9 @@ import org.apache.spark.sql.types._
  *   coalesce(null, null, null) => null
  * }}}
  */
+@ExpressionDescription(
+  usage = "_FUNC_(seq) - Returns the first non-null input from the expressions",
+  extended = "> SELECT _FUNC_(null, 1, 2);\n1")
 case class Coalesce(children: Seq[Expression]) extends Expression {
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
@@ -89,6 +92,9 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 /**
  * Evaluates to `true` iff it's NaN.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns true iff expr is NaN",
+  extended = "> SELECT _FUNC_(1.23);\nfalse")
 case class IsNaN(child: Expression) extends UnaryExpression
   with Predicate with ImplicitCastInputTypes {
 
@@ -126,6 +132,10 @@ case class IsNaN(child: Expression) extends UnaryExpression
  * An Expression evaluates to `left` iff it's not NaN, or evaluates to `right` otherwise.
  * This Expression is useful for mapping NaN values to null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(leftExpr, rightExpr) - Returns `leftExpr` iff it's not NaN, or evaluates to " +
+    "`rightExpr` otherwise. This Expression is useful for mapping NaN values to null",
+  extended = "> SELECT _FUNC_(1.23, 4.56);\n1.23")
 case class NaNvl(left: Expression, right: Expression)
     extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -180,6 +190,9 @@ case class NaNvl(left: Expression, right: Expression)
 /**
  * An expression that is evaluated to true if the input is null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns true if the input is null",
+  extended = "> SELECT _FUNC_(null);\ntrue")
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
@@ -201,6 +214,9 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
 /**
  * An expression that is evaluated to true if the input is not null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns true if the input is not null",
+  extended = "> SELECT _FUNC_(null);\nfalse")
 case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
