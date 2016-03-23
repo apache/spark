@@ -370,7 +370,7 @@ object SQLConf {
           "unmatching partitions can be eliminated earlier.")
 
   val NATIVE_VIEW = booleanConf("spark.sql.nativeView",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
           "Note that this function is experimental and should ony be used when you are using " +
           "non-hive-compatible tables written by Spark SQL.  The SQL string used to create " +
@@ -524,6 +524,11 @@ object SQLConf {
     doc = "When true, the planner will try to find out duplicated exchanges and re-use them.",
     isPublic = false)
 
+  val CHECKPOINT_LOCATION = stringConf("spark.sql.streaming.checkpointLocation",
+    defaultValue = None,
+    doc = "The default location for storing checkpoint data for continuously executing queries.",
+    isPublic = true)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -553,6 +558,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
     new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
+
+  def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 

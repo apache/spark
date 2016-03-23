@@ -25,7 +25,7 @@ __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
            'KMeans', 'KMeansModel']
 
 
-class KMeansModel(JavaModel, MLWritable, MLReadable):
+class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by KMeans.
 
@@ -48,7 +48,7 @@ class KMeansModel(JavaModel, MLWritable, MLReadable):
 
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
-             MLWritable, MLReadable):
+             JavaMLWritable, JavaMLReadable):
     """
     K-means clustering with support for multiple parallel runs and a k-means++ like initialization
     mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
