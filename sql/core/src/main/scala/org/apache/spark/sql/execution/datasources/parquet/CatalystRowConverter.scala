@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -658,5 +659,14 @@ private[parquet] object CatalystRowConverter {
     val bits = 8 * (end - start)
     unscaled = (unscaled << (64 - bits)) >> (64 - bits)
     unscaled
+  }
+
+  def binaryToSQLTimestamp(binary: Binary): SQLTimestamp = {
+    assert(binary.length() == 12, s"Timestamps (with nanoseconds) are expected to be stored in" +
+      s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
+    val buffer = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
+    val timeOfDayNanos = buffer.getLong
+    val julianDay = buffer.getInt
+    DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
   }
 }
