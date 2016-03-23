@@ -94,7 +94,7 @@ public abstract class ColumnVector {
     }
 
     @Override
-    public final int numElements() { return length; }
+    public int numElements() { return length; }
 
     @Override
     public ArrayData copy() {
@@ -109,62 +109,62 @@ public abstract class ColumnVector {
 
       if (dt instanceof BooleanType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getBoolean(offset + i);
           }
         }
       } else if (dt instanceof ByteType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getByte(offset + i);
           }
         }
       } else if (dt instanceof ShortType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getShort(offset + i);
           }
         }
       } else if (dt instanceof IntegerType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getInt(offset + i);
           }
         }
       } else if (dt instanceof FloatType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getFloat(offset + i);
           }
         }
       } else if (dt instanceof DoubleType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getDouble(offset + i);
           }
         }
       } else if (dt instanceof LongType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getLong(offset + i);
           }
         }
       } else if (dt instanceof DecimalType) {
         DecimalType decType = (DecimalType)dt;
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = getDecimal(i, decType.precision(), decType.scale());
           }
         }
       } else if (dt instanceof StringType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = getUTF8String(i).toString();
           }
         }
       } else if (dt instanceof CalendarIntervalType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = getInterval(i);
           }
         }
@@ -175,10 +175,10 @@ public abstract class ColumnVector {
     }
 
     @Override
-    public final boolean isNullAt(int ordinal) { return data.getIsNull(offset + ordinal); }
+    public boolean isNullAt(int ordinal) { return data.isNullAt(offset + ordinal); }
 
     @Override
-    public final boolean getBoolean(int ordinal) {
+    public boolean getBoolean(int ordinal) {
       throw new NotImplementedException();
     }
 
@@ -256,6 +256,8 @@ public abstract class ColumnVector {
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
+    if (isConstant) return;
+
     if (childColumns != null) {
       for (ColumnVector c: childColumns) {
         c.reset();
@@ -314,7 +316,7 @@ public abstract class ColumnVector {
   /**
    * Returns whether the value at rowId is NULL.
    */
-  public abstract boolean getIsNull(int rowId);
+  public abstract boolean isNullAt(int rowId);
 
   /**
    * Sets the value at rowId to `value`.
@@ -501,6 +503,15 @@ public abstract class ColumnVector {
   }
 
   /**
+   * Returns a utility object to get structs.
+   * provided to keep API compabilitity with InternalRow for code generation
+   */
+  public ColumnarBatch.Row getStruct(int rowId, int size) {
+    resultStruct.rowId = rowId;
+    return resultStruct;
+  }
+
+  /**
    * Returns the array at rowid.
    */
   public final Array getArray(int rowId) {
@@ -529,6 +540,13 @@ public abstract class ColumnVector {
     Array array = getArray(rowId);
     array.data.loadBytes(array);
     return array;
+  }
+
+  /**
+   * Returns the value for rowId.
+   */
+  public MapData getMap(int ordinal) {
+    throw new NotImplementedException();
   }
 
   /**
@@ -807,6 +825,11 @@ public abstract class ColumnVector {
   public final boolean isArray() { return resultArray != null; }
 
   /**
+   * Marks this column as being constant.
+   */
+  public final void setIsConstant() { isConstant = true; }
+
+  /**
    * Maximum number of rows that can be stored in this column.
    */
   protected int capacity;
@@ -826,6 +849,12 @@ public abstract class ColumnVector {
    * having to clear NULL bits.
    */
   protected boolean anyNullsSet;
+
+  /**
+   * True if this column's values are fixed. This means the column values never change, even
+   * across resets.
+   */
+  protected boolean isConstant;
 
   /**
    * Default size of each array length value. This grows as necessary.

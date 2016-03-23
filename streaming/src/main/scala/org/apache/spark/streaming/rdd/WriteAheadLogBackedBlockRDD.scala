@@ -161,7 +161,8 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
-      blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+      blockManager.dataDeserialize(blockId, new ChunkedByteBuffer(dataRead))
+        .asInstanceOf[Iterator[T]]
     }
 
     if (partition.isBlockIdValid) {

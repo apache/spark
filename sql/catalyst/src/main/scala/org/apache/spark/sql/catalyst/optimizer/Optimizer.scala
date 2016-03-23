@@ -87,6 +87,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SimplifyConditionals,
       RemoveDispensableExpressions,
       PruneFilters,
+      EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       EliminateSerialization) ::
@@ -826,6 +827,17 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * Removes no-op SortOrder from Sort
+ */
+object EliminateSorts  extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
+      val newOrders = orders.filterNot(_.child.foldable)
+      if (newOrders.isEmpty) child else s.copy(order = newOrders)
+  }
+}
+
+/**
  * Removes filters that can be evaluated trivially.  This can be done through the following ways:
  * 1) by eliding the filter for cases where it will always evaluate to `true`.
  * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
@@ -879,29 +891,7 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
         case a: Alias => (a.toAttribute, a.child)
       })
 
-      // Split the condition into small conditions by `And`, so that we can push down part of this
-      // condition without nondeterministic expressions.
-      val andConditions = splitConjunctivePredicates(condition)
-
-      val (deterministic, nondeterministic) = andConditions.partition(_.collect {
-        case a: Attribute if aliasMap.contains(a) => aliasMap(a)
-      }.forall(_.deterministic))
-
-      // If there is no nondeterministic conditions, push down the whole condition.
-      if (nondeterministic.isEmpty) {
-        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
-      } else {
-        // If they are all nondeterministic conditions, leave it un-changed.
-        if (deterministic.isEmpty) {
-          filter
-        } else {
-          // Push down the small conditions without nondeterministic expressions.
-          val pushedCondition =
-            deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
-          Filter(nondeterministic.reduce(And),
-            project.copy(child = Filter(pushedCondition, grandChild)))
-        }
-      }
+      project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
   }
 
 }

@@ -107,11 +107,11 @@ public class JavaDeveloperApiExample {
 class MyJavaLogisticRegression
   extends Classifier<Vector, MyJavaLogisticRegression, MyJavaLogisticRegressionModel> {
 
-  public MyJavaLogisticRegression() {
+  MyJavaLogisticRegression() {
     init();
   }
 
-  public MyJavaLogisticRegression(String uid) {
+  MyJavaLogisticRegression(String uid) {
     this.uid_ = uid;
     init();
   }
@@ -177,7 +177,7 @@ class MyJavaLogisticRegressionModel
   private Vector coefficients_;
   public Vector coefficients() { return coefficients_; }
 
-  public MyJavaLogisticRegressionModel(String uid, Vector coefficients) {
+  MyJavaLogisticRegressionModel(String uid, Vector coefficients) {
     this.uid_ = uid;
     this.coefficients_ = coefficients;
   }
