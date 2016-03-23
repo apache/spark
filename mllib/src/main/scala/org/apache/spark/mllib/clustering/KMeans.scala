@@ -245,17 +245,17 @@ class KMeans private (
 
         points.foreach { point =>
           System.arraycopy(point.vector.toArray, 0, pointsArray, numRows * dims, dims)
-          pointsNormArray(numRows) = math.pow(point.norm, 2.0)
+          pointsNormArray(numRows) = point.norm * point.norm
           numRows += 1
         }
         val pointMatrix = new DenseMatrix(numRows, dims, pointsArray, true)
-        val pointsNormMatrix = new DenseMatrix(numRows, k, Array.fill(k)(pointsNormArray).flatten)
 
-        (pointMatrix, pointsNormMatrix)
+        (pointMatrix, pointsNormArray)
       }
     }
 
     blockData.persist()
+    blockData.count()
     val model = runAlgorithm(blockData, centers)
     blockData.unpersist()
 
@@ -271,10 +271,11 @@ class KMeans private (
    * Implementation of K-Means algorithm.
    */
   private def runAlgorithm(
-      data: RDD[(DenseMatrix, DenseMatrix)],
+      data: RDD[(DenseMatrix, Array[Double])],
       centers: Array[VectorWithNorm]): KMeansModel = {
 
     val sc = data.sparkContext
+    val dims = centers(0).vector.size
 
     var done = false
     var costs = 0.0
@@ -290,56 +291,68 @@ class KMeans private (
       }
 
       val costAccums = sc.accumulator(0.0)
-      val bcCenters = sc.broadcast(centers)
 
+      // Construct centers array and broadcast them
+      val centersArray = new Array[Double](k * dims)
+      val centersNormArray = new Array[Double](k)
+      var i = 0
+      centers.foreach { center =>
+        System.arraycopy(center.vector.toArray, 0, centersArray, i * dims, dims)
+        centersNormArray(i) = math.pow(center.norm, 2.0)
+        i += 1
+      }
+      val bcCentersArray = sc.broadcast(centersArray)
+      val bcCentersNormArray = sc.broadcast(centersNormArray)
 
       // Find the sum and count of points mapping to each center
-      val totalContribs = data.flatMap { case (pointMatrix, pointsNormMatrix) =>
-        val thisCenters = bcCenters.value
-        val k = thisCenters.length
-        val dims = thisCenters(0).vector.size
+      val totalContribs = data.flatMap { case (pointMatrix, pointsNormArray) =>
+        val thisCentersArray = bcCentersArray.value
+        val thisCentersNormArray = bcCentersNormArray.value
+
+        val k = thisCentersNormArray.length
+        val numRows = pointMatrix.numRows
 
         val sums = Array.fill(k)(Vectors.zeros(dims))
         val counts = Array.fill(k)(0L)
 
-        val numRows = pointMatrix.numRows
-
         // Construct centers matrix
-        val centersArray = new Array[Double](k * dims)
-        val centersNormArray = new Array[Double](k)
+        val centerMatrix = new DenseMatrix(dims, k, thisCentersArray)
+
+        // Construct a^2 + b^2 matrix
+        val a2b2 = new Array[Double](numRows * k)
         var i = 0
-        thisCenters.foreach { center =>
-          System.arraycopy(center.vector.toArray, 0, centersArray, i * dims, dims)
-          centersNormArray(i) = math.pow(center.norm, 2.0)
+        while (i < k) {
+          var j = 0
+          while (j < numRows) {
+            a2b2(i * numRows + j) = pointsNormArray(j) + thisCentersNormArray(i)
+            j += 1
+          }
           i += 1
         }
-        val centerMatrix = new DenseMatrix(dims, k, centersArray)
 
-        val a2b2 = new Array[Double](k * numRows)
-        for (i <- 0 until k; j <- 0 until numRows) {
-          a2b2(i * numRows + j) = pointsNormMatrix.values(j) + centersNormArray(i)
-        }
-
+        // Compute distance matrix
         val distanceMatrix = new DenseMatrix(numRows, k, a2b2)
         gemm(-2.0, pointMatrix, centerMatrix, 1.0, distanceMatrix)
 
-        val original = pointMatrix.values.grouped(dims).toArray
-
-        for (i <- 0 until numRows) {
+        i = 0
+        while (i < numRows) {
           var minCost = Double.PositiveInfinity
           var min = -1
-          for (j <- 0 until k) {
+          var j = 0
+          while (j < k) {
             val distance = distanceMatrix.values(i + j * numRows)
             if (distance < minCost) {
               minCost = distance
               min = j
             }
+            j += 1
           }
           costAccums += minCost
           val sum = sums(min)
-          val value = original(i)
+          val value = pointMatrix.values.slice(i * dims, (i + 1) * dims)
           axpy(1.0, Vectors.dense(value), sum)
           counts(min) += 1
+          i += 1
         }
 
         val contribs = for (j <- 0 until k) yield {
@@ -349,7 +362,8 @@ class KMeans private (
       }.reduceByKey(mergeContribs).collectAsMap()
 
 
-      bcCenters.unpersist(blocking = false)
+      bcCentersArray.unpersist(blocking = false)
+      bcCentersNormArray.unpersist(blocking = false)
 
       var changed = false
       var j = 0
