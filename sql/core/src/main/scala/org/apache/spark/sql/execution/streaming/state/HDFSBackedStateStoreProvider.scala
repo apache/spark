@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream, IOException}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -206,7 +206,6 @@ private[state] class HDFSBackedStateStoreProvider(
     require(version >= 0, "Version cannot be less than 0")
     val newMap = new MapType()
     if (version > 0) {
-      val time = System.nanoTime()
       newMap.putAll(loadMap(version))
     }
     val store = new HDFSBackedStateStore(version, newMap)
@@ -351,7 +350,7 @@ private[state] class HDFSBackedStateStoreProvider(
         if (keySize == -1) {
           eof = true
         } else if (keySize < 0) {
-          throw new Exception(
+          throw new IOException(
             s"Error reading delta file $fileToRead of $this: key size cannot be $keySize")
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
@@ -416,7 +415,7 @@ private[state] class HDFSBackedStateStoreProvider(
         if (keySize == -1) {
           eof = true
         } else if (keySize < 0) {
-          throw new Exception(
+          throw new IOException(
             s"Error reading snapshot file $fileToRead of $this: key size cannot be $keySize")
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
@@ -427,7 +426,7 @@ private[state] class HDFSBackedStateStoreProvider(
 
           val valueSize = input.readInt()
           if (valueSize < 0) {
-            throw new Exception(
+            throw new IOException(
               s"Error reading snapshot file $fileToRead of $this: value size cannot be $valueSize")
           } else {
             val valueRowBuffer = new Array[Byte](valueSize)
