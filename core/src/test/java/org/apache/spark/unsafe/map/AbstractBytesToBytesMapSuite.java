@@ -64,8 +64,9 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private TestMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;
-  private SerializerManager serializerManager =
-      new SerializerManager(new JavaSerializer(new SparkConf()), new SparkConf());
+  private SerializerManager serializerManager = new SerializerManager(
+      new JavaSerializer(new SparkConf()),
+      new SparkConf().set("spark.shuffle.spill.compress", "false"));
   private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
