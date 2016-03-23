@@ -1308,8 +1308,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner
 
   /**
-   * Private function to checkpoint the RDD and clean up its
-   * all of its parents shuffles eagerly.
+   * Private function to checkpoint the RDD and clean up its all of its parents' shuffles eagerly.
    */
   private[spark] def checkpointAndCleanParents[T](rdd: RDD[T], blocking: Boolean = false): Unit = {
     val sc = rdd.sparkContext
@@ -1319,7 +1318,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     }
     val cleaner = sc.cleaner.get
     /**
-     * Clean the shuffles & uncache this dependency and any of its parents.
+     * Clean the shuffles & all of its parents.
      */
     def cleanEagerly(dep: Dependency[_]): Unit = {
       if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
@@ -1327,7 +1326,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         cleaner.doCleanupShuffle(shuffleId, blocking)
       }
       val rdd = dep.rdd
-      cleaner.doCleanupRDD(rdd.id, blocking)
       if (rdd.dependencies != null) {
         rdd.dependencies.foreach(cleanEagerly)
       }
