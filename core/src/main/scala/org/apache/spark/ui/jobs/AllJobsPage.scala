@@ -71,7 +71,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val jobId = jobUIData.jobId
       val status = jobUIData.status
       val (jobName, jobDescription) = getLastStageNameAndDescription(jobUIData)
-      val displayJobDescription = if (jobDescription.isEmpty) jobName else jobDescription
+      val displayJobDescription =
+        if (jobDescription.isEmpty) {
+          jobName
+        } else {
+          UIUtils.makeDescription(jobDescription, "", plainText = true).text
+        }
       val submissionTime = jobUIData.submissionTime.get
       val completionTimeOpt = jobUIData.completionTime
       val completionTime = completionTimeOpt.getOrElse(System.currentTimeMillis())
@@ -225,7 +230,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
       val basePathUri = UIUtils.prependBaseUri(parent.basePath)
-      val jobDescription = UIUtils.makeDescription(lastStageDescription, basePathUri)
+      val jobDescription =
+        UIUtils.makeDescription(lastStageDescription, basePathUri, plainText = false)
 
       val detailUrl = "%s/jobs/job?id=%s".format(basePathUri, job.jobId)
       <tr id={"job-" + job.jobId}>
