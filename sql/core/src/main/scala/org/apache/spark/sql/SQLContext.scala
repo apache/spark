@@ -351,7 +351,7 @@ class SQLContext private[sql](
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    Dataset.newDataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
@@ -366,7 +366,7 @@ class SQLContext private[sql](
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    Dataset.newDataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
+    Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
   /**
@@ -376,7 +376,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    Dataset.newDataFrame(this, LogicalRelation(baseRelation))
+    Dataset.ofRows(this, LogicalRelation(baseRelation))
   }
 
   /**
@@ -431,7 +431,7 @@ class SQLContext private[sql](
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    Dataset.newDataFrame(this, logicalPlan)
+    Dataset.ofRows(this, logicalPlan)
   }
 
 
@@ -466,7 +466,7 @@ class SQLContext private[sql](
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    Dataset.newDataFrame(this, logicalPlan)
+    Dataset.ofRows(this, logicalPlan)
   }
 
   /**
@@ -494,7 +494,7 @@ class SQLContext private[sql](
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    Dataset.newDataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
   /**
@@ -513,7 +513,7 @@ class SQLContext private[sql](
       val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
       SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
     }
-    Dataset.newDataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
+    Dataset.ofRows(this, LogicalRDD(attributeSeq, rowRdd)(this))
   }
 
   /**
@@ -541,7 +541,7 @@ class SQLContext private[sql](
     val className = beanClass.getName
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    Dataset.newDataFrame(self, LocalRelation(attrSeq, rows.toSeq))
+    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
   /**
@@ -759,7 +759,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def sql(sqlText: String): DataFrame = {
-    Dataset.newDataFrame(this, parseSql(sqlText))
+    Dataset.ofRows(this, parseSql(sqlText))
   }
 
   /**
@@ -782,7 +782,7 @@ class SQLContext private[sql](
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.newDataFrame(this, sessionState.catalog.lookupRelation(tableIdent))
+    Dataset.ofRows(this, sessionState.catalog.lookupRelation(tableIdent))
   }
 
   /**
@@ -794,7 +794,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.newDataFrame(this, ShowTablesCommand(None))
+    Dataset.ofRows(this, ShowTablesCommand(None))
   }
 
   /**
@@ -806,7 +806,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.newDataFrame(this, ShowTablesCommand(Some(databaseName)))
+    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName)))
   }
 
   /**
@@ -871,7 +871,7 @@ class SQLContext private[sql](
       schema: StructType): DataFrame = {
 
     val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
-    Dataset.newDataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
+    Dataset.ofRows(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**

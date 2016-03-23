@@ -214,7 +214,7 @@ private[sql] trait SQLTestUtils
    * way to construct [[DataFrame]] directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
-    Dataset.newDataFrame(sqlContext, plan)
+    Dataset.ofRows(sqlContext, plan)
   }
 
   /**
