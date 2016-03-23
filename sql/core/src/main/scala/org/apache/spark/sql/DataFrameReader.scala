@@ -289,6 +289,18 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * </li>
    * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
    * (e.g. 00012)</li>
+   * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
+   * during parsing.<li>
+   * <ul>
+   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
+   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *  a schema is set by user, it sets `null` for extra fields.</li>
+   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   * </ul>
+   * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
+   * having malformed string created by `PERMISSIVE` mode. This overrides
+   * `spark.sql.columnNameOfCorruptRecord`.<li>
    *
    * @since 1.4.0
    */
@@ -313,6 +325,18 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * (e.g. 00012)</li>
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
+   * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
+   * during parsing.<li>
+   * <ul>
+   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
+   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *  a schema is set by user, it sets `null` for extra fields.</li>
+   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   * </ul>
+   * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
+   * having malformed string created by `PERMISSIVE` mode. This overrides
+   * `spark.sql.columnNameOfCorruptRecord`.<li>
    *
    * @since 1.6.0
    */
@@ -342,8 +366,14 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
     val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
+    val columnNameOfCorruptRecord =
+      parsedOptions.columnNameOfCorruptRecord
+        .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
     val schema = userSpecifiedSchema.getOrElse {
-      InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)
+      InferSchema.infer(
+        jsonRDD,
+        columnNameOfCorruptRecord,
+        parsedOptions)
     }
 
     Dataset.newNamedDataFrame(
@@ -353,7 +383,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         JacksonParser.parse(
           jsonRDD,
           schema,
-          sqlContext.conf.columnNameOfCorruptRecord,
+          columnNameOfCorruptRecord,
           parsedOptions))(sqlContext))
   }
 

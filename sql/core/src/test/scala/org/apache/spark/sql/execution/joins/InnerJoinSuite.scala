@@ -29,7 +29,8 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
-  import testImplicits.localSeqToDataFrameHolder
+  import testImplicits.newProductEncoder
+  import testImplicits.localSeqToDatasetHolder
 
   private lazy val myUpperCaseData = sqlContext.createDataFrame(
     sparkContext.parallelize(Seq(
