@@ -140,11 +140,19 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("upload metrics.properties to distributed cache in client mode") {
-    testMetricsConf(true)
+    testLocalResource(true, "metrics.properties", METRICS_CONF)
   }
 
   test("upload metrics.properties to distributed cache in cluster mode") {
-    testMetricsConf(false)
+    testLocalResource(false, "metrics.properties", METRICS_CONF)
+  }
+
+  test("upload log4j.properties to distributed cache in client mode") {
+    testLocalResource(true, "log4j.properties", LOG4J_CONF)
+  }
+
+  test("upload log4j.properties to distributed cache in cluster mode") {
+    testLocalResource(false, "log4j.properties", LOG4J_CONF)
   }
 
   private def testBasicYarnApp(clientMode: Boolean): Unit = {
@@ -211,17 +219,14 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, executorResult, "OVERRIDDEN")
   }
 
-  private def testMetricsConf(clientMode: Boolean): Unit = {
-    // Create a jar file that contains a different version of "test.resource".
-    val resource = "metrics.properties"
+  private def testLocalResource(clientMode: Boolean, resource: String, result: String): Unit = {
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
       appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath(), resource))
-    checkResult(finalState, driverResult, METRICS_CONF)
-    checkResult(finalState, executorResult, METRICS_CONF)
+    checkResult(finalState, driverResult, result)
+    checkResult(finalState, executorResult, result)
   }
-
 }
 
 private[spark] class SaveExecutorInfo extends SparkListener {
