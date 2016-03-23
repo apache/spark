@@ -232,6 +232,8 @@ class LDA private (
    */
   @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
+    require(maxIterations >= 0,
+      s"Maximum of iterations must be no less than 0 but got ${maxIterations}")
     this.maxIterations = maxIterations
     this
   }

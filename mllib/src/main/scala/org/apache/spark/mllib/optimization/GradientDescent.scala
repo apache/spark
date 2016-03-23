@@ -47,7 +47,7 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    */
   def setStepSize(step: Double): this.type = {
     require(step > 0,
-      s"Initial step size must be greater than 0, but got ${step}")
+      s"Initial step size must be greater than 0 but got ${step}")
     this.stepSize = step
     this
   }
@@ -60,7 +60,7 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
   @Experimental
   def setMiniBatchFraction(fraction: Double): this.type = {
     require(fraction > 0 && fraction <= 1.0,
-      s"Fraction for mini-batch SGD must be in range (0, 1], but got ${fraction}")
+      s"Fraction for mini-batch SGD must be in range (0, 1] but got ${fraction}")
     this.miniBatchFraction = fraction
     this
   }
@@ -69,8 +69,8 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    * Set the number of iterations for SGD. Default 100.
    */
   def setNumIterations(iters: Int): this.type = {
-    require(iters > 0,
-      s"Number of iterations must be greater than 0, but got ${iters}")
+    require(iters >= 0,
+      s"Number of iterations must be no less than 0 but got ${iters}")
     this.numIterations = iters
     this
   }
@@ -80,7 +80,7 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    */
   def setRegParam(regParam: Double): this.type = {
     require(regParam >= 0,
-      s"Regularization parameter must be no less than 0, but got ${regParam}")
+      s"Regularization parameter must be no less than 0 but got ${regParam}")
     this.regParam = regParam
     this
   }
@@ -100,7 +100,7 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    */
   def setConvergenceTol(tolerance: Double): this.type = {
     require(tolerance >= 0.0 && tolerance <= 1.0,
-      s"Convergence tolerance must be in range [0, 1], but got ${tolerance}")
+      s"Convergence tolerance must be in range [0, 1] but got ${tolerance}")
     this.convergenceTol = tolerance
     this
   }

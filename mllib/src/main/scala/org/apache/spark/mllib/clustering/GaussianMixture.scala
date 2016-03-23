@@ -97,6 +97,8 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setK(k: Int): this.type = {
+    require(k > 0,
+      s"Number of Gaussians must be greater than 0 but got ${k}")
     this.k = k
     this
   }
@@ -112,6 +114,8 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
+    require(maxIterations >= 0,
+      s"Maximum of iterations must be no less than 0 but got ${maxIterations}")
     this.maxIterations = maxIterations
     this
   }
@@ -128,6 +132,8 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setConvergenceTol(convergenceTol: Double): this.type = {
+    require(convergenceTol >= 0.0,
+      s"Convergence tolerance must be no less than but got ${convergenceTol}")
     this.convergenceTol = convergenceTol
     this
   }
