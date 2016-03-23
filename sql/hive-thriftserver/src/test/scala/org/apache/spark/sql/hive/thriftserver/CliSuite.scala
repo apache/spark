@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.Date
 
@@ -28,7 +29,8 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.Utils
 
@@ -67,7 +69,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
    *
-   * @param queriesAndExpectedAnswers one or more tupes of query + answer
+   * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
       timeout: FiniteDuration,
@@ -121,7 +123,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
     val process = new ProcessBuilder(command: _*).start()
 
-    val stdinWriter = new OutputStreamWriter(process.getOutputStream)
+    val stdinWriter = new OutputStreamWriter(process.getOutputStream, StandardCharsets.UTF_8)
     stdinWriter.write(queriesString)
     stdinWriter.flush()
     stdinWriter.close()

@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.util;
 
-import java.util.Iterator;
 import java.util.LinkedList;
 
 import com.google.common.base.Preconditions;
@@ -206,7 +205,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     return interceptor != null;
   }
 
-  public static interface Interceptor {
+  public interface Interceptor {
 
     /**
      * Handles data received from the remote end.

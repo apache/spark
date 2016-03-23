@@ -19,7 +19,7 @@ package org.apache.spark.mllib.fpm
 
 import scala.collection.mutable
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * Calculate all patterns of a projected database in local mode.

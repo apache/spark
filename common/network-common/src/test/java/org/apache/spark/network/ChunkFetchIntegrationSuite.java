@@ -64,8 +64,6 @@ public class ChunkFetchIntegrationSuite {
   static ManagedBuffer bufferChunk;
   static ManagedBuffer fileChunk;
 
-  private TransportConf transportConf;
-
   @BeforeClass
   public static void setUp() throws Exception {
     int bufSize = 100000;
@@ -132,7 +130,7 @@ public class ChunkFetchIntegrationSuite {
     testFile.delete();
   }
 
-  class FetchResult {
+  static class FetchResult {
     public Set<Integer> successChunks;
     public Set<Integer> failedChunks;
     public List<ManagedBuffer> buffers;

@@ -29,10 +29,11 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkContext, SparkException}
+import org.apache.spark.{HashPartitioner, Partitioner, SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.fpm.FPGrowth._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -232,7 +233,7 @@ class FPGrowth private (
       partitioner: Partitioner): Array[Item] = {
     data.flatMap { t =>
       val uniq = t.toSet
-      if (t.size != uniq.size) {
+      if (t.length != uniq.size) {
         throw new SparkException(s"Items in a transaction must be unique but got ${t.toSeq}.")
       }
       t

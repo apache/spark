@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.sql.{Date, Timestamp}
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -27,8 +26,9 @@ import scala.util.Try
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-
+import org.apache.spark.unsafe.types.UTF8String
 
 private[csv] object CSVInferSchema {
 
@@ -48,7 +48,11 @@ private[csv] object CSVInferSchema {
       tokenRdd.aggregate(startType)(inferRowType(nullValue), mergeRowTypes)
 
     val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
-      StructField(thisHeader, rootType, nullable = true)
+      val dType = rootType match {
+        case _: NullType => StringType
+        case other => other
+      }
+      StructField(thisHeader, dType, nullable = true)
     }
 
     StructType(structFields)
@@ -65,12 +69,8 @@ private[csv] object CSVInferSchema {
   }
 
   def mergeRowTypes(first: Array[DataType], second: Array[DataType]): Array[DataType] = {
-    first.zipAll(second, NullType, NullType).map { case ((a, b)) =>
-      val tpe = findTightestCommonType(a, b).getOrElse(StringType)
-      tpe match {
-        case _: NullType => StringType
-        case other => other
-      }
+    first.zipAll(second, NullType, NullType).map { case (a, b) =>
+      findTightestCommonType(a, b).getOrElse(NullType)
     }
   }
 
@@ -88,6 +88,7 @@ private[csv] object CSVInferSchema {
         case LongType => tryParseLong(field)
         case DoubleType => tryParseDouble(field)
         case TimestampType => tryParseTimestamp(field)
+        case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
           throw new UnsupportedOperationException(s"Unexpected data type $other")
@@ -116,8 +117,16 @@ private[csv] object CSVInferSchema {
   }
 
   def tryParseTimestamp(field: String): DataType = {
-    if ((allCatch opt Timestamp.valueOf(field)).isDefined) {
+    if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
       TimestampType
+    } else {
+      tryParseBoolean(field)
+    }
+  }
+
+  def tryParseBoolean(field: String): DataType = {
+    if ((allCatch opt field.toBoolean).isDefined) {
+      BooleanType
     } else {
       stringType()
     }
@@ -140,6 +149,8 @@ private[csv] object CSVInferSchema {
     case (t1, t2) if t1 == t2 => Some(t1)
     case (NullType, t1) => Some(t1)
     case (t1, NullType) => Some(t1)
+    case (StringType, t2) => Some(StringType)
+    case (t1, StringType) => Some(StringType)
 
     // Promote numeric types to the highest of the two and all numeric types to unlimited decimal
     case (t1, t2) if Seq(t1, t2).forall(numericPrecedence.contains) =>
@@ -149,7 +160,6 @@ private[csv] object CSVInferSchema {
     case _ => None
   }
 }
-
 
 private[csv] object CSVTypeCast {
 
@@ -182,12 +192,18 @@ private[csv] object CSVTypeCast {
         case _: DoubleType => Try(datum.toDouble)
           .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
         case _: BooleanType => datum.toBoolean
-        case _: DecimalType => new BigDecimal(datum.replaceAll(",", ""))
+        case dt: DecimalType =>
+          val value = new BigDecimal(datum.replaceAll(",", ""))
+          Decimal(value, dt.precision, dt.scale)
         // TODO(hossein): would be good to support other common timestamp formats
-        case _: TimestampType => Timestamp.valueOf(datum)
+        case _: TimestampType =>
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.
+          DateTimeUtils.stringToTime(datum).getTime  * 1000L
         // TODO(hossein): would be good to support other common date formats
-        case _: DateType => Date.valueOf(datum)
-        case _: StringType => datum
+        case _: DateType =>
+          DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
+        case _: StringType => UTF8String.fromString(datum)
         case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
       }
     }

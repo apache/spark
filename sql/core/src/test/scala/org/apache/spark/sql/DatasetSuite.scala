@@ -27,26 +27,33 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-case class OtherTuple(_1: String, _2: Int)
-
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("toDS") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
-    checkAnswer(
+    checkDataset(
       data.toDS(),
       data: _*)
   }
 
   test("toDS with RDD") {
     val ds = sparkContext.makeRDD(Seq("a", "b", "c"), 3).toDS()
-    checkAnswer(
+    checkDataset(
       ds.mapPartitions(_ => Iterator(1)),
       1, 1, 1)
   }
 
-  test("SPARK-12404: Datatype Helper Serializablity") {
+  test("range") {
+    assert(sqlContext.range(10).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10, 1, 2).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10, 1, 2).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+  }
+
+  test("SPARK-12404: Datatype Helper Serializability") {
     val ds = sparkContext.parallelize((
       new Timestamp(0),
       new Date(0),
@@ -71,26 +78,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = data.toDS()
 
     assert(ds.repartition(10).rdd.partitions.length == 10)
-    checkAnswer(
+    checkDataset(
       ds.repartition(10),
       data: _*)
 
     assert(ds.coalesce(1).rdd.partitions.length == 1)
-    checkAnswer(
+    checkDataset(
       ds.coalesce(1),
       data: _*)
   }
 
   test("as tuple") {
     val data = Seq(("a", 1), ("b", 2)).toDF("a", "b")
-    checkAnswer(
+    checkDataset(
       data.as[(String, Int)],
       ("a", 1), ("b", 2))
   }
 
   test("as case class / collect") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("a", "b").as[ClassData]
-    checkAnswer(
+    checkDataset(
       ds,
       ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
     assert(ds.collect().head == ClassData("a", 1))
@@ -108,17 +115,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("map") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    checkAnswer(
+    checkDataset(
       ds.map(v => (v._1, v._2 + 1)),
       ("a", 2), ("b", 3), ("c", 4))
   }
 
-  test("map with type change") {
+  test("map with type change with the exact matched number of attributes") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 
-    checkAnswer(
+    checkDataset(
       ds.map(identity[(String, Int)])
         .as[OtherTuple]
+        .map(identity[OtherTuple]),
+      OtherTuple("a", 1), OtherTuple("b", 2), OtherTuple("c", 3))
+  }
+
+  test("map with type change with less attributes") {
+    val ds = Seq(("a", 1, 3), ("b", 2, 4), ("c", 3, 5)).toDS()
+
+    checkDataset(
+      ds.as[OtherTuple]
         .map(identity[OtherTuple]),
       OtherTuple("a", 1), OtherTuple("b", 2), OtherTuple("c", 3))
   }
@@ -128,23 +144,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // when we implement better pipelining and local execution mode.
     val ds: Dataset[(ClassData, Long)] = Seq(ClassData("one", 1), ClassData("two", 2)).toDS()
         .map(c => ClassData(c.a, c.b + 1))
-        .groupBy(p => p).count()
+        .groupByKey(p => p).count()
 
-    checkAnswer(
+    checkDataset(
       ds,
       (ClassData("one", 2), 1L), (ClassData("two", 3), 1L))
   }
 
   test("select") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    checkAnswer(
+    checkDataset(
       ds.select(expr("_2 + 1").as[Int]),
       2, 3, 4)
   }
 
   test("select 2") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    checkAnswer(
+    checkDataset(
       ds.select(
         expr("_1").as[String],
         expr("_2").as[Int]) : Dataset[(String, Int)],
@@ -153,7 +169,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("select 2, primitive and tuple") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    checkAnswer(
+    checkDataset(
       ds.select(
         expr("_1").as[String],
         expr("struct(_2, _2)").as[(Int, Int)]),
@@ -162,7 +178,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("select 2, primitive and class") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    checkAnswer(
+    checkDataset(
       ds.select(
         expr("_1").as[String],
         expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
@@ -180,7 +196,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("filter") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    checkAnswer(
+    checkDataset(
       ds.filter(_._1 == "b"),
       ("b", 2))
   }
@@ -208,7 +224,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 2, 3).toDS().as("a")
     val ds2 = Seq(1, 2).toDS().as("b")
 
-    checkAnswer(
+    checkDataset(
       ds1.joinWith(ds2, $"a.value" === $"b.value", "inner"),
       (1, 1), (2, 2))
   }
@@ -221,7 +237,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq(("a", new Integer(1)),
       ("b", new Integer(2))).toDS()
 
-    checkAnswer(
+    checkDataset(
       ds1.joinWith(ds2, $"_1" === $"a", "outer"),
       (ClassNullableData("a", 1), ("a", new Integer(1))),
       (ClassNullableData("c", 3), (nullString, nullInteger)),
@@ -232,7 +248,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 1, 2).toDS()
     val ds2 = Seq(("a", 1), ("b", 2)).toDS()
 
-    checkAnswer(
+    checkDataset(
       ds1.joinWith(ds2, $"value" === $"_2"),
       (1, ("a", 1)), (1, ("a", 1)), (2, ("b", 2)))
   }
@@ -251,7 +267,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq(("a", 1), ("b", 2)).toDS().as("b")
     val ds3 = Seq(("a", 1), ("b", 2)).toDS().as("c")
 
-    checkAnswer(
+    checkDataset(
       ds1.joinWith(ds2, $"a._2" === $"b._2").as("ab").joinWith(ds3, $"ab._1._2" === $"c._2"),
       ((("a", 1), ("a", 1)), ("a", 1)),
       ((("b", 2), ("b", 2)), ("b", 2)))
@@ -259,48 +275,48 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy function, keys") {
     val ds = Seq(("a", 1), ("b", 1)).toDS()
-    val grouped = ds.groupBy(v => (1, v._2))
-    checkAnswer(
+    val grouped = ds.groupByKey(v => (1, v._2))
+    checkDataset(
       grouped.keys,
       (1, 1))
   }
 
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy(v => (v._1, "word"))
+    val grouped = ds.groupByKey(v => (v._1, "word"))
     val agged = grouped.mapGroups { case (g, iter) => (g._1, iter.map(_._2).sum) }
 
-    checkAnswer(
+    checkDataset(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy(v => (v._1, "word"))
+    val grouped = ds.groupByKey(v => (v._1, "word"))
     val agged = grouped.flatMapGroups { case (g, iter) =>
       Iterator(g._1, iter.map(_._2).sum.toString)
     }
 
-    checkAnswer(
+    checkDataset(
       agged,
       "a", "30", "b", "3", "c", "1")
   }
 
   test("groupBy function, reduce") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val agged = ds.groupBy(_.length).reduce(_ + _)
+    val agged = ds.groupByKey(_.length).reduce(_ + _)
 
-    checkAnswer(
+    checkDataset(
       agged,
       3 -> "abcxyz", 5 -> "hello")
   }
 
   test("groupBy single field class, count") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val count = ds.groupBy(s => Tuple1(s.length)).count()
+    val count = ds.groupByKey(s => Tuple1(s.length)).count()
 
-    checkAnswer(
+    checkDataset(
       count,
       (Tuple1(3), 2L), (Tuple1(5), 1L)
     )
@@ -308,49 +324,49 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy columns, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1")
+    val grouped = ds.groupByKey($"_1")
     val agged = grouped.mapGroups { case (g, iter) => (g.getString(0), iter.map(_._2).sum) }
 
-    checkAnswer(
+    checkDataset(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy columns, count") {
     val ds = Seq("a" -> 1, "b" -> 1, "a" -> 2).toDS()
-    val count = ds.groupBy($"_1").count()
+    val count = ds.groupByKey($"_1").count()
 
-    checkAnswer(
+    checkDataset(
       count,
       (Row("a"), 2L), (Row("b"), 1L))
   }
 
   test("groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1").keyAs[String]
+    val grouped = ds.groupByKey($"_1").keyAs[String]
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
 
-    checkAnswer(
+    checkDataset(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy columns asKey tuple, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1", lit(1)).keyAs[(String, Int)]
+    val grouped = ds.groupByKey($"_1", lit(1)).keyAs[(String, Int)]
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
 
-    checkAnswer(
+    checkDataset(
       agged,
       (("a", 1), 30), (("b", 1), 3), (("c", 1), 1))
   }
 
   test("groupBy columns asKey class, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1".as("a"), lit(1).as("b")).keyAs[ClassData]
+    val grouped = ds.groupByKey($"_1".as("a"), lit(1).as("b")).keyAs[ClassData]
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
 
-    checkAnswer(
+    checkDataset(
       agged,
       (ClassData("a", 1), 30), (ClassData("b", 1), 3), (ClassData("c", 1), 1))
   }
@@ -358,32 +374,32 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkAnswer(
-      ds.groupBy(_._1).agg(sum("_2").as[Long]),
+    checkDataset(
+      ds.groupByKey(_._1).agg(sum("_2").as[Long]),
       ("a", 30L), ("b", 3L), ("c", 1L))
   }
 
   test("typed aggregation: expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkAnswer(
-      ds.groupBy(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long]),
+    checkDataset(
+      ds.groupByKey(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long]),
       ("a", 30L, 32L), ("b", 3L, 5L), ("c", 1L, 2L))
   }
 
   test("typed aggregation: expr, expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkAnswer(
-      ds.groupBy(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long], count("*")),
+    checkDataset(
+      ds.groupByKey(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long], count("*")),
       ("a", 30L, 32L, 2L), ("b", 3L, 5L, 2L), ("c", 1L, 2L, 1L))
   }
 
   test("typed aggregation: expr, expr, expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkAnswer(
-      ds.groupBy(_._1).agg(
+    checkDataset(
+      ds.groupByKey(_._1).agg(
         sum("_2").as[Long],
         sum($"_2" + 1).as[Long],
         count("*").as[Long],
@@ -394,11 +410,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("cogroup") {
     val ds1 = Seq(1 -> "a", 3 -> "abc", 5 -> "hello", 3 -> "foo").toDS()
     val ds2 = Seq(2 -> "q", 3 -> "w", 5 -> "e", 5 -> "r").toDS()
-    val cogrouped = ds1.groupBy(_._1).cogroup(ds2.groupBy(_._1)) { case (key, data1, data2) =>
+    val cogrouped = ds1.groupByKey(_._1).cogroup(ds2.groupByKey(_._1)) { case (key, data1, data2) =>
       Iterator(key -> (data1.map(_._2).mkString + "#" + data2.map(_._2).mkString))
     }
 
-    checkAnswer(
+    checkDataset(
       cogrouped,
       1 -> "a#", 2 -> "#q", 3 -> "abcfoo#w", 5 -> "hello#er")
   }
@@ -406,11 +422,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("cogroup with complex data") {
     val ds1 = Seq(1 -> ClassData("a", 1), 2 -> ClassData("b", 2)).toDS()
     val ds2 = Seq(2 -> ClassData("c", 3), 3 -> ClassData("d", 4)).toDS()
-    val cogrouped = ds1.groupBy(_._1).cogroup(ds2.groupBy(_._1)) { case (key, data1, data2) =>
+    val cogrouped = ds1.groupByKey(_._1).cogroup(ds2.groupByKey(_._1)) { case (key, data1, data2) =>
       Iterator(key -> (data1.map(_._2.a).mkString + data2.map(_._2.a).mkString))
     }
 
-    checkAnswer(
+    checkDataset(
       cogrouped,
       1 -> "a", 2 -> "bc", 3 -> "d")
   }
@@ -418,7 +434,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("sample with replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()
-    checkAnswer(
+    checkDataset(
       data.sample(withReplacement = true, 0.05, seed = 13),
       5, 10, 52, 73)
   }
@@ -426,7 +442,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("sample without replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()
-    checkAnswer(
+    checkDataset(
       data.sample(withReplacement = false, 0.05, seed = 13),
       3, 17, 27, 58, 62)
   }
@@ -436,13 +452,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq(2, 3).toDS().as("b")
 
     val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
-    checkAnswer(joined, ("2", 2))
+    checkDataset(joined, ("2", 2))
   }
 
   test("self join") {
     val ds = Seq("1", "2").toDS().as("a")
     val joined = ds.joinWith(ds, lit(true))
-    checkAnswer(joined, ("1", "1"), ("1", "2"), ("2", "1"), ("2", "2"))
+    checkDataset(joined, ("1", "1"), ("1", "2"), ("2", "1"), ("2", "2"))
   }
 
   test("toString") {
@@ -468,7 +484,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
 
-    assert(ds.groupBy(p => p).count().collect().toSet ==
+    assert(ds.groupByKey(p => p).count().collect().toSet ==
       Set((KryoData(1), 1L), (KryoData(2), 1L)))
   }
 
@@ -487,7 +503,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
 
-    assert(ds.groupBy(p => p).count().collect().toSeq ==
+    assert(ds.groupByKey(p => p).count().collect().toSeq ==
       Seq((JavaData(1), 1L), (JavaData(2), 1L)))
   }
 
@@ -507,7 +523,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
     val ds2 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
 
-    checkAnswer(
+    checkDataset(
       ds1.joinWith(ds2, lit(true)),
       ((nullInt, "1"), (nullInt, "1")),
       ((new java.lang.Integer(22), "2"), (nullInt, "1")),
@@ -541,7 +557,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       sqlContext.createDataFrame(rowRDD, schema).as[NestedStruct]
     }
 
-    checkAnswer(
+    checkDataset(
       buildDataset(Row(Row("hello", 1))),
       NestedStruct(ClassData("hello", 1))
     )
@@ -558,11 +574,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-12478: top level null field") {
     val ds0 = Seq(NestedStruct(null)).toDS()
-    checkAnswer(ds0, NestedStruct(null))
+    checkDataset(ds0, NestedStruct(null))
     checkAnswer(ds0.toDF(), Row(null))
 
     val ds1 = Seq(DeepNestedStruct(NestedStruct(null))).toDS()
-    checkAnswer(ds1, DeepNestedStruct(NestedStruct(null)))
+    checkDataset(ds1, DeepNestedStruct(NestedStruct(null)))
     checkAnswer(ds1.toDF(), Row(Row(null)))
   }
 
@@ -570,26 +586,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val outer = new OuterClass
     OuterScopes.addOuterScope(outer)
     val ds = Seq(outer.InnerClass("1"), outer.InnerClass("2")).toDS()
-    checkAnswer(ds.map(_.a), "1", "2")
+    checkDataset(ds.map(_.a), "1", "2")
   }
 
   test("grouping key and grouped value has field with same name") {
     val ds = Seq(ClassData("a", 1), ClassData("a", 2)).toDS()
-    val agged = ds.groupBy(d => ClassNullableData(d.a, null)).mapGroups {
+    val agged = ds.groupByKey(d => ClassNullableData(d.a, null)).mapGroups {
       case (key, values) => key.a + values.map(_.b).sum
     }
 
-    checkAnswer(agged, "a3")
+    checkDataset(agged, "a3")
   }
 
   test("cogroup's left and right side has field with same name") {
     val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
     val right = Seq(ClassNullableData("a", 3), ClassNullableData("b", 4)).toDS()
-    val cogrouped = left.groupBy(_.a).cogroup(right.groupBy(_.a)) {
+    val cogrouped = left.groupByKey(_.a).cogroup(right.groupByKey(_.a)) {
       case (key, lData, rData) => Iterator(key + lData.map(_.b).sum + rData.map(_.b.toInt).sum)
     }
 
-    checkAnswer(cogrouped, "a13", "b24")
+    checkDataset(cogrouped, "a13", "b24")
   }
 
   test("give nice error message when the real number of fields doesn't match encoder schema") {
@@ -617,13 +633,34 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-13440: Resolving option fields") {
     val df = Seq(1, 2, 3).toDS()
     val ds = df.as[Option[Int]]
-    checkAnswer(
+    checkDataset(
       ds.filter(_ => true),
       Some(1), Some(2), Some(3))
   }
+
+  test("SPARK-13540 Dataset of nested class defined in Scala object") {
+    checkDataset(
+      Seq(OuterObject.InnerClass("foo")).toDS(),
+      OuterObject.InnerClass("foo"))
+  }
+
+  test("SPARK-14000: case class with tuple type field") {
+    checkDataset(
+      Seq(TupleClass((1, "a"))).toDS(),
+      TupleClass(1, "a")
+    )
+  }
 }
 
+case class OtherTuple(_1: String, _2: Int)
+
+case class TupleClass(data: (Int, String))
+
 class OuterClass extends Serializable {
+  case class InnerClass(a: String)
+}
+
+object OuterObject {
   case class InnerClass(a: String)
 }
 

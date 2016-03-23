@@ -24,8 +24,9 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, 
 import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
@@ -163,8 +164,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }.first()
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
-    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 && numFeatures <= 4096) ||
-      $(solver) == "normal") {
+    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 &&
+      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
       require($(elasticNetParam) == 0.0, "Only L2 regularization can be used when normal " +
         "solver is used.'")
       // For low dimensional data, WeightedLeastSquares is more efficiently since the
@@ -397,12 +398,8 @@ class LinearRegressionModel private[ml] (
    * thrown if `trainingSummary == None`.
    */
   @Since("1.5.0")
-  def summary: LinearRegressionTrainingSummary = trainingSummary match {
-    case Some(summ) => summ
-    case None =>
-      throw new SparkException(
-        "No training summary available for this LinearRegressionModel",
-        new NullPointerException())
+  def summary: LinearRegressionTrainingSummary = trainingSummary.getOrElse {
+    throw new SparkException("No training summary available for this LinearRegressionModel")
   }
 
   private[regression] def setSummary(summary: LinearRegressionTrainingSummary): this.type = {

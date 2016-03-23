@@ -19,6 +19,10 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import org.apache.commons.lang.NotImplementedException;
+import org.apache.parquet.column.Dictionary;
+import org.apache.parquet.io.api.Binary;
+
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
@@ -26,8 +30,6 @@ import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
-
-import org.apache.commons.lang.NotImplementedException;
 
 /**
  * This class represents a column of values and provides the main APIs to access the data
@@ -92,7 +94,7 @@ public abstract class ColumnVector {
     }
 
     @Override
-    public final int numElements() { return length; }
+    public int numElements() { return length; }
 
     @Override
     public ArrayData copy() {
@@ -107,62 +109,62 @@ public abstract class ColumnVector {
 
       if (dt instanceof BooleanType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getBoolean(offset + i);
           }
         }
       } else if (dt instanceof ByteType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getByte(offset + i);
           }
         }
       } else if (dt instanceof ShortType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getShort(offset + i);
           }
         }
       } else if (dt instanceof IntegerType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getInt(offset + i);
           }
         }
       } else if (dt instanceof FloatType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getFloat(offset + i);
           }
         }
       } else if (dt instanceof DoubleType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getDouble(offset + i);
           }
         }
       } else if (dt instanceof LongType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = data.getLong(offset + i);
           }
         }
       } else if (dt instanceof DecimalType) {
         DecimalType decType = (DecimalType)dt;
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = getDecimal(i, decType.precision(), decType.scale());
           }
         }
       } else if (dt instanceof StringType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
-            list[i] = ColumnVectorUtils.toString(data.getByteArray(offset + i));
+          if (!data.isNullAt(offset + i)) {
+            list[i] = getUTF8String(i).toString();
           }
         }
       } else if (dt instanceof CalendarIntervalType) {
         for (int i = 0; i < length; i++) {
-          if (!data.getIsNull(offset + i)) {
+          if (!data.isNullAt(offset + i)) {
             list[i] = getInterval(i);
           }
         }
@@ -173,10 +175,10 @@ public abstract class ColumnVector {
     }
 
     @Override
-    public final boolean isNullAt(int ordinal) { return data.getIsNull(offset + ordinal); }
+    public boolean isNullAt(int ordinal) { return data.isNullAt(offset + ordinal); }
 
     @Override
-    public final boolean getBoolean(int ordinal) {
+    public boolean getBoolean(int ordinal) {
       throw new NotImplementedException();
     }
 
@@ -204,28 +206,17 @@ public abstract class ColumnVector {
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
-      if (precision <= Decimal.MAX_LONG_DIGITS()) {
-        return Decimal.apply(getLong(ordinal), precision, scale);
-      } else {
-        byte[] bytes = getBinary(ordinal);
-        BigInteger bigInteger = new BigInteger(bytes);
-        BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
-        return Decimal.apply(javaDecimal, precision, scale);
-      }
+      return data.getDecimal(offset + ordinal, precision, scale);
     }
 
     @Override
     public UTF8String getUTF8String(int ordinal) {
-      Array child = data.getByteArray(offset + ordinal);
-      return UTF8String.fromBytes(child.byteArray, child.byteArrayOffset, child.length);
+      return data.getUTF8String(offset + ordinal);
     }
 
     @Override
     public byte[] getBinary(int ordinal) {
-      ColumnVector.Array array = data.getByteArray(offset + ordinal);
-      byte[] bytes = new byte[array.length];
-      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
-      return bytes;
+      return data.getBinary(offset + ordinal);
     }
 
     @Override
@@ -265,6 +256,8 @@ public abstract class ColumnVector {
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
+    if (isConstant) return;
+
     if (childColumns != null) {
       for (ColumnVector c: childColumns) {
         c.reset();
@@ -323,7 +316,7 @@ public abstract class ColumnVector {
   /**
    * Returns whether the value at rowId is NULL.
    */
-  public abstract boolean getIsNull(int rowId);
+  public abstract boolean isNullAt(int rowId);
 
   /**
    * Sets the value at rowId to `value`.
@@ -510,6 +503,15 @@ public abstract class ColumnVector {
   }
 
   /**
+   * Returns a utility object to get structs.
+   * provided to keep API compabilitity with InternalRow for code generation
+   */
+  public ColumnarBatch.Row getStruct(int rowId, int size) {
+    resultStruct.rowId = rowId;
+    return resultStruct;
+  }
+
+  /**
    * Returns the array at rowid.
    */
   public final Array getArray(int rowId) {
@@ -534,10 +536,62 @@ public abstract class ColumnVector {
   /**
    * Returns the value for rowId.
    */
-  public final Array getByteArray(int rowId) {
+  private Array getByteArray(int rowId) {
     Array array = getArray(rowId);
     array.data.loadBytes(array);
     return array;
+  }
+
+  /**
+   * Returns the value for rowId.
+   */
+  public MapData getMap(int ordinal) {
+    throw new NotImplementedException();
+  }
+
+  /**
+   * Returns the decimal for rowId.
+   */
+  public final Decimal getDecimal(int rowId, int precision, int scale) {
+    if (precision <= Decimal.MAX_INT_DIGITS()) {
+      return Decimal.createUnsafe(getInt(rowId), precision, scale);
+    } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      return Decimal.createUnsafe(getLong(rowId), precision, scale);
+    } else {
+      // TODO: best perf?
+      byte[] bytes = getBinary(rowId);
+      BigInteger bigInteger = new BigInteger(bytes);
+      BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+      return Decimal.apply(javaDecimal, precision, scale);
+    }
+  }
+
+  /**
+   * Returns the UTF8String for rowId.
+   */
+  public final UTF8String getUTF8String(int rowId) {
+    if (dictionary == null) {
+      ColumnVector.Array a = getByteArray(rowId);
+      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
+    } else {
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      return UTF8String.fromBytes(v.getBytes());
+    }
+  }
+
+  /**
+   * Returns the byte array for rowId.
+   */
+  public final byte[] getBinary(int rowId) {
+    if (dictionary == null) {
+      ColumnVector.Array array = getByteArray(rowId);
+      byte[] bytes = new byte[array.length];
+      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
+      return bytes;
+    } else {
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      return v.getBytes();
+    }
   }
 
   /**
@@ -771,6 +825,11 @@ public abstract class ColumnVector {
   public final boolean isArray() { return resultArray != null; }
 
   /**
+   * Marks this column as being constant.
+   */
+  public final void setIsConstant() { isConstant = true; }
+
+  /**
    * Maximum number of rows that can be stored in this column.
    */
   protected int capacity;
@@ -790,6 +849,12 @@ public abstract class ColumnVector {
    * having to clear NULL bits.
    */
   protected boolean anyNullsSet;
+
+  /**
+   * True if this column's values are fixed. This means the column values never change, even
+   * across resets.
+   */
+  protected boolean isConstant;
 
   /**
    * Default size of each array length value. This grows as necessary.
@@ -815,6 +880,39 @@ public abstract class ColumnVector {
    * Reusable Struct holder for getStruct().
    */
   protected final ColumnarBatch.Row resultStruct;
+
+  /**
+   * The Dictionary for this column.
+   *
+   * If it's not null, will be used to decode the value in getXXX().
+   */
+  protected Dictionary dictionary;
+
+  /**
+   * Reusable column for ids of dictionary.
+   */
+  protected ColumnVector dictionaryIds;
+
+  /**
+   * Update the dictionary.
+   */
+  public void setDictionary(Dictionary dictionary) {
+    this.dictionary = dictionary;
+  }
+
+  /**
+   * Reserve a integer column for ids of dictionary.
+   */
+  public ColumnVector reserveDictionaryIds(int capacity) {
+    if (dictionaryIds == null) {
+      dictionaryIds = allocate(capacity, DataTypes.IntegerType,
+        this instanceof OnHeapColumnVector ? MemoryMode.ON_HEAP : MemoryMode.OFF_HEAP);
+    } else {
+      dictionaryIds.reset();
+      dictionaryIds.reserve(capacity);
+    }
+    return dictionaryIds;
+  }
 
   /**
    * Sets up the common state and also handles creating the child columns if this is a nested

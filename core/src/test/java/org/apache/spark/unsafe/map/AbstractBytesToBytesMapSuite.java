@@ -64,9 +64,9 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private TestMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;
-  private final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
+  private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
-  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
+  final LinkedList<File> spillFilesCreated = new LinkedList<>();
   File tempDir;
 
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
@@ -92,9 +92,11 @@ public abstract class AbstractBytesToBytesMapSuite {
     spillFilesCreated.clear();
     MockitoAnnotations.initMocks(this);
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
-    when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(
+        new Answer<Tuple2<TempLocalBlockId, File>>() {
       @Override
-      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock)
+          throws Throwable {
         TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
         File file = File.createTempFile("spillFile", ".spill", tempDir);
         spillFilesCreated.add(file);
@@ -131,8 +133,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     Utils.deleteRecursively(tempDir);
     tempDir = null;
 
-    Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
     if (taskMemoryManager != null) {
+      Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
       long leakedMemory = taskMemoryManager.getMemoryConsumptionForThisTask();
       taskMemoryManager = null;
       Assert.assertEquals(0L, leakedMemory);
@@ -397,7 +399,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     final int size = 65536;
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
-    final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
+    final Map<ByteBuffer, byte[]> expected = new HashMap<>();
     final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, size, PAGE_SIZE_BYTES);
     try {
       // Fill the map to 90% full so that we can trigger probing
@@ -453,7 +455,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 64, pageSizeBytes);
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
-    final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
+    final Map<ByteBuffer, byte[]> expected = new HashMap<>();
     try {
       for (int i = 0; i < 1000; i++) {
         final byte[] key = getRandomByteArray(rand.nextInt(128));
@@ -544,7 +546,8 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void spillInIterator() throws IOException {
-    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, blockManager, 1, 0.75, 1024, false);
+    BytesToBytesMap map =
+        new BytesToBytesMap(taskMemoryManager, blockManager, 1, 0.75, 1024, false);
     try {
       int i;
       for (i = 0; i < 1024; i++) {

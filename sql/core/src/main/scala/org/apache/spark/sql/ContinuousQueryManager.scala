@@ -55,9 +55,8 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
    * @since 2.0.0
    */
   def get(name: String): ContinuousQuery = activeQueriesLock.synchronized {
-    activeQueries.get(name).getOrElse {
-      throw new IllegalArgumentException(s"There is no active query with name $name")
-    }
+    activeQueries.getOrElse(name,
+      throw new IllegalArgumentException(s"There is no active query with name $name"))
   }
 
   /**
@@ -165,13 +164,17 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
   }
 
   /** Start a query */
-  private[sql] def startQuery(name: String, df: DataFrame, sink: Sink): ContinuousQuery = {
+  private[sql] def startQuery(
+      name: String,
+      checkpointLocation: String,
+      df: DataFrame,
+      sink: Sink): ContinuousQuery = {
     activeQueriesLock.synchronized {
       if (activeQueries.contains(name)) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
-      val query = new StreamExecution(sqlContext, name, df.logicalPlan, sink)
+      val query = new StreamExecution(sqlContext, name, checkpointLocation, df.logicalPlan, sink)
       query.start()
       activeQueries.put(name, query)
       query

@@ -24,7 +24,8 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.shuffle.FetchFailedException
@@ -70,7 +71,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] var numBlocksToFetch = 0
 
   /**
-   * The number of blocks proccessed by the caller. The iterator is exhausted when
+   * The number of blocks processed by the caller. The iterator is exhausted when
    * [[numBlocksProcessed]] == [[numBlocksToFetch]].
    */
   private[this] var numBlocksProcessed = 0

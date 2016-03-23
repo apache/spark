@@ -126,7 +126,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = sqlContext.range(0, 5)
+      val df = sqlContext.range(0, 5).toDF()
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
       val summaryPath = new Path(path, "_metadata")
@@ -206,6 +206,26 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orderBy("index")
 
       checkAnswer(loadedDF, df)
+    }
+  }
+
+  test("SPARK-13543: Support for specifying compression codec for Parquet via option()") {
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "UNCOMPRESSED") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/table1"
+        val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
+        df.write
+          .option("compression", "GzIP")
+          .parquet(path)
+
+        val compressedFiles = new File(path).listFiles()
+        assert(compressedFiles.exists(_.getName.endsWith(".gz.parquet")))
+
+        val copyDf = sqlContext
+          .read
+          .parquet(path)
+        checkAnswer(df, copyDf)
+      }
     }
   }
 }

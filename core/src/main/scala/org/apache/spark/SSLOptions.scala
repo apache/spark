@@ -23,6 +23,8 @@ import javax.net.ssl.SSLContext
 
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
+import org.apache.spark.internal.Logging
+
 /**
  * SSLOptions class is a common container for SSL configuration options. It offers methods to
  * generate specific objects to configure SSL for different communication protocols.
