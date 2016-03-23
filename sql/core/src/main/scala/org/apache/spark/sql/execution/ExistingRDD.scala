@@ -255,6 +255,7 @@ private[sql] case class DataSourceScan(
       |       $numOutputRows.add(numRows);
       |     }
       |
+      |     // this loop is very perf sensitive and changes to it should be measured carefully
       |     while ($idx < numRows) {
       |       int $rowidx = $idx++;
       |       ${consume(ctx, columns1).trim}
