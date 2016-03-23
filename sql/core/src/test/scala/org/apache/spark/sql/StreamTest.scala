@@ -67,7 +67,14 @@ trait StreamTest extends QueryTest with Timeouts {
 
   implicit class RichContinuousQuery(cq: ContinuousQuery) {
     def stopQuietly(): Unit = quietly {
-      cq.stop()
+      try {
+        failAfter(10.seconds) {
+          cq.stop()
+        }
+      } catch {
+        case e: TestFailedDueToTimeoutException =>
+          logError(e.getMessage(), e)
+      }
     }
   }
 
