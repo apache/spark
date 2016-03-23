@@ -47,7 +47,7 @@ An interactive scala console can be invoked by running `build/sbt hive/console`.
 From here you can execute queries with HiveQl and manipulate DataFrame by using DSL.
 
 ```scala
-catalyst$ build/sbt hive/console
+$ build/sbt hive/console
 
 [info] Starting scala interpreter...
 import org.apache.spark.sql.catalyst.analysis._
@@ -61,22 +61,23 @@ import org.apache.spark.sql.execution
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.types._
 Type in expressions to have them evaluated.
 Type :help for more information.
 
 scala> val query = sql("SELECT * FROM (SELECT * FROM src) a")
-query: org.apache.spark.sql.DataFrame = org.apache.spark.sql.DataFrame@74448eed
+query: org.apache.spark.sql.DataFrame = [key: int, value: string]
 ```
 
 Query results are `DataFrames` and can be operated as such.
 ```
 scala> query.collect()
-res2: Array[org.apache.spark.sql.Row] = Array([238,val_238], [86,val_86], [311,val_311], [27,val_27]...
+res0: Array[org.apache.spark.sql.Row] = Array([238,val_238], [86,val_86], [311,val_311], [27,val_27]...
 ```
 
 You can also build further queries on top of these `DataFrames` using the query DSL.
 ```
 scala> query.where(query("key") > 30).select(avg(query("key"))).collect()
-res3: Array[org.apache.spark.sql.Row] = Array([274.79025423728814])
+res1: Array[org.apache.spark.sql.Row] = Array([274.79025423728814])
 ```
