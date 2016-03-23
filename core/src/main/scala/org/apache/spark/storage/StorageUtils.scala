@@ -175,7 +175,10 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   def memRemaining: Long = maxMem - memUsed
 
   /** Return the memory used by this block manager. */
-  def memUsed: Long = _nonRddStorageInfo._1 + _rddBlocks.keys.toSeq.map(memUsedByRdd).sum
+  def memUsed: Long = _nonRddStorageInfo._1 + cacheSize
+
+  /** Return the memory used by caching RDDs */
+  def cacheSize: Long = _rddBlocks.keys.toSeq.map(memUsedByRdd).sum
 
   /** Return the disk space used by this block manager. */
   def diskUsed: Long = _nonRddStorageInfo._2 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum
