@@ -45,14 +45,15 @@ class KMeans private (
     private var initializationMode: String,
     private var initializationSteps: Int,
     private var epsilon: Double,
-    private var seed: Long) extends Serializable with Logging {
+    private var seed: Long,
+    private var blockSize: Int) extends Serializable with Logging {
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
    * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, seed: random}.
    */
   @Since("0.8.0")
-  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
+  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong(), 128)
 
   /**
    * Number of clusters to create (k).
@@ -185,6 +186,24 @@ class KMeans private (
     this
   }
 
+  /**
+   * Block size for stacking input data in matrices to speed up the computation.
+   * Data is stacked within partitions. If block size is more than remaining data in
+   * a partition then it is adjusted to the size of this data.
+   * Recommended size is between 10 and 1000.
+   */
+  @Since("2.0.0")
+  def getBlockSize: Int = blockSize
+
+  /**
+   * Set the block size for stacking input data in matrices.
+   */
+  @Since("2.0.0")
+  def setBlockSize(blockSize: Int): this.type = {
+    this.blockSize = blockSize
+    this
+  }
+
   // Initial cluster centers can be provided as a KMeansModel object rather than using the
   // random or k-means|| initializationMode
   private var initialModel: Option[KMeansModel] = None
@@ -233,11 +252,9 @@ class KMeans private (
 
     val samplePoint = data.first()
     val dims = samplePoint.size
-    // TODO: make stack size can be configured.
-    val stackSize = 128
 
     val blockData = zippedData.mapPartitions { iter =>
-      iter.grouped(stackSize).map { points =>
+      iter.grouped(blockSize).map { points =>
         val realSize = points.size
         val pointsArray = new Array[Double](realSize * dims)
         val pointsNormArray = new Array[Double](realSize)
