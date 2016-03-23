@@ -309,6 +309,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @SafeVarargs
+  @SuppressWarnings("varargs")
   private static <T> Set<T> asSet(T... records) {
     return toSet(Arrays.asList(records));
   }
