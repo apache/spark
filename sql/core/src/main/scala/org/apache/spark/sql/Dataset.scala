@@ -314,7 +314,7 @@ class Dataset[T] private[sql](
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
-      Column(Alias(oldAttribute, newName)(qualifiers = oldAttribute.qualifiers))
+      Column(Alias(oldAttribute, newName)(qualifier = oldAttribute.qualifier))
     }
     select(newCols : _*)
   }
@@ -769,7 +769,7 @@ class Dataset[T] private[sql](
       Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
       val col = resolve(colName) match {
-        case attr: Attribute => UnresolvedAttribute(attr.qualifiers :+ attr.name)
+        case attr: Attribute => UnresolvedAttribute(attr.qualifier.toSeq :+ attr.name)
         case Alias(child, _) => UnresolvedAttribute.quotedString(child.sql)
       }
       Column(col)
@@ -1585,7 +1585,7 @@ class Dataset[T] private[sql](
     if (shouldRename) {
       val columns = output.map { col =>
         if (resolver(col.name, existingName)) {
-          Column(Alias(col, newName)(qualifiers = col.qualifiers))
+          Column(Alias(col, newName)(qualifier = col.qualifier))
         } else {
           Column(col)
         }

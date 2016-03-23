@@ -169,7 +169,7 @@ class PlannerSuite extends SharedSQLContext {
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProject])
     assert(planned.output ===
-      testData.select('key, 'value).logicalPlan.output.map(_.withQualifiers(Nil)))
+      testData.select('key, 'value).logicalPlan.output.map(_.withQualifier(None)))
   }
 
   test("terminal limit -> project -> sort should use TakeOrderedAndProject") {
