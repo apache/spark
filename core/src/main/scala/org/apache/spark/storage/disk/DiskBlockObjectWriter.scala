@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage.disk
 
-import java.io.{File, OutputStream}
+import java.io.File
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance}
@@ -33,12 +33,11 @@ import org.apache.spark.util.Utils
  * reopened again.
  */
 private[spark] class DiskBlockObjectWriter(
-    diskBlockWriter: DiskBlockWriter,
+    private[this] var diskBlockWriter: DiskBlockWriter,
     serializerInstance: SerializerInstance,
     val blockId: BlockId = null)
   extends Logging {
 
-  private var bs: OutputStream = null
   private var objOut: SerializationStream = null
   private var initialized = false
   private var hasBeenClosed = false
@@ -50,22 +49,24 @@ private[spark] class DiskBlockObjectWriter(
     if (hasBeenClosed) {
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
     }
-    bs = diskBlockWriter.open()
-    objOut = serializerInstance.serializeStream(bs)
+    diskBlockWriter.open()
+    objOut = serializerInstance.serializeStream(diskBlockWriter)
     initialized = true
     this
   }
 
   def close() {
-    if (initialized) {
-      Utils.tryWithSafeFinally {
+    Utils.tryWithSafeFinally {
+      if (initialized) {
         if (diskBlockWriter.syncWrites) {
           objOut.flush()
         }
-      } {
+      }
+    } {
+      if (initialized) {
         objOut.close()
       }
-      bs = null
+      diskBlockWriter = null
       objOut = null
       initialized = false
       hasBeenClosed = true
@@ -92,10 +93,16 @@ private[spark] class DiskBlockObjectWriter(
    * @return the file that this DiskBlockObjectWriter wrote to.
    */
   def revertPartialWritesAndClose(): File = {
-    if (initialized) {
-      objOut.flush()
+    try {
+      if (initialized) {
+        objOut.flush()
+      }
+      diskBlockWriter.revertPartialWritesAndClose()
+    } catch {
+      case e: Exception =>
+        logError("Uncaught exception while reverting partial writes to file " + file, e)
+        file
     }
-    diskBlockWriter.revertPartialWritesAndClose()
   }
 
   /**
@@ -120,6 +127,6 @@ private[spark] class DiskBlockObjectWriter(
   // For testing
   private[spark] def flush() {
     objOut.flush()
-    bs.flush()
+    diskBlockWriter.flush()
   }
 }
