@@ -389,8 +389,8 @@ class Params(Identifiable):
         if extra is None:
             extra = dict()
         that = copy.copy(self)
-        that._paramMap = self.extractParamMap(extra)
-        return that
+        that._paramMap = copy.copy(self._paramMap)
+        return self._copyValues(that, extra)
 
     def _shouldOwn(self, param):
         """
