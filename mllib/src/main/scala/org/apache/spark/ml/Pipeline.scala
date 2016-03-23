@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
  */
 @DeveloperApi
-trait PipelineStage extends Params with Logging {
+abstract class PipelineStage extends Params with Logging {
 
   /**
    * :: DeveloperApi ::

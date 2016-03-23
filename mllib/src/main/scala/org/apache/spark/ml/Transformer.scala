@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
  * Abstract class for transformers that transform one dataset into another.
  */
 @DeveloperApi
-trait Transformer extends PipelineStage {
+abstract class Transformer extends PipelineStage {
 
   /**
    * Transforms the dataset with optional parameters

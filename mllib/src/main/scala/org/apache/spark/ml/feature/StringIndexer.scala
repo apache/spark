@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.{ModelEstimator, Estimator, Model, Transformer}
+import org.apache.spark.ml.{MutableEstimator, Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -107,9 +107,8 @@ private[feature] trait HasStringIndex extends Params { self: HasInputCol => // T
  * @see [[IndexToString]] for the inverse transformation
  */
 @Experimental
-class StringIndexer(override val uid: String) extends ModelEstimator[StringIndexer]
-  with Model[StringIndexer] with StringIndexerBase with DefaultParamsWritable
-  with Transformer {
+class StringIndexer(override val uid: String) extends MutableEstimator[StringIndexer]
+  with StringIndexerBase with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("strIdx"))
 
