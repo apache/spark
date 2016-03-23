@@ -133,7 +133,7 @@ class GaussianMixture private (
   @Since("1.3.0")
   def setConvergenceTol(convergenceTol: Double): this.type = {
     require(convergenceTol >= 0.0,
-      s"Convergence tolerance must be no less than but got ${convergenceTol}")
+      s"Convergence tolerance must be no less 0 than but got ${convergenceTol}")
     this.convergenceTol = convergenceTol
     this
   }
