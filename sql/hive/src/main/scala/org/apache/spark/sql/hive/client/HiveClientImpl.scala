@@ -241,10 +241,6 @@ private[hive] class HiveClientImpl(
     state.err = stream
   }
 
-  override def currentDatabase: String = withHiveState {
-    state.getCurrentDatabase
-  }
-
   override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
     if (getDatabaseOption(databaseName).isDefined) {
       state.setCurrentDatabase(databaseName)
