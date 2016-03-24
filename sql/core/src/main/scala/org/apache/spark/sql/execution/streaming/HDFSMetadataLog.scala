@@ -103,7 +103,6 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
     var nextId = 0
     while (true) {
       val tempPath = new Path(metadataPath, s".${batchId}_$nextId.tmp")
-      fileManager.deleteOnExit(tempPath)
       try {
         val output = fileManager.create(tempPath)
         try {
@@ -145,6 +144,8 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
           // metadata path. In addition, the old Streaming also have this issue, people can create
           // malicious checkpoint files to crash a Streaming application too.
           nextId += 1
+      } finally {
+        fileManager.delete(tempPath)
       }
     }
   }
@@ -210,18 +211,38 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
 
 object HDFSMetadataLog {
 
-  /** A simple trait to abstract out the file management operations needed by HDFSMetadataLog */
+  /** A simple trait to abstract out the file management operations needed by HDFSMetadataLog. */
   trait FileManager {
+
+    /** List the files in a path that matches a filter. */
     def list(path: Path, filter: PathFilter): Array[FileStatus]
+
+    /** Make directory at the give path and all its parent directories as needed. */
     def mkdirs(path: Path): Unit
+
+    /** Whether path exists */
     def exists(path: Path): Boolean
+
+    /** Open a file for reading, or throw exception if it does not exist. */
     def open(path: Path): FSDataInputStream
+
+    /** Create path, or throw exception if it already exists */
     def create(path: Path): FSDataOutputStream
+
+    /**
+     * Atomically ename path, or throw exception if it cannot be done.
+     * Should throw FileAlreadyExistsException if file already exists.
+     * Should throw FileNotFound exception if the file does not exist.
+     */
     def rename(srcPath: Path, destPath: Path): Unit
-    def deleteOnExit(path: Path): Unit
+
+    /** Recursively delete a path if it exists. Should not throw exception if file doesn't exist. */
+    def delete(path: Path): Unit
   }
 
-  /** Implementation of FileManager using newer FileContext API */
+  /**
+   * Default implementation of FileManager using newer FileContext API.
+   */
   class FileContextManager(path: Path, hadoopConf: Configuration) extends FileManager {
     private val fc = if (path.toUri.getScheme == null) {
       FileContext.getFileContext(hadoopConf)
@@ -253,28 +274,44 @@ object HDFSMetadataLog {
       fc.util().exists(path)
     }
 
-    override def deleteOnExit(path: Path): Unit = {
-      fc.deleteOnExit(path)
+    override def delete(path: Path): Unit = {
+      try {
+        fc.delete(path, true)
+      } catch {
+        case e: FileNotFoundException =>
+        // ignore if file has already been deleted
+      }
     }
   }
 
-  /** Implementation of FileManager using older FileSystem API */
+  /**
+   * Implementation of FileManager using older FileSystem API. Note that this implementation
+   * cannot provide atomic renaming of paths, hence can lead to consistency issues. This
+   * should be used only as a backup option, when FileContextManager cannot be used.
+   */
   class FileSystemManager(path: Path, hadoopConf: Configuration) extends FileManager {
-    private val fs = if (path.toUri.getScheme == null) {
-      FileSystem.get(hadoopConf)
-    } else {
-      FileSystem.get(path.toUri, hadoopConf)
-    }
+    private val fs = path.getFileSystem(hadoopConf)
 
     override def list(path: Path, filter: PathFilter): Array[FileStatus] = {
       fs.listStatus(path, filter)
     }
 
+    /**
+     * Rename a path. Note that this implementation is not atomic.
+     * @throws FileNotFoundException if source path does not exist.
+     * @throws FileAlreadyExistsException if destination path already exists.
+     * @throws IOException if renaming fails for some unknown reason.
+     */
     override def rename(srcPath: Path, destPath: Path): Unit = {
-      if (fs.exists(destPath)) {
-        throw new FileAlreadyExistsException(s"File already exists: $destPath")
+      if (!fs.exists(srcPath)) {
+        throw new FileNotFoundException(s"Source path already exists: $srcPath")
       }
-      fs.rename(srcPath, destPath)
+      if (fs.exists(destPath)) {
+        throw new FileAlreadyExistsException(s"Destination path already exists: $destPath")
+      }
+      if (!fs.rename(srcPath, destPath)) {
+        throw new IOException(s"Failed to rename $srcPath to $destPath")
+      }
     }
 
     override def mkdirs(path: Path): Unit = {
@@ -293,8 +330,13 @@ object HDFSMetadataLog {
       fs.exists(path)
     }
 
-    override def deleteOnExit(path: Path): Unit = {
-      fs.deleteOnExit(path)
+    override def delete(path: Path): Unit = {
+      try {
+        fs.delete(path, true)
+      } catch {
+        case e: FileNotFoundException =>
+          // ignore if file has already been deleted
+      }
     }
   }
 }

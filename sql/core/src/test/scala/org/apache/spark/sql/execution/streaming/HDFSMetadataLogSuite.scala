@@ -17,21 +17,25 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.{File, FileNotFoundException, IOException}
 import java.net.URI
+import java.nio.file.Files
 import java.util.ConcurrentModificationException
 
 import scala.util.Random
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.scalatest.concurrent.AsyncAssertions._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.execution.streaming.FakeFileSystem._
+import org.apache.spark.sql.execution.streaming.HDFSMetadataLog.{FileContextManager, FileManager, FileSystemManager}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
-
 
   override protected val sparkConf =
     new SparkConf()
@@ -41,9 +45,24 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
 
-  test("basic") {
+  test("FileManager: FileContextManager") {
     withTempDir { temp =>
-      val metadataLog = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
+      val path = new Path(temp.getAbsolutePath)
+      testManager(path, new FileContextManager(path, new Configuration))
+    }
+  }
+
+  test("FileManager: FileSystemManager") {
+    withTempDir { temp =>
+      val path = new Path(temp.getAbsolutePath)
+      testManager(path, new FileSystemManager(path, new Configuration))
+    }
+  }
+
+  test("HDFSMetadataLog: basic") {
+    withTempDir { temp =>
+      val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
+      val metadataLog = new HDFSMetadataLog[String](sqlContext, dir.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
       assert(metadataLog.getLatest() === Some(0 -> "batch0"))
       assert(metadataLog.get(0) === Some("batch0"))
@@ -65,7 +84,16 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("restart") {
+  testQuietly("HDFSMetadataLog: fallback from FileContext to FileSystem") {
+    sqlContext.sparkContext.hadoopConfiguration.set(
+      s"fs.$scheme.impl",
+      classOf[FakeFileSystem].getName)
+    withTempDir { temp =>
+      val metadataLog = new HDFSMetadataLog[String](sqlContext, s"$scheme://$temp")
+    }
+  }
+
+  test("HDFSMetadataLog: restart") {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
@@ -83,7 +111,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("metadata directory collision") {
+  test("HDFSMetadataLog: metadata directory collision") {
     withTempDir { temp =>
       val waiter = new Waiter
       val maxBatchId = 100
@@ -115,38 +143,57 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  testQuietly("fallback from FileContext to FileSystem") {
-    sqlContext.sparkContext.hadoopConfiguration.set(
-      s"fs.$scheme.impl",
-      classOf[FakeFileSystem].getName)
-    withTempDir { temp =>
-      val metadataLog = new HDFSMetadataLog[String](sqlContext, s"$scheme://$temp")
 
-      assert(metadataLog.add(0, "batch0"))
-      assert(metadataLog.getLatest() === Some(0 -> "batch0"))
-      assert(metadataLog.get(0) === Some("batch0"))
-      assert(metadataLog.getLatest() === Some(0 -> "batch0"))
-      assert(metadataLog.get(None, 0) === Array(0 -> "batch0"))
+  def testManager(basePath: Path, fm: FileManager): Unit = {
+    // Mkdirs
+    val dir = new Path(s"$basePath/dir/subdir/subsubdir")
+    assert(!fm.exists(dir))
+    fm.mkdirs(dir)
+    assert(fm.exists(dir))
+    fm.mkdirs(dir)
 
-      assert(metadataLog.add(1, "batch1"))
-      assert(metadataLog.get(0) === Some("batch0"))
-      assert(metadataLog.get(1) === Some("batch1"))
-      assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+    // List
+    val acceptAllFilter = new PathFilter {
+      override def accept(path: Path): Boolean = true
+    }
+    val rejectAllFilter = new PathFilter {
+      override def accept(path: Path): Boolean = false
+    }
+    assert(fm.list(basePath, acceptAllFilter).exists(_.getPath.getName == "dir"))
+    assert(fm.list(basePath, rejectAllFilter).length === 0)
 
-      // Adding the same batch does nothing
-      metadataLog.add(1, "batch1-duplicated")
-      assert(metadataLog.get(0) === Some("batch0"))
-      assert(metadataLog.get(1) === Some("batch1"))
-      assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+    // Create
+    val path = new Path(s"$dir/file")
+    assert(!fm.exists(path))
+    fm.create(path).close()
+    assert(fm.exists(path))
+    intercept[IOException] {
+      fm.create(path)
+    }
 
-      // Restarting recovers the same data
-      val metadataLog2 = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
-      assert(metadataLog2.get(0) === Some("batch0"))
-      assert(metadataLog2.get(1) === Some("batch1"))
-      assert(metadataLog2.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog2.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+    // Open and delete
+    fm.open(path)
+    fm.delete(path)
+    assert(!fm.exists(path))
+    intercept[IOException] {
+      fm.open(path)
+    }
+    fm.delete(path)  // should not throw exception
+
+    // Rename
+    val path1 = new Path(s"$dir/file1")
+    val path2 = new Path(s"$dir/file2")
+    fm.create(path1).close()
+    assert(fm.exists(path1))
+    fm.rename(path1, path2)
+    intercept[FileNotFoundException] {
+      fm.rename(path1, path2)
+    }
+    val path3 = new Path(s"$dir/file3")
+    fm.create(path3).close()
+    assert(fm.exists(path3))
+    intercept[FileAlreadyExistsException] {
+      fm.rename(path2, path3)
     }
   }
 }
