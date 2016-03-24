@@ -40,14 +40,21 @@ statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
     | CREATE DATABASE (IF NOT EXISTS)? identifier
-        (COMMENT comment=STRING)? (LOCATION location=STRING)?
+        (COMMENT comment=STRING)? locationSpec?
         (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
-    | createTable ('(' colTypeList ')')? tableProvider tableProperties #createTableUsing
-    | createTable tableProvider tableProperties? AS? query             #createTableUsingAsSelect
-    | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
-        (USING resource (',' resource)*)?                              #createFunction
-    | DROP TABLE (IF EXISTS)? tableIdentifier                          #dropTable                   // TODO HIVE - add purge/replication clause
-    | DELETE FROM tableIdentifier (WHERE booleanExpression)?           #delete                      // TODO HIVE
+    | createTableHeader ('(' colTypeList ')')? tableProvider
+        (OPTIONS tablePropertyList)?                                   #createTableUsing
+    | createTableHeader tableProvider
+        (OPTIONS tablePropertyList)? AS? query                         #createTableUsing
+    | createTableHeader LIKE tableIdentifier
+        rowFormat?  createFileFormat? locationSpec?
+        (TBLPROPERTIES tablePropertyList)?                             #createTableLike
+    | createTableHeader '(' colTypeList ')' (COMMENT STRING)?
+        (PARTITIONED BY identifierList)? bucketSpec? skewSpec?
+        rowFormat?  createFileFormat? locationSpec?
+        (TBLPROPERTIES tablePropertyList)?                             #createTable
+    | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
+        (identifier | FOR COLUMNS identifierList)                      #analyze
     | ALTER TABLE from=tableIdentifier RENAME TO to=tableIdentifier    #renameTable
     | ALTER TABLE tableIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
@@ -56,23 +63,19 @@ statement
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
-            SET SERDEPROPERTIES tablePropertyList                      #setTableSerDe
-    | ALTER TABLE tableIdentifier CLUSTERED BY identifierList
-            (SORTED BY orderedIdentifierList)?
-            INTO INTEGER_VALUE BUCKETS                                 #bucketTable
+        SET SERDEPROPERTIES tablePropertyList                          #setTableSerDe
+    | ALTER TABLE tableIdentifier bucketSpec                           #bucketTable
     | ALTER TABLE tableIdentifier NOT CLUSTERED                        #unclusterTable
     | ALTER TABLE tableIdentifier NOT SORTED                           #unsortTable
-    | ALTER TABLE tableIdentifier SKEWED BY identifierList
-       ON (constantList | nestedConstantList)
-       (STORED AS DIRECTORIES)?                                        #skewTable
+    | ALTER TABLE tableIdentifier skewSpec                             #skewTable
     | ALTER TABLE tableIdentifier NOT SKEWED                           #unskewTable
     | ALTER TABLE tableIdentifier NOT STORED AS DIRECTORIES            #unstoreTable
     | ALTER TABLE tableIdentifier
-         SET SKEWED LOCATION skewedLocationList                        #setTableSkewLocations
+        SET SKEWED LOCATION skewedLocationList                         #setTableSkewLocations
     | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
-         partitionSpecLocation+                                        #addTablePartition
+        partitionSpecLocation+                                         #addTablePartition
     | ALTER TABLE tableIdentifier
-         from=partitionSpec RENAME TO to=partitionSpec                 #renameTablePartition
+        from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER TABLE from=tableIdentifier
         EXCHANGE partitionSpec WITH TABLE to=tableIdentifier           #exchangeTablePartition
     | ALTER TABLE tableIdentifier
@@ -81,7 +84,7 @@ statement
     | ALTER TABLE tableIdentifier UNARCHIVE partitionSpec              #unarchiveTablePartition
     | ALTER TABLE tableIdentifier partitionSpec?
         SET FILEFORMAT fileFormat                                      #setTableFileFormat
-    | ALTER TABLE tableIdentifier partitionSpec? SET LOCATION STRING   #setTableLocation
+    | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
     | ALTER TABLE tableIdentifier TOUCH partitionSpec?                 #touchTable
     | ALTER TABLE tableIdentifier partitionSpec? COMPACT STRING        #compactTable
     | ALTER TABLE tableIdentifier partitionSpec? CONCATENATE           #concatenateTable
@@ -92,29 +95,67 @@ statement
         ADD COLUMNS '(' colTypeList ')' (CASCADE | RESTRICT)?          #addColumns
     | ALTER TABLE tableIdentifier partitionSpec?
         REPLACE COLUMNS '(' colTypeList ')' (CASCADE | RESTRICT)?      #replaceColumns
-    | CREATE (OR REPLACE)? VIEW qualifiedName AS query                 #createView                  // TODO HIVE
-    | DROP VIEW (IF EXISTS)? qualifiedName                             #dropView                    // TODO HIVE
+    | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?
+        (FOR METADATA? REPLICATION '(' STRING ')')?                    #dropTable
+    | CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? tableIdentifier
+        identifierCommentList? (COMMENT STRING)?
+        (PARTITIONED ON identifierList)?
+        (TBLPROPERTIES tablePropertyList)? AS query                    #createView
+    | DELETE FROM tableIdentifier (WHERE booleanExpression)?           #delete
+    | TRUNCATE TABLE tableIdentifier partitionSpec?
+        (COLUMNS identifierList)?                                      #truncate
+    | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
+    | ALTER VIEW from=tableIdentifier AS? RENAME TO to=tableIdentifier #renameView
+    | ALTER VIEW from=tableIdentifier AS?
+        SET TBLPROPERTIES tablePropertyList                            #setViewProperties
+    | ALTER VIEW from=tableIdentifier AS?
+        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetViewProperties
+    | ALTER VIEW from=tableIdentifier AS?
+        ADD (IF NOT EXISTS)? partitionSpecLocation+                    #addViewPartition
+    | ALTER VIEW from=tableIdentifier AS?
+        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropViewPartition
+    | DROP VIEW (IF EXISTS)? qualifiedName                             #dropView
+    | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
+        (USING resource (',' resource)*)?                              #createFunction
     | EXPLAIN explainOption* statement                                 #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE (qualifiedName | pattern=STRING))?                       #showTables
-    | SHOW COLUMNS (FROM | IN) qualifiedName                           #showColumns                 // TODO HIVE
+    | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)? #showColumns
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
-    | START TRANSACTION (transactionMode (',' transactionMode)*)?      #startTransaction            // TODO HIVE
-    | COMMIT WORK?                                                     #commit                      // TODO HIVE
-    | ROLLBACK WORK?                                                   #rollback                    // TODO HIVE
-    | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions              // TODO HIVE
+    | START TRANSACTION (transactionMode (',' transactionMode)*)?      #startTransaction
+    | COMMIT WORK?                                                     #commit
+    | ROLLBACK WORK?                                                   #rollback
+    | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
     | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache
+    | DFS .*?                                                          #dfs
+    | ADD identifier .*?                                               #addResource
     | SET .*?                                                          #setConfiguration
     ;
 
-createTable
-    : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? tableIdentifier
+createTableHeader
+    : CREATE TEMPORARY? EXTERNAL? TABLE (IF NOT EXISTS)? tableIdentifier
+    ;
+
+bucketSpec
+    : CLUSTERED BY identifierList
+      (SORTED BY orderedIdentifierList)?
+      INTO INTEGER_VALUE BUCKETS
+    ;
+
+skewSpec
+    : SKEWED BY identifierList
+      ON (constantList | nestedConstantList)
+      (STORED AS DIRECTORIES)?
+    ;
+
+locationSpec
+    : LOCATION STRING
     ;
 
 query
@@ -127,7 +168,7 @@ insertInto
     ;
 
 partitionSpecLocation
-    : partitionSpec (LOCATION STRING)?
+    : partitionSpec locationSpec?
     ;
 
 partitionSpec
@@ -152,10 +193,6 @@ namedQuery
 
 tableProvider
     : USING qualifiedName
-    ;
-
-tableProperties
-    :(OPTIONS | WITH) tablePropertyList
     ;
 
 tablePropertyList
@@ -187,10 +224,19 @@ skewedLocationList
     : '(' skewedLocation (',' skewedLocation)* ')'
     ;
 
+createFileFormat
+    : STORED AS fileFormat
+    | STORED BY storageHandler
+    ;
+
 fileFormat
     : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING SERDE serdeCls=STRING
       (INPUTDRIVER inDriver=STRING OUTPUTDRIVER outDriver=STRING)?                         #tableFileFormat
     | identifier                                                                           #genericFileFormat
+    ;
+
+storageHandler
+    : STRING (WITH SERDEPROPERTIES tablePropertyList)?
     ;
 
 resource
@@ -324,6 +370,14 @@ orderedIdentifier
     : identifier ordering=(ASC | DESC)?
     ;
 
+identifierCommentList
+    : '(' identifierComment (',' identifierComment)* ')'
+    ;
+
+identifierComment
+    : identifier (COMMENT STRING)?
+    ;
+
 relationPrimary
     : tableIdentifier (AS? identifier)?                             #tableName
     | '(' queryNoWith ')' (AS? identifier)?                         #aliasedQuery
@@ -341,7 +395,7 @@ rowFormat
     ;
 
 rowFormatSerde
-    : ROW FORMAT SERDE name=STRING (WITH SERDEPROPERTIES props=tableProperties)?
+    : ROW FORMAT SERDE name=STRING (WITH SERDEPROPERTIES props=tablePropertyList)?
     ;
 
 rowFormatDelimited
@@ -500,15 +554,8 @@ explainOption
     ;
 
 transactionMode
-    : ISOLATION LEVEL levelOfIsolation    #isolationLevel
+    : ISOLATION LEVEL SNAPSHOT            #isolationLevel
     | READ accessMode=(ONLY | WRITE)      #transactionAccessMode
-    ;
-
-levelOfIsolation
-    : READ UNCOMMITTED                    #readUncommitted
-    | READ COMMITTED                      #readCommitted
-    | REPEATABLE READ                     #repeatableRead
-    | SERIALIZABLE                        #serializable
     ;
 
 qualifiedName
@@ -559,11 +606,12 @@ nonReserved
     | IF
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
-    | SERIALIZABLE | REPEATABLE | COMMITTED | UNCOMMITTED | READ | WRITE | ONLY
+    | SNAPSHOT | READ | WRITE | ONLY
     | SORT | CLUSTER | DISTRIBUTE UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE | FIRST
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
-    | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES
+    | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
+    | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL
     ;
 
 SELECT: 'SELECT';
@@ -670,10 +718,7 @@ ROLLBACK: 'ROLLBACK';
 WORK: 'WORK';
 ISOLATION: 'ISOLATION';
 LEVEL: 'LEVEL';
-SERIALIZABLE: 'SERIALIZABLE';
-REPEATABLE: 'REPEATABLE';
-COMMITTED: 'COMMITTED';
-UNCOMMITTED: 'UNCOMMITTED';
+SNAPSHOT: 'SNAPSHOT';
 READ: 'READ';
 WRITE: 'WRITE';
 ONLY: 'ONLY';
@@ -762,6 +807,15 @@ OUTPUTFORMAT: 'OUTPUTFORMAT';
 INPUTDRIVER: 'INPUTDRIVER';
 OUTPUTDRIVER: 'OUTPUTDRIVER';
 DATABASE: 'DATABASE';
+DFS: 'DFS';
+TRUNCATE: 'TRUNCATE';
+METADATA: 'METADATA';
+REPLICATION: 'REPLICATION';
+ANALYZE: 'ANALYZE';
+COMPUTE: 'COMPUTE';
+STATISTICS: 'STATISTICS';
+PARTITIONED: 'PARTITIONED';
+EXTERNAL: 'EXTERNAL';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

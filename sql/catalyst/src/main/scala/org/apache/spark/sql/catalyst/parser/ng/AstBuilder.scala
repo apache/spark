@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
 import org.apache.spark.internal.Logging
@@ -328,16 +329,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         val withFilter = relation.optionalMap(where)(filter)
 
         // Create the attributes.
-        val attributes = if (colTypeList != null) {
+        val (attributes, schemaLess) = if (colTypeList != null) {
           // Typed return columns.
-          createStructType(colTypeList).toAttributes
+          (createStructType(colTypeList).toAttributes, false)
         } else if (identifierSeq != null) {
           // Untyped return columns.
-          visitIdentifierSeq(identifierSeq).map { name =>
+          val attrs = visitIdentifierSeq(identifierSeq).map { name =>
             AttributeReference(name, StringType, nullable = true)()
           }
+          (attrs, false)
         } else {
-          Seq.empty
+          (Seq(AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()), true)
         }
 
         // Create the transform.
@@ -346,7 +349,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           string(script),
           attributes,
           withFilter,
-          withScriptIOSchema(inRowFormat, outRowFormat, outRecordReader))
+          withScriptIOSchema(inRowFormat, outRowFormat, outRecordReader, schemaLess))
 
       case SqlBaseParser.SELECT =>
         // Regular select
@@ -385,7 +388,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   protected def withScriptIOSchema(
       inRowFormat: RowFormatContext,
       outRowFormat: RowFormatContext,
-      outRecordReader: Token): ScriptInputOutputSchema = null
+      outRecordReader: Token,
+      schemaLess: Boolean): ScriptInputOutputSchema = null
 
   /**
    * Create a logical plan for a given 'FROM' clause. Note that we support multiple (comma
@@ -1455,6 +1459,13 @@ private[sql] object AstBuilder extends Logging {
   def source(ctx: ParserRuleContext): String = ParseSource.cmd(ctx) match {
     case Some(sql) => sql
     case None => ""
+  }
+
+  /** Get all the text which comes after the given node. */
+  def remainder(ctx: ParserRuleContext): String = {
+    val stream = ctx.getStop.getInputStream
+    val interval = Interval.of(ctx.getStart.getStopIndex + 1, stream.size())
+    stream.getText(interval)
   }
 
   /** Convert a string token into a string. */

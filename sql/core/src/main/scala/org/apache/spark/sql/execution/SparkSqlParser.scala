@@ -18,8 +18,6 @@ package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
 
-import org.antlr.v4.runtime.misc.Interval
-
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ng.{AbstractSqlParser, AstBuilder, ParseException}
@@ -49,19 +47,15 @@ class SparkSqlAstBuilder extends AstBuilder {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    // Get the remaining text from the stream.
-    val stream = ctx.getStop.getInputStream
-    val interval = Interval.of(ctx.getStart.getStopIndex + 1, stream.size())
-    val remainder = stream.getText(interval)
-
     // Construct the command.
-    val keyValueSeparatorIndex = remainder.indexOf('=')
+    val raw = remainder(ctx)
+    val keyValueSeparatorIndex = raw.indexOf('=')
     if (keyValueSeparatorIndex >= 0) {
-      val key = remainder.substring(0, keyValueSeparatorIndex).trim
-      val value = remainder.substring(keyValueSeparatorIndex + 1).trim
+      val key = raw.substring(0, keyValueSeparatorIndex).trim
+      val value = raw.substring(keyValueSeparatorIndex + 1).trim
       SetCommand(Some(key -> Option(value)))
-    } else if (remainder.nonEmpty) {
-      SetCommand(Some(remainder.trim -> None))
+    } else if (raw.nonEmpty) {
+      SetCommand(Some(raw.trim -> None))
     } else {
       SetCommand(None)
     }
@@ -161,80 +155,52 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  /** Type to keep track of a table header. */
+  type TableHeader = (TableIdentifier, Boolean, Boolean, Boolean)
+
   /**
    * Validate a create table statement and return the [[TableIdentifier]].
    */
-  override def visitCreateTable(
-      ctx: CreateTableContext): (TableIdentifier, Boolean, Boolean) = withOrigin(ctx) {
+  override def visitCreateTableHeader(
+      ctx: CreateTableHeaderContext): TableHeader = withOrigin(ctx) {
     val temporary = ctx.TEMPORARY != null
     val ifNotExists = ctx.EXISTS != null
     assert(!temporary || !ifNotExists,
       "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.",
       ctx)
-    (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists)
+    (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists, ctx.EXTERNAL != null)
   }
 
   /**
-   * Create a [[CreateTableUsing]] logical plan.
-   */
-  override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
-    val (table, temporary, ifNotExists) = visitCreateTable(ctx.createTable)
-    val options = Option(ctx.tableProperties)
-      .map(visitTableProperties)
-      .getOrElse(Map.empty)
-    CreateTableUsing(
-      table,
-      Option(ctx.colTypeList).map(createStructType),
-      ctx.tableProvider.qualifiedName.getText,
-      temporary,
-      options,
-      ifNotExists,
-      managedIfNoPath = false)
-  }
-
-  /**
-   * Create a [[CreateTableUsingAsSelect]] logical plan.
+   * Create a [[CreateTableUsing]] or a [[CreateTableUsingAsSelect]] logical plan.
    *
    * TODO add bucketing and partitioning.
    */
-  override def visitCreateTableUsingAsSelect(
-      ctx: CreateTableUsingAsSelectContext): LogicalPlan = withOrigin(ctx) {
-    // Get basic configuration.
-    val (table, temporary, ifNotExists) = visitCreateTable(ctx.createTable)
-    val options = Option(ctx.tableProperties)
-      .map(visitTableProperties)
-      .getOrElse(Map.empty)
-
-    // Get the backing query.
-    val query = plan(ctx.query)
-
-    // Determine the storage mode.
-    val mode = if (ifNotExists) {
-      SaveMode.Ignore
-    } else if (temporary) {
-      SaveMode.Overwrite
-    } else {
-      SaveMode.ErrorIfExists
+  override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
+    val (table, temporary, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    if (external) {
+      logWarning("EXTERNAL option is not supported.")
     }
+    val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
+    val provider = ctx.tableProvider.qualifiedName.getText
 
-    CreateTableUsingAsSelect(
-      table,
-      ctx.tableProvider.qualifiedName.getText,
-      temporary,
-      Array.empty,
-      None,
-      mode,
-      options,
-      query
-    )
-  }
+    if (ctx.query != null) {
+      // Get the backing query.
+      val query = plan(ctx.query)
 
-  /**
-   * Convert table properties into a key-value map.
-   */
-  override def visitTableProperties(
-      ctx: TablePropertiesContext): Map[String, String] = withOrigin(ctx) {
-    visitTablePropertyList(ctx.tablePropertyList)
+      // Determine the storage mode.
+      val mode = if (ifNotExists) {
+        SaveMode.Ignore
+      } else if (temporary) {
+        SaveMode.Overwrite
+      } else {
+        SaveMode.ErrorIfExists
+      }
+      CreateTableUsingAsSelect(table, provider, temporary, Array.empty, None, mode, options, query)
+    } else {
+      val struct = Option(ctx.colTypeList).map(createStructType)
+      CreateTableUsing(table, struct, provider, temporary, options, ifNotExists, false)
+    }
   }
 
   /**
@@ -268,7 +234,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     CreateDatabase(
       ctx.identifier.getText,
       ctx.EXISTS != null,
-      Option(ctx.location).map(string),
+      Option(ctx.locationSpec).map(visitLocationSpec),
       Option(ctx.comment).map(string),
       Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))(
       source(ctx))
@@ -378,16 +344,9 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitBucketTable(ctx: BucketTableContext): LogicalPlan = withOrigin(ctx) {
-    val sortColumnNames = Option(ctx.orderedIdentifierList).toSeq
-      .flatMap(_.orderedIdentifier.asScala)
-      .map(_.identifier.getText)
-
     AlterTableStorageProperties(
       visitTableIdentifier(ctx.tableIdentifier),
-      BucketSpec(
-        ctx.INTEGER_VALUE.getText.toInt,
-        visitIdentifierList(ctx.identifierList),
-        sortColumnNames))(
+      visitBucketSpec(ctx.bucketSpec))(
       source(ctx))
   }
 
@@ -426,18 +385,9 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitSkewTable(ctx: SkewTableContext): LogicalPlan = withOrigin(ctx) {
-    val skewedValues = if (ctx.constantList != null) {
-      Seq(visitConstantList(ctx.constantList))
-    } else {
-      visitNestedConstantList(ctx.nestedConstantList)
-    }
-
-    AlterTableSkewed(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitIdentifierList(ctx.identifierList),
-      skewedValues,
-      ctx.DIRECTORIES != null)(
-      source(ctx))
+    val table = visitTableIdentifier(ctx.tableIdentifier)
+    val (cols, values, storedAsDirs) = visitSkewSpec(ctx.skewSpec)
+    AlterTableSkewed(table, cols, values, storedAsDirs)(source(ctx))
   }
 
   /**
@@ -507,7 +457,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val specsAndLocs = ctx.partitionSpecLocation.asScala.map {
       splCtx =>
         val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
-        val location = Option(splCtx.STRING).map(string)
+        val location = Option(splCtx.locationSpec).map(visitLocationSpec)
         spec -> location
     }
     AlterTableAddPartition(
@@ -638,7 +588,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableSetLocation(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      string(ctx.STRING))(
+      visitLocationSpec(ctx.locationSpec))(
       source(ctx))
   }
 
@@ -759,6 +709,41 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
       source(ctx))
+  }
+
+  /**
+   * Create location string.
+   */
+  override def visitLocationSpec(ctx: LocationSpecContext): String = withOrigin(ctx) {
+    string(ctx.STRING)
+  }
+
+  /**
+   * Create a [[BucketSpec]].
+   */
+  override def visitBucketSpec(ctx: BucketSpecContext): BucketSpec = withOrigin(ctx) {
+    BucketSpec(
+      ctx.INTEGER_VALUE.getText.toInt,
+      visitIdentifierList(ctx.identifierList),
+      Option(ctx.orderedIdentifierList).toSeq
+        .flatMap(_.orderedIdentifier.asScala)
+        .map(_.identifier.getText))
+  }
+
+  /**
+   * Create a skew specification. This contains three components:
+   * - The Skewed Columns
+   * - Values for which are skewed. The size of each entry must match the number of skewed columns.
+   * - A store in directory flag.
+   */
+  override def visitSkewSpec(
+      ctx: SkewSpecContext): (Seq[String], Seq[Seq[String]], Boolean) = withOrigin(ctx) {
+    val skewedValues = if (ctx.constantList != null) {
+      Seq(visitConstantList(ctx.constantList))
+    } else {
+      visitNestedConstantList(ctx.nestedConstantList)
+    }
+    (visitIdentifierList(ctx.identifierList), skewedValues, ctx.DIRECTORIES != null)
   }
 
   /**
