@@ -32,6 +32,7 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -163,12 +164,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private long peakMemoryUsedBytes = 0L;
 
   private final BlockManager blockManager;
+  private final SerializerManager serializerManager;
   private volatile MapIterator destructiveIterator = null;
   private LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
       BlockManager blockManager,
+      SerializerManager serializerManager,
       int initialCapacity,
       double loadFactor,
       long pageSizeBytes,
@@ -176,6 +179,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     super(taskMemoryManager, pageSizeBytes);
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
+    this.serializerManager = serializerManager;
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
@@ -209,6 +213,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     this(
       taskMemoryManager,
       SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
+      SparkEnv.get() != null ? SparkEnv.get().serializerManager() :  null,
       initialCapacity,
       0.70,
       pageSizeBytes,
@@ -271,7 +276,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
           }
           try {
             Closeables.close(reader, /* swallowIOException = */ false);
-            reader = spillWriters.getFirst().getReader(blockManager);
+            reader = spillWriters.getFirst().getReader(serializerManager);
             recordsInPage = -1;
           } catch (IOException e) {
             // Scala iterator does not handle exception
@@ -689,7 +694,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       offset += keyLength;
       Platform.copyMemory(valueBase, valueOffset, base, offset, valueLength);
 
-      // --- Update bookkeeping data structures -----------------------------------------------------
+      // --- Update bookkeeping data structures ----------------------------------------------------
       offset = currentPage.getBaseOffset();
       Platform.putInt(base, offset, Platform.getInt(base, offset) + 1);
       pageCursor += recordLength;

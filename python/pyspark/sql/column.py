@@ -315,6 +315,8 @@ class Column(object):
             sc = SparkContext._active_spark_context
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
+    name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
+
     @ignore_unicode_prefix
     @since(1.3)
     def cast(self, dataType):

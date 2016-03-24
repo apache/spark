@@ -78,7 +78,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     "Minimum information gain for a split to be considered at a tree node.")
 
   /**
-   * Maximum memory in MB allocated to histogram aggregation.
+   * Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be
+   * split per iteration, and its aggregates may exceed this size.
    * (default = 256 MB)
    * @group expertParam
    */
@@ -376,7 +377,7 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase
 }
 
-private[ml] object RandomForestParams {
+private[spark] object RandomForestParams {
   // These options should be lowercase.
   final val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)

@@ -116,44 +116,56 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new MyDenseVectorUDT()
   ).filter(supportsDataType)
 
-  for (dataType <- supportedDataTypes) {
-    test(s"test all data types - $dataType") {
-      withTempPath { file =>
-        val path = file.getCanonicalPath
+  try {
+    for (dataType <- supportedDataTypes) {
+      for (parquetDictionaryEncodingEnabled <- Seq(true, false)) {
+        test(s"test all data types - $dataType with parquet.enable.dictionary = " +
+          s"$parquetDictionaryEncodingEnabled") {
 
-        val dataGenerator = RandomDataGenerator.forType(
-          dataType = dataType,
-          nullable = true,
-          new Random(System.nanoTime())
-        ).getOrElse {
-          fail(s"Failed to create data generator for schema $dataType")
+          hadoopConfiguration.setBoolean("parquet.enable.dictionary",
+            parquetDictionaryEncodingEnabled)
+
+          withTempPath { file =>
+            val path = file.getCanonicalPath
+
+            val dataGenerator = RandomDataGenerator.forType(
+              dataType = dataType,
+              nullable = true,
+              new Random(System.nanoTime())
+            ).getOrElse {
+              fail(s"Failed to create data generator for schema $dataType")
+            }
+
+            // Create a DF for the schema with random data. The index field is used to sort the
+            // DataFrame.  This is a workaround for SPARK-10591.
+            val schema = new StructType()
+              .add("index", IntegerType, nullable = false)
+              .add("col", dataType, nullable = true)
+            val rdd =
+              sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
+            val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+
+            df.write
+              .mode("overwrite")
+              .format(dataSourceName)
+              .option("dataSchema", df.schema.json)
+              .save(path)
+
+            val loadedDF = sqlContext
+              .read
+              .format(dataSourceName)
+              .option("dataSchema", df.schema.json)
+              .schema(df.schema)
+              .load(path)
+              .orderBy("index")
+
+            checkAnswer(loadedDF, df)
+          }
         }
-
-        // Create a DF for the schema with random data. The index field is used to sort the
-        // DataFrame.  This is a workaround for SPARK-10591.
-        val schema = new StructType()
-          .add("index", IntegerType, nullable = false)
-          .add("col", dataType, nullable = true)
-        val rdd = sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
-        val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
-
-        df.write
-          .mode("overwrite")
-          .format(dataSourceName)
-          .option("dataSchema", df.schema.json)
-          .save(path)
-
-        val loadedDF = sqlContext
-          .read
-          .format(dataSourceName)
-          .option("dataSchema", df.schema.json)
-          .schema(df.schema)
-          .load(path)
-          .orderBy("index")
-
-        checkAnswer(loadedDF, df)
       }
     }
+  } finally {
+    hadoopConfiguration.unset("parquet.enable.dictionary")
   }
 
   test("save()/load() - non-partitioned table - Overwrite") {

@@ -32,13 +32,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources._
@@ -339,18 +335,6 @@ class SQLContext private[sql](
   @Experimental
   object implicits extends SQLImplicits with Serializable {
     protected override def _sqlContext: SQLContext = self
-
-    /**
-     * Converts $"col name" into an [[Column]].
-     *
-     * @since 1.3.0
-     */
-    // This must live here to preserve binary compatibility with Spark < 1.5.
-    implicit class StringToColumn(val sc: StringContext) {
-      def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args: _*))
-      }
-    }
   }
   // scalastyle:on
 
@@ -367,7 +351,7 @@ class SQLContext private[sql](
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    Dataset.newDataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
@@ -382,7 +366,7 @@ class SQLContext private[sql](
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    Dataset.newDataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
+    Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
   /**
@@ -392,7 +376,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    Dataset.newDataFrame(this, LogicalRelation(baseRelation))
+    Dataset.ofRows(this, LogicalRelation(baseRelation))
   }
 
   /**
@@ -447,7 +431,7 @@ class SQLContext private[sql](
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    Dataset.newDataFrame(this, logicalPlan)
+    Dataset.ofRows(this, logicalPlan)
   }
 
 
@@ -482,7 +466,7 @@ class SQLContext private[sql](
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    Dataset.newDataFrame(this, logicalPlan)
+    Dataset.ofRows(this, logicalPlan)
   }
 
   /**
@@ -510,7 +494,7 @@ class SQLContext private[sql](
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    Dataset.newDataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
   /**
@@ -529,7 +513,7 @@ class SQLContext private[sql](
       val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
       SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
     }
-    Dataset.newDataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
+    Dataset.ofRows(this, LogicalRDD(attributeSeq, rowRdd)(this))
   }
 
   /**
@@ -557,7 +541,7 @@ class SQLContext private[sql](
     val className = beanClass.getName
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    Dataset.newDataFrame(self, LocalRelation(attrSeq, rows.toSeq))
+    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
   /**
@@ -725,7 +709,7 @@ class SQLContext private[sql](
    * @group dataset
    */
   @Experimental
-  def range(end: Long): Dataset[Long] = range(0, end)
+  def range(end: Long): Dataset[java.lang.Long] = range(0, end)
 
   /**
    * :: Experimental ::
@@ -736,7 +720,7 @@ class SQLContext private[sql](
    * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long): Dataset[Long] = {
+  def range(start: Long, end: Long): Dataset[java.lang.Long] = {
     range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
   }
 
@@ -749,7 +733,7 @@ class SQLContext private[sql](
     * @group dataset
     */
   @Experimental
-  def range(start: Long, end: Long, step: Long): Dataset[Long] = {
+  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, numPartitions = sparkContext.defaultParallelism)
   }
 
@@ -763,8 +747,8 @@ class SQLContext private[sql](
    * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Long] = {
-    new Dataset(this, Range(start, end, step, numPartitions), implicits.newLongEncoder)
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
+    new Dataset(this, Range(start, end, step, numPartitions), Encoders.LONG)
   }
 
   /**
@@ -775,7 +759,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def sql(sqlText: String): DataFrame = {
-    Dataset.newDataFrame(this, parseSql(sqlText))
+    Dataset.ofRows(this, parseSql(sqlText))
   }
 
   /**
@@ -798,7 +782,7 @@ class SQLContext private[sql](
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.newDataFrame(this, sessionState.catalog.lookupRelation(tableIdent))
+    Dataset.ofRows(this, sessionState.catalog.lookupRelation(tableIdent))
   }
 
   /**
@@ -810,7 +794,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.newDataFrame(this, ShowTablesCommand(None))
+    Dataset.ofRows(this, ShowTablesCommand(None))
   }
 
   /**
@@ -822,7 +806,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.newDataFrame(this, ShowTablesCommand(Some(databaseName)))
+    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName)))
   }
 
   /**
@@ -887,7 +871,7 @@ class SQLContext private[sql](
       schema: StructType): DataFrame = {
 
     val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
-    Dataset.newDataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
+    Dataset.ofRows(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**

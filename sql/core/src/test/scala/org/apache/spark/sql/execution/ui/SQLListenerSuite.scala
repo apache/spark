@@ -81,7 +81,16 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 
   test("basic") {
     def checkAnswer(actual: Map[Long, String], expected: Map[Long, Long]): Unit = {
-      assert(actual === expected.mapValues(_.toString))
+      assert(actual.size == expected.size)
+      expected.foreach { e =>
+        // The values in actual can be SQL metrics meaning that they contain additional formatting
+        // when converted to string. Verify that they start with the expected value.
+        // TODO: this is brittle. There is no requirement that the actual string needs to start
+        // with the accumulator value.
+        assert(actual.contains(e._1))
+        val v = actual.get(e._1).get.trim
+        assert(v.startsWith(e._2.toString))
+      }
     }
 
     val listener = new SQLListener(sqlContext.sparkContext.conf)

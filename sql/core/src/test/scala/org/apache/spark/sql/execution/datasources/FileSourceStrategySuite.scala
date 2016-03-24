@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{File, FilenameFilter}
+import java.io.File
 
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.execution.{DataSourceScan, PhysicalRDD}
+import org.apache.spark.sql.execution.DataSourceScan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -268,7 +268,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           l.copy(relation =
             r.copy(bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil))))
       }
-      Dataset.newDataFrame(sqlContext, bucketed)
+      Dataset.ofRows(sqlContext, bucketed)
     } else {
       df
     }
