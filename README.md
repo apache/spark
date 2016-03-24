@@ -110,7 +110,7 @@ Currently **officially** using Airflow:
 
 ## Links
 
-* [Full documentation on pythonhosted.com](http://pythonhosted.org/airflow/)
+* [Full documentation on pythonhosted.org](http://pythonhosted.org/airflow/)
 * [Airflow Google Group (mailing list / forum)](https://groups.google.com/forum/#!forum/airbnb_airflow)
 * [Airbnb Blog Post about Airflow](http://nerds.airbnb.com/airflow/)
 * [Airflow Common Pitfalls](https://github.com/airbnb/airflow/wiki/Airflow-Common-Pitfalls)

@@ -64,7 +64,7 @@ If you are proposing a feature:
 
 ## Documentation
 
-The latest API documentation is usually available [here](http://pythonhosted.com/airflow). To generate a local version, you need to have installed airflow with the `doc` extra. In that case you can generate the doc by running:
+The latest API documentation is usually available [here](http://pythonhosted.org/airflow). To generate a local version, you need to have installed airflow with the `doc` extra. In that case you can generate the doc by running:
 
     cd docs && ./build.sh
 
