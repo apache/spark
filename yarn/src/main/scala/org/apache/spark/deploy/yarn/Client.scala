@@ -374,14 +374,6 @@ private[spark] class Client(
 
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
 
-    val oldLog4jConf = Option(System.getenv("SPARK_LOG4J_CONF"))
-    if (oldLog4jConf.isDefined) {
-      logWarning(
-        "SPARK_LOG4J_CONF detected in the system environment. This variable has been " +
-          "deprecated. Please refer to the \"Launching Spark on YARN\" documentation " +
-          "for alternatives.")
-    }
-
     def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
       if (distributedUris.contains(uriStr)) {
@@ -503,25 +495,16 @@ private[spark] class Client(
     }
 
     /**
-     * Copy a few resources to the distributed cache if their scheme is not "local".
+     * Copy user jar to the distributed cache if their scheme is not "local".
      * Otherwise, set the corresponding key in our SparkConf to handle it downstream.
-     * Each resource is represented by a 3-tuple of:
-     *   (1) destination resource name,
-     *   (2) local path to the resource,
-     *   (3) Spark property key to set if the scheme is not local
      */
-    List(
-      (APP_JAR_NAME, args.userJar, APP_JAR),
-      ("log4j.properties", oldLog4jConf.orNull, null)
-    ).foreach { case (destName, path, confKey) =>
-      if (path != null && !path.trim().isEmpty()) {
-        val (isLocal, localizedPath) = distribute(path, destName = Some(destName))
-        if (isLocal && confKey != null) {
-          require(localizedPath != null, s"Path $path already distributed.")
-          // If the resource is intended for local use only, handle this downstream
-          // by setting the appropriate property
-          sparkConf.set(confKey, localizedPath)
-        }
+    for (jar <- Option(args.userJar); if !jar.trim.isEmpty) {
+      val (isLocal, localizedPath) = distribute(jar, destName = Some(APP_JAR_NAME))
+      if (isLocal) {
+        require(localizedPath != null, s"Path $jar already distributed")
+        // If the resource is intended for local use only, handle this downstream
+        // by setting the appropriate property
+        sparkConf.set(APP_JAR, localizedPath)
       }
     }
 
