@@ -78,6 +78,9 @@ sealed abstract class Node extends Serializable {
    * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
    */
   private[ml] def maxSplitFeatureIndex(): Int
+
+  /** Returns a deep copy of the subtree rooted at this node. */
+  private[tree] def deepCopy(): Node
 }
 
 private[ml] object Node {
@@ -137,6 +140,10 @@ final class LeafNode private[ml] (
   }
 
   override private[ml] def maxSplitFeatureIndex(): Int = -1
+
+  override private[tree] def deepCopy(): Node = {
+    new LeafNode(prediction, impurity, impurityStats)
+  }
 }
 
 /**
@@ -202,6 +209,11 @@ final class InternalNode private[ml] (
   override private[ml] def maxSplitFeatureIndex(): Int = {
     math.max(split.featureIndex,
       math.max(leftChild.maxSplitFeatureIndex(), rightChild.maxSplitFeatureIndex()))
+  }
+
+  override private[tree] def deepCopy(): Node = {
+    new InternalNode(prediction, impurity, gain, leftChild.deepCopy(), rightChild.deepCopy(),
+      split, impurityStats)
   }
 }
 
@@ -286,11 +298,12 @@ private[tree] class LearningNode(
    *
    * @param binnedFeatures  Binned feature vector for data point.
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
-   * @return  Leaf index if the data point reaches a leaf.
-   *          Otherwise, last node reachable in tree matching this example.
-   *          Note: This is the global node index, i.e., the index used in the tree.
-   *                This index is different from the index used during training a particular
-   *                group of nodes on one call to [[findBestSplits()]].
+   * @return Leaf index if the data point reaches a leaf.
+   *         Otherwise, last node reachable in tree matching this example.
+   *         Note: This is the global node index, i.e., the index used in the tree.
+   *         This index is different from the index used during training a particular
+   *         group of nodes on one call to
+   *         [[org.apache.spark.ml.tree.impl.RandomForest.findBestSplits()]].
    */
   def predictImpl(binnedFeatures: Array[Int], splits: Array[Array[Split]]): Int = {
     if (this.isLeaf || this.split.isEmpty) {

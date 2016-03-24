@@ -164,7 +164,8 @@ if __name__ == "__main__":
          "split will be discarded as invalid. Should be >= 1.", "TypeConverters.toInt"),
         ("minInfoGain", "Minimum information gain for a split to be considered at a tree node.",
          "TypeConverters.toFloat"),
-        ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.",
+        ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation. If too small," +
+         " then 1 node will be split per iteration, and its aggregates may exceed this size.",
          "TypeConverters.toInt"),
         ("cacheNodeIds", "If false, the algorithm will pass trees to executors to match " +
          "instances with nodes. If true, the algorithm will cache node IDs for each instance. " +
