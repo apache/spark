@@ -28,11 +28,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.ParseUtils
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
@@ -42,8 +40,7 @@ import org.apache.spark.util.random.RandomSampler
  * TableIdentifier.
  */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
-  import AstBuilder._
-  import ParseUtils._
+  import ParserUtils._
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
@@ -72,6 +69,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   protected def plan(tree: ParserRuleContext): LogicalPlan = typedVisit(tree)
 
   /**
+   * Make sure we do not try to create a plan for a native command.
+   */
+  override def visitExecuteNativeCommand(ctx: ExecuteNativeCommandContext): LogicalPlan = null
+
+  /**
    * Create a plan for a SHOW FUNCTIONS command.
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
@@ -87,7 +89,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           throw new ParseException("SHOW FUNCTIONS unsupported name", ctx)
       }
     } else if (pattern != null) {
-      ShowFunctions(None, Some(unescapeSQLString(pattern.getText)))
+      ShowFunctions(None, Some(string(pattern)))
     } else {
       ShowFunctions(None, None)
     }
@@ -194,14 +196,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       ctx: InsertIntoContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
-    val partitionKeys = Option(ctx.partitionSpec).toSeq.flatMap {
-      _.partitionVal.asScala.map {
-        pVal =>
-          val name = pVal.identifier.getText
-          val value = Option(pVal.constant).map(c => expression(c).toString)
-          name -> value
-      }
-    }.toMap
+    val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
@@ -209,6 +204,38 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       query,
       ctx.OVERWRITE != null,
       ctx.EXISTS != null)
+  }
+
+  /**
+   * Create a partition specification map.
+   */
+  override def visitPartitionSpec(
+      ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
+    ctx.partitionVal.asScala.map { pVal =>
+      val name = pVal.identifier.getText.toLowerCase
+      val value = Option(pVal.constant).map(visitStringConstant)
+      name -> value
+    }.toMap
+  }
+
+  /**
+   * Create a partition specification map without optional values.
+   */
+  protected def visitNonOptionalPartitionSpec(
+      ctx: PartitionSpecContext): Map[String, String] = withOrigin(ctx) {
+    visitPartitionSpec(ctx).mapValues(_.orNull).map(identity)
+  }
+
+  /**
+   * Convert a constant of any type into a string. This is typically used in DDL commands, and its
+   * main purpose is to prevent slight differences due to back to back conversions i.e.:
+   * String -> Literal -> String.
+   */
+  protected def visitStringConstant(ctx: ConstantContext): String = withOrigin(ctx) {
+    ctx match {
+      case s: StringLiteralContext => createString(s)
+      case o => o.getText
+    }
   }
 
   /**
@@ -290,13 +317,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
 
     // Expressions.
-    val expressions = namedExpression.asScala.map(visit).map {
-      case e: NamedExpression => e
-      case e: Expression => UnresolvedAlias(e)
-    }
+    val expressions = Option(namedExpressionSeq).toSeq
+      .flatMap(_.namedExpression.asScala)
+      .map(typedVisit[Expression])
 
     // Create either a transform or a regular query.
-    kind.getType match {
+    val specType = Option(kind).map(_.getType).getOrElse(SqlBaseParser.SELECT)
+    specType match {
       case SqlBaseParser.MAP | SqlBaseParser.REDUCE | SqlBaseParser.TRANSFORM =>
         // Transform
 
@@ -304,25 +331,27 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         val withFilter = relation.optionalMap(where)(filter)
 
         // Create the attributes.
-        val attributes = if (colTypeList != null) {
+        val (attributes, schemaLess) = if (colTypeList != null) {
           // Typed return columns.
-          createStructType(colTypeList).toAttributes
-        } else if (columnAliasList != null) {
+          (createStructType(colTypeList).toAttributes, false)
+        } else if (identifierSeq != null) {
           // Untyped return columns.
-          visitColumnAliasList(columnAliasList).map { name =>
+          val attrs = visitIdentifierSeq(identifierSeq).map { name =>
             AttributeReference(name, StringType, nullable = true)()
           }
+          (attrs, false)
         } else {
-          Seq.empty
+          (Seq(AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()), true)
         }
 
         // Create the transform.
         ScriptTransformation(
           expressions,
-          unescapeSQLString(script.getText),
+          string(script),
           attributes,
           withFilter,
-          withScriptIOSchema(inRowFormat, outRowFormat, outRecordReader))
+          withScriptIOSchema(inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess))
 
       case SqlBaseParser.SELECT =>
         // Regular select
@@ -334,14 +363,24 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         val withFilter = withLateralView.optionalMap(where)(filter)
 
         // Add aggregation or a project.
+        val namedExpressions = expressions.map {
+          case e: NamedExpression => e
+          case e: Expression => UnresolvedAlias(e)
+        }
         val withProject = if (aggregation != null) {
-          withAggregation(aggregation, expressions, withFilter)
+          withAggregation(aggregation, namedExpressions, withFilter)
+        } else if (namedExpressions.nonEmpty) {
+          Project(namedExpressions, withFilter)
         } else {
-          Project(expressions, withFilter)
+          withFilter
         }
 
         // Having
-        val withHaving = withProject.optionalMap(having)(filter)
+        val withHaving = withProject.optional(having) {
+          // Note that we added a cast to boolean. If the expression itself is already boolean,
+          // the optimizer will get rid of the unnecessary cast.
+          Filter(Cast(expression(having), BooleanType), withProject)
+        }
 
         // Distinct
         val withDistinct = if (setQuantifier() != null && setQuantifier().DISTINCT() != null) {
@@ -360,8 +399,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   protected def withScriptIOSchema(
       inRowFormat: RowFormatContext,
+      recordWriter: Token,
       outRowFormat: RowFormatContext,
-      outRecordReader: Token): ScriptInputOutputSchema = null
+      recordReader: Token,
+      schemaLess: Boolean): ScriptInputOutputSchema = null
 
   /**
    * Create a logical plan for a given 'FROM' clause. Note that we support multiple (comma
@@ -515,45 +556,57 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a join between two logical plans.
+   * Create a joins between two or more logical plans.
    */
   override def visitJoinRelation(ctx: JoinRelationContext): LogicalPlan = withOrigin(ctx) {
-    val baseJoinType = ctx.joinType match {
-      case null => Inner
-      case jt if jt.FULL != null => FullOuter
-      case jt if jt.SEMI != null => LeftSemi
-      case jt if jt.LEFT != null => LeftOuter
-      case jt if jt.RIGHT != null => RightOuter
-      case _ => Inner
+    /** Build a join between two plans. */
+    def join(ctx: JoinRelationContext, left: LogicalPlan, right: LogicalPlan): Join = {
+      val baseJoinType = ctx.joinType match {
+        case null => Inner
+        case jt if jt.FULL != null => FullOuter
+        case jt if jt.SEMI != null => LeftSemi
+        case jt if jt.LEFT != null => LeftOuter
+        case jt if jt.RIGHT != null => RightOuter
+        case _ => Inner
+      }
+
+      // Resolve the join type and join condition
+      val (joinType, condition) = Option(ctx.joinCriteria) match {
+        case Some(c) if c.USING != null =>
+          val columns = c.identifier.asScala.map { column =>
+            UnresolvedAttribute.quoted(column.getText)
+          }
+          (UsingJoin(baseJoinType, columns), None)
+        case Some(c) if c.booleanExpression != null =>
+          (baseJoinType, Option(expression(c.booleanExpression)))
+        case None if ctx.NATURAL != null =>
+          (NaturalJoin(baseJoinType), None)
+        case None =>
+          (baseJoinType, None)
+      }
+      Join(left, right, joinType, condition)
     }
 
-    // Resolve the join type and join condition
-    val (joinType, condition) = Option(ctx.joinCriteria) match {
-      case Some(c) if c.USING != null =>
-        val columns = c.identifier.asScala.map { column =>
-          UnresolvedAttribute.quoted(column.getText)
-        }
-        (UsingJoin(baseJoinType, columns), None)
-      case Some(c) if c.booleanExpression != null =>
-        (baseJoinType, Option(expression(c.booleanExpression)))
-      case None if ctx.NATURAL != null =>
-        (NaturalJoin(baseJoinType), None)
-      case None =>
-        (baseJoinType, None)
+    // Handle all consecutive join clauses. ANTLR produces a right nested tree in which the the
+    // first join clause is at the top. However fields of previously referenced tables can be used
+    // in following join clauses. The tree needs to be reversed in order to make this work.
+    var result = plan(ctx.left)
+    var current = ctx
+    while (current != null) {
+      current.right match {
+        case right: JoinRelationContext =>
+          result = join(current, result, plan(right.left))
+          current = right
+        case right =>
+          result = join(current, result, plan(right))
+          current = null
+      }
     }
-
-    // Resolve the query sides.
-    val left = plan(ctx.left)
-    val right = if (ctx.right != null) {
-      plan(ctx.right)
-    } else {
-      plan(ctx.rightRelation)
-    }
-    Join(left, right, joinType, condition)
+    result
   }
 
   /**
-   * Create a sampled relation. This returns a [[Sample]] operator when sampling is requested.
+   * Add a [[Sample]] to a logical plan.
    *
    * This currently supports the following sampling methods:
    * - TABLESAMPLE(x ROWS): Sample the table down to the given number of rows.
@@ -561,9 +614,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * are defined as a number between 0 and 100.
    * - TABLESAMPLE(BUCKET x OUT OF y): Sample the table down to a 'x' divided by 'y' fraction.
    */
-  override def visitSampledRelation(ctx: SampledRelationContext): LogicalPlan = withOrigin(ctx) {
-    val relation = plan(ctx.relationPrimary)
-
+  private def withSample(ctx: SampleContext, query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Create a sampled plan if we need one.
     def sample(fraction: Double): Sample = {
       // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
@@ -573,25 +624,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       assert(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
-      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)(true)
+      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)(true)
     }
 
-    // Sample the relation if we have to.
-    relation.optional(ctx.sampleType) {
-      ctx.sampleType.getType match {
-        case SqlBaseParser.ROWS =>
-          Limit(expression(ctx.expression), relation)
+    ctx.sampleType.getType match {
+      case SqlBaseParser.ROWS =>
+        Limit(expression(ctx.expression), query)
 
-        case SqlBaseParser.PERCENTLIT =>
-          val fraction = ctx.percentage.getText.toDouble
-          sample(fraction / 100.0d)
+      case SqlBaseParser.PERCENTLIT =>
+        val fraction = ctx.percentage.getText.toDouble
+        sample(fraction / 100.0d)
 
-        case SqlBaseParser.BUCKET if ctx.ON != null =>
-          throw new ParseException("TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported", ctx)
+      case SqlBaseParser.BUCKET if ctx.ON != null =>
+        throw new ParseException("TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported", ctx)
 
-        case SqlBaseParser.BUCKET =>
-          sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)
-      }
+      case SqlBaseParser.BUCKET =>
+        sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)
     }
   }
 
@@ -618,9 +666,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an aliased table reference. This is typically used in FROM clauses.
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-    UnresolvedRelation(
+    val table = UnresolvedRelation(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.identifier).map(_.getText))
+    table.optionalMap(ctx.sample)(withSample)
   }
 
   /**
@@ -650,8 +699,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     // Construct attributes.
     val baseAttributes = structType.toAttributes.map(_.withNullability(true))
-    val attributes = if (ctx.columnAliases != null) {
-      val aliases = visitColumnAliases(ctx.columnAliases)
+    val attributes = if (ctx.identifierList != null) {
+      val aliases = visitIdentifierList(ctx.identifierList)
       assert(aliases.size == baseAttributes.size,
         "Number of aliases must match the number of fields in an inline table.", ctx)
       baseAttributes.zip(aliases).map(p => p._1.withName(p._2))
@@ -669,7 +718,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedRelation(ctx: AliasedRelationContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.relation).optionalMap(ctx.identifier)(aliasPlan)
+    plan(ctx.relation).optionalMap(ctx.sample)(withSample).optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**
@@ -678,7 +727,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryNoWith).optionalMap(ctx.identifier)(aliasPlan)
+    plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample).optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**
@@ -691,14 +740,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   /**
    * Create a Sequence of Strings for a parenthesis enclosed alias list.
    */
-  override def visitColumnAliases(ctx: ColumnAliasesContext): Seq[String] = withOrigin(ctx) {
-    visitColumnAliasList(ctx.columnAliasList)
+  override def visitIdentifierList(ctx: IdentifierListContext): Seq[String] = withOrigin(ctx) {
+    visitIdentifierSeq(ctx.identifierSeq)
   }
 
   /**
-   * Create a Sequence of Strings for an alias list.
+   * Create a Sequence of Strings for an identifier list.
    */
-  override def visitColumnAliasList(ctx: ColumnAliasListContext): Seq[String] = withOrigin(ctx) {
+  override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
     ctx.identifier.asScala.map(_.getText)
   }
 
@@ -720,7 +769,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an expression from the given context. This method just passes the context on to the
    * vistor and only takes care of typing (We assume that the visitor returns an Expression here).
    */
-  private def expression(ctx: ParserRuleContext): Expression = typedVisit(ctx)
+  protected def expression(ctx: ParserRuleContext): Expression = typedVisit(ctx)
 
   /**
    * Create sequence of expressions from the given sequence of contexts.
@@ -756,8 +805,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val e = expression(ctx.expression)
     if (ctx.identifier != null) {
       Alias(e, ctx.identifier.getText)()
-    } else if (ctx.columnAliases != null) {
-      MultiAlias(e, visitColumnAliases(ctx.columnAliases))
+    } else if (ctx.identifierList != null) {
+      MultiAlias(e, visitIdentifierList(ctx.identifierList))
     } else {
       e
     }
@@ -838,7 +887,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * - Greater then or Equal: '>='
    */
   override def visitComparison(ctx: ComparisonContext): Expression = withOrigin(ctx) {
-    val left = expression(ctx.value)
+    val left = expression(ctx.left)
     val right = expression(ctx.right)
     val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
     operator.getSymbol.getType match {
@@ -980,16 +1029,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
-    val arguments = if (ctx.ASTERISK != null) {
-      Seq(Literal(1))
-    } else {
-      ctx.expression().asScala.map(expression)
+    // Create the function call.
+    val name = ctx.qualifiedName.getText
+    val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
+    val arguments = ctx.expression().asScala.map(expression) match {
+      case Seq(UnresolvedStar(None)) if name.toLowerCase == "count" && !isDistinct =>
+        // Transform COUNT(*) into COUNT(1). Move this to analysis?
+        Seq(Literal(1))
+      case expressions =>
+        expressions
     }
-
-    val function = UnresolvedFunction(
-      ctx.qualifiedName.getText,
-      arguments,
-      Option(ctx.setQuantifier()).exists(_.DISTINCT != null))
+    val function = UnresolvedFunction(name, arguments, isDistinct)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1012,7 +1062,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a window definition, i.e. [[WindowSpecDefinition]].
    */
   override def visitWindowDef(ctx: WindowDefContext): WindowSpecDefinition = withOrigin(ctx) {
-    // PARTITION BY ... ORDER BY ...
+    // CLUSTER BY ... | PARTITION BY ... ORDER BY ...
     val partition = ctx.partition.asScala.map(expression)
     val order = ctx.sortItem.asScala.map(visitSortItem)
 
@@ -1176,7 +1226,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * TODO what the added value of this over casting?
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
-    val value = unescapeSQLString(ctx.STRING.getText)
+    val value = string(ctx.STRING)
     ctx.identifier.getText.toUpperCase match {
       case "DATE" =>
         Literal(Date.valueOf(value))
@@ -1274,14 +1324,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a String literal expression. This supports multiple consecutive string literals, these
-   * are concatenated, for example this expression "'hello' 'world'" will be converted into
-   * "helloworld".
+   * Create a String literal expression.
+   */
+  override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
+    Literal(createString(ctx))
+  }
+
+  /**
+   * Create a String from a string literal context. This supports multiple consecutive string
+   * literals, these are concatenated, for example this expression "'hello' 'world'" will be
+   * converted into "helloworld".
    *
    * Special characters can be escaped by using Hive/C-style escaping.
    */
-  override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal(ctx.STRING().asScala.map(s => unescapeSQLString(s.getText)).mkString)
+  private def createString(ctx: StringLiteralContext): String = {
+    ctx.STRING().asScala.map(string).mkString
   }
 
   /**
@@ -1387,65 +1444,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Add the comment to the metadata.
     val builder = new MetadataBuilder
     if (STRING != null) {
-      builder.putString("comment", unescapeSQLString(STRING.getText))
+      builder.putString("comment", string(STRING))
     }
 
     StructField(identifier.getText, typedVisit(dataType), nullable = true, builder.build())
-  }
-}
-
-private[sql] object AstBuilder extends Logging {
-  /**
-   * Register the origin of the context. Any TreeNode created in the closure will be assigned the
-   * registered origin. This method restores the previously set origin after completion of the
-   * closure.
-   */
-  def withOrigin[T](ctx: ParserRuleContext)(f: => T): T = {
-    val current = CurrentOrigin.get
-    val token = ctx.getStart
-    CurrentOrigin.setPosition(token.getLine, token.getCharPositionInLine)
-    try {
-      f
-    } finally {
-      CurrentOrigin.set(current)
-    }
-  }
-
-  /**
-   * Assert if a condition holds. If it doesn't throw a parse exception.
-   */
-  def assert(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
-    if (!f) {
-      throw new ParseException(message, ctx)
-    }
-  }
-
-  /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
-  implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
-    /**
-     * Create a plan using the block of code when the given context exists. Otherwise return the
-     * original plan.
-     */
-    def optional(ctx: AnyRef)(f: => LogicalPlan): LogicalPlan = {
-      if (ctx != null) {
-        f
-      } else {
-        plan
-      }
-    }
-
-    /**
-     * Map a [[LogicalPlan]] to another [[LogicalPlan]] if the passed context exists using the
-     * passed function. The original plan is returned when the context does not exist.
-     */
-    def optionalMap[C <: ParserRuleContext](
-        ctx: C)(
-        f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
-      if (ctx != null) {
-        f(ctx, plan)
-      } else {
-        plan
-      }
-    }
   }
 }

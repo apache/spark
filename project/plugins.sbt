@@ -28,4 +28,4 @@ libraryDependencies += "org.antlr" % "antlr" % "3.5.2"
 // TODO I am not sure we want such a dep.
 resolvers += "simplytyped" at "http://simplytyped.github.io/repo/releases"
 
-addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.7.8")
+addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.7.10")

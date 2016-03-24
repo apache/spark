@@ -20,7 +20,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
@@ -64,9 +64,9 @@ class PlanParserSuite extends PlanTest {
     val a = table("a").select(star())
     val b = table("b").select(star())
 
-    assertEqual("select * from a union select * from b", Distinct(a.unionAll(b)))
-    assertEqual("select * from a union distinct select * from b", Distinct(a.unionAll(b)))
-    assertEqual("select * from a union all select * from b", a.unionAll(b))
+    assertEqual("select * from a union select * from b", Distinct(a.union(b)))
+    assertEqual("select * from a union distinct select * from b", Distinct(a.union(b)))
+    assertEqual("select * from a union all select * from b", a.union(b))
     assertEqual("select * from a except select * from b", a.except(b))
     intercept("select * from a except all select * from b", "EXCEPT ALL is not supported.")
     assertEqual("select * from a except distinct select * from b", a.except(b))
@@ -104,31 +104,44 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select a, b", OneRowRelation.select('a, 'b))
     assertEqual("select a, b from db.c", table("db", "c").select('a, 'b))
     assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select('a, 'b))
-    assertEqual("select a, b from db.c having x < 1", table("db", "c").select('a, 'b).where('x < 1))
+    assertEqual(
+      "select a, b from db.c having x < 1",
+      table("db", "c").select('a, 'b).where(('x < 1).cast(BooleanType)))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
+  }
+
+  test("reverse select query") {
+    assertEqual("from a", table("a"))
+    assertEqual("from a select b, c", table("a").select('b, 'c))
+    assertEqual(
+      "from db.a select b, c where d < 1", table("db", "a").where('d < 1).select('b, 'c))
+    assertEqual("from a select distinct b, c", Distinct(table("a").select('b, 'c)))
+    assertEqual(
+      "from (from a union all from b) c select *",
+      table("a").union(table("b")).as("c").select(star()))
   }
 
   test("transform query spec") {
     val p = ScriptTransformation(Seq('a, 'b), "func", Seq.empty, table("e"), null)
     assertEqual("select transform(a, b) using 'func' from e where f < 10",
-      p.copy(child = p.child.where('f < 10)))
-    assertEqual("map(a, b) using 'func' as c, d from e",
+      p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
+    assertEqual("map a, b using 'func' as c, d from e",
       p.copy(output = Seq('c.string, 'd.string)))
-    assertEqual("reduce(a, b) using 'func' as (c: int, d decimal(10, 0)) from e",
+    assertEqual("reduce a, b using 'func' as (c: int, d decimal(10, 0)) from e",
       p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
   }
 
   test("multi select query") {
     assertEqual(
       "from a select * select * where s < 10",
-      table("a").select(star()).unionAll(table("a").where('s < 10).select(star())))
+      table("a").select(star()).union(table("a").where('s < 10).select(star())))
     intercept(
       "from a select * select * from x where a.s < 10",
       "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
-      table("a").select(star()).insertInto("tbl1").unionAll(
+      table("a").select(star()).insertInto("tbl1").union(
         table("a").where('s < 10).select(star()).insertInto("tbl2")))
   }
 
@@ -194,7 +207,7 @@ class PlanParserSuite extends PlanTest {
     val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
       InsertIntoTable(
-        table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).unionAll(
+        table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).union(
         InsertIntoTable(
           table("u"), Map.empty, plan2, overwrite = false, ifNotExists = false)))
   }
@@ -268,10 +281,10 @@ class PlanParserSuite extends PlanTest {
     assertEqual(
       """select *
         |from t
-        |lateral view explode(x) expl as x
+        |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
       table("t")
-        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq.empty)
         .generate(JsonTuple(Seq('x, 'y)), join = true, outer = true, Some("jtup"), Seq("q", "z"))
         .select(star()))
 
@@ -300,6 +313,7 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("joins") {
+    // Test single joins.
     val testUnconditionalJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t as tt $sql u",
@@ -335,19 +349,24 @@ class PlanParserSuite extends PlanTest {
     test("right outer join", RightOuter, testAll)
     test("full join", FullOuter, testAll)
     test("full outer join", FullOuter, testAll)
+
+    // Test multiple consecutive joins
+    assertEqual(
+      "select * from a join b join c right join d",
+      table("a").join(table("b")).join(table("c")).join(table("d"), RightOuter).select(star()))
   }
 
   test("sampled relations") {
     val sql = "select * from t"
     assertEqual(s"$sql tablesample(100 rows)",
       table("t").limit(100).select(star()))
-    assertEqual(s"$sql as x tablesample(43 percent)",
+    assertEqual(s"$sql tablesample(43 percent) as x",
       Sample(0, .43d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
-    assertEqual(s"$sql as x tablesample(bucket 4 out of 10)",
+    assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
       Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
-    intercept(s"$sql as x tablesample(bucket 4 out of 10 on x)",
+    intercept(s"$sql tablesample(bucket 4 out of 10 on x) as x",
       "TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported")
-    intercept(s"$sql as x tablesample(bucket 11 out of 10)",
+    intercept(s"$sql tablesample(bucket 11 out of 10) as x",
       s"Sampling fraction (${11.0/10.0}) must be on interval [0, 1]")
   }
 
@@ -357,11 +376,11 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select id from ((((((t0))))))", plan)
     assertEqual(
       "(select * from t1) union distinct (select * from t2)",
-      Distinct(table("t1").select(star()).unionAll(table("t2").select(star()))))
+      Distinct(table("t1").select(star()).union(table("t2").select(star()))))
     assertEqual(
       "select * from ((select * from t1) union (select * from t2)) t",
       Distinct(
-        table("t1").select(star()).unionAll(table("t2").select(star()))).as("t").select(star()))
+        table("t1").select(star()).union(table("t2").select(star()))).as("t").select(star()))
     assertEqual(
       """select  id
         |from (((select id from t0)
@@ -370,7 +389,7 @@ class PlanParserSuite extends PlanTest {
         |      union all
         |      (select id from t0)) as u_1
       """.stripMargin,
-      plan.unionAll(plan).unionAll(plan).as("u_1").select('id))
+      plan.union(plan).union(plan).as("u_1").select('id))
   }
 
   test("scalar sub-query") {
@@ -382,7 +401,9 @@ class PlanParserSuite extends PlanTest {
       table("t").where('a === ScalarSubquery(table("s").select('b))).select(star()))
     assertEqual(
       "select g from t group by g having a > (select b from s)",
-      table("t").groupBy('g)('g).where('a > ScalarSubquery(table("s").select('b))))
+      table("t")
+        .groupBy('g)('g)
+        .where(('a > ScalarSubquery(table("s").select('b))).cast(BooleanType)))
   }
 
   test("table reference") {

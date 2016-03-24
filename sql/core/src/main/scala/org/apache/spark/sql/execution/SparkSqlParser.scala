@@ -18,14 +18,12 @@ package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
 
-import org.antlr.v4.runtime.misc.Interval
-
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ng.{AbstractSqlParser, AstBuilder}
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.command.{DescribeCommand => _, _}
 import org.apache.spark.sql.execution.datasources._
 
 /**
@@ -39,8 +37,7 @@ object SparkSqlParser extends AbstractSqlParser{
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
 class SparkSqlAstBuilder extends AstBuilder {
-  import AstBuilder._
-  import org.apache.spark.sql.catalyst.parser.ParseUtils._
+  import org.apache.spark.sql.catalyst.parser.ng.ParserUtils._
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -50,19 +47,15 @@ class SparkSqlAstBuilder extends AstBuilder {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    // Get the remaining text from the stream.
-    val stream = ctx.getStop.getInputStream
-    val interval = Interval.of(ctx.getStart.getStopIndex + 1, stream.size())
-    val remainder = stream.getText(interval)
-
     // Construct the command.
-    val keyValueSeparatorIndex = remainder.indexOf('=')
+    val raw = remainder(ctx.SET.getSymbol)
+    val keyValueSeparatorIndex = raw.indexOf('=')
     if (keyValueSeparatorIndex >= 0) {
-      val key = remainder.substring(0, keyValueSeparatorIndex).trim
-      val value = remainder.substring(keyValueSeparatorIndex + 1).trim
+      val key = raw.substring(0, keyValueSeparatorIndex).trim
+      val value = raw.substring(keyValueSeparatorIndex + 1).trim
       SetCommand(Some(key -> Option(value)))
-    } else if (remainder.nonEmpty) {
-      SetCommand(Some(remainder.trim -> None))
+    } else if (raw.nonEmpty) {
+      SetCommand(Some(raw.trim -> None))
     } else {
       SetCommand(None)
     }
@@ -149,101 +142,77 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
     // FORMATTED and columns are not supported. Return null and let the parser decide what to do
     // with this (create an exception or pass it on to a different system).
-    if (ctx.describeColName != null || ctx.FORMATTED != null) {
+    if (ctx.describeColName != null || ctx.FORMATTED != null || ctx.partitionSpec != null) {
       null
     } else {
-      // Partitioning clause is ignored.
-      if (ctx.partitionSpec != null) {
-        logWarning("DESCRIBE PARTITIONING option is ignored.")
-      }
       datasources.DescribeCommand(
         visitTableIdentifier(ctx.tableIdentifier),
         ctx.EXTENDED != null)
     }
   }
 
+  /** Type to keep track of a table header. */
+  type TableHeader = (TableIdentifier, Boolean, Boolean, Boolean)
+
   /**
    * Validate a create table statement and return the [[TableIdentifier]].
    */
-  override def visitCreateTable(
-      ctx: CreateTableContext): (TableIdentifier, Boolean, Boolean) = withOrigin(ctx) {
+  override def visitCreateTableHeader(
+      ctx: CreateTableHeaderContext): TableHeader = withOrigin(ctx) {
     val temporary = ctx.TEMPORARY != null
     val ifNotExists = ctx.EXISTS != null
     assert(!temporary || !ifNotExists,
       "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.",
       ctx)
-    (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists)
+    (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists, ctx.EXTERNAL != null)
   }
 
   /**
-   * Create a [[CreateTableUsing]] logical plan.
-   */
-  override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
-    val (table, temporary, ifNotExists) = visitCreateTable(ctx.createTable)
-    val options = Option(ctx.tableProperties)
-      .map(visitTableProperties)
-      .getOrElse(Map.empty)
-    CreateTableUsing(
-      table,
-      Option(ctx.colTypeList).map(createStructType),
-      ctx.tableProvider.qualifiedName.getText,
-      temporary,
-      options,
-      ifNotExists,
-      managedIfNoPath = false)
-  }
-
-  /**
-   * Create a [[CreateTableUsingAsSelect]] logical plan.
+   * Create a [[CreateTableUsing]] or a [[CreateTableUsingAsSelect]] logical plan.
    *
    * TODO add bucketing and partitioning.
    */
-  override def visitCreateTableUsingAsSelect(
-      ctx: CreateTableUsingAsSelectContext): LogicalPlan = withOrigin(ctx) {
-    // Get basic configuration.
-    val (table, temporary, ifNotExists) = visitCreateTable(ctx.createTable)
-    val options = Option(ctx.tableProperties)
-      .map(visitTableProperties)
-      .getOrElse(Map.empty)
-
-    // Get the backing query.
-    val query = plan(ctx.query)
-
-    // Determine the storage mode.
-    val mode = if (ifNotExists) {
-      SaveMode.Ignore
-    } else if (temporary) {
-      SaveMode.Overwrite
-    } else {
-      SaveMode.ErrorIfExists
+  override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
+    val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    if (external) {
+      logWarning("EXTERNAL option is not supported.")
     }
+    val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
+    val provider = ctx.tableProvider.qualifiedName.getText
 
-    CreateTableUsingAsSelect(
-      table,
-      ctx.tableProvider.qualifiedName.getText,
-      temporary,
-      Array.empty,
-      None,
-      mode,
-      options,
-      query
-    )
+    if (ctx.query != null) {
+      // Get the backing query.
+      val query = plan(ctx.query)
+
+      // Determine the storage mode.
+      val mode = if (ifNotExists) {
+        SaveMode.Ignore
+      } else if (temp) {
+        SaveMode.Overwrite
+      } else {
+        SaveMode.ErrorIfExists
+      }
+      CreateTableUsingAsSelect(table, provider, temp, Array.empty, None, mode, options, query)
+    } else {
+      val struct = Option(ctx.colTypeList).map(createStructType)
+      CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = false)
+    }
   }
 
   /**
-   * Convert TableProperties into a key-value map.
-   */
-  override def visitTableProperties(
-      ctx: TablePropertiesContext): Map[String, String] = withOrigin(ctx) {
+    * Convert a table property list into a key-value map.
+    */
+  override def visitTablePropertyList(
+      ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
     ctx.tableProperty.asScala.map { property =>
       // A key can either be a String or a collection of dot separated elements. We need to treat
       // these differently.
       val key = if (property.key.STRING != null) {
-        unescapeSQLString(property.key.STRING.getText)
+        string(property.key.STRING)
       } else {
         property.key.getText
       }
-      val value = Option(property.value).map(t => unescapeSQLString(t.getText)).getOrElse("")
+      val value = Option(property.value).map(string).orNull
       key -> value
     }.toMap
   }
