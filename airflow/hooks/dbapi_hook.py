@@ -156,7 +156,7 @@ class DbApiHook(BaseHook):
                 target_fields,
                 ",".join(values))
             cur.execute(sql)
-            if i % commit_every == 0:
+            if commit_every and i % commit_every == 0:
                 conn.commit()
                 logging.info(
                     "Loaded {i} into {table} rows so far".format(**locals()))
