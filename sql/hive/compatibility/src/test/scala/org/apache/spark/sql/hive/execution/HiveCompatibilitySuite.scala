@@ -338,6 +338,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_round_3",
     "view_cast",
 
+    // enable this after fixing SPARK-14137
+    "union20",
+
     // These tests check the VIEW table definition, but Spark handles CREATE VIEW itself and
     // generates different View Expanded Text.
     "alter_view_as_select",
@@ -1040,7 +1043,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union18",
     "union19",
     "union2",
-    "union20",
     "union22",
     "union23",
     "union24",
