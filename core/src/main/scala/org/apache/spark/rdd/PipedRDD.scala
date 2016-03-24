@@ -206,8 +206,9 @@ private[spark] class PipedRDD[T: ClassTag](
       private def propagateChildException(): Unit = {
         val t = childThreadException.get()
         if (t != null) {
-          logError(s"Caught exception ${t.getMessage} while running pipe(). Command ran: " +
-            command.mkString(" "))
+          val commandRan = command.mkString(" ")
+          logError(s"Caught exception while running pipe() operator. Command ran: $commandRan. " +
+            s"Exception: ${t.getMessage}")
           proc.destroy()
           cleanup()
           throw t
