@@ -94,8 +94,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("union all") {
-    val unionDF = testData.unionAll(testData).unionAll(testData)
-      .unionAll(testData).unionAll(testData)
+    val unionDF = testData.union(testData).union(testData)
+      .union(testData).union(testData)
 
     // Before optimizer, Union should be combined.
     assert(unionDF.queryExecution.analyzed.collect {
@@ -107,7 +107,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("unionAll should union DataFrames with UDTs (SPARK-13410)") {
+  test("union should union DataFrames with UDTs (SPARK-13410)") {
     val rowRDD1 = sparkContext.parallelize(Seq(Row(1, new ExamplePoint(1.0, 2.0))))
     val schema1 = StructType(Array(StructField("label", IntegerType, false),
                     StructField("point", new ExamplePointUDT(), false)))
@@ -118,7 +118,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df2 = sqlContext.createDataFrame(rowRDD2, schema2)
 
     checkAnswer(
-      df1.unionAll(df2).orderBy("label"),
+      df1.union(df2).orderBy("label"),
       Seq(Row(1, new ExamplePoint(1.0, 2.0)), Row(2, new ExamplePoint(3.0, 4.0)))
     )
   }
@@ -636,7 +636,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val jsonDF = sqlContext.read.json(jsonDir)
       assert(parquetDF.inputFiles.nonEmpty)
 
-      val unioned = jsonDF.unionAll(parquetDF).inputFiles.sorted
+      val unioned = jsonDF.union(parquetDF).inputFiles.sorted
       val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
       assert(unioned === allFiles)
     }
@@ -1104,7 +1104,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       }
     }
 
-    val union = df1.unionAll(df2)
+    val union = df1.union(df2)
     checkAnswer(
       union.filter('i < rand(7) * 10),
       expected(union)

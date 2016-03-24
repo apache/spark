@@ -122,7 +122,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
 
     // verify the append mode
     df.write.mode(SaveMode.Append).json(path.toString)
-    val df2 = df.unionAll(df)
+    val df2 = df.union(df)
     df2.registerTempTable("jsonTable2")
 
     checkLoad(df2, "jsonTable2")

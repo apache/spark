@@ -280,7 +280,7 @@ package object dsl {
 
       def intersect(otherPlan: LogicalPlan): LogicalPlan = Intersect(logicalPlan, otherPlan)
 
-      def unionAll(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
+      def union(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 
       def generate(
         generator: Generator,

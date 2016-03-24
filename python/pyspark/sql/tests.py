@@ -599,7 +599,7 @@ class SQLTests(ReusedPySparkTestCase):
         point = df1.head().point
         self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
-    def test_unionAll_with_udt(self):
+    def test_union_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row1 = (1.0, ExamplePoint(1.0, 2.0))
         row2 = (2.0, ExamplePoint(3.0, 4.0))
@@ -608,7 +608,7 @@ class SQLTests(ReusedPySparkTestCase):
         df1 = self.sqlCtx.createDataFrame([row1], schema)
         df2 = self.sqlCtx.createDataFrame([row2], schema)
 
-        result = df1.unionAll(df2).orderBy("label").collect()
+        result = df1.union(df2).orderBy("label").collect()
         self.assertEqual(
             result,
             [

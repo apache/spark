@@ -184,7 +184,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("big inner join, 4 matches per row") {
-    val bigData = testData.unionAll(testData).unionAll(testData).unionAll(testData)
+    val bigData = testData.union(testData).union(testData).union(testData)
     val bigDataX = bigData.as("x")
     val bigDataY = bigData.as("y")
 

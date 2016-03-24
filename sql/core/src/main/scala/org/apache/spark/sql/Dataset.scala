@@ -1361,8 +1361,8 @@ class Dataset[T] private[sql](
    * by a [[distinct]].
    *
    * @group typedrel
-   * @since 2.0.0
-   */
+  * @since 2.0.0
+  */
   def union(other: Dataset[T]): Dataset[T] = withTypedPlan {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.

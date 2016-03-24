@@ -82,7 +82,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testUDAF() {
-    Dataset<Row> df = hc.range(0, 100).unionAll(hc.range(0, 100)).select(col("id").as("value"));
+    Dataset<Row> df = hc.range(0, 100).union(hc.range(0, 100)).select(col("id").as("value"));
     UserDefinedAggregateFunction udaf = new MyDoubleSum();
     UserDefinedAggregateFunction registeredUDAF = hc.udf().register("mydoublesum", udaf);
     // Create Columns for the UDAF. For now, callUDF does not take an argument to specific if

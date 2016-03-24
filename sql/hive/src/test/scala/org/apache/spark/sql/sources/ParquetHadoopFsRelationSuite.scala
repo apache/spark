@@ -137,7 +137,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       fs.delete(commonSummaryPath, true)
 
       df.write.mode(SaveMode.Append).parquet(path)
-      checkAnswer(sqlContext.read.parquet(path), df.unionAll(df))
+      checkAnswer(sqlContext.read.parquet(path), df.union(df))
 
       assert(fs.exists(summaryPath))
       assert(fs.exists(commonSummaryPath))

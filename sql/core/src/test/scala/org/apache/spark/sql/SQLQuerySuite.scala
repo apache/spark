@@ -250,8 +250,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("aggregation with codegen") {
     // Prepare a table that we can group some rows.
     sqlContext.table("testData")
-      .unionAll(sqlContext.table("testData"))
-      .unionAll(sqlContext.table("testData"))
+      .union(sqlContext.table("testData"))
+      .union(sqlContext.table("testData"))
       .registerTempTable("testData3x")
 
     try {

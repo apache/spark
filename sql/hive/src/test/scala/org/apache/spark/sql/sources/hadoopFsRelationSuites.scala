@@ -60,7 +60,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     p2 <- Seq("foo", "bar")
   } yield (i, s"val_$i", 2, p2)).toDF("a", "b", "p1", "p2")
 
-  lazy val partitionedTestDF = partitionedTestDF1.unionAll(partitionedTestDF2)
+  lazy val partitionedTestDF = partitionedTestDF1.union(partitionedTestDF2)
 
   def checkQueries(df: DataFrame): Unit = {
     // Selects everything
@@ -191,7 +191,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath).orderBy("a"),
-        testDF.unionAll(testDF).orderBy("a").collect())
+        testDF.union(testDF).orderBy("a").collect())
     }
   }
 
@@ -268,7 +268,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
-        partitionedTestDF.unionAll(partitionedTestDF).collect())
+        partitionedTestDF.union(partitionedTestDF).collect())
     }
   }
 
@@ -332,7 +332,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), testDF.unionAll(testDF).orderBy("a").collect())
+      checkAnswer(sqlContext.table("t"), testDF.union(testDF).orderBy("a").collect())
     }
   }
 
@@ -415,7 +415,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.unionAll(partitionedTestDF).collect())
+      checkAnswer(sqlContext.table("t"), partitionedTestDF.union(partitionedTestDF).collect())
     }
   }
 
@@ -625,7 +625,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .format(dataSourceName)
             .option("dataSchema", df.schema.json)
             .load(dir.getCanonicalPath),
-          df.unionAll(df))
+          df.union(df))
 
         // This will fail because AlwaysFailOutputCommitter is used when we do append.
         intercept[Exception] {

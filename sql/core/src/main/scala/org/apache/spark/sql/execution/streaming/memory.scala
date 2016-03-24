@@ -97,7 +97,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
     newBlocks
       .map(_.toDF())
-      .reduceOption(_ unionAll _)
+      .reduceOption(_ union _)
       .getOrElse {
         sys.error("No data selected!")
       }

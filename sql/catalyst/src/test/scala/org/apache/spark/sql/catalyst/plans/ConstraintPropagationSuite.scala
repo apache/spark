@@ -109,14 +109,14 @@ class ConstraintPropagationSuite extends SparkFunSuite {
 
     assert(tr1
       .where('a.attr > 10)
-      .unionAll(tr2.where('e.attr > 10)
-      .unionAll(tr3.where('i.attr > 10)))
+      .union(tr2.where('e.attr > 10)
+      .union(tr3.where('i.attr > 10)))
       .analyze.constraints.isEmpty)
 
     verifyConstraints(tr1
       .where('a.attr > 10)
-      .unionAll(tr2.where('d.attr > 10)
-      .unionAll(tr3.where('g.attr > 10)))
+      .union(tr2.where('d.attr > 10)
+      .union(tr3.where('g.attr > 10)))
       .analyze.constraints,
       ExpressionSet(Seq(resolveColumn(tr1, "a") > 10,
         IsNotNull(resolveColumn(tr1, "a")))))
