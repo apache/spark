@@ -219,48 +219,62 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Runs this query returning the result as an array.
+   * Packing the UnsafeRows into byte array for faster serialization.
+   * The byte arrays are in the following format:
+   * [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
+   *
+   * UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
+   * compressed.
    */
-  def executeCollect(): Array[InternalRow] = {
-    // Packing the UnsafeRows into byte array for faster serialization.
-    // The byte arrays are in the following format:
-    // [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
-    //
-    // UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
-    // compressed.
-    val byteArrayRdd = execute().mapPartitionsInternal { iter =>
+  private def getByteArrayRdd(n: Int = -1): RDD[Array[Byte]] = {
+    execute().mapPartitionsInternal { iter =>
+      var count = 0
       val buffer = new Array[Byte](4 << 10)  // 4K
       val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
       val bos = new ByteArrayOutputStream()
       val out = new DataOutputStream(codec.compressedOutputStream(bos))
-      while (iter.hasNext) {
+      while (iter.hasNext && (n < 0 || count < n)) {
         val row = iter.next().asInstanceOf[UnsafeRow]
         out.writeInt(row.getSizeInBytes)
         row.writeToStream(out, buffer)
+        count += 1
       }
       out.writeInt(-1)
       out.flush()
       out.close()
       Iterator(bos.toByteArray)
     }
+  }
 
-    // Collect the byte arrays back to driver, then decode them as UnsafeRows.
+  /**
+   * Decode the byte arrays back to UnsafeRows and put them into buffer.
+   */
+  private def decodeUnsafeRows(bytes: Array[Byte], buffer: ArrayBuffer[InternalRow]): Unit = {
     val nFields = schema.length
-    val results = ArrayBuffer[InternalRow]()
 
+    val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(codec.compressedInputStream(bis))
+    var sizeOfNextRow = ins.readInt()
+    while (sizeOfNextRow >= 0) {
+      val bs = new Array[Byte](sizeOfNextRow)
+      ins.readFully(bs)
+      val row = new UnsafeRow(nFields)
+      row.pointTo(bs, sizeOfNextRow)
+      buffer += row
+      sizeOfNextRow = ins.readInt()
+    }
+  }
+
+  /**
+   * Runs this query returning the result as an array.
+   */
+  def executeCollect(): Array[InternalRow] = {
+    val byteArrayRdd = getByteArrayRdd()
+
+    val results = ArrayBuffer[InternalRow]()
     byteArrayRdd.collect().foreach { bytes =>
-      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
-      val bis = new ByteArrayInputStream(bytes)
-      val ins = new DataInputStream(codec.compressedInputStream(bis))
-      var sizeOfNextRow = ins.readInt()
-      while (sizeOfNextRow >= 0) {
-        val bs = new Array[Byte](sizeOfNextRow)
-        ins.readFully(bs)
-        val row = new UnsafeRow(nFields)
-        row.pointTo(bs, sizeOfNextRow)
-        results += row
-        sizeOfNextRow = ins.readInt()
-      }
+      decodeUnsafeRows(bytes, results)
     }
     results.toArray
   }
@@ -283,7 +297,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       return new Array[InternalRow](0)
     }
 
-    val childRDD = execute().map(_.copy())
+    val childRDD = getByteArrayRdd(n)
 
     val buf = new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
@@ -307,13 +321,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val left = n - buf.size
       val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
       val sc = sqlContext.sparkContext
-      val res = sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
+      val res = sc.runJob(childRDD,
+        (it: Iterator[Array[Byte]]) => if (it.hasNext) it.next() else Array.empty, p)
 
-      res.foreach(buf ++= _.take(n - buf.size))
+      res.foreach { r =>
+        decodeUnsafeRows(r.asInstanceOf[Array[Byte]], buf)
+      }
+
       partsScanned += p.size
     }
 
-    buf.toArray
+    if (buf.size > n) {
+      buf.take(n).toArray
+    } else {
+      buf.toArray
+    }
   }
 
   private[this] def isTesting: Boolean = sys.props.contains("spark.testing")

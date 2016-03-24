@@ -27,8 +27,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-case class OtherTuple(_1: String, _2: Int)
-
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
@@ -44,6 +42,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.mapPartitions(_ => Iterator(1)),
       1, 1, 1)
+  }
+
+  test("range") {
+    assert(sqlContext.range(10).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10, 1, 2).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10, 1, 2).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
   }
 
   test("SPARK-12404: Datatype Helper Serializability") {
@@ -298,7 +305,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy function, reduce") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val agged = ds.groupByKey(_.length).reduce(_ + _)
+    val agged = ds.groupByKey(_.length).reduceGroups(_ + _)
 
     checkDataset(
       agged,
@@ -636,7 +643,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(OuterObject.InnerClass("foo")).toDS(),
       OuterObject.InnerClass("foo"))
   }
+
+  test("SPARK-14000: case class with tuple type field") {
+    checkDataset(
+      Seq(TupleClass((1, "a"))).toDS(),
+      TupleClass(1, "a")
+    )
+  }
 }
+
+case class OtherTuple(_1: String, _2: Int)
+
+case class TupleClass(data: (Int, String))
 
 class OuterClass extends Serializable {
   case class InnerClass(a: String)

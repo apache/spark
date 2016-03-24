@@ -25,6 +25,7 @@ import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.util.DefaultParamsReader
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.sql.SQLContext
 
 /**
@@ -32,7 +33,7 @@ import org.apache.spark.sql.SQLContext
  *
  * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
  */
-private[ml] trait DecisionTreeModel {
+private[spark] trait DecisionTreeModel {
 
   /** Root of the decision tree */
   def rootNode: Node
@@ -64,9 +65,13 @@ private[ml] trait DecisionTreeModel {
 
   /**
    * Trace down the tree, and return the largest feature index used in any split.
+   *
    * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
    */
   private[ml] def maxSplitFeatureIndex(): Int = rootNode.maxSplitFeatureIndex()
+
+  /** Convert to spark.mllib DecisionTreeModel (losing some infomation) */
+  private[spark] def toOld: OldDecisionTreeModel
 }
 
 /**
