@@ -102,7 +102,7 @@ object CSVRelation extends Logging {
               indexSafeTokens(index),
               field.dataType,
               field.nullable,
-              params.nullValue)
+              params)
             if (subIndex < requiredSize) {
               row(subIndex) = value
             }

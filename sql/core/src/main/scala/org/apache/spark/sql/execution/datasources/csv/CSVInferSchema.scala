@@ -177,35 +177,57 @@ private[csv] object CSVTypeCast {
       datum: String,
       castType: DataType,
       nullable: Boolean = true,
-      nullValue: String = ""): Any = {
+      params: CSVOptions = CSVOptions()): Any = {
 
-    if (datum == nullValue && nullable && (!castType.isInstanceOf[StringType])) {
-      null
-    } else {
-      castType match {
-        case _: ByteType => datum.toByte
-        case _: ShortType => datum.toShort
-        case _: IntegerType => datum.toInt
-        case _: LongType => datum.toLong
-        case _: FloatType => Try(datum.toFloat)
-          .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
-        case _: DoubleType => Try(datum.toDouble)
-          .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
-        case _: BooleanType => datum.toBoolean
-        case dt: DecimalType =>
+    castType match {
+      case _: ByteType => if (datum == params.byteNullValue && nullable) null else datum.toByte
+      case _: ShortType => if (datum == params.shortNullValue && nullable) null else datum.toShort
+      case _: IntegerType => if (datum == params.integerNullValue && nullable) null else datum.toInt
+      case _: LongType => if (datum == params.longNullValue && nullable) null else datum.toLong
+      case _: FloatType =>
+        if (datum == params.floatNullValue && nullable) {
+          null
+        } else if (datum == params.floatNaNValue) {
+          Float.NaN
+        } else if (datum == params.floatNegativeInf) {
+          Float.NegativeInfinity
+        } else if (datum == params.floatPositiveInf) {
+          Float.PositiveInfinity
+        } else {
+          Try(datum.toFloat)
+            .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+        }
+      case _: DoubleType =>
+        if (datum == params.doubleNullValue && nullable) {
+          null
+        } else if (datum == params.doubleNaNValue) {
+          Double.NaN
+        } else if (datum == params.doubleNegativeInf) {
+          Double.NegativeInfinity
+        } else if (datum == params.doublePositiveInf) {
+          Double.PositiveInfinity
+        } else {
+          Try(datum.toDouble)
+            .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+        }
+      case _: BooleanType => datum.toBoolean
+      case dt: DecimalType =>
+        if (datum == params.decimalNullValue && nullable) {
+          null
+        } else {
           val value = new BigDecimal(datum.replaceAll(",", ""))
           Decimal(value, dt.precision, dt.scale)
-        // TODO(hossein): would be good to support other common timestamp formats
-        case _: TimestampType =>
-          // This one will lose microseconds parts.
-          // See https://issues.apache.org/jira/browse/SPARK-10681.
-          DateTimeUtils.stringToTime(datum).getTime  * 1000L
-        // TODO(hossein): would be good to support other common date formats
-        case _: DateType =>
-          DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
-        case _: StringType => UTF8String.fromString(datum)
-        case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
-      }
+        }
+      // TODO(hossein): would be good to support other common timestamp formats
+      case _: TimestampType =>
+        // This one will lose microseconds parts.
+        // See https://issues.apache.org/jira/browse/SPARK-10681.
+        DateTimeUtils.stringToTime(datum).getTime  * 1000L
+      // TODO(hossein): would be good to support other common date formats
+      case _: DateType =>
+        DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
+      case _: StringType => UTF8String.fromString(datum)
+      case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
     }
   }
 

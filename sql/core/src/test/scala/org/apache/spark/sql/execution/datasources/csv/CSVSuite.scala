@@ -45,6 +45,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val disableCommentsFile = "disable_comments.csv"
   private val boolFile = "bool.csv"
   private val simpleSparseFile = "simple_sparse.csv"
+  private val numbersFile = "numbers.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -477,5 +478,35 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
+  test("nulls, NaNs and Infinity values can be parsed") {
+    val numbers = sqlContext
+      .read
+      .format("csv")
+      .schema(StructType(List(
+        StructField("int", IntegerType, true),
+        StructField("long", LongType, true),
+        StructField("float", FloatType, true),
+        StructField("double", DoubleType, true)
+      )))
+      .options(Map(
+        "header" -> "true",
+        "mode" -> "DROPMALFORMED",
+        "integerNullValue" -> "--",
+        "longNullValue" -> "++",
+        "floatNullValue" -> "null",
+        "doubleNullValue" -> "NULL",
+        "floatNaNValue" -> "FNAN",
+        "doubleNaNValue" -> "DNAN",
+        "floatNegativeInf" -> "-FINF",
+        "floatPositiveInf" -> "FINF",
+        "doublePositiveInf" -> "DINF",
+        "doubleNegativeInf" -> "-DINF"))
+      .load(testFile(numbersFile))
+
+    assert(numbers.count() == 8)
+    
+
   }
 }

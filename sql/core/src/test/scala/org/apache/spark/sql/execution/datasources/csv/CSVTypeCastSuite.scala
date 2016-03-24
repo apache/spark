@@ -27,6 +27,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class CSVTypeCastSuite extends SparkFunSuite {
 
+  private def isNull(v: Any) = assert(v == null)
+
   test("Can parse decimal type values") {
     val stringValues = Seq("10.05", "1,000.01", "158,058,049.001")
     val decimalValues = Seq(10.05, 1000.01, 158058049.001)
@@ -64,17 +66,21 @@ class CSVTypeCastSuite extends SparkFunSuite {
   }
 
   test("Nullable types are handled") {
-    assert(CSVTypeCast.castTo("", IntegerType, nullable = true) == null)
+    assert(CSVTypeCast.castTo("", IntegerType, nullable = true, CSVOptions()) == null)
   }
 
   test("String type should always return the same as the input") {
-    assert(CSVTypeCast.castTo("", StringType, nullable = true) == UTF8String.fromString(""))
-    assert(CSVTypeCast.castTo("", StringType, nullable = false) == UTF8String.fromString(""))
+    assert(
+      CSVTypeCast.castTo("", StringType, nullable = true, CSVOptions()) ==
+        UTF8String.fromString(""))
+    assert(
+      CSVTypeCast.castTo("", StringType, nullable = false, CSVOptions()) ==
+        UTF8String.fromString(""))
   }
 
   test("Throws exception for empty string with non null type") {
     val exception = intercept[NumberFormatException]{
-      CSVTypeCast.castTo("", IntegerType, nullable = false)
+      CSVTypeCast.castTo("", IntegerType, nullable = false, CSVOptions())
     }
     assert(exception.getMessage.contains("For input string: \"\""))
   }
@@ -104,5 +110,64 @@ class CSVTypeCastSuite extends SparkFunSuite {
     } finally {
       Locale.setDefault(originalLocale)
     }
+  }
+
+  test("Float NaN values are parsed correctly") {
+    val floatVal: Float = CSVTypeCast.castTo(
+      "nn", FloatType, nullable = true, CSVOptions("floatNaNValue", "nn")).asInstanceOf[Float]
+
+    // Java implements the IEEE-754 floating point standard which guarantees that any comparison
+    // against NaN will return false (except != which returns true)
+    assert(floatVal != floatVal)
+  }
+
+  test("Double NaN values are parsed correctly") {
+    val doubleVal: Double = CSVTypeCast.castTo(
+      "-", DoubleType, nullable = true, CSVOptions("doubleNaNValue", "-")).asInstanceOf[Double]
+
+    assert(doubleVal.isNaN)
+  }
+
+  test("Float infinite values can be parsed") {
+    val floatVal1 = CSVTypeCast.castTo(
+      "max", FloatType, nullable = true, CSVOptions("floatNegativeInf", "max")).asInstanceOf[Float]
+
+    assert(floatVal1 == Float.NegativeInfinity)
+
+    val floatVal2 = CSVTypeCast.castTo(
+      "max", FloatType, nullable = true, CSVOptions("floatPositiveInf", "max")).asInstanceOf[Float]
+
+    assert(floatVal2 == Float.PositiveInfinity)
+  }
+
+  test("Double infinite values can be parsed") {
+    val doubleVal1 = CSVTypeCast.castTo(
+      "max", DoubleType, nullable = true, CSVOptions("doubleNegativeInf", "max")
+    ).asInstanceOf[Double]
+
+    assert(doubleVal1 == Double.NegativeInfinity)
+
+    val doubleVal2 = CSVTypeCast.castTo(
+      "max", DoubleType, nullable = true, CSVOptions("doublePositiveInf", "max")
+    ).asInstanceOf[Double]
+
+    assert(doubleVal2 == Double.PositiveInfinity)
+  }
+
+  test("Type-specific null values are used for casting") {
+    isNull(
+      CSVTypeCast.castTo("-", ByteType, nullable = true, CSVOptions("byteNullValue", "-")))
+    isNull(
+      CSVTypeCast.castTo("-", ShortType, nullable = true, CSVOptions("shortNullValue", "-")))
+    isNull(
+      CSVTypeCast.castTo("-", IntegerType, nullable = true, CSVOptions("integerNullValue", "-")))
+    isNull(
+      CSVTypeCast.castTo("-", LongType, nullable = true, CSVOptions("longNullValue", "-")))
+    isNull(
+      CSVTypeCast.castTo("-", FloatType, nullable = true, CSVOptions("floatNullValue", "-")))
+    isNull(
+      CSVTypeCast.castTo("-", DoubleType, nullable = true, CSVOptions("doubleNullValue", "-")))
+    isNull(
+      CSVTypeCast.castTo("-", DecimalType.DoubleDecimal, true, CSVOptions("decimalNullValue", "-")))
   }
 }
