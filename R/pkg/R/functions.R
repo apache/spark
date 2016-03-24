@@ -2643,21 +2643,28 @@ setMethod("sort_array",
 #' 
 #' @name histogram
 #' @title Histogram
-#' @param nbins the number of bins (optional). The default is 10.
+#' @param nbins the number of bins (optional). Default value is 10.
 #' @param df the DataFrame containing the Column to build the histogram from.
 #' @param colname the name of the column to build the histogram from.
 #' @return a data.frame with the histogram statistics, i.e., counts and centroids.
-#' @examples \dontrun{
-#' 
+#' @rdname histogram
+#' @family agg_funcs
+#' @export
+#' @examples 
+#' \dontrun{
 #' # Create a DataFrame from the Iris dataset
 #' irisDF <- createDataFrame(sqlContext, iris)
 #' 
 #' # Compute histogram statistics
 #' histData <- histogram(df, "colname"Sepal_Length", nbins = 12)
 #'
-#' # Once SparkR has computed the histogram statistics, it would be very easy to
-#' # render the histogram using R's visualization packages such as ggplot2.
-#'   
+#' # Once SparkR has computed the histogram statistics, the histogram can be
+#' # rendered using the ggplot2 library:
+#'
+#' require(ggplot2)
+#' plot <- ggplot(histStats, aes(x = centroids, y = counts))
+#' plot <- plot + geom_histogram(data = histStats, stat = "identity", binwidth = 100)
+#' plot <- plot + xlab("Sepal_Length") + ylab("Frequency")   
 #' } 
 setMethod("histogram",
           signature(df = "DataFrame"),
