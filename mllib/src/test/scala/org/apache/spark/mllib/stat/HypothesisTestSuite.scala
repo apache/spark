@@ -21,12 +21,12 @@ import java.util.Random
 
 import org.apache.commons.math3.distribution.{ExponentialDistribution,
   NormalDistribution, UniformRealDistribution}
-import org.apache.commons.math3.stat.inference.KolmogorovSmirnovTest
+import org.apache.commons.math3.stat.inference.{KolmogorovSmirnovTest => CommonMathKolmogorovSmirnovTest}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.stat.test.ChiSqTest
+import org.apache.spark.mllib.stat.test.{ChiSqTest, KolmogorovSmirnovTest}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -177,7 +177,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val sampledUnif = sc.parallelize(unifDist.sample(n), 10)
 
     // Use a apache math commons local KS test to verify calculations
-    val ksTest = new KolmogorovSmirnovTest()
+    val ksTest = new CommonMathKolmogorovSmirnovTest()
     val pThreshold = 0.05
 
     // Comparing a standard normal sample to a standard normal distribution
@@ -253,5 +253,166 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rCompResult = Statistics.kolmogorovSmirnovTest(rData, "norm", 0, 1)
     assert(rCompResult.statistic ~== rKSStat relTol 1e-4)
     assert(rCompResult.pValue ~== rKSPVal relTol 1e-4)
+  }
+
+  test("2 sample Kolmogorov-Smirnov test: apache commons math3 implementation equivalence") {
+    // Create theoretical distributions
+    val stdNormalDist = new NormalDistribution(0, 1)
+    val normalDist = new NormalDistribution(2, 3)
+    val expDist = new ExponentialDistribution(0.6)
+
+    // create data samples and parallelize
+    val n = 10000
+    // local copies
+    val sampledStdNorm1L = stdNormalDist.sample(n)
+    val sampledStdNorm2L = stdNormalDist.sample(n)
+    val sampledNormL = normalDist.sample(n)
+    val sampledExpL = expDist.sample(n)
+    // distributed
+    val sampledStdNorm1P = sc.parallelize(sampledStdNorm1L, 10)
+    val sampledStdNorm2P = sc.parallelize(sampledStdNorm2L, 10)
+    val sampledNormP = sc.parallelize(sampledNormL, 10)
+    val sampledExpP = sc.parallelize(sampledExpL, 10)
+
+    // Use apache math commons local KS test to verify calculations
+    val ksTest = new CommonMathKolmogorovSmirnovTest()
+    val pThreshold = 0.05
+
+    // Comparing 2 samples from same standard normal distribution
+    val result1 = Statistics.kolmogorovSmirnovTest2Sample(sampledStdNorm1P, sampledStdNorm2P)
+    val refStat1 = ksTest.kolmogorovSmirnovStatistic(sampledStdNorm1L, sampledStdNorm2L)
+    val refP1 = ksTest.kolmogorovSmirnovTest(sampledStdNorm1L, sampledStdNorm2L)
+    assert(result1.statistic ~== refStat1 relTol 1e-4)
+    assert(result1.pValue ~== refP1 relTol 1e-4)
+    assert(result1.pValue > pThreshold) // accept H0
+
+    // Comparing 2 samples from different normal distributions
+    val result2 = Statistics.kolmogorovSmirnovTest2Sample(sampledStdNorm1P, sampledNormP)
+    val refStat2 = ksTest.kolmogorovSmirnovStatistic(sampledStdNorm1L, sampledNormL)
+    val refP2 = ksTest.kolmogorovSmirnovTest(sampledStdNorm1L, sampledNormL)
+    assert(result2.statistic ~== refStat2 relTol 1e-4)
+    assert(result2.pValue ~== refP2 relTol 1e-4)
+    assert(result2.pValue < pThreshold) // reject H0
+
+    // Comparing 1 sample from normal distribution to 1 sample from exponential distribution
+    val result3 = Statistics.kolmogorovSmirnovTest2Sample(sampledNormP, sampledExpP)
+    val refStat3 = ksTest.kolmogorovSmirnovStatistic(sampledNormL, sampledExpL)
+    val refP3 = ksTest.kolmogorovSmirnovTest(sampledNormL, sampledExpL)
+    assert(result3.statistic ~== refStat3 relTol 1e-4)
+    assert(result3.pValue ~== refP3 relTol 1e-4)
+    assert(result3.pValue < pThreshold) // reject H0
+  }
+
+  test("2 sample Kolmogorov-Smirnov test: R implementation equivalence") {
+    /*
+     Comparing results with the R implementation of KS
+     > sessionInfo()
+     R version 3.2.0 (2015-04-16)
+     Platform: x86_64-apple-darwin13.4.0 (64-bit)
+     > set.seed(20)
+     > v <- rnorm(20)
+     > v2 <- rnorm(20)
+     > v
+      [1]  1.16268529 -0.58592447  1.78546500 -1.33259371 -0.44656677  0.56960612
+      [7] -2.88971761 -0.86901834 -0.46170268 -0.55554091 -0.02013537 -0.15038222
+     [13] -0.62812676  1.32322085 -1.52135057 -0.43742787  0.97057758  0.02822264
+     [19] -0.08578219  0.38921440
+     > v2
+      [1]  0.23668737 -0.14444023  0.72222970  0.36990686 -0.24206631 -1.47206332
+      [7] -0.59615955 -1.14670013 -2.47463643 -0.61350858 -0.21631151  1.59014577
+     [13]  1.55614328  1.10845089 -1.09734184 -1.86060572 -0.91357885  1.24556891
+     [19]  0.08785472  0.42348190
+    */
+    val rData1 = sc.parallelize(
+      Array(
+        1.1626852897838, -0.585924465893051, 1.78546500331661, -1.33259371048501,
+        -0.446566766553219, 0.569606122374976, -2.88971761441412, -0.869018343326555,
+        -0.461702683149641, -0.555540910137444, -0.0201353678515895, -0.150382224136063,
+        -0.628126755843964, 1.32322085193283, -1.52135057001199, -0.437427868856691,
+        0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
+      )
+    )
+
+    val rData2 = sc.parallelize(
+      Array(
+        0.236687367712904, -0.144440226694072, 0.722229700806146, 0.369906857410192,
+        -0.242066314481781, -1.47206331842053, -0.596159545765696, -1.1467001312186,
+        -2.47463643305885, -0.613508578410268, -0.216311514038102, 1.5901457684867,
+        1.55614327565194, 1.10845089348356, -1.09734184488477, -1.86060571637755,
+        -0.913578847977252, 1.24556891198713, 0.0878547183607045, 0.423481895050245
+      )
+    )
+
+    val rKSStat = 0.15
+    val rKSPval = 0.9831
+    val kSCompResult = Statistics.kolmogorovSmirnovTest2Sample(rData1, rData2)
+    assert(kSCompResult.statistic ~== rKSStat relTol 1e-4)
+    // we're more lenient with the p-value here since the approximate p-value calculated
+    // by apache math commons is likely to be slightly off given the small sample size
+    assert(kSCompResult.pValue ~== rKSPval relTol 1e-2)
+  }
+
+  test("2 sample Kolmogorov-Smirnov test: helper functions in case partitions have no data") {
+    // we use the R data provided in the prior test
+    // Once we have combined and sorted we partitino with a larger number than
+    // the number of elements to guarantee we have empty partitions.
+    // We test various critical package private functions in this circumstance.
+    val rData1 = Array(
+        1.1626852897838, -0.585924465893051, 1.78546500331661, -1.33259371048501,
+        -0.446566766553219, 0.569606122374976, -2.88971761441412, -0.869018343326555,
+        -0.461702683149641, -0.555540910137444, -0.0201353678515895, -0.150382224136063,
+        -0.628126755843964, 1.32322085193283, -1.52135057001199, -0.437427868856691,
+        0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
+      )
+
+    val rData2 = Array(
+        0.236687367712904, -0.144440226694072, 0.722229700806146, 0.369906857410192,
+        -0.242066314481781, -1.47206331842053, -0.596159545765696, -1.1467001312186,
+        -2.47463643305885, -0.613508578410268, -0.216311514038102, 1.5901457684867,
+        1.55614327565194, 1.10845089348356, -1.09734184488477, -1.86060571637755,
+        -0.913578847977252, 1.24556891198713, 0.0878547183607045, 0.423481895050245
+      )
+
+
+    val n1 = rData1.length
+    val n2 = rData2.length
+    val unioned = (rData1.map((_, true)) ++ rData2.map((_, false))).sortBy(_._1)
+    val parallel = sc.parallelize(unioned, 100)
+    // verify that there are empty partitions
+    assert(parallel.mapPartitions(x => Array(x.size).iterator).collect().contains(0))
+    val localExtrema = parallel.mapPartitions(
+      KolmogorovSmirnovTest.searchTwoSampleCandidates(_, n1, n2)
+    ).collect()
+    val ksCompStat = KolmogorovSmirnovTest.searchTwoSampleStatistic(localExtrema, n1 * n2)
+
+    val rKSStat = 0.15
+    assert(ksCompStat ~== rKSStat relTol 1e-4)
+  }
+
+  test("2 sample Kolmogorov-Smirnov test: helper functions in case partitions have only 1 sample") {
+    // Creating 2 samples that don't overlap and request a large number of partitions to guarantee
+    // that there will be partitions with only data from 1 sample. We test critical helper
+    // functions in these circumstances.
+    val n = 100
+    val lower = (1 to n).toArray.map(_.toDouble)
+    val upper = (1 to n).toArray.map(n + _.toDouble * 100)
+
+    val unioned = (lower.map((_, true)) ++ upper.map((_, false))).sortBy(_._1)
+    val parallel = sc.parallelize(unioned, 200)
+    // verify that there is at least 1 partition with only 1 sample
+    assert(parallel.mapPartitions(x =>
+      Array(x.toArray.map(_._1).distinct.length).iterator
+      ).collect().contains(1)
+    )
+    val localExtrema = parallel.mapPartitions(
+      KolmogorovSmirnovTest.searchTwoSampleCandidates(_, n, n)
+    ).collect()
+    val ksCompStat = KolmogorovSmirnovTest.searchTwoSampleStatistic(localExtrema, n * n)
+
+    // Use apache math commons local KS test to verify calculations
+    val ksTest = new CommonMathKolmogorovSmirnovTest()
+
+    val refStat4 = ksTest.kolmogorovSmirnovStatistic(lower, upper)
+    assert(ksCompStat ~== refStat4 relTol 1e-3)
   }
 }

@@ -447,11 +447,16 @@ user tests against the normal distribution (`distName="norm"`), but does not pro
 parameters, the test initializes to the standard normal distribution and logs an appropriate 
 message.
 
+There is also a 2-sample, 2-sided implementation available, which tests the null hypothesis that the
+2 samples are drawn from the same distribution. It is worth noting that the test assumes that all
+elements are unique, both within and across the 2 samples, and thus no ranking ties should occur.
+Given that the test is for continuous distributions this should not be an onerous requirement.
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 [`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to
-run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
-and interpret the hypothesis tests.
+run a 1-sample, 2-sided Kolmogorov-Smirnov test and a 2-sample, 2-sided Kolmogorv-Smirnov test.
+The following example demonstrates how to run and interpret the hypothesis tests.
 
 Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
 
@@ -469,6 +474,13 @@ println(testResult) // summary of the test including the p-value, test statistic
 // perform a KS test using a cumulative distribution function of our making
 val myCDF: Double => Double = ...
 val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
+
+val data2: RDD[Double] = ... // another RDD of sample data
+// run a KS test for data vs data 2
+// this corresponds to a 2-sample test
+// the statistic provides a test for the null hypothesis that both samples are drawn from the 
+// same distribution
+val ksTestResult2 = Statistics.kolmogorovSmirnovTest2Sample(data, data2)
 {% endhighlight %}
 </div>
 
