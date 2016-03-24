@@ -56,7 +56,8 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  *                    If a split has less information gain than minInfoGain,
  *                    this split will not be considered as a valid split.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
- *                      256 MB.
+ *                      256 MB.  If too small, then 1 node will be split per iteration, and
+ *                      its aggregates may exceed this size.
  * @param subsamplingRate Fraction of the training data used for learning decision tree.
  * @param useNodeIdCache If this is true, instead of passing trees to executors, the algorithm will
  *                       maintain a separate RDD of node Id cache for each row.

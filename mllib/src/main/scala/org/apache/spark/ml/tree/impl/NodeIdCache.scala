@@ -171,7 +171,6 @@ private[spark] class NodeIdCache(
   }
 }
 
-@DeveloperApi
 private[spark] object NodeIdCache {
   /**
    * Initialize the node Id cache with initial node Id values.

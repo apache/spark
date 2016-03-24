@@ -169,7 +169,7 @@ public class JavaDatasetSuite implements Serializable {
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
-    GroupedDataset<Integer, String> grouped = ds.groupByKey(new MapFunction<String, Integer>() {
+    KeyValueGroupedDataset<Integer, String> grouped = ds.groupByKey(new MapFunction<String, Integer>() {
       @Override
       public Integer call(String v) throws Exception {
         return v.length();
@@ -204,7 +204,7 @@ public class JavaDatasetSuite implements Serializable {
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped.collectAsList()));
 
-    Dataset<Tuple2<Integer, String>> reduced = grouped.reduce(new ReduceFunction<String>() {
+    Dataset<Tuple2<Integer, String>> reduced = grouped.reduceGroups(new ReduceFunction<String>() {
       @Override
       public String call(String v1, String v2) throws Exception {
         return v1 + v2;
@@ -217,7 +217,7 @@ public class JavaDatasetSuite implements Serializable {
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT());
-    GroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(new MapFunction<Integer, Integer>() {
+    KeyValueGroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(new MapFunction<Integer, Integer>() {
       @Override
       public Integer call(Integer v) throws Exception {
         return v / 2;
@@ -249,7 +249,7 @@ public class JavaDatasetSuite implements Serializable {
   public void testGroupByColumn() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
-    GroupedDataset<Integer, String> grouped =
+    KeyValueGroupedDataset<Integer, String> grouped =
       ds.groupByKey(length(col("value"))).keyAs(Encoders.INT());
 
     Dataset<String> mapped = grouped.mapGroups(
@@ -300,7 +300,7 @@ public class JavaDatasetSuite implements Serializable {
       Arrays.asList("abc", "abc", "xyz", "xyz", "foo", "foo", "abc", "abc", "xyz"),
       unioned.collectAsList());
 
-    Dataset<String> subtracted = ds.subtract(ds2);
+    Dataset<String> subtracted = ds.except(ds2);
     Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
   }
 
@@ -309,6 +309,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @SafeVarargs
+  @SuppressWarnings("varargs")
   private static <T> Set<T> asSet(T... records) {
     return toSet(Arrays.asList(records));
   }
@@ -410,7 +411,7 @@ public class JavaDatasetSuite implements Serializable {
       Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
     Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
 
-    GroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupByKey(
+    KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupByKey(
       new MapFunction<Tuple2<String, Integer>, String>() {
         @Override
         public String call(Tuple2<String, Integer> value) throws Exception {

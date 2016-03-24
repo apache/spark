@@ -409,7 +409,10 @@ abstract class HiveComparisonTest
                 }
 
                 try {
-                  new TestHive.QueryExecution(convertedSQL)
+                  val queryExecution = new TestHive.QueryExecution(convertedSQL)
+                  // Trigger the analysis of this converted SQL query.
+                  queryExecution.analyzed
+                  queryExecution
                 } catch {
                   case NonFatal(e) => fail(
                     s"""Failed to analyze the converted SQL string:

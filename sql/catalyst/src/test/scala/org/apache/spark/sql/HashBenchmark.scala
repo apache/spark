@@ -18,14 +18,14 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Murmur3Hash, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Benchmark
 
 /**
- * Benchmark for the previous interpreted hash function(InternalRow.hashCode) vs the new codegen
- * hash expression(Murmur3Hash).
+ * Benchmark for the previous interpreted hash function(InternalRow.hashCode) vs codegened
+ * hash expressions (Murmur3Hash/xxHash64).
  */
 object HashBenchmark {
 
@@ -63,19 +63,44 @@ object HashBenchmark {
         }
       }
     }
+
+    val getHashCode64b = UnsafeProjection.create(new XxHash64(attrs) :: Nil, attrs)
+    benchmark.addCase("codegen version 64-bit") { _: Int =>
+      for (_ <- 0L until iters) {
+        var sum = 0
+        var i = 0
+        while (i < numRows) {
+          sum += getHashCode64b(rows(i)).getInt(0)
+          i += 1
+        }
+      }
+    }
+
     benchmark.run()
   }
 
   def main(args: Array[String]): Unit = {
-    val simple = new StructType().add("i", IntegerType)
+    val singleInt = new StructType().add("i", IntegerType)
     /*
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    Hash For simple:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
+    Hash For single ints:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    interpreted version                       941 /  955        142.6           7.0       1.0X
-    codegen version                          1737 / 1775         77.3          12.9       0.5X
+    interpreted version                      1006 / 1011        133.4           7.5       1.0X
+    codegen version                          1835 / 1839         73.1          13.7       0.5X
+    codegen version 64-bit                   1627 / 1628         82.5          12.1       0.6X
      */
-    test("simple", simple, 1 << 13, 1 << 14)
+    test("single ints", singleInt, 1 << 15, 1 << 14)
+
+    val singleLong = new StructType().add("i", LongType)
+    /*
+    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
+    Hash For single longs:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    interpreted version                      1196 / 1209        112.2           8.9       1.0X
+    codegen version                          2178 / 2181         61.6          16.2       0.5X
+    codegen version 64-bit                   1752 / 1753         76.6          13.1       0.7X
+     */
+    test("single longs", singleLong, 1 << 15, 1 << 14)
 
     val normal = new StructType()
       .add("null", NullType)
@@ -93,11 +118,12 @@ object HashBenchmark {
       .add("date", DateType)
       .add("timestamp", TimestampType)
     /*
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
     Hash For normal:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    interpreted version                      2209 / 2271          0.9        1053.4       1.0X
-    codegen version                          1887 / 2018          1.1         899.9       1.2X
+    interpreted version                      2713 / 2715          0.8        1293.5       1.0X
+    codegen version                          2015 / 2018          1.0         960.9       1.3X
+    codegen version 64-bit                    735 /  738          2.9         350.7       3.7X
      */
     test("normal", normal, 1 << 10, 1 << 11)
 
@@ -106,11 +132,12 @@ object HashBenchmark {
       .add("array", arrayOfInt)
       .add("arrayOfArray", ArrayType(arrayOfInt))
     /*
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
     Hash For array:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    interpreted version                      1481 / 1529          0.1       11301.7       1.0X
-    codegen version                          2591 / 2636          0.1       19771.1       0.6X
+    interpreted version                      1498 / 1499          0.1       11432.1       1.0X
+    codegen version                          2642 / 2643          0.0       20158.4       0.6X
+    codegen version 64-bit                   2421 / 2424          0.1       18472.5       0.6X
      */
     test("array", array, 1 << 8, 1 << 9)
 
@@ -119,11 +146,12 @@ object HashBenchmark {
       .add("map", mapOfInt)
       .add("mapOfMap", MapType(IntegerType, mapOfInt))
     /*
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
     Hash For map:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    interpreted version                      1820 / 1861          0.0      444347.2       1.0X
-    codegen version                           205 /  223          0.0       49936.5       8.9X
+    interpreted version                      1612 / 1618          0.0      393553.4       1.0X
+    codegen version                           149 /  150          0.0       36381.2      10.8X
+    codegen version 64-bit                    144 /  145          0.0       35122.1      11.2X
      */
     test("map", map, 1 << 6, 1 << 6)
   }
