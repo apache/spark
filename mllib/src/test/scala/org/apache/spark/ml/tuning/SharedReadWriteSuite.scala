@@ -278,12 +278,12 @@ object MyValidator extends MLReadable[MyValidator] {
   override def load(path: String): MyValidator = super.load(path)
 
   private[MyValidator] class MyValidatorWriter(instance: MyValidator)
-    extends MLWriter with SharedReadWrite {
+    extends MLWriter with MetaPipelineReadWrite {
     validateParams(instance)
     override protected def saveImpl(path: String): Unit = saveImpl(path, instance, sc)
   }
 
-  private class MyValidatorReader extends MLReader[MyValidator] with SharedReadWrite {
+  private class MyValidatorReader extends MLReader[MyValidator] with MetaPipelineReadWrite {
     /** Checked against metadata when loading model */
     private val className = classOf[MyValidator].getName
 
@@ -333,7 +333,7 @@ object MyValidatorModel extends MLReadable[MyValidatorModel] {
   override def load(path: String): MyValidatorModel = super.load(path)
 
   private[MyValidatorModel] class MyValidatorModelWriter(instance: MyValidatorModel)
-    extends MLWriter with SharedReadWrite {
+    extends MLWriter with MetaPipelineReadWrite {
     validateParams(instance)
     override protected def saveImpl(path: String): Unit = {
       saveImpl(path, instance, sc, None)
@@ -342,7 +342,7 @@ object MyValidatorModel extends MLReadable[MyValidatorModel] {
     }
   }
 
-  private class MyValidatorModelReader extends MLReader[MyValidatorModel] with SharedReadWrite {
+  private class MyValidatorModelReader extends MLReader[MyValidatorModel] with MetaPipelineReadWrite {
 
     /** Checked against metadata when loading model */
     private val className = classOf[MyValidatorModel].getName

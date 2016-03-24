@@ -152,7 +152,7 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
 
   private[TrainValidationSplit]
   class TrainValidationSplitWriter(instance: TrainValidationSplit)
-    extends MLWriter with SharedReadWrite {
+    extends MLWriter with MetaPipelineReadWrite {
 
     validateParams(instance)
 
@@ -161,7 +161,7 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
   }
 
   private class TrainValidationSplitReader
-    extends MLReader[TrainValidationSplit] with SharedReadWrite {
+    extends MLReader[TrainValidationSplit] with MetaPipelineReadWrite {
 
     /** Checked against metadata when loading model */
     private val className = classOf[TrainValidationSplit].getName
@@ -231,7 +231,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
   private[TrainValidationSplitModel]
   class TrainValidationSplitModelWriter(instance: TrainValidationSplitModel)
-    extends MLWriter with SharedReadWrite {
+    extends MLWriter with MetaPipelineReadWrite {
 
     validateParams(instance)
 
@@ -245,7 +245,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
   }
 
   private class TrainValidationSplitModelReader
-    extends MLReader[TrainValidationSplitModel] with SharedReadWrite {
+    extends MLReader[TrainValidationSplitModel] with MetaPipelineReadWrite {
 
     /** Checked against metadata when loading model */
     private val className = classOf[TrainValidationSplitModel].getName
