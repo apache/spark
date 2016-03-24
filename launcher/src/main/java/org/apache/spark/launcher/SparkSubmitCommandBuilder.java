@@ -242,6 +242,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xms" + memory);
       cmd.add("-Xmx" + memory);
+      cmd.add("-XX:MaxDirectMemorySize=128g"); // TODO(josh): configure in a principled way
       addOptionString(cmd, config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS));
       mergeEnvPathList(env, getLibPathEnvName(),
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));

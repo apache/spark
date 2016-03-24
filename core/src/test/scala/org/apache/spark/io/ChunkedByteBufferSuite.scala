@@ -52,7 +52,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
 
   test("copy() does not affect original buffer's position") {
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(8)))
-    chunkedByteBuffer.copy()
+    chunkedByteBuffer.copy(ByteBuffer.allocate)
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
   }
 
@@ -90,4 +90,6 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     assert(bytesFromStream === bytes1.array() ++ bytes2.array())
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
   }
+
+  // TODO(josh): figure out how to test the dispose=true case.
 }

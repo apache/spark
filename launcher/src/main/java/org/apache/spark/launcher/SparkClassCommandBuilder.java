@@ -87,6 +87,7 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
     cmd.add("-Xms" + mem);
     cmd.add("-Xmx" + mem);
+    cmd.add("-XX:MaxDirectMemorySize=128g"); // TODO(josh): configure in a principled way
     addPermGenSizeOpt(cmd);
     cmd.add(className);
     cmd.addAll(classArgs);

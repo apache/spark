@@ -17,6 +17,7 @@
 package org.apache.spark.streaming.rdd
 
 import java.io.File
+import java.nio.ByteBuffer
 
 import scala.util.Random
 

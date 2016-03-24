@@ -117,8 +117,10 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   /**
    * Make a copy of this ChunkedByteBuffer, copying all of the backing data into new buffers.
    * The new buffer will share no resources with the original buffer.
+   *
+   * @param allocator a method for allocating byte buffers
    */
-  def copy(): ChunkedByteBuffer = {
+  def copy(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     val copiedChunks = getChunks().map { chunk =>
       // TODO: accept an allocator in this copy method to integrate with mem. accounting systems
       val newChunk = ByteBuffer.allocate(chunk.limit())
@@ -162,6 +164,7 @@ private class ChunkedByteBufferInputStream(
 
   override def read(): Int = {
     if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
+      StorageUtils.dispose(currentChunk)
       currentChunk = chunks.next()
     }
     if (currentChunk != null && currentChunk.hasRemaining) {
@@ -174,6 +177,7 @@ private class ChunkedByteBufferInputStream(
 
   override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
     if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
+      StorageUtils.dispose(currentChunk)
       currentChunk = chunks.next()
     }
     if (currentChunk != null && currentChunk.hasRemaining) {
@@ -204,8 +208,10 @@ private class ChunkedByteBufferInputStream(
   }
 
   override def close(): Unit = {
-    if (chunkedByteBuffer != null && dispose) {
-      chunkedByteBuffer.dispose()
+    if (currentChunk != null) {
+      if (dispose) {
+        chunkedByteBuffer.dispose()
+      }
     }
     chunkedByteBuffer = null
     chunks = null
