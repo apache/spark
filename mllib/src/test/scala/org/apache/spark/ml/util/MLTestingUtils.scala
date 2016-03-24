@@ -18,7 +18,7 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{Model, PredictionModel, Predictor}
+import org.apache.spark.ml.{Estimator, Model, PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.Regressor
 import org.apache.spark.mllib.linalg.Vectors
@@ -34,23 +34,41 @@ object MLTestingUtils extends SparkFunSuite {
     assert(copied.parent == model.parent)
   }
 
-  def checkAcceptAllNumericTypes[M <: PredictionModel[_, M], T <: Predictor[_, _, M]](
+  def checkPredictorAcceptAllNumericTypes[M <: PredictionModel[_, M], T <: Predictor[_, _, M]](
       predictor: T, sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
     val dfs = if (predictor.isInstanceOf[Regressor[_, _, _]]) {
-      genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
+      genRegressionDFWithNumericLabelCol(sqlContext)
     } else {
-      genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
+      genClassifDFWithNumericLabelCol(sqlContext)
     }
     val expected = predictor.fit(dfs(DoubleType))
     val actuals = dfs.keys.filter(_ != DoubleType).map(t => predictor.fit(dfs(t)))
     actuals.foreach(actual => check(expected, actual))
   }
 
-  def checkRejectNotNumericTypes(predictor: Predictor[_, _, _], sqlContext: SQLContext): Unit = {
-    val dfWithStringLabels =
-      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
+  def checkPredictorRejectNotNumericTypes(
+      predictor: Predictor[_, _, _], sqlContext: SQLContext): Unit = {
+    val dfWithStringLabels = generateDFWithStringLabelCol(sqlContext)
     val thrown = intercept[IllegalArgumentException] {
       predictor.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
+  }
+  
+  def checkEstimatorAcceptAllNumericTypes[M <: Model[M], T <: Estimator[M]](
+      estimator: T, sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
+    val dfs = genRegressionDFWithNumericLabelCol(sqlContext)
+    val expected = estimator.fit(dfs(DoubleType))
+    val actuals = dfs.keys.filter(_ != DoubleType).map(t => estimator.fit(dfs(t)))
+    actuals.foreach(actual => check(expected, actual))
+  }
+
+  def checkEstimatorRejectNotNumericTypes(
+      estimator: Estimator[_], sqlContext: SQLContext): Unit = {
+    val dfWithStringLabels = generateDFWithStringLabelCol(sqlContext)
+    val thrown = intercept[IllegalArgumentException] {
+      estimator.fit(dfWithStringLabels)
     }
     assert(thrown.getMessage contains
       "Column label must be of type NumericType but was actually of type StringType")
@@ -58,8 +76,8 @@ object MLTestingUtils extends SparkFunSuite {
 
   def genClassifDFWithNumericLabelCol(
       sqlContext: SQLContext,
-      labelColName: String,
-      featuresColName: String): Map[NumericType, DataFrame] = {
+      labelColName: String = "label",
+      featuresColName: String = "features"): Map[NumericType, DataFrame] = {
     val df = sqlContext.createDataFrame(Seq(
       (0, Vectors.dense(0, 2, 3)),
       (1, Vectors.dense(0, 3, 1)),
@@ -75,8 +93,8 @@ object MLTestingUtils extends SparkFunSuite {
 
   def genRegressionDFWithNumericLabelCol(
       sqlContext: SQLContext,
-      labelColName: String,
-      featuresColName: String,
+      labelColName: String = "label",
+      featuresColName: String = "features",
       censorColName: String = "censor"): Map[NumericType, DataFrame] = {
     val df = sqlContext.createDataFrame(Seq(
       (0, Vectors.dense(0), 0.0),
@@ -94,8 +112,8 @@ object MLTestingUtils extends SparkFunSuite {
 
   def generateDFWithStringLabelCol(
       sqlContext: SQLContext,
-      labelColName: String,
-      featuresColName: String,
+      labelColName: String = "label",
+      featuresColName: String = "features",
       censorColName: String = "censor"): DataFrame =
     sqlContext.createDataFrame(Seq(
       ("0", Vectors.dense(0, 2, 3), 0.0),
