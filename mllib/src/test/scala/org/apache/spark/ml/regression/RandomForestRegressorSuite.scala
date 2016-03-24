@@ -26,7 +26,6 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.types.DoubleType
 
 /**
  * Test suite for [[RandomForestRegressor]].
@@ -95,32 +94,12 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(importances.toArray.forall(_ >= 0.0))
   }
 
-  test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
-
-    val rf = new RandomForestRegressor().setFeaturesCol("features")
-
-    val expected = rf.setLabelCol("label")
-      .fit(TreeTests.setMetadata(dfs(DoubleType), 2, "label"))
-    dfs.keys.filter(_ != DoubleType).foreach { t =>
-      TreeTests.checkEqual(expected,
-        rf.setLabelCol("label").fit(TreeTests.setMetadata(dfs(t), 2, "label")))
-    }
-  }
-
-  test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels =
-      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
-
+  test("should support all NumericType labels and not support other types") {
     val rf = new RandomForestRegressor()
-      .setLabelCol("label")
-      .setFeaturesCol("features")
-
-    val thrown = intercept[IllegalArgumentException] {
-      rf.fit(dfWithStringLabels)
-    }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
+    MLTestingUtils.checkPredictorAcceptAllNumericTypes[
+        RandomForestRegressionModel, RandomForestRegressor](
+      rf, sqlContext)((expected, actual) => TreeTests.checkEqual(expected, actual))
+    MLTestingUtils.checkPredictorRejectNotNumericTypes(rf, sqlContext)
   }
 
   /////////////////////////////////////////////////////////////////////////////

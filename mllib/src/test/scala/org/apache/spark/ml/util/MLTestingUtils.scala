@@ -18,6 +18,7 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.{Estimator, Model, PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.Regressor
@@ -65,10 +66,10 @@ object MLTestingUtils extends SparkFunSuite {
   }
 
   def checkEstimatorRejectNotNumericTypes(
-      estimator: Estimator[_], sqlContext: SQLContext): Unit = {
+      predictor: Estimator[_], sqlContext: SQLContext): Unit = {
     val dfWithStringLabels = generateDFWithStringLabelCol(sqlContext)
     val thrown = intercept[IllegalArgumentException] {
-      estimator.fit(dfWithStringLabels)
+      predictor.fit(dfWithStringLabels)
     }
     assert(thrown.getMessage contains
       "Column label must be of type NumericType but was actually of type StringType")
@@ -88,7 +89,9 @@ object MLTestingUtils extends SparkFunSuite {
 
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-    types.map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName))).toMap
+    types.map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName)))
+      .map { case (t, d) => t -> TreeTests.setMetadata(d, 2, "label") }
+      .toMap
   }
 
   def genRegressionDFWithNumericLabelCol(
@@ -106,8 +109,10 @@ object MLTestingUtils extends SparkFunSuite {
 
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-    types.map(t =>
-      t -> df.select(col(labelColName).cast(t), col(featuresColName), col(censorColName))).toMap
+    types
+      .map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName), col(censorColName)))
+      .map { case (t, d) => t -> TreeTests.setMetadata(d, 2, "label") }
+      .toMap
   }
 
   def generateDFWithStringLabelCol(

@@ -27,7 +27,6 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.util.Utils
 
 /**
@@ -112,32 +111,11 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
     Utils.deleteRecursively(tempDir)
   }
 
-  test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
-
-    val gbt = new GBTRegressor().setFeaturesCol("features")
-
-    val expected = gbt.setLabelCol("label")
-      .fit(TreeTests.setMetadata(dfs(DoubleType), 2, "label"))
-    dfs.keys.filter(_ != DoubleType).foreach { t =>
-      TreeTests.checkEqual(expected,
-        gbt.setLabelCol("label").fit(TreeTests.setMetadata(dfs(t), 2, "label")))
-    }
-  }
-
-  test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels =
-      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
-
+  test("should support all NumericType labels and not support other types") {
     val gbt = new GBTRegressor()
-      .setLabelCol("label")
-      .setFeaturesCol("features")
-
-    val thrown = intercept[IllegalArgumentException] {
-      gbt.fit(dfWithStringLabels)
-    }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
+    MLTestingUtils.checkPredictorAcceptAllNumericTypes[GBTRegressionModel, GBTRegressor](
+      gbt, sqlContext)((expected, actual) => TreeTests.checkEqual(expected, actual))
+    MLTestingUtils.checkPredictorRejectNotNumericTypes(gbt, sqlContext)
   }
 
   // TODO: Reinstate test once runWithValidation is implemented  SPARK-7132

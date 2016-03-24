@@ -31,7 +31,6 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
 
 class GeneralizedLinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -983,33 +982,16 @@ class GeneralizedLinearRegressionSuite
     testEstimatorAndModelReadWrite(glr, datasetPoissonLog,
       GeneralizedLinearRegressionSuite.allParamSettings, checkModelData)
   }
-
-  test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
-
-    val glr = new GeneralizedLinearRegression().setFeaturesCol("features")
-
-    val expected = glr.setLabelCol("label").fit(dfs(DoubleType))
-    dfs.keys.filter(_ != DoubleType).foreach { t =>
-      val actual = glr.setLabelCol("label").fit(dfs(t))
-      assert(expected.intercept === actual.intercept)
-      assert(expected.coefficients === actual.coefficients)
-    }
-  }
-
-  test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels =
-      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
-
+  
+  test("should support all NumericType labels and not support other types") {
     val glr = new GeneralizedLinearRegression()
-      .setLabelCol("label")
-      .setFeaturesCol("features")
-
-    val thrown = intercept[IllegalArgumentException] {
-      glr.fit(dfWithStringLabels)
-    }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
+    MLTestingUtils.checkPredictorAcceptAllNumericTypes[
+        GeneralizedLinearRegressionModel, GeneralizedLinearRegression](
+      glr, sqlContext) { (expected, actual) =>
+        assert(expected.intercept === actual.intercept)
+        assert(expected.coefficients === actual.coefficients)
+      }
+    MLTestingUtils.checkPredictorRejectNotNumericTypes(glr, sqlContext)
   }
 }
 

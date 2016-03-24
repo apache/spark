@@ -27,7 +27,6 @@ import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.types.DoubleType
 
 class AFTSurvivalRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -349,34 +348,14 @@ class AFTSurvivalRegressionSuite
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
-
     val aft = new AFTSurvivalRegression()
-      .setFeaturesCol("features")
-      .setCensorCol("censor")
-
-    val expected = aft.setLabelCol("label").fit(dfs(DoubleType))
-    dfs.keys.filter(_ != DoubleType).foreach { t =>
-      val actual = aft.setLabelCol("label").fit(dfs(t))
-      assert(expected.intercept === actual.intercept)
-      assert(expected.coefficients === actual.coefficients)
-    }
-  }
-
-  test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels =
-      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
-
-    val aft = new AFTSurvivalRegression()
-      .setLabelCol("label")
-      .setFeaturesCol("features")
-      .setCensorCol("censor")
-
-    val thrown = intercept[IllegalArgumentException] {
-      aft.fit(dfWithStringLabels)
-    }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
+    MLTestingUtils.checkEstimatorAcceptAllNumericTypes[
+        AFTSurvivalRegressionModel, AFTSurvivalRegression](
+      aft, sqlContext) { (expected, actual) =>
+        assert(expected.intercept === actual.intercept)
+        assert(expected.coefficients === actual.coefficients)
+      }
+    MLTestingUtils.checkEstimatorRejectNotNumericTypes(aft, sqlContext)
   }
 
   test("read/write") {

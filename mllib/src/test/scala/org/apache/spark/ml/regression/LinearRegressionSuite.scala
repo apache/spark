@@ -1009,12 +1009,12 @@ class LinearRegressionSuite
 
   test("should support all NumericType labels and not support other types") {
     val lr = new LinearRegression()
-    MLTestingUtils.checkAcceptAllNumericTypes[LinearRegressionModel, LinearRegression](
+    MLTestingUtils.checkPredictorAcceptAllNumericTypes[LinearRegressionModel, LinearRegression](
       lr, sqlContext) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }
-    MLTestingUtils.checkRejectNotNumericTypes(lr, sqlContext)
+    MLTestingUtils.checkPredictorRejectNotNumericTypes(lr, sqlContext)
   }
 }
 
