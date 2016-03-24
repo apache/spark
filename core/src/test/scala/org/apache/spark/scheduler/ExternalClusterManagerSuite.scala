@@ -28,12 +28,12 @@ class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext
         setAppName("testcm").set("spark.driver.allowMultipleContexts", "true")
     sc = new SparkContext(conf)
     // check if the scheduler components are created
-    assert(sc.schedulerBackend.isInstanceOf[FakeSchedulerBackend])
+    assert(sc.schedulerBackend.isInstanceOf[DummySchedulerBackend])
     assert(sc.taskScheduler.isInstanceOf[DummyTaskScheduler])
   }
 }
 
-class DummyExternalClusterManager extends ExternalClusterManager {
+private class DummyExternalClusterManager extends ExternalClusterManager {
 
   def canCreate(masterURL: String): Boolean = masterURL == "myclusterManager"
 
@@ -43,13 +43,20 @@ class DummyExternalClusterManager extends ExternalClusterManager {
   def createSchedulerBackend(sc: SparkContext,
                              masterURL: String,
                              scheduler: TaskScheduler): SchedulerBackend =
-    new FakeSchedulerBackend()
+    new DummySchedulerBackend()
 
   def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {}
 
 }
 
-class DummyTaskScheduler extends TaskScheduler {
+private class DummySchedulerBackend extends SchedulerBackend {
+  def start() {}
+  def stop() {}
+  def reviveOffers() {}
+  def defaultParallelism(): Int = 1
+}
+
+private class DummyTaskScheduler extends TaskScheduler {
   override def rootPool: Pool = null
   override def schedulingMode: SchedulingMode = SchedulingMode.NONE
   override def start(): Unit = {}
