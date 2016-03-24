@@ -18,10 +18,9 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{Model, Predictor}
-import org.apache.spark.ml.classification.{ClassificationModel, Classifier}
+import org.apache.spark.ml.{Model, PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.regression.{RegressionModel, Regressor}
+import org.apache.spark.ml.regression.Regressor
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.functions._
@@ -35,21 +34,18 @@ object MLTestingUtils extends SparkFunSuite {
     assert(copied.parent == model.parent)
   }
 
-  def checkAcceptAllNumericTypes[M <: RegressionModel[_, M], T <: Regressor[_, _, M]](
-      regressor: T, sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
-    val dfs = genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
-    val expected = regressor.fit(dfs(DoubleType))
-    val actuals = dfs.keys.filter(_ != DoubleType).map(t => regressor.fit(dfs(t)))
+  def checkAcceptAllNumericTypes[M <: PredictionModel[_, M], T <: Predictor[_, _, M]](
+      predictor: T, sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
+    val dfs = if (predictor.isInstanceOf[Regressor[_, _, _]]) {
+      genRegressionDFWithNumericLabelCol(sqlContext, "label", "features")
+    } else {
+      genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
+    }
+    val expected = predictor.fit(dfs(DoubleType))
+    val actuals = dfs.keys.filter(_ != DoubleType).map(t => predictor.fit(dfs(t)))
     actuals.foreach(actual => check(expected, actual))
   }
 
-  def checkAcceptAllNumericTypes[M <: ClassificationModel[_, M], T <: Classifier[_, _, M]](
-      classifier: T, sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
-    val dfs = genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
-    val expected = classifier.fit(dfs(DoubleType))
-    val actuals = dfs.keys.filter(_ != DoubleType).map(t => classifier.fit(dfs(t)))
-    actuals.foreach(actual => check(expected, actual))
-  }
   def checkRejectNotNumericTypes(predictor: Predictor[_, _, _], sqlContext: SQLContext): Unit = {
     val dfWithStringLabels =
       MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
