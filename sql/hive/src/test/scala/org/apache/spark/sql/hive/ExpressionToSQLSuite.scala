@@ -26,6 +26,7 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
+    super.beforeAll()
     sql("DROP TABLE IF EXISTS t0")
     sql("DROP TABLE IF EXISTS t1")
     sql("DROP TABLE IF EXISTS t2")
@@ -43,9 +44,13 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   override protected def afterAll(): Unit = {
-    sql("DROP TABLE IF EXISTS t0")
-    sql("DROP TABLE IF EXISTS t1")
-    sql("DROP TABLE IF EXISTS t2")
+    try {
+      sql("DROP TABLE IF EXISTS t0")
+      sql("DROP TABLE IF EXISTS t1")
+      sql("DROP TABLE IF EXISTS t2")
+    } finally {
+      super.afterAll()
+    }
   }
 
   private def checkSqlGeneration(hiveQl: String): Unit = {

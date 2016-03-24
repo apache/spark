@@ -31,6 +31,7 @@ class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAft
   val df = sparkContext.parallelize((1 to 10).map(i => (i, s"str$i"))).toDF("key", "value")
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     // The catalog in HiveContext is a case insensitive one.
     sessionState.catalog.createTempTable(
       "ListTablesSuiteTable", df.logicalPlan, ignoreIfExists = true)
@@ -40,11 +41,15 @@ class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAft
   }
 
   override def afterAll(): Unit = {
-    sessionState.catalog.dropTable(
-      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
-    sql("DROP TABLE IF EXISTS HiveListTablesSuiteTable")
-    sql("DROP TABLE IF EXISTS ListTablesSuiteDB.HiveInDBListTablesSuiteTable")
-    sql("DROP DATABASE IF EXISTS ListTablesSuiteDB")
+    try {
+      sessionState.catalog.dropTable(
+        TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
+      sql("DROP TABLE IF EXISTS HiveListTablesSuiteTable")
+      sql("DROP TABLE IF EXISTS ListTablesSuiteDB.HiveInDBListTablesSuiteTable")
+      sql("DROP DATABASE IF EXISTS ListTablesSuiteDB")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("get all tables of current database") {

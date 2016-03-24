@@ -59,10 +59,6 @@ object TestHive
         // SPARK-8910
         .set("spark.ui.enabled", "false")))
 
-trait TestHiveSingleton {
-  protected val sqlContext: SQLContext = TestHive
-  protected val hiveContext: TestHiveContext = TestHive
-}
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
