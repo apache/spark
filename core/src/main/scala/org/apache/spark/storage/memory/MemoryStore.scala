@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.{MemoryMode, MemoryManager}
+import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
