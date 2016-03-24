@@ -12,7 +12,8 @@ Depends:
     methods,
 Suggests:
     testthat,
-    e1071
+    e1071,
+    survival
 Description: R frontend for Spark
 License: Apache License (== 2.0)
 Collate:
@@ -37,4 +38,4 @@ Collate:
     'stats.R'
     'types.R'
     'utils.R'
-RoxygenNote: 5.0.1
+RoxygenNote: 5.0.0

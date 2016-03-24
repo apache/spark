@@ -200,3 +200,82 @@ test_that("naiveBayes", {
     expect_equal(as.character(predict(m, t1[1, ])), "Yes")
   }
 })
+
+test_that("survreg", {
+  # R code to reproduce the result.
+  #
+  #' rData <- list(time = c(4, 3, 1, 1, 2, 2, 3), status = c(1, 1, 1, 0, 1, 1, 0),
+  #'               x = c(0, 2, 1, 1, 1, 0, 0), sex = c(0, 0, 0, 0, 1, 1, 1))
+  #' library(survival)
+  #' model <- survreg(Surv(time, status) ~ x + sex, rData)
+  #' summary(model)
+  #' predict(model, data)
+  #
+  # -- output of 'summary(model)'
+  #
+  # survreg(formula = Surv(time, status) ~ x + sex, data = data)
+  #              Value Std. Error     z        p
+  # (Intercept)  1.315      0.270  4.88 1.07e-06
+  # x           -0.190      0.173 -1.10 2.72e-01
+  # sex         -0.253      0.329 -0.77 4.42e-01
+  # Log(scale)  -1.160      0.396 -2.93 3.41e-03
+  #
+  # Scale= 0.313
+  #
+  # Weibull distribution
+  # Loglik(model)= -7.7   Loglik(intercept only)= -8.2
+  #     Chisq= 1.16 on 2 degrees of freedom, p= 0.56
+  # Number of Newton-Raphson Iterations: 8
+  # n= 7
+  #
+  # -- output of 'predict(model, data)'
+  #
+  #        1        2        3        4        5        6        7
+  # 3.724591 2.545368 3.079035 3.079035 2.390146 2.891269 2.891269
+  #
+  data <- list(list(4, 1, 0, 0), list(3, 1, 2, 0), list(1, 1, 1, 0),
+          list(1, 0, 1, 0), list(2, 1, 1, 1), list(2, 1, 0, 1), list(3, 0, 0, 1))
+  df <- createDataFrame(sqlContext, data, c("time", "status", "x", "sex"))
+  model <- survreg(Surv(time, status) ~ x + sex, df)
+  stats <- summary(model)
+  coefs <- as.vector(stats$coefficients[, 1])
+  rCoefs <- c(1.3149571, -0.1903409, -0.2532618, -1.1599800)
+  expect_equal(coefs, rCoefs, tolerance = 1e-4)
+  expect_true(all(
+    rownames(stats$coefficients) ==
+    c("(Intercept)", "x", "sex", "Log(scale)")))
+  p <- collect(select(predict(model, df), "prediction"))
+  expect_equal(p$prediction, c(3.724591, 2.545368, 3.079035, 3.079035,
+               2.390146, 2.891269, 2.891269), tolerance = 1e-4)
+
+  # Test survival::survreg
+  if (requireNamespace("survival", quietly = TRUE)) {
+    rData <- list(time = c(4, 3, 1, 1, 2, 2, 3), status = c(1, 1, 1, 0, 1, 1, 0),
+                 x = c(0, 2, 1, 1, 1, 0, 0), sex = c(0, 0, 0, 0, 1, 1, 1))
+    expect_that(
+      model <- survival::survreg(formula = survival::Surv(time, status) ~ x + sex, data = rData),
+      not(throws_error()))
+    expect_equal(predict(model, rData)[[1]], 3.724591, tolerance = 1e-4)
+  }
+})
+
+test_that("survreg2", {
+  library(survival)
+  data(ovarian)
+  df <- suppressWarnings(createDataFrame(sqlContext, ovarian))
+
+  model <- SparkR::survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
+  stats <- summary(model)
+  coefs <- as.vector(stats$coefficients[, 1][1:3])
+  scale <- exp(stats$coefficients[, 1][4])
+
+  rModel <- survival::survreg(Surv(futime, fustat) ~ ecog.ps + rx, ovarian)
+  rCoefs <- as.vector(coef(rModel))
+  rScale <- rModel$scale
+
+  expect_equal(coefs, rCoefs, tolerance = 1e-4)
+  expect_true(abs(rScale - scale) < 1e-4)
+  expect_true(all(
+    rownames(stats$coefficients) ==
+    c("(Intercept)", "ecog_ps", "rx", "Log(scale)")))
+})
