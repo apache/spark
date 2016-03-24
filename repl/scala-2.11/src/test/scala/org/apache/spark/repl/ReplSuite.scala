@@ -61,7 +61,7 @@ class ReplSuite extends SparkFunSuite {
 
   // Simulate the paste mode in Scala REPL.
   def runInterpreterInPasteMode(master: String, input: String): String =
-    runInterpreter(master, ":paste\n" + input + 4.toChar)
+    runInterpreter(master, ":paste\n" + input + 4.toChar) // 4 is the ascii code of CTRL + D
 
   def assertContains(message: String, output: String) {
     val isContain = output.contains(message)
