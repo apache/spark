@@ -705,7 +705,7 @@ private[storage] class PartiallySerializedBlock[T](
     while (rest.hasNext) {
       serializationStream.writeObject(rest.next())(classTag)
     }
-    serializationStream.close()
+    discard()
   }
 
   /**

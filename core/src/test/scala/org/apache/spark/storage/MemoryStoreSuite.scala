@@ -29,7 +29,7 @@ import org.scalatest._
 import org.apache.spark._
 import org.apache.spark.memory.StaticMemoryManager
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
-import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallyUnrolledIterator}
+import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -47,6 +47,8 @@ class MemoryStoreSuite
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   val serializer = new KryoSerializer(new SparkConf(false).set("spark.kryoserializer.buffer", "1m"))
 
+  val serializerManager = new SerializerManager(serializer, conf)
+
   // Implicitly convert strings to BlockIds for test clarity.
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
@@ -61,7 +63,6 @@ class MemoryStoreSuite
 
   def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
     val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
-    val serializerManager = new SerializerManager(serializer, conf)
     val blockInfoManager = new BlockInfoManager
     val blockEvictionHandler = new BlockEvictionHandler {
       var memoryStore: MemoryStore = _
@@ -174,7 +175,7 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
   }
 
-  test("safely unroll blocks through putIterator") {
+  test("safely unroll blocks through putIteratorAsValues") {
     val (memoryStore, blockInfoManager) = makeMemoryStore(12000)
     val smallList = List.fill(40)(new Array[Byte](100))
     val bigList = List.fill(40)(new Array[Byte](1000))
@@ -236,6 +237,116 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
     result4.left.get.close()
     assert(memoryStore.currentUnrollMemoryForThisTask === 0) // close released the unroll memory
+  }
+
+  test("safely unroll blocks through putIteratorAsBytes") {
+    val (memoryStore, blockInfoManager) = makeMemoryStore(12000)
+    val smallList = List.fill(40)(new Array[Byte](100))
+    val bigList = List.fill(40)(new Array[Byte](1000))
+    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+
+    def putIteratorAsBytes[T](
+        blockId: BlockId,
+        iter: Iterator[T],
+        classTag: ClassTag[T]): Either[PartiallySerializedBlock[T], Long] = {
+      assert(blockInfoManager.lockNewBlockForWriting(
+        blockId,
+        new BlockInfo(StorageLevel.MEMORY_ONLY_SER, classTag, tellMaster = false)))
+      val res = memoryStore.putIteratorAsBytes(blockId, iter, classTag)
+      blockInfoManager.unlock(blockId)
+      res
+    }
+
+    // Unroll with plenty of space. This should succeed and cache both blocks.
+    val result1 = putIteratorAsBytes("b1", smallIterator, ClassTag.Any)
+    val result2 = putIteratorAsBytes("b2", smallIterator, ClassTag.Any)
+    assert(memoryStore.contains("b1"))
+    assert(memoryStore.contains("b2"))
+    assert(result1.isRight) // unroll was successful
+    assert(result2.isRight)
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+
+    // Re-put these two blocks so block manager knows about them too. Otherwise, block manager
+    // would not know how to drop them from memory later.
+    blockInfoManager.lockForWriting("b1")
+    memoryStore.remove("b1")
+    blockInfoManager.removeBlock("b1")
+    blockInfoManager.lockForWriting("b2")
+    memoryStore.remove("b2")
+    blockInfoManager.removeBlock("b2")
+    putIteratorAsBytes("b1", smallIterator, ClassTag.Any)
+    putIteratorAsBytes("b2", smallIterator, ClassTag.Any)
+
+    // Unroll with not enough space. This should succeed but kick out b1 in the process.
+    val result3 = putIteratorAsBytes("b3", smallIterator, ClassTag.Any)
+    assert(result3.isRight)
+    assert(!memoryStore.contains("b1"))
+    assert(memoryStore.contains("b2"))
+    assert(memoryStore.contains("b3"))
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+    blockInfoManager.lockForWriting("b3")
+    assert(memoryStore.remove("b3"))
+    blockInfoManager.removeBlock("b3")
+    putIteratorAsBytes("b3", smallIterator, ClassTag.Any)
+
+    // Unroll huge block with not enough space. This should fail and kick out b2 in the process.
+    val result4 = putIteratorAsBytes("b4", bigIterator, ClassTag.Any)
+    assert(result4.isLeft) // unroll was unsuccessful
+    assert(!memoryStore.contains("b1"))
+    assert(!memoryStore.contains("b2"))
+    assert(memoryStore.contains("b3"))
+    assert(!memoryStore.contains("b4"))
+    assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
+    result4.left.get.discard()
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0) // discard released the unroll memory
+  }
+
+  test("PartiallySerializedBlock.valuesIterator") {
+    val (memoryStore, blockInfoManager) = makeMemoryStore(12000)
+    val bigList = List.fill(40)(new Array[Byte](1000))
+    def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
+
+    // Unroll huge block with not enough space. This should fail.
+    assert(blockInfoManager.lockNewBlockForWriting(
+      "b1",
+      new BlockInfo(StorageLevel.MEMORY_ONLY_SER, ClassTag.Any, tellMaster = false)))
+    val res = memoryStore.putIteratorAsBytes("b1", bigIterator, ClassTag.Any)
+    blockInfoManager.unlock("b1")
+    assert(res.isLeft)
+    assert(memoryStore.currentUnrollMemoryForThisTask > 0)
+    val valuesReturnedFromFailedPut = res.left.get.valuesIterator.toSeq // force materialization
+    valuesReturnedFromFailedPut.zip(bigList).foreach { case (e, a) =>
+      assert(e === a, "PartiallySerializedBlock.valuesIterator() did not return original values!")
+    }
+    // The unroll memory was freed once the iterator was fully traversed.
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+  }
+
+  test("PartiallySerializedBlock.finishWritingToStream") {
+    val (memoryStore, blockInfoManager) = makeMemoryStore(12000)
+    val bigList = List.fill(40)(new Array[Byte](1000))
+    def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
+
+    // Unroll huge block with not enough space. This should fail.
+    assert(blockInfoManager.lockNewBlockForWriting(
+      "b1",
+      new BlockInfo(StorageLevel.MEMORY_ONLY_SER, ClassTag.Any, tellMaster = false)))
+    val res = memoryStore.putIteratorAsBytes("b1", bigIterator, ClassTag.Any)
+    blockInfoManager.unlock("b1")
+    assert(res.isLeft)
+    assert(memoryStore.currentUnrollMemoryForThisTask > 0)
+    val bos = new ByteBufferOutputStream()
+    res.left.get.finishWritingToStream(bos)
+    // The unroll memory was freed once the block was fully written.
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+    val deserializationStream = serializerManager.dataDeserializeStream[Any](
+      "b1", new ByteBufferInputStream(bos.toByteBuffer))(ClassTag.Any)
+    deserializationStream.zip(bigList.iterator).foreach { case (e, a) =>
+      assert(e === a,
+        "PartiallySerializedBlock.finishWritingtoStream() did not write original values!")
+    }
   }
 
   test("multiple unrolls by the same thread") {
