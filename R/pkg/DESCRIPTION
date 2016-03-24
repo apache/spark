@@ -38,4 +38,4 @@ Collate:
     'stats.R'
     'types.R'
     'utils.R'
-RoxygenNote: 5.0.0
+RoxygenNote: 5.0.1
