@@ -18,10 +18,10 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.{Estimator, Model, PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.Regressor
+import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.functions._
@@ -56,7 +56,7 @@ object MLTestingUtils extends SparkFunSuite {
     assert(thrown.getMessage contains
       "Column label must be of type NumericType but was actually of type StringType")
   }
-  
+
   def checkEstimatorAcceptAllNumericTypes[M <: Model[M], T <: Estimator[M]](
       estimator: T, sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
     val dfs = genRegressionDFWithNumericLabelCol(sqlContext)

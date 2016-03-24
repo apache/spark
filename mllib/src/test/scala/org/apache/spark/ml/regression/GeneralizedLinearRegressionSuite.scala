@@ -982,7 +982,7 @@ class GeneralizedLinearRegressionSuite
     testEstimatorAndModelReadWrite(glr, datasetPoissonLog,
       GeneralizedLinearRegressionSuite.allParamSettings, checkModelData)
   }
-  
+
   test("should support all NumericType labels and not support other types") {
     val glr = new GeneralizedLinearRegression()
     MLTestingUtils.checkPredictorAcceptAllNumericTypes[
