@@ -26,9 +26,9 @@ import org.apache.hadoop.fs._
 import org.scalatest.concurrent.AsyncAssertions._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
