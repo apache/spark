@@ -481,7 +481,7 @@ private class SlowShuffleManager(conf: SparkConf) extends SortShuffleManager(con
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf) {
 
     override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
-      Thread.sleep(10)
+      Thread.sleep(100)
       super.getBlockData(blockId)
     }
   }
