@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.{LineRecordReader, FileInputFormat, FileSplit}
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit, LineRecordReader}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
