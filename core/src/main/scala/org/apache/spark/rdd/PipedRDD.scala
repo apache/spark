@@ -184,7 +184,8 @@ private[spark] class PipedRDD[T: ClassTag](
           val exitStatus = proc.waitFor()
           cleanup()
           if (exitStatus != 0) {
-            throw new IllegalStateException(s"Subprocess exited with status $exitStatus")
+            throw new IllegalStateException(s"Subprocess exited with status $exitStatus. " +
+              s"Command ran: " + command.mkString(" "))
           }
           false
         }
@@ -205,6 +206,9 @@ private[spark] class PipedRDD[T: ClassTag](
       private def propagateChildException(): Unit = {
         val t = childThreadException.get()
         if (t != null) {
+          val commandRan = command.mkString(" ")
+          logError(s"Caught exception while running pipe() operator. Command ran: $commandRan. " +
+            s"Exception: ${t.getMessage}")
           proc.destroy()
           cleanup()
           throw t

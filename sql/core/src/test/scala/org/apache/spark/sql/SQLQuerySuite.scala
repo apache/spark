@@ -1397,16 +1397,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-4699 case sensitivity SQL query") {
-    val orig = sqlContext.getConf(SQLConf.CASE_SENSITIVE)
-    try {
-      sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
-      val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-      val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
-      rdd.toDF().registerTempTable("testTable1")
-      checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
-    } finally {
-      sqlContext.setConf(SQLConf.CASE_SENSITIVE, orig)
-    }
+    sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
+    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.toDF().registerTempTable("testTable1")
+    checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
+    sqlContext.setConf(SQLConf.CASE_SENSITIVE, true)
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
@@ -1680,8 +1676,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         .format("parquet")
         .save(path)
 
-      // We don't support creating a temporary table while specifying a database
-      intercept[AnalysisException] {
+      val message = intercept[AnalysisException] {
         sqlContext.sql(
           s"""
           |CREATE TEMPORARY TABLE db.t
@@ -1691,8 +1686,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |)
         """.stripMargin)
       }.getMessage
+      assert(message.contains("Specifying database name or other qualifiers are not allowed"))
 
-      // If you use backticks to quote the name then it's OK.
+      // If you use backticks to quote the name of a temporary table having dot in it.
       sqlContext.sql(
         s"""
           |CREATE TEMPORARY TABLE `db.t`
@@ -1938,6 +1934,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // Qualify the struct type with the table name.
       checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
         Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+    }
+  }
+
+  test("Star Expansion - group by") {
+    withSQLConf("spark.sql.retainGroupColumns" -> "false") {
+      checkAnswer(
+        testData2.groupBy($"a", $"b").agg($"*"),
+        sql("SELECT * FROM testData2 group by a, b"))
     }
   }
 

@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -138,11 +137,11 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(!(('a || 'b) && ('c || 'd)), (!'a && !'b) || (!'c && !'d))
   }
 
-  private val caseInsensitiveConf = new SimpleCatalystConf(false)
-  private val caseInsensitiveAnalyzer = new Analyzer(
-    new SessionCatalog(new InMemoryCatalog, caseInsensitiveConf),
-    EmptyFunctionRegistry,
-    caseInsensitiveConf)
+  private val caseInsensitiveAnalyzer =
+    new Analyzer(
+      EmptyCatalog,
+      EmptyFunctionRegistry,
+      new SimpleCatalystConf(caseSensitiveAnalysis = false))
 
   test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
     val plan = caseInsensitiveAnalyzer.execute(
