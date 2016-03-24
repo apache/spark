@@ -649,7 +649,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       val fileFormatClass = classOf[OrcDefaultSource]
       val options = Map[String, String]()
 
-      convertToLogicalRelation(relation, options, defaultSource, fileFormatClass,  "orc")
+      convertToLogicalRelation(relation, options, defaultSource, fileFormatClass, "orc")
     }
 
     override def apply(plan: LogicalPlan): LogicalPlan = {
