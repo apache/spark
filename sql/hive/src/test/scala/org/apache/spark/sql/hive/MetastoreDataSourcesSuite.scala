@@ -693,13 +693,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("SPARK-6024 wide schema support") {
     withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "4000") {
       withTable("wide_schema") {
-        withTempDir { tempDir =>
+        withTempDir( tempDir => {
           // We will need 80 splits for this schema if the threshold is 4000.
           val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))
 
           // Manually create a metastore data source table.
           sessionState.catalog.createDataSourceTable(
-            name = TableIdentifier("wide_schema"),
+            tableIdent = TableIdentifier("wide_schema"),
             userSpecifiedSchema = Some(schema),
             partitionColumns = Array.empty[String],
             bucketSpec = None,
@@ -711,7 +711,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
           val actualSchema = table("wide_schema").schema
           assert(schema === actualSchema)
-        }
+        })
       }
     }
   }
@@ -737,7 +737,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           "spark.sql.sources.schema" -> schema.json,
           "EXTERNAL" -> "FALSE"))
 
-      hiveCatalog.createTable("default", hiveTable, ignoreIfExists = false)
+      sessionState.catalog.client.createTable(hiveTable, ignoreIfExists = false)
 
       invalidateTable(tableName)
       val actualSchema = table(tableName).schema
@@ -752,7 +752,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     withTable(tableName) {
       df.write.format("parquet").partitionBy("d", "b").saveAsTable(tableName)
       invalidateTable(tableName)
-      val metastoreTable = hiveCatalog.getTable("default", tableName)
+      val metastoreTable = sessionState.catalog.client.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
 
       val numPartCols = metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt
@@ -787,7 +787,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .sortBy("c")
         .saveAsTable(tableName)
       invalidateTable(tableName)
-      val metastoreTable = hiveCatalog.getTable("default", tableName)
+      val metastoreTable = sessionState.catalog.client.getTable("default", tableName)
       val expectedBucketByColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
       val expectedSortByColumns = StructType(df.schema("c") :: Nil)
 
@@ -903,11 +903,11 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
 
   test("skip hive metadata on table creation") {
-    withTempDir { tempPath =>
+    withTempDir(tempPath => {
       val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
 
       sessionState.catalog.createDataSourceTable(
-        name = TableIdentifier("not_skip_hive_metadata"),
+        tableIdent = TableIdentifier("not_skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
         bucketSpec = None,
@@ -917,11 +917,11 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       // As a proxy for verifying that the table was stored in Hive compatible format,
       // we verify that each column of the table is of native type StringType.
-      assert(hiveCatalog.getTable("default", "not_skip_hive_metadata").schema
+      assert(sessionState.catalog.client.getTable("default", "not_skip_hive_metadata").schema
         .forall(column => HiveMetastoreTypes.toDataType(column.dataType) == StringType))
 
       sessionState.catalog.createDataSourceTable(
-        name = TableIdentifier("skip_hive_metadata"),
+        tableIdent = TableIdentifier("skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
         bucketSpec = None,
@@ -929,11 +929,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         options = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "true"),
         isExternal = false)
 
-      // As a proxy for verifying that the table was stored in SparkSQL format,
-      // we verify that the table has a column type as array of StringType.
-      assert(hiveCatalog.getTable("default", "skip_hive_metadata").schema.forall { c =>
-        HiveMetastoreTypes.toDataType(c.dataType) == ArrayType(StringType)
-      })
-    }
+      // As a proxy for verifying that the table was stored in SparkSQL format, we verify that
+      // the table has a column type as array of StringType.
+      assert(sessionState.catalog.client.getTable("default", "skip_hive_metadata").schema
+        .forall(column => HiveMetastoreTypes.toDataType(column.dataType) == ArrayType(StringType)))
+    })
   }
 }

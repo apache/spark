@@ -71,8 +71,7 @@ case class DropTable(
     }
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.sessionState.catalog.dropTable(
-      TableIdentifier(tableName), ignoreIfNotExists = true)
+    hiveContext.sessionState.catalog.unregisterTable(TableIdentifier(tableName))
     Seq.empty[Row]
   }
 }
@@ -143,8 +142,7 @@ case class CreateMetastoreDataSource(
     val optionsWithPath =
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
-        options + ("path" ->
-          hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" -> hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
@@ -202,8 +200,7 @@ case class CreateMetastoreDataSourceAsSelect(
     val optionsWithPath =
       if (!options.contains("path")) {
         isExternal = false
-        options + ("path" ->
-          hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" -> hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }

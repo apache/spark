@@ -56,7 +56,7 @@ private[hive] case class CreateViewAsSelect(
 
       case true if orReplace =>
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        hiveContext.metadataHive.alertView(prepareTable(sqlContext))
+        hiveContext.sessionState.catalog.client.alertView(prepareTable(sqlContext))
 
       case true =>
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
@@ -66,7 +66,7 @@ private[hive] case class CreateViewAsSelect(
           "CREATE OR REPLACE VIEW AS")
 
       case false =>
-        hiveContext.metadataHive.createView(prepareTable(sqlContext))
+        hiveContext.sessionState.catalog.client.createView(prepareTable(sqlContext))
     }
 
     Seq.empty[Row]

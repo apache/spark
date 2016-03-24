@@ -52,34 +52,37 @@ class InMemoryCatalog extends ExternalCatalog {
     names.filter { funcName => regex.pattern.matcher(funcName).matches() }
   }
 
-  private def functionExists(db: String, funcName: String): Boolean = {
+  private def existsFunction(db: String, funcName: String): Boolean = {
     requireDbExists(db)
     catalog(db).functions.contains(funcName)
   }
 
-  private def partitionExists(db: String, table: String, spec: TablePartitionSpec): Boolean = {
+  private def existsTable(db: String, table: String): Boolean = {
+    requireDbExists(db)
+    catalog(db).tables.contains(table)
+  }
+
+  private def existsPartition(db: String, table: String, spec: TablePartitionSpec): Boolean = {
     requireTableExists(db, table)
     catalog(db).tables(table).partitions.contains(spec)
   }
 
   private def requireFunctionExists(db: String, funcName: String): Unit = {
-    if (!functionExists(db, funcName)) {
-      throw new AnalysisException(
-        s"Function not found: '$funcName' does not exist in database '$db'")
+    if (!existsFunction(db, funcName)) {
+      throw new AnalysisException(s"Function '$funcName' does not exist in database '$db'")
     }
   }
 
   private def requireTableExists(db: String, table: String): Unit = {
-    if (!tableExists(db, table)) {
-      throw new AnalysisException(
-        s"Table not found: '$table' does not exist in database '$db'")
+    if (!existsTable(db, table)) {
+      throw new AnalysisException(s"Table '$table' does not exist in database '$db'")
     }
   }
 
   private def requirePartitionExists(db: String, table: String, spec: TablePartitionSpec): Unit = {
-    if (!partitionExists(db, table, spec)) {
+    if (!existsPartition(db, table, spec)) {
       throw new AnalysisException(
-        s"Partition not found: database '$db' table '$table' does not contain: '$spec'")
+        s"Partition does not exist in database '$db' table '$table': '$spec'")
     }
   }
 
@@ -156,7 +159,7 @@ class InMemoryCatalog extends ExternalCatalog {
       ignoreIfExists: Boolean): Unit = synchronized {
     requireDbExists(db)
     val table = tableDefinition.name.table
-    if (tableExists(db, table)) {
+    if (existsTable(db, table)) {
       if (!ignoreIfExists) {
         throw new AnalysisException(s"Table '$table' already exists in database '$db'")
       }
@@ -170,7 +173,7 @@ class InMemoryCatalog extends ExternalCatalog {
       table: String,
       ignoreIfNotExists: Boolean): Unit = synchronized {
     requireDbExists(db)
-    if (tableExists(db, table)) {
+    if (existsTable(db, table)) {
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
@@ -197,17 +200,13 @@ class InMemoryCatalog extends ExternalCatalog {
     catalog(db).tables(table).table
   }
 
-  override def tableExists(db: String, table: String): Boolean = synchronized {
-    requireDbExists(db)
-    catalog(db).tables.contains(table)
-  }
-
   override def listTables(db: String): Seq[String] = synchronized {
     requireDbExists(db)
     catalog(db).tables.keySet.toSeq
   }
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
+    requireDbExists(db)
     filterPattern(listTables(db), pattern)
   }
 
@@ -296,7 +295,7 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
-    if (functionExists(db, func.name.funcName)) {
+    if (existsFunction(db, func.name.funcName)) {
       throw new AnalysisException(s"Function '$func' already exists in '$db' database")
     } else {
       catalog(db).functions.put(func.name.funcName, func)

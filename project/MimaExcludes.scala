@@ -563,9 +563,6 @@ object MimaExcludes {
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerEvent.logEvent"),
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.OutputWriterFactory.newInstance")
       ) ++ Seq(
-        // [SPARK-14014] Replace existing analysis.Catalog with SessionCatalog
-        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLContext.this")
-      ) ++ Seq(
         // [SPARK-13928] Move org.apache.spark.Logging into org.apache.spark.internal.Logging
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Logging"),
         (problem: Problem) => problem match {

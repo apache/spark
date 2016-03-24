@@ -1817,8 +1817,7 @@ test_that("approxQuantile() on a DataFrame", {
 
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
-  expect_equal(grepl("Table not found", retError), TRUE)
-  expect_equal(grepl("blah", retError), TRUE)
+  expect_equal(grepl("Table not found: blah", retError), TRUE)
 })
 
 irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
