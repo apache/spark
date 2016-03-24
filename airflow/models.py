@@ -1400,7 +1400,7 @@ class BaseOperator(object):
     which ultimately becomes a node in DAG objects. Task dependencies should
     be set by using the set_upstream and/or set_downstream methods.
 
-    Note that this class is derived from SQLAlquemy's Base class, which
+    Note that this class is derived from SQLAlchemy's Base class, which
     allows us to push metadata regarding tasks to the database. Deriving this
     classes needs to implement the polymorphic specificities documented in
     SQLAlchemy. This should become clear while reading the code for other
@@ -1416,7 +1416,7 @@ class BaseOperator(object):
     :param retry_delay: delay between retries
     :type retry_delay: timedelta
     :param start_date: The ``start_date`` for the task, determines
-        the ``execution_date`` for the first task instanec. The best practice
+        the ``execution_date`` for the first task instance. The best practice
         is to have the start_date rounded
         to your DAG's ``schedule_interval``. Daily jobs have their start_date
         some day at 00:00:00, hourly jobs have their start_date at 00:00
