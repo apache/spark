@@ -75,10 +75,10 @@ private[sql] object PartitioningUtils {
    *       StructField(name = "b", dataType = StringType, nullable = true),
    *       StructField(name = "c", dataType = DoubleType, nullable = true)),
    *     partitions = Seq(
-   *       Partition(
+   *       PartitionDirectory(
    *         values = Row(1, "hello", 3.14),
    *         path = "hdfs://<host>:<port>/path/to/partition/a=1/b=hello/c=3.14"),
-   *       Partition(
+   *       PartitionDirectory(
    *         values = Row(2, "world", 6.28),
    *         path = "hdfs://<host>:<port>/path/to/partition/a=2/b=world/c=6.28")))
    * }}}

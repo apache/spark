@@ -315,8 +315,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     def newHiveCompatibleMetastoreTable(
         relation: HadoopFsRelation,
         serde: HiveSerDe): CatalogTable = {
-      assert(partitionColumns.isEmpty)
-      assert(relation.partitionSchema.isEmpty)
+      //assert(partitionColumns.isEmpty)
+      //assert(relation.partitionSchema.isEmpty)
 
       CatalogTable(
         name = TableIdentifier(tblName, Option(dbName)),
@@ -345,15 +345,18 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
-      case (Some(serde), relation: HadoopFsRelation)
-        if relation.location.paths.length == 1 && relation.partitionSchema.isEmpty =>
+      case (Some(serde), relation: HadoopFsRelation) =>
+        //if relation.location.paths.length == 1 && relation.partitionSchema.isEmpty =>
+        println(s"relation.location: ${relation.location}")
+        relation.location.paths.foreach(println(_))
+        println(s"partitionSpec: ${relation.location.partitionSpec()}")
         val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
         val message =
           s"Persisting data source relation $qualifiedTableName with a single input path " +
             s"into Hive metastore in Hive compatible format. Input path: " +
             s"${relation.location.paths.head}."
         (Some(hiveTable), message)
-
+      /*
       case (Some(serde), relation: HadoopFsRelation) if relation.partitionSchema.nonEmpty =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
@@ -367,7 +370,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
             s"Input paths: " + relation.location.paths.mkString("\n", "\n", "")
         (None, message)
-
+      */
       case (Some(serde), _) =>
         val message =
           s"Data source relation $qualifiedTableName is not a " +

@@ -66,6 +66,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import hiveContext.implicits._
 
+  test("writing to Hive") {
+    val schema = StructType(
+      Array(StructField("a", LongType, false),
+        StructField("b", StringType, false),
+        StructField("c", StringType, false),
+        StructField("d", IntegerType, false)))
+
+    val df = sqlContext.createDataFrame(sparkContext.parallelize(Array(Row(1L, "test", "NW", 1))), schema)
+    df.write.partitionBy("c", "d").saveAsTable("testDFTABLE1")
+  }
+
+  /*
   test("UDTF") {
     sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
     // The function source code can be found at:
@@ -1811,4 +1823,5 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+  */
 }
