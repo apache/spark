@@ -30,7 +30,8 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.4.0")
 class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
-  require(k >= 1, s"PCA requires a number of principal components k >= 1 but was given $k")
+  require(k > 0,
+    s"Number of principal components must be positive but got ${k}")
 
   /**
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.

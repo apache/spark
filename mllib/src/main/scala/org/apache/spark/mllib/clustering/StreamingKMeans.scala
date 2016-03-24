@@ -178,6 +178,8 @@ class StreamingKMeans @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setK(k: Int): this.type = {
+    require(k > 0,
+      s"Number of clusters must be positive but got ${k}")
     this.k = k
     this
   }
@@ -187,6 +189,8 @@ class StreamingKMeans @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setDecayFactor(a: Double): this.type = {
+    require(a >= 0,
+      s"Decay factor must be nonnegative but got ${a}")
     this.decayFactor = a
     this
   }
@@ -198,6 +202,8 @@ class StreamingKMeans @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setHalfLife(halfLife: Double, timeUnit: String): this.type = {
+    require(halfLife > 0,
+      s"Half life must be positive but got ${halfLife}")
     if (timeUnit != StreamingKMeans.BATCHES && timeUnit != StreamingKMeans.POINTS) {
       throw new IllegalArgumentException("Invalid time unit for decay: " + timeUnit)
     }
