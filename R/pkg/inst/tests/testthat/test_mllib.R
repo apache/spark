@@ -265,7 +265,7 @@ test_that("survreg2", {
   rScale <- rModel$scale
 
   expect_equal(coefs, rCoefs, tolerance = 1e-4)
-  expect_equal(scale, rScale, tolerance = 1e-4)
+  expect_true(abs(scale - rScale) < 1e-4)
   expect_true(all(
     rownames(stats$coefficients) ==
     c("(Intercept)", "ecog_ps", "rx", "Log(scale)")))
