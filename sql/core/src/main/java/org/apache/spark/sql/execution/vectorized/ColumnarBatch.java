@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * This class is the in memory representation of rows as they are streamed through operators. It
  * is designed to maximize CPU efficiency and not storage footprint. Since it is expected that
- * each operator allocates one of thee objects, the storage footprint on the task is negligible.
+ * each operator allocates one of these objects, the storage footprint on the task is negligible.
  *
  * The layout is a columnar with values encoded in their native format. Each RowBatch contains
  * a horizontal partitioning of the data, split into columns.
@@ -168,7 +168,7 @@ public final class ColumnarBatch {
     }
 
     @Override
-    public boolean isNullAt(int ordinal) { return columns[ordinal].getIsNull(rowId); }
+    public boolean isNullAt(int ordinal) { return columns[ordinal].isNullAt(rowId); }
 
     @Override
     public boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
@@ -295,7 +295,7 @@ public final class ColumnarBatch {
     for (int ordinal : nullFilteredColumns) {
       if (columns[ordinal].numNulls != 0) {
         for (int rowId = 0; rowId < numRows; rowId++) {
-          if (!filteredRows[rowId] && columns[ordinal].getIsNull(rowId)) {
+          if (!filteredRows[rowId] && columns[ordinal].isNullAt(rowId)) {
             filteredRows[rowId] = true;
             ++numRowsFiltered;
           }

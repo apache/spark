@@ -98,7 +98,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public boolean getIsNull(int rowId) {
+  public boolean isNullAt(int rowId) {
     return nulls[rowId] == 1;
   }
 
@@ -403,7 +403,8 @@ public final class OnHeapColumnVector extends ColumnVector {
       int[] newData = new int[newCapacity];
       if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
       intData = newData;
-    } else if (type instanceof LongType || DecimalType.is64BitDecimalType(type)) {
+    } else if (type instanceof LongType || type instanceof TimestampType ||
+        DecimalType.is64BitDecimalType(type)) {
       long[] newData = new long[newCapacity];
       if (longData != null) System.arraycopy(longData, 0, newData, 0, elementsAppended);
       longData = newData;

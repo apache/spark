@@ -215,7 +215,7 @@ private[joins] class UnsafeHashedRelation(
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     // TODO(josh): This needs to be revisited before we merge this patch; making this change now
     // so that tests compile:
-    val taskMemoryManager = new StaticMemoryManager(
+    val taskMemoryManager = new TaskMemoryManager(
       new StaticMemoryManager(
         new SparkConf().set("spark.memory.offHeap.enabled", "false"),
         Long.MaxValue,

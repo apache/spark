@@ -1621,15 +1621,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10215 Div of Decimal returns null") {
-    val d = Decimal(1.12321)
+    val d = Decimal(1.12321).toBigDecimal
     val df = Seq((d, 1)).toDF("a", "b")
 
     checkAnswer(
       df.selectExpr("b * a / b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a / b / b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a + b"),
       Seq(Row(BigDecimal(2.12321))))
@@ -1638,7 +1638,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(BigDecimal(0.12321))))
     checkAnswer(
       df.selectExpr("b * a * b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
   }
 
   test("precision smaller than scale") {
@@ -1744,7 +1744,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e3 = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
     }
-    assert(e3.message.contains("Unable to infer schema"))
+    assert(e3.message.contains("Path does not exist"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
@@ -1934,6 +1934,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // Qualify the struct type with the table name.
       checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
         Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+    }
+  }
+
+  test("Star Expansion - group by") {
+    withSQLConf("spark.sql.retainGroupColumns" -> "false") {
+      checkAnswer(
+        testData2.groupBy($"a", $"b").agg($"*"),
+        sql("SELECT * FROM testData2 group by a, b"))
     }
   }
 
