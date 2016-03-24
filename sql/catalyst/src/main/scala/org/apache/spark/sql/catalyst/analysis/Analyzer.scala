@@ -592,7 +592,7 @@ class Analyzer(
                 "access to the scope that this class was defined in.\n" +
                 "Try moving this class out of its parent class.")
           }
-          n.copy(outerPointer = Some(Literal.fromObject(outer)))
+          n.copy(outerPointer = Some(outer))
       }
     }
 

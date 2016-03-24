@@ -197,15 +197,17 @@ object NewInstance {
  * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
  *                 to manually specify the type when the object in question is a valid internal
  *                 representation (i.e. ArrayData) instead of an object.
- * @param outerPointer If the object being constructed is an inner class the outerPointer must
- *                     for the containing class must be specified.
+ * @param outerPointer If the object being constructed is an inner class, the outerPointer for the
+ *                     containing class must be specified. This parameter is defined as an optional
+ *                     function, which allows us to get the outer pointer lazily,and it's useful if
+ *                     the inner class is defined in REPL.
  */
 case class NewInstance(
     cls: Class[_],
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[Literal]) extends Expression with NonSQLExpression {
+    outerPointer: Option[() => AnyRef]) extends Expression with NonSQLExpression {
   private val className = cls.getName
 
   override def nullable: Boolean = propagateNull
@@ -220,12 +222,12 @@ case class NewInstance(
     val argGen = arguments.map(_.gen(ctx))
     val argString = argGen.map(_.value).mkString(", ")
 
-    val outer = outerPointer.map(_.gen(ctx))
+    val outer = outerPointer.map(func => Literal.fromObject(func()).gen(ctx))
 
     val setup =
       s"""
          ${argGen.map(_.code).mkString("\n")}
-         ${outer.map(_.code.mkString("")).getOrElse("")}
+         ${outer.map(_.code).getOrElse("")}
        """.stripMargin
 
     val constructorCall = outer.map { gen =>
