@@ -282,13 +282,14 @@ case class Range(
       |   }
       | }
       |
-      | while (!$overflow && $checkEnd && !shouldStop()) {
+      | while (!$overflow && $checkEnd) {
       |  long $value = $number;
       |  $number += ${step}L;
       |  if ($number < $value ^ ${step}L < 0) {
       |    $overflow = true;
       |  }
       |  ${consume(ctx, Seq(ev))}
+      |  if (shouldStop()) return;
       | }
      """.stripMargin
   }

@@ -20,14 +20,11 @@ package org.apache.spark.shuffle
 import java.io.{ByteArrayOutputStream, InputStream}
 import java.nio.ByteBuffer
 
-import org.mockito.Matchers.{eq => meq, _}
 import org.mockito.Mockito.{mock, when}
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 
 import org.apache.spark._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.{BlockManager, BlockManagerId, ShuffleBlockId}
 
 /**
@@ -77,13 +74,6 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     // can ensure retain() and release() are properly called.
     val blockManager = mock(classOf[BlockManager])
 
-    // Create a return function to use for the mocked wrapForCompression method that just returns
-    // the original input stream.
-    val dummyCompressionFunction = new Answer[InputStream] {
-      override def answer(invocation: InvocationOnMock): InputStream =
-        invocation.getArguments()(1).asInstanceOf[InputStream]
-    }
-
     // Create a buffer with some randomly generated key-value pairs to use as the shuffle data
     // from each mappers (all mappers return the same shuffle data).
     val byteOutputStream = new ByteArrayOutputStream()
@@ -105,9 +95,6 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
       // fetch shuffle data.
       val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
       when(blockManager.getBlockData(shuffleBlockId)).thenReturn(managedBuffer)
-      when(blockManager.wrapForCompression(meq(shuffleBlockId), isA(classOf[InputStream])))
-        .thenAnswer(dummyCompressionFunction)
-
       managedBuffer
     }
 
@@ -127,17 +114,24 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     // Create a mocked shuffle handle to pass into HashShuffleReader.
     val shuffleHandle = {
       val dependency = mock(classOf[ShuffleDependency[Int, Int, Int]])
-      when(dependency.serializer).thenReturn(Some(serializer))
+      when(dependency.serializer).thenReturn(serializer)
       when(dependency.aggregator).thenReturn(None)
       when(dependency.keyOrdering).thenReturn(None)
       new BaseShuffleHandle(shuffleId, numMaps, dependency)
     }
+
+    val serializerManager = new SerializerManager(
+      serializer,
+      new SparkConf()
+        .set("spark.shuffle.compress", "false")
+        .set("spark.shuffle.spill.compress", "false"))
 
     val shuffleReader = new BlockStoreShuffleReader(
       shuffleHandle,
       reduceId,
       reduceId + 1,
       TaskContext.empty(),
+      serializerManager,
       blockManager,
       mapOutputTracker)
 

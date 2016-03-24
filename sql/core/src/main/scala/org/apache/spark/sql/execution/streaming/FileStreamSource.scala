@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.collection.OpenHashSet
@@ -44,7 +44,7 @@ class FileStreamSource(
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   private val seenFiles = new OpenHashSet[String]
-  metadataLog.get(None, maxBatchId).foreach { case (batchId, files) =>
+  metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, files) =>
     files.foreach(seenFiles.add)
   }
 
@@ -109,25 +109,29 @@ class FileStreamSource(
   /**
    * Returns the next batch of data that is available after `start`, if any is available.
    */
-  override def getNextBatch(start: Option[Offset]): Option[Batch] = {
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
-    val end = fetchMaxOffset()
-    val endId = end.offset
+    val endId = end.asInstanceOf[LongOffset].offset
 
-    if (startId + 1 <= endId) {
-      val files = metadataLog.get(Some(startId + 1), endId).map(_._2).flatten
-      logDebug(s"Return files from batches ${startId + 1}:$endId")
-      logDebug(s"Streaming ${files.mkString(", ")}")
-      Some(new Batch(end, dataFrameBuilder(files)))
-    }
-    else {
-      None
-    }
+    assert(startId <= endId)
+    val files = metadataLog.get(Some(startId + 1), Some(endId)).map(_._2).flatten
+    logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
+    logDebug(s"Streaming ${files.mkString(", ")}")
+    dataFrameBuilder(files)
+
   }
 
   private def fetchAllFiles(): Seq[String] = {
-    fs.listStatus(new Path(path))
+    val startTime = System.nanoTime()
+    val files = fs.listStatus(new Path(path))
       .filterNot(_.getPath.getName.startsWith("_"))
       .map(_.getPath.toUri.toString)
+    val endTime = System.nanoTime()
+    logDebug(s"Listed ${files.size} in ${(endTime.toDouble - startTime) / 1000000}ms")
+    files
   }
+
+  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
+
+  override def toString: String = s"FileSource[$path]"
 }

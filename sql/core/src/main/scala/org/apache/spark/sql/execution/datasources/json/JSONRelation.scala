@@ -27,8 +27,8 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
-import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -51,6 +51,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       None
     } else {
       val parsedOptions: JSONOptions = new JSONOptions(options)
+      val columnNameOfCorruptRecord =
+        parsedOptions.columnNameOfCorruptRecord
+          .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
       val jsonFiles = files.filterNot { status =>
         val name = status.getPath.getName
         name.startsWith("_") || name.startsWith(".")
@@ -58,7 +61,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
       val jsonSchema = InferSchema.infer(
         createBaseRdd(sqlContext, jsonFiles),
-        sqlContext.conf.columnNameOfCorruptRecord,
+        columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
 
@@ -102,10 +105,13 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
     val parsedOptions: JSONOptions = new JSONOptions(options)
     val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
+    val columnNameOfCorruptRecord =
+      parsedOptions.columnNameOfCorruptRecord
+        .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
     val rows = JacksonParser.parse(
       createBaseRdd(sqlContext, jsonFiles),
       requiredDataSchema,
-      sqlContext.conf.columnNameOfCorruptRecord,
+      columnNameOfCorruptRecord,
       parsedOptions)
 
     rows.mapPartitions { iterator =>

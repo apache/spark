@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchItemException
@@ -84,7 +84,6 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
   private def requireTableExists(db: String, table: String): Unit = {
     withClient { getTable(db, table) }
   }
-
 
   // --------------------------------------------------------------------------
   // Databases
@@ -180,6 +179,10 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
 
   override def getTable(db: String, table: String): CatalogTable = withClient {
     client.getTable(db, table)
+  }
+
+  override def tableExists(db: String, table: String): Boolean = withClient {
+    client.getTableOption(db, table).isDefined
   }
 
   override def listTables(db: String): Seq[String] = withClient {

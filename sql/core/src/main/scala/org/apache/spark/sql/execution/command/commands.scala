@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.util.NoSuchElementException
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
@@ -160,6 +160,15 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    case Some((SQLConf.Deprecated.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED} is " +
+            s"deprecated and will be ignored. Vectorized parquet reader will be used instead.")
+        Seq(Row(SQLConf.PARQUET_VECTORIZED_READER_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
@@ -252,7 +261,7 @@ case class CacheTableCommand(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      sqlContext.registerDataFrameAsTable(Dataset.newDataFrame(sqlContext, logicalPlan), tableName)
+      sqlContext.registerDataFrameAsTable(Dataset.ofRows(sqlContext, logicalPlan), tableName)
     }
     sqlContext.cacheTable(tableName)
 
@@ -330,10 +339,12 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
   override def run(sqlContext: SQLContext): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sqlContext.
-    val rows = sqlContext.sessionState.catalog.getTables(databaseName).map {
-      case (tableName, isTemporary) => Row(tableName, isTemporary)
+    val catalog = sqlContext.sessionState.catalog
+    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
+    val rows = catalog.listTables(db).map { t =>
+      val isTemp = t.database.isEmpty
+      Row(t.table, isTemp)
     }
-
     rows
   }
 }

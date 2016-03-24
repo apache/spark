@@ -22,6 +22,7 @@ import java.io.{File, PrintStream}
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
@@ -34,7 +35,8 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
@@ -62,6 +64,7 @@ import org.apache.spark.util.{CircularBuffer, Utils}
 private[hive] class HiveClientImpl(
     override val version: HiveVersion,
     sparkConf: SparkConf,
+    hadoopConf: Configuration,
     config: Map[String, String],
     initClassLoader: ClassLoader,
     val clientLoader: IsolatedClientLoader)
@@ -115,7 +118,7 @@ private[hive] class HiveClientImpl(
         // so we should keep `conf` and reuse the existing instance of `CliSessionState`.
         originalState
       } else {
-        val initialConf = new HiveConf(classOf[SessionState])
+        val initialConf = new HiveConf(hadoopConf, classOf[SessionState])
         // HiveConf is a Hadoop Configuration, which has a field of classLoader and
         // the initial value will be the current thread's context class loader
         // (i.e. initClassLoader at here).
@@ -236,10 +239,6 @@ private[hive] class HiveClientImpl(
 
   def setError(stream: PrintStream): Unit = withHiveState {
     state.err = stream
-  }
-
-  override def currentDatabase: String = withHiveState {
-    state.getCurrentDatabase
   }
 
   override def setCurrentDatabase(databaseName: String): Unit = withHiveState {

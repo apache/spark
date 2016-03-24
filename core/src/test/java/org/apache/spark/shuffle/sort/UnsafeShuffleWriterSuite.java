@@ -70,6 +70,7 @@ public class UnsafeShuffleWriterSuite {
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
   SparkConf conf;
   final Serializer serializer = new KryoSerializer(new SparkConf());
+  final SerializerManager serializerManager = new SerializerManager(serializer, new SparkConf());
   TaskMetrics taskMetrics;
 
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
@@ -111,7 +112,7 @@ public class UnsafeShuffleWriterSuite {
       .set("spark.memory.offHeap.enabled", "false");
     taskMetrics = new TaskMetrics();
     memoryManager = new TestMemoryManager(conf);
-    taskMemoryManager =  new TaskMemoryManager(memoryManager, 0);
+    taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
 
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(blockManager.getDiskWriter(
@@ -135,35 +136,6 @@ public class UnsafeShuffleWriterSuite {
         );
       }
     });
-    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class))).thenAnswer(
-      new Answer<InputStream>() {
-        @Override
-        public InputStream answer(InvocationOnMock invocation) throws Throwable {
-          assertTrue(invocation.getArguments()[0] instanceof TempShuffleBlockId);
-          InputStream is = (InputStream) invocation.getArguments()[1];
-          if (conf.getBoolean("spark.shuffle.compress", true)) {
-            return CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(is);
-          } else {
-            return is;
-          }
-        }
-      }
-    );
-
-    when(blockManager.wrapForCompression(any(BlockId.class), any(OutputStream.class))).thenAnswer(
-      new Answer<OutputStream>() {
-        @Override
-        public OutputStream answer(InvocationOnMock invocation) throws Throwable {
-          assertTrue(invocation.getArguments()[0] instanceof TempShuffleBlockId);
-          OutputStream os = (OutputStream) invocation.getArguments()[1];
-          if (conf.getBoolean("spark.shuffle.compress", true)) {
-            return CompressionCodec$.MODULE$.createCodec(conf).compressedOutputStream(os);
-          } else {
-            return os;
-          }
-        }
-      }
-    );
 
     when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
     doAnswer(new Answer<Void>() {
@@ -191,7 +163,7 @@ public class UnsafeShuffleWriterSuite {
       });
 
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);
-    when(shuffleDep.serializer()).thenReturn(Option.<Serializer>apply(serializer));
+    when(shuffleDep.serializer()).thenReturn(serializer);
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
   }
 

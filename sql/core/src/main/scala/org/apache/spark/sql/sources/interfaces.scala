@@ -25,9 +25,10 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
@@ -414,7 +415,7 @@ case class HadoopFsRelation(
   def refresh(): Unit = location.refresh()
 
   override def toString: String =
-    s"$fileFormat part: ${partitionSchema.simpleString}, data: ${dataSchema.simpleString}"
+    s"HadoopFiles"
 
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
@@ -550,10 +551,13 @@ class HDFSFileCatalog(
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
     if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles()) :: Nil
+      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
-        case PartitionDirectory(values, path) => Partition(values, getStatus(path))
+        case PartitionDirectory(values, path) =>
+          Partition(
+            values,
+            getStatus(path).filterNot(_.getPath.getName startsWith "_"))
       }
     }
   }

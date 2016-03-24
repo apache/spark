@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.planning
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -79,12 +80,12 @@ object PhysicalOperation extends PredicateHelper {
     expr.transform {
       case a @ Alias(ref: AttributeReference, name) =>
         aliases.get(ref)
-          .map(Alias(_, name)(a.exprId, a.qualifiers, isGenerated = a.isGenerated))
+          .map(Alias(_, name)(a.exprId, a.qualifier, isGenerated = a.isGenerated))
           .getOrElse(a)
 
       case a: AttributeReference =>
         aliases.get(a)
-          .map(Alias(_, a.name)(a.exprId, a.qualifiers, isGenerated = a.isGenerated)).getOrElse(a)
+          .map(Alias(_, a.name)(a.exprId, a.qualifier, isGenerated = a.isGenerated)).getOrElse(a)
     }
   }
 }
@@ -200,5 +201,17 @@ object Unions {
         case other => collectUnionChildren(plans, children :+ other)
       }
     }
+  }
+}
+
+/**
+ * Extractor for retrieving Int value.
+ */
+object IntegerIndex {
+  def unapply(a: Any): Option[Int] = a match {
+    case Literal(a: Int, IntegerType) => Some(a)
+    // When resolving ordinal in Sort, negative values are extracted for issuing error messages.
+    case UnaryMinus(IntegerLiteral(v)) => Some(-v)
+    case _ => None
   }
 }

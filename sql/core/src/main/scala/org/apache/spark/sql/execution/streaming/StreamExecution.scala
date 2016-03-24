@@ -23,7 +23,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -41,6 +43,7 @@ import org.apache.spark.sql.util.ContinuousQueryListener._
 class StreamExecution(
     val sqlContext: SQLContext,
     override val name: String,
+    val checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink) extends ContinuousQuery with Logging {
 
@@ -52,12 +55,27 @@ class StreamExecution(
   /** Minimum amount of time in between the start of each batch. */
   private val minBatchTime = 10
 
-  /** Tracks how much data we have processed from each input source. */
-  private[sql] val streamProgress = new StreamProgress
+  /**
+   * Tracks how much data we have processed and committed to the sink or state store from each
+   * input source.
+   */
+  private[sql] var committedOffsets = new StreamProgress
+
+  /**
+   * Tracks the offsets that are available to be processed, but have not yet be committed to the
+   * sink.
+   */
+  private var availableOffsets = new StreamProgress
+
+  /** The current batchId or -1 if execution has not yet been initialized. */
+  private var currentBatchId: Long = -1
 
   /** All stream sources present the query plan. */
   private val sources =
     logicalPlan.collect { case s: StreamingRelation => s.source }
+
+  /** A list of unique sources in the query plan. */
+  private val uniqueSources = sources.distinct
 
   /** Defines the internal state of execution */
   @volatile
@@ -74,19 +92,33 @@ class StreamExecution(
     override def run(): Unit = { runBatches() }
   }
 
+  /**
+   * A write-ahead-log that records the offsets that are present in each batch. In order to ensure
+   * that a given batch will always consist of the same data, we write to this log *before* any
+   * processing is done.  Thus, the Nth record in this log indicated data that is currently being
+   * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
+   */
+  private val offsetLog =
+    new HDFSMetadataLog[CompositeOffset](sqlContext, checkpointFile("offsets"))
+
   /** Whether the query is currently active or not */
   override def isActive: Boolean = state == ACTIVE
 
   /** Returns current status of all the sources. */
   override def sourceStatuses: Array[SourceStatus] = {
-    sources.map(s => new SourceStatus(s.toString, streamProgress.get(s))).toArray
+    sources.map(s => new SourceStatus(s.toString, availableOffsets.get(s))).toArray
   }
 
   /** Returns current status of the sink. */
-  override def sinkStatus: SinkStatus = new SinkStatus(sink.toString, sink.currentOffset)
+  override def sinkStatus: SinkStatus =
+    new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources))
 
   /** Returns the [[ContinuousQueryException]] if the query was terminated by an exception. */
   override def exception: Option[ContinuousQueryException] = Option(streamDeathCause)
+
+  /** Returns the path of a file with `name` in the checkpoint directory. */
+  private def checkpointFile(name: String): String =
+    new Path(new Path(checkpointRoot), name).toUri.toString
 
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStarted]] event
@@ -102,7 +134,7 @@ class StreamExecution(
    * Repeatedly attempts to run batches as data arrives.
    *
    * Note that this method ensures that [[QueryStarted]] and [[QueryTerminated]] events are posted
-   * so that listeners are guaranteed to get former event before the latter. Furthermore, this
+   * such that listeners are guaranteed to get a start event before a termination. Furthermore, this
    * method also ensures that [[QueryStarted]] event is posted before the `start()` method returns.
    */
   private def runBatches(): Unit = {
@@ -118,9 +150,10 @@ class StreamExecution(
       // While active, repeatedly attempt to run batches.
       SQLContext.setActive(sqlContext)
       populateStartOffsets()
-      logInfo(s"Stream running at $streamProgress")
+      logDebug(s"Stream running from $committedOffsets to $availableOffsets")
       while (isActive) {
-        attemptBatch()
+        if (dataAvailable) runBatch()
+        commitAndConstructNextBatch()
         Thread.sleep(minBatchTime) // TODO: Could be tighter
       }
     } catch {
@@ -130,7 +163,7 @@ class StreamExecution(
           this,
           s"Query $name terminated with exception: ${e.getMessage}",
           e,
-          Some(streamProgress.toCompositeOffset(sources)))
+          Some(committedOffsets.toCompositeOffset(sources)))
         logError(s"Query $name terminated with error", e)
     } finally {
       state = TERMINATED
@@ -142,48 +175,105 @@ class StreamExecution(
 
   /**
    * Populate the start offsets to start the execution at the current offsets stored in the sink
-   * (i.e. avoid reprocessing data that we have already processed).
+   * (i.e. avoid reprocessing data that we have already processed). This function must be called
+   * before any processing occurs and will populate the following fields:
+   *  - currentBatchId
+   *  - committedOffsets
+   *  - availableOffsets
    */
   private def populateStartOffsets(): Unit = {
-    sink.currentOffset match {
-      case Some(c: CompositeOffset) =>
-        val storedProgress = c.offsets
-        val sources = logicalPlan collect {
-          case StreamingRelation(source, _) => source
+    offsetLog.getLatest() match {
+      case Some((batchId, nextOffsets)) =>
+        logInfo(s"Resuming continuous query, starting with batch $batchId")
+        currentBatchId = batchId + 1
+        availableOffsets = nextOffsets.toStreamProgress(sources)
+        logDebug(s"Found possibly uncommitted offsets $availableOffsets")
+
+        offsetLog.get(batchId - 1).foreach {
+          case lastOffsets =>
+            committedOffsets = lastOffsets.toStreamProgress(sources)
+            logDebug(s"Resuming with committed offsets: $committedOffsets")
         }
 
-        assert(sources.size == storedProgress.size)
-        sources.zip(storedProgress).foreach { case (source, offset) =>
-          offset.foreach(streamProgress.update(source, _))
-        }
       case None => // We are starting this stream for the first time.
-      case _ => throw new IllegalArgumentException("Expected composite offset from sink")
+        logInfo(s"Starting new continuous query.")
+        currentBatchId = 0
+        commitAndConstructNextBatch()
     }
   }
 
   /**
-   * Checks to see if any new data is present in any of the sources. When new data is available,
-   * a batch is executed and passed to the sink, updating the currentOffsets.
+   * Returns true if there is any new data available to be processed.
    */
-  private def attemptBatch(): Unit = {
+  private def dataAvailable: Boolean = {
+    availableOffsets.exists {
+      case (source, available) =>
+        committedOffsets
+            .get(source)
+            .map(committed => committed < available)
+            .getOrElse(true)
+    }
+  }
+
+  /**
+   * Queries all of the sources to see if any new data is available. When there is new data the
+   * batchId counter is incremented and a new log entry is written with the newest offsets.
+   *
+   * Note that committing the offsets for a new batch implicitly marks the previous batch as
+   * finished and thus this method should only be called when all currently available data
+   * has been written to the sink.
+   */
+  private def commitAndConstructNextBatch(): Boolean = {
+    // Update committed offsets.
+    committedOffsets ++= availableOffsets
+
+    // Check to see what new data is available.
+    val newData = uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+    availableOffsets ++= newData
+
+    if (dataAvailable) {
+      assert(
+        offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
+        s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
+      currentBatchId += 1
+      logInfo(s"Committed offsets for batch $currentBatchId.")
+      true
+    } else {
+      noNewData = true
+      awaitBatchLock.synchronized {
+        // Wake up any threads that are waiting for the stream to progress.
+        awaitBatchLock.notifyAll()
+      }
+
+      false
+    }
+  }
+
+  /**
+   * Processes any data available between `availableOffsets` and `committedOffsets`.
+   */
+  private def runBatch(): Unit = {
     val startTime = System.nanoTime()
 
-    // A list of offsets that need to be updated if this batch is successful.
-    // Populated while walking the tree.
-    val newOffsets = new ArrayBuffer[(Source, Offset)]
+    // Request unprocessed data from all sources.
+    val newData = availableOffsets.flatMap {
+      case (source, available) if committedOffsets.get(source).map(_ < available).getOrElse(true) =>
+        val current = committedOffsets.get(source)
+        val batch = source.getBatch(current, available)
+        logDebug(s"Retrieving data from $source: $current -> $available")
+        Some(source -> batch)
+      case _ => None
+    }.toMap
+
     // A list of attributes that will need to be updated.
     var replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
       case StreamingRelation(source, output) =>
-        val prevOffset = streamProgress.get(source)
-        val newBatch = source.getNextBatch(prevOffset)
-
-        newBatch.map { batch =>
-          newOffsets += ((source, batch.end))
-          val newPlan = batch.data.logicalPlan
-
-          assert(output.size == newPlan.output.size)
+        newData.get(source).map { data =>
+          val newPlan = data.logicalPlan
+          assert(output.size == newPlan.output.size,
+            s"Invalid batch: ${output.mkString(",")} != ${newPlan.output.mkString(",")}")
           replacements ++= output.zip(newPlan.output)
           newPlan
         }.getOrElse {
@@ -197,35 +287,24 @@ class StreamExecution(
       case a: Attribute if replacementMap.contains(a) => replacementMap(a)
     }
 
-    if (newOffsets.nonEmpty) {
-      val optimizerStart = System.nanoTime()
+    val optimizerStart = System.nanoTime()
 
-      lastExecution = new QueryExecution(sqlContext, newPlan)
-      val executedPlan = lastExecution.executedPlan
-      val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
-      logDebug(s"Optimized batch in ${optimizerTime}ms")
+    lastExecution = new QueryExecution(sqlContext, newPlan)
+    val executedPlan = lastExecution.executedPlan
+    val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
+    logDebug(s"Optimized batch in ${optimizerTime}ms")
 
-      streamProgress.synchronized {
-        // Update the offsets and calculate a new composite offset
-        newOffsets.foreach(streamProgress.update)
+    val nextBatch = Dataset.ofRows(sqlContext, newPlan)
+    sink.addBatch(currentBatchId - 1, nextBatch)
 
-        // Construct the batch and send it to the sink.
-        val batchOffset = streamProgress.toCompositeOffset(sources)
-        val nextBatch = new Batch(batchOffset, Dataset.newDataFrame(sqlContext, newPlan))
-        sink.addBatch(nextBatch)
-      }
-
-      awaitBatchLock.synchronized {
-        // Wake up any threads that are waiting for the stream to progress.
-        awaitBatchLock.notifyAll()
-      }
-
-      val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
-      logInfo(s"Completed up to $newOffsets in ${batchTime}ms")
-      postEvent(new QueryProgress(this))
+    awaitBatchLock.synchronized {
+      // Wake up any threads that are waiting for the stream to progress.
+      awaitBatchLock.notifyAll()
     }
 
-    logDebug(s"Waiting for data, current: $streamProgress")
+    val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
+    logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
+    postEvent(new QueryProgress(this))
   }
 
   private def postEvent(event: ContinuousQueryListener.Event) {
@@ -252,15 +331,25 @@ class StreamExecution(
    * least the given `Offset`. This method is indented for use primarily when writing tests.
    */
   def awaitOffset(source: Source, newOffset: Offset): Unit = {
-    def notDone = streamProgress.synchronized {
-      !streamProgress.contains(source) || streamProgress(source) < newOffset
-    }
+    def notDone = !committedOffsets.contains(source) || committedOffsets(source) < newOffset
 
     while (notDone) {
       logInfo(s"Waiting until $newOffset at $source")
       awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
     logDebug(s"Unblocked at $newOffset for $source")
+  }
+
+  /** A flag to indicate that a batch has completed with no new data available. */
+  @volatile private var noNewData = false
+
+  override def processAllAvailable(): Unit = {
+    noNewData = false
+    while (!noNewData) {
+      awaitBatchLock.synchronized { awaitBatchLock.wait(10000) }
+      if (streamDeathCause != null) { throw streamDeathCause }
+    }
+    if (streamDeathCause != null) { throw streamDeathCause }
   }
 
   override def awaitTermination(): Unit = {
@@ -297,7 +386,7 @@ class StreamExecution(
     s"""
        |=== Continuous Query ===
        |Name: $name
-       |Current Offsets: $streamProgress
+       |Current Offsets: $committedOffsets
        |
        |Current State: $state
        |Thread State: ${microBatchThread.getState}

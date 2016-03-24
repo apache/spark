@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -856,7 +856,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def alias(alias: String): Column = as(alias)
+  def alias(alias: String): Column = name(alias)
 
   /**
    * Gives the column an alias.
@@ -871,12 +871,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias)()
-    }
-  }
+  def as(alias: String): Column = name(alias)
 
   /**
    * (Scala-specific) Assigns the given aliases to the results of a table generating function.
@@ -934,6 +929,26 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    */
   def as(alias: String, metadata: Metadata): Column = withExpr {
     Alias(expr, alias)(explicitMetadata = Some(metadata))
+  }
+
+  /**
+   * Gives the column a name (alias).
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select($"colA".name("colB"))
+   * }}}
+   *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  def name(alias: String): Column = withExpr {
+    expr match {
+      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
+      case other => Alias(other, alias)()
+    }
   }
 
   /**

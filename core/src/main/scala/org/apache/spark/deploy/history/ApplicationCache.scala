@@ -28,7 +28,7 @@ import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 import org.eclipse.jetty.servlet.FilterHolder
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Clock

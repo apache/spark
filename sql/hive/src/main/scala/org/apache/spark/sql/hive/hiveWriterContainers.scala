@@ -36,6 +36,7 @@ import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -278,6 +279,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         StructType.fromAttributes(partitionOutput),
         StructType.fromAttributes(dataOutput),
         SparkEnv.get.blockManager,
+        SparkEnv.get.serializerManager,
         TaskContext.get().taskMemoryManager().pageSizeBytes)
 
       while (iterator.hasNext) {

@@ -19,8 +19,8 @@ package org.apache.spark.ml
 
 import scala.annotation.varargs
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.sql.DataFrame
