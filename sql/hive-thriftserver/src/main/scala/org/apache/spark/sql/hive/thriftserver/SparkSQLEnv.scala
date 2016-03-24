@@ -36,7 +36,7 @@ private[hive] object SparkSQLEnv extends Logging {
 
   private def readContextClassFromConf(sparkConf: SparkConf): Class[_ <: HiveContext] = {
     val className =
-      sparkConf.get("spark.sql.context.class", "org.apache.spark.sql.hive.HiveContext")
+      sparkConf.get("spark.sql.context.class", classOf[HiveContext].getName)
     val configuredContextClass = Utils.classForName(className)
     val defaultContextClass = classOf[HiveContext]
     if (defaultContextClass.isAssignableFrom(configuredContextClass)) {
