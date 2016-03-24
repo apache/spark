@@ -64,7 +64,7 @@ public class TransportClientFactory implements Closeable {
     TransportClient[] clients;
     Object[] locks;
 
-    public ClientPool(int size) {
+    ClientPool(int size) {
       clients = new TransportClient[size];
       locks = new Object[size];
       for (int i = 0; i < size; i++) {
@@ -194,8 +194,8 @@ public class TransportClientFactory implements Closeable {
       .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
       .option(ChannelOption.ALLOCATOR, pooledAllocator);
 
-    final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
-    final AtomicReference<Channel> channelRef = new AtomicReference<Channel>();
+    final AtomicReference<TransportClient> clientRef = new AtomicReference<>();
+    final AtomicReference<Channel> channelRef = new AtomicReference<>();
 
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override

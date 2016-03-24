@@ -25,9 +25,10 @@ import scala.collection.mutable
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
-import org.apache.spark.{Logging, SparkConf, TaskEndReason}
+import org.apache.spark.{SparkConf, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.ui.SparkUI

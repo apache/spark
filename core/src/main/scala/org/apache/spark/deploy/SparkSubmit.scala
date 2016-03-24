@@ -48,7 +48,7 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, U
 
 /**
  * Whether to submit, kill, or request the status of an application.
- * The latter two operations are currently supported only for standalone cluster mode.
+ * The latter two operations are currently supported only for standalone and Mesos cluster modes.
  */
 private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value
@@ -626,7 +626,6 @@ object SparkSubmit {
     val pathConfigs = Seq(
       "spark.jars",
       "spark.files",
-      "spark.yarn.jar",
       "spark.yarn.dist.files",
       "spark.yarn.dist.archives")
     pathConfigs.foreach { config =>

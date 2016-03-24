@@ -89,11 +89,6 @@ final class VectorSlicer(override val uid: String)
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def validateParams(): Unit = {
-    require($(indices).length > 0 || $(names).length > 0,
-      s"VectorSlicer requires that at least one feature be selected.")
-  }
-
   override def transform(dataset: DataFrame): DataFrame = {
     // Validity checks
     transformSchema(dataset.schema)
@@ -139,7 +134,8 @@ final class VectorSlicer(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
+    require($(indices).length > 0 || $(names).length > 0,
+      s"VectorSlicer requires that at least one feature be selected.")
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
 
     if (schema.fieldNames.contains($(outputCol))) {

@@ -52,7 +52,8 @@ object LDASuite {
     "checkpointInterval" -> 30,
     "learningOffset" -> 1023.0,
     "learningDecay" -> 0.52,
-    "subsamplingRate" -> 0.051
+    "subsamplingRate" -> 0.051,
+    "docConcentration" -> Array(2.0)
   )
 }
 
@@ -137,16 +138,18 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       new LDA().setTopicConcentration(-1.1)
     }
 
-    // validateParams()
-    lda.validateParams()
+    val dummyDF = sqlContext.createDataFrame(Seq(
+      (1, Vectors.dense(1.0, 2.0)))).toDF("id", "features")
+    // validate parameters
+    lda.transformSchema(dummyDF.schema)
     lda.setDocConcentration(1.1)
-    lda.validateParams()
+    lda.transformSchema(dummyDF.schema)
     lda.setDocConcentration(Range(0, lda.getK).map(_ + 2.0).toArray)
-    lda.validateParams()
+    lda.transformSchema(dummyDF.schema)
     lda.setDocConcentration(Range(0, lda.getK - 1).map(_ + 2.0).toArray)
     withClue("LDA docConcentration validity check failed for bad array length") {
       intercept[IllegalArgumentException] {
-        lda.validateParams()
+        lda.transformSchema(dummyDF.schema)
       }
     }
 

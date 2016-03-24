@@ -17,12 +17,11 @@
 
 package org.apache.spark.storage
 
-import java.nio.ByteBuffer
-
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{ManagedBuffer, NettyManagedBuffer}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
- * This [[ManagedBuffer]] wraps a [[ByteBuffer]] which was retrieved from the [[BlockManager]]
+ * This [[ManagedBuffer]] wraps a [[ChunkedByteBuffer]] retrieved from the [[BlockManager]]
  * so that the corresponding block's read lock can be released once this buffer's references
  * are released.
  *
@@ -30,19 +29,19 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
  * to the network layer's notion of retain / release counts.
  */
 private[storage] class BlockManagerManagedBuffer(
-    blockManager: BlockManager,
+    blockInfoManager: BlockInfoManager,
     blockId: BlockId,
-    buf: ByteBuffer) extends NioManagedBuffer(buf) {
+    chunkedBuffer: ChunkedByteBuffer) extends NettyManagedBuffer(chunkedBuffer.toNetty) {
 
   override def retain(): ManagedBuffer = {
     super.retain()
-    val locked = blockManager.blockInfoManager.lockForReading(blockId, blocking = false)
+    val locked = blockInfoManager.lockForReading(blockId, blocking = false)
     assert(locked.isDefined)
     this
   }
 
   override def release(): ManagedBuffer = {
-    blockManager.releaseLock(blockId)
+    blockInfoManager.unlock(blockId)
     super.release()
   }
 }

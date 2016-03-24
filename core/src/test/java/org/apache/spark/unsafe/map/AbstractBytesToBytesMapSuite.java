@@ -19,7 +19,6 @@ package org.apache.spark.unsafe.map;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -42,7 +41,9 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.serializer.JavaSerializer;
 import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -51,7 +52,6 @@ import org.apache.spark.util.Utils;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.mockito.AdditionalAnswers.returnsSecondArg;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
@@ -64,9 +64,12 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private TestMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;
-  private final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
+  private SerializerManager serializerManager = new SerializerManager(
+      new JavaSerializer(new SparkConf()),
+      new SparkConf().set("spark.shuffle.spill.compress", "false"));
+  private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
-  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
+  final LinkedList<File> spillFilesCreated = new LinkedList<>();
   File tempDir;
 
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
@@ -85,16 +88,20 @@ public abstract class AbstractBytesToBytesMapSuite {
       new TestMemoryManager(
         new SparkConf()
           .set("spark.memory.offHeap.enabled", "" + useOffHeapMemoryAllocator())
-          .set("spark.memory.offHeap.size", "256mb"));
+          .set("spark.memory.offHeap.size", "256mb")
+          .set("spark.shuffle.spill.compress", "false")
+          .set("spark.shuffle.compress", "false"));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
 
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
     spillFilesCreated.clear();
     MockitoAnnotations.initMocks(this);
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
-    when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(
+        new Answer<Tuple2<TempLocalBlockId, File>>() {
       @Override
-      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock)
+          throws Throwable {
         TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
         File file = File.createTempFile("spillFile", ".spill", tempDir);
         spillFilesCreated.add(file);
@@ -122,8 +129,6 @@ public abstract class AbstractBytesToBytesMapSuite {
         );
       }
     });
-    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
-      .then(returnsSecondArg());
   }
 
   @After
@@ -131,8 +136,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     Utils.deleteRecursively(tempDir);
     tempDir = null;
 
-    Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
     if (taskMemoryManager != null) {
+      Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
       long leakedMemory = taskMemoryManager.getMemoryConsumptionForThisTask();
       taskMemoryManager = null;
       Assert.assertEquals(0L, leakedMemory);
@@ -397,7 +402,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     final int size = 65536;
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
-    final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
+    final Map<ByteBuffer, byte[]> expected = new HashMap<>();
     final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, size, PAGE_SIZE_BYTES);
     try {
       // Fill the map to 90% full so that we can trigger probing
@@ -453,7 +458,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 64, pageSizeBytes);
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
-    final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
+    final Map<ByteBuffer, byte[]> expected = new HashMap<>();
     try {
       for (int i = 0; i < 1000; i++) {
         final byte[] key = getRandomByteArray(rand.nextInt(128));
@@ -544,7 +549,8 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void spillInIterator() throws IOException {
-    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, blockManager, 1, 0.75, 1024, false);
+    BytesToBytesMap map = new BytesToBytesMap(
+      taskMemoryManager, blockManager, serializerManager, 1, 0.75, 1024, false);
     try {
       int i;
       for (i = 0; i < 1024; i++) {

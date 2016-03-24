@@ -19,11 +19,12 @@ package org.apache.spark.sql.streaming.test
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, ContinuousQuery, SQLContext, StreamTest}
-import org.apache.spark.sql.execution.streaming.{Batch, Offset, Sink, Source}
+import org.apache.spark.sql._
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 object LastOptions {
   var parameters: Map[String, String] = null
@@ -41,8 +42,15 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     LastOptions.parameters = parameters
     LastOptions.schema = schema
     new Source {
-      override def getNextBatch(start: Option[Offset]): Option[Batch] = None
       override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
+
+      override def getOffset: Option[Offset] = Some(new LongOffset(0))
+
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        import sqlContext.implicits._
+
+        Seq[Int]().toDS().toDF()
+      }
     }
   }
 
@@ -53,14 +61,15 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     LastOptions.parameters = parameters
     LastOptions.partitionColumns = partitionColumns
     new Sink {
-      override def addBatch(batch: Batch): Unit = {}
-      override def currentOffset: Option[Offset] = None
+      override def addBatch(batchId: Long, data: DataFrame): Unit = {}
     }
   }
 }
 
 class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
   import testImplicits._
+
+  private def newMetadataDir = Utils.createTempDir("streaming.metadata").getCanonicalPath
 
   after {
     sqlContext.streams.active.foreach(_.stop())
@@ -72,7 +81,8 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .stream()
       .write
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .option("checkpointLocation", newMetadataDir)
+      .startStream()
       .stop()
   }
 
@@ -82,7 +92,8 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .stream()
       .write
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .option("checkpointLocation", newMetadataDir)
+      .startStream()
       .stop()
   }
 
@@ -108,7 +119,8 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .option("opt1", "1")
       .options(Map("opt2" -> "2"))
       .options(map)
-      .stream()
+      .option("checkpointLocation", newMetadataDir)
+      .startStream()
       .stop()
 
     assert(LastOptions.parameters("opt1") == "1")
@@ -123,22 +135,25 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .option("checkpointLocation", newMetadataDir)
+      .startStream()
       .stop()
     assert(LastOptions.partitionColumns == Nil)
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
       .partitionBy("a")
-      .stream()
+      .startStream()
       .stop()
     assert(LastOptions.partitionColumns == Seq("a"))
 
     withSQLConf("spark.sql.caseSensitive" -> "false") {
       df.write
         .format("org.apache.spark.sql.streaming.test")
+        .option("checkpointLocation", newMetadataDir)
         .partitionBy("A")
-        .stream()
+        .startStream()
         .stop()
       assert(LastOptions.partitionColumns == Seq("a"))
     }
@@ -146,8 +161,9 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     intercept[AnalysisException] {
       df.write
         .format("org.apache.spark.sql.streaming.test")
+        .option("checkpointLocation", newMetadataDir)
         .partitionBy("b")
-        .stream()
+        .startStream()
         .stop()
     }
   }
@@ -155,6 +171,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
   test("stream paths") {
     val df = sqlContext.read
       .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
       .stream("/test")
 
     assert(LastOptions.parameters("path") == "/test")
@@ -163,7 +180,8 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
-      .stream("/test")
+      .option("checkpointLocation", newMetadataDir)
+      .startStream("/test")
       .stop()
 
     assert(LastOptions.parameters("path") == "/test")
@@ -187,7 +205,8 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .option("intOpt", 56)
       .option("boolOpt", false)
       .option("doubleOpt", 6.7)
-      .stream("/test")
+      .option("checkpointLocation", newMetadataDir)
+      .startStream("/test")
       .stop()
 
     assert(LastOptions.parameters("intOpt") == "56")
@@ -204,8 +223,9 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
         .stream("/test")
         .write
         .format("org.apache.spark.sql.streaming.test")
+        .option("checkpointLocation", newMetadataDir)
         .queryName(name)
-        .stream()
+        .startStream()
     }
 
     /** Start a query without specifying a name */
@@ -215,7 +235,8 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
         .stream("/test")
         .write
         .format("org.apache.spark.sql.streaming.test")
-        .stream()
+        .option("checkpointLocation", newMetadataDir)
+        .startStream()
     }
 
     /** Get the names of active streams */

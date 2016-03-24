@@ -21,10 +21,11 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
@@ -136,6 +137,8 @@ class PowerIterationClustering private[clustering] (
    */
   @Since("1.3.0")
   def setK(k: Int): this.type = {
+    require(k > 0,
+      s"Number of clusters must be positive but got ${k}")
     this.k = k
     this
   }
@@ -145,6 +148,8 @@ class PowerIterationClustering private[clustering] (
    */
   @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
+    require(maxIterations >= 0,
+      s"Maximum of iterations must be nonnegative but got ${maxIterations}")
     this.maxIterations = maxIterations
     this
   }

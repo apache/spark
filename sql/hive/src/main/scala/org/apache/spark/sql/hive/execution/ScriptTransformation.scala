@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io._
+import java.nio.charset.StandardCharsets
 import java.util.Properties
 import javax.annotation.Nullable
 
@@ -31,7 +32,8 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
 
-import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -113,7 +115,7 @@ case class ScriptTransformation(
         ioschema.initOutputSerDe(output).getOrElse((null, null))
       }
 
-      val reader = new BufferedReader(new InputStreamReader(inputStream))
+      val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
       val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
         var curLine: String = null
         val scriptOutputStream = new DataInputStream(inputStream)
@@ -271,7 +273,7 @@ private class ScriptTransformationWriterThread(
             sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
             sb.toString()
           }
-          outputStream.write(data.getBytes("utf-8"))
+          outputStream.write(data.getBytes(StandardCharsets.UTF_8))
         } else {
           val writable = inputSerde.serialize(
             row.asInstanceOf[GenericInternalRow].values, inputSoi)
@@ -397,6 +399,54 @@ case class HiveScriptIOSchema (
       val instance = Utils.classForName(klass).newInstance().asInstanceOf[RecordWriter]
       instance.initialize(outputStream, conf)
       instance
+    }
+  }
+
+  def inputRowFormatSQL: Option[String] =
+    getRowFormatSQL(inputRowFormat, inputSerdeClass, inputSerdeProps)
+
+  def outputRowFormatSQL: Option[String] =
+    getRowFormatSQL(outputRowFormat, outputSerdeClass, outputSerdeProps)
+
+  /**
+   * Get the row format specification
+   * Note:
+   * 1. Changes are needed when readerClause and writerClause are supported.
+   * 2. Changes are needed when "ESCAPED BY" is supported.
+   */
+  private def getRowFormatSQL(
+      rowFormat: Seq[(String, String)],
+      serdeClass: Option[String],
+      serdeProps: Seq[(String, String)]): Option[String] = {
+    if (schemaLess) return Some("")
+
+    val rowFormatDelimited =
+      rowFormat.map {
+        case ("TOK_TABLEROWFORMATFIELD", value) =>
+          "FIELDS TERMINATED BY " + value
+        case ("TOK_TABLEROWFORMATCOLLITEMS", value) =>
+          "COLLECTION ITEMS TERMINATED BY " + value
+        case ("TOK_TABLEROWFORMATMAPKEYS", value) =>
+          "MAP KEYS TERMINATED BY " + value
+        case ("TOK_TABLEROWFORMATLINES", value) =>
+          "LINES TERMINATED BY " + value
+        case ("TOK_TABLEROWFORMATNULL", value) =>
+          "NULL DEFINED AS " + value
+        case o => return None
+      }
+
+    val serdeClassSQL = serdeClass.map("'" + _ + "'").getOrElse("")
+    val serdePropsSQL =
+      if (serdeClass.nonEmpty) {
+        val props = serdeProps.map{p => s"'${p._1}' = '${p._2}'"}.mkString(", ")
+        if (props.nonEmpty) " WITH SERDEPROPERTIES(" + props + ")" else ""
+      } else {
+        ""
+      }
+    if (rowFormat.nonEmpty) {
+      Some("ROW FORMAT DELIMITED " + rowFormatDelimited.mkString(" "))
+    } else {
+      Some("ROW FORMAT SERDE " + serdeClassSQL + serdePropsSQL)
     }
   }
 }

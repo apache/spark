@@ -67,9 +67,9 @@ public class TaskMemoryManager {
 
   /**
    * Maximum supported data page size (in bytes). In principle, the maximum addressable page size is
-   * (1L &lt;&lt; OFFSET_BITS) bytes, which is 2+ petabytes. However, the on-heap allocator's maximum page
-   * size is limited by the maximum amount of data that can be stored in a  long[] array, which is
-   * (2^32 - 1) * 8 bytes (or 16 gigabytes). Therefore, we cap this at 16 gigabytes.
+   * (1L &lt;&lt; OFFSET_BITS) bytes, which is 2+ petabytes. However, the on-heap allocator's
+   * maximum page size is limited by the maximum amount of data that can be stored in a long[]
+   * array, which is (2^32 - 1) * 8 bytes (or 16 gigabytes). Therefore, we cap this at 16 gigabytes.
    */
   public static final long MAXIMUM_PAGE_SIZE_BYTES = ((1L << 31) - 1) * 8L;
 
@@ -268,8 +268,8 @@ public class TaskMemoryManager {
       logger.warn("Failed to allocate a page ({} bytes), try again.", acquired);
       // there is no enough memory actually, it means the actual free memory is smaller than
       // MemoryManager thought, we should keep the acquired memory.
-      acquiredButNotUsed += acquired;
       synchronized (this) {
+        acquiredButNotUsed += acquired;
         allocatedPages.clear(pageNumber);
       }
       // this could trigger spilling to free some pages.

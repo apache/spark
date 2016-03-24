@@ -58,7 +58,7 @@ else
     declare java_cmd=java
 fi
 
-export RAT_VERSION=0.10
+export RAT_VERSION=0.11
 export rat_jar="$FWDIR"/lib/apache-rat-${RAT_VERSION}.jar
 mkdir -p "$FWDIR"/lib
 
@@ -67,14 +67,15 @@ mkdir -p "$FWDIR"/lib
     exit 1
 }
 
-$java_cmd -jar "$rat_jar" -E "$FWDIR"/.rat-excludes  -d "$FWDIR" > rat-results.txt
+mkdir target
+$java_cmd -jar "$rat_jar" -E "$FWDIR"/dev/.rat-excludes -d "$FWDIR" > target/rat-results.txt
 
 if [ $? -ne 0 ]; then
    echo "RAT exited abnormally"
    exit 1
 fi
 
-ERRORS="$(cat rat-results.txt | grep -e "??")"
+ERRORS="$(cat target/rat-results.txt | grep -e "??")"
 
 if test ! -z "$ERRORS"; then 
     echo "Could not find Apache license headers in the following files:"

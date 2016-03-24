@@ -20,7 +20,8 @@ package org.apache.spark.scheduler.cluster.mesos
 import org.apache.mesos.Protos.{ContainerInfo, Volume}
 import org.apache.mesos.Protos.ContainerInfo.DockerInfo
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 
 /**
  * A collection of utility functions which can be used by both the
