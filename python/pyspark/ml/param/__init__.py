@@ -435,7 +435,7 @@ class Params(Identifiable):
                 try:
                     value = p.typeConverter(value)
                 except TypeError as e:
-                    raise TypeError('Invalid param value %s given for param "%s". %s' % (value, p.name, e))
+                    raise TypeError('Invalid param value given for param "%s". %s' % (p.name, e))
             self._paramMap[p] = value
         return self
 
