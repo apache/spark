@@ -125,8 +125,8 @@ class StreamExecution(
    * status. "microBatchThread" won't be interrupted until it enters into the interruptible status.
    */
   private def interruptMicroBatchThreadSafely(): Unit = {
-    synchronized {
-      if (uninterruptible == true) {
+    uninterruptibleLock.synchronized {
+      if (uninterruptible) {
         interrupted = true
       } else {
         microBatchThread.interrupt()
@@ -140,7 +140,7 @@ class StreamExecution(
    */
   private def runUninterruptiblyInMicroBatchThread[T](f: => T): T = {
     assert(Thread.currentThread() == microBatchThread)
-    synchronized {
+    uninterruptibleLock.synchronized {
       uninterruptible = true
       // Clear the interrupted status if it's set.
       if (Thread.interrupted()) {
@@ -150,7 +150,7 @@ class StreamExecution(
     try {
       f
     } finally {
-      synchronized {
+      uninterruptibleLock.synchronized {
         uninterruptible = false
         if (interrupted) {
           // Recover the interrupted status
