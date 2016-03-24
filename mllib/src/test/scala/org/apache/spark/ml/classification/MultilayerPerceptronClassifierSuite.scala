@@ -27,7 +27,6 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.types.DoubleType
 
 class MultilayerPerceptronClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -165,35 +164,15 @@ class MultilayerPerceptronClassifierSuite
     assert(newMlpModel.weights === mlpModel.weights)
   }
   
-  test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
-
+  test("should support all NumericType labels and not support other types") {
     val layers = Array(3, 2)
-    val mpc = new MultilayerPerceptronClassifier()
-      .setFeaturesCol("features")
-      .setLayers(layers)
-
-    val expected = mpc.setLabelCol("label").fit(dfs(DoubleType))
-    dfs.keys.filter(_ != DoubleType).foreach { t =>
-      val actual = mpc.setLabelCol("label").fit(dfs(t))
-      assert(expected.layers === actual.layers)
-      assert(expected.weights === actual.weights)
-      assert(expected.numFeatures === actual.numFeatures)
-    }
-  }
-
-  test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels =
-      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
-
-    val mpc = new MultilayerPerceptronClassifier()
-      .setLabelCol("label")
-      .setFeaturesCol("features")
-
-    val thrown = intercept[IllegalArgumentException] {
-      mpc.fit(dfWithStringLabels)
-    }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
+    val mpc = new MultilayerPerceptronClassifier().setLayers(layers)
+    MLTestingUtils.checkPredictorAcceptAllNumericTypes[
+        MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier](
+      mpc, sqlContext) { (expected, actual) =>
+        assert(expected.layers === actual.layers)
+        assert(expected.weights === actual.weights)
+      }
+    MLTestingUtils.checkPredictorRejectNotNumericTypes(mpc, sqlContext)
   }
 }

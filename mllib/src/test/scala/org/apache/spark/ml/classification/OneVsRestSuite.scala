@@ -31,7 +31,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.types.{DoubleType, Metadata}
+import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -226,34 +226,22 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
-
-    val ovr = new OneVsRest()
-      .setClassifier(new LogisticRegression)
-      .setFeaturesCol("features")
-
-    val expected = ovr.setLabelCol("label").fit(dfs(DoubleType))
-    val expectedModels = expected.models.map(m => m.asInstanceOf[LogisticRegressionModel])
-    dfs.keys.filter(_ != DoubleType).foreach { t =>
-      val actual = ovr.setLabelCol("label").fit(dfs(t))
-      val actualModels = actual.models.map(m => m.asInstanceOf[LogisticRegressionModel])
-      assert(expectedModels.length === actualModels.length)
-      expectedModels.zip(actualModels).foreach { case (e, a) =>
-        assert(e.intercept === a.intercept)
-        assert(e.coefficients.toArray === a.coefficients.toArray)
+    val ovr = new OneVsRest().setClassifier(new LogisticRegression)
+    MLTestingUtils.checkEstimatorAcceptAllNumericTypes[OneVsRestModel, OneVsRest](
+      ovr, sqlContext) { (expected, actual) =>
+        val expectedModels = expected.models.map(m => m.asInstanceOf[LogisticRegressionModel])
+        val actualModels = actual.models.map(m => m.asInstanceOf[LogisticRegressionModel])
+        assert(expectedModels.length === actualModels.length)
+        expectedModels.zip(actualModels).foreach { case (e, a) =>
+          assert(e.intercept === a.intercept)
+          assert(e.coefficients.toArray === a.coefficients.toArray)
+        }
       }
-    }
   }
 
   test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels =
-      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
-
-    val ovr = new OneVsRest()
-      .setClassifier(new LogisticRegression)
-      .setLabelCol("label")
-      .setFeaturesCol("features")
-
+    val dfWithStringLabels = MLTestingUtils.generateDFWithStringLabelCol(sqlContext)
+    val ovr = new OneVsRest().setClassifier(new LogisticRegression)
     // thrown by AttributeFactory#fromStructField and not by Predictor#validateAndTransformSchema
     // because OneVsRest reimplements the fit method
     intercept[IllegalArgumentException] {

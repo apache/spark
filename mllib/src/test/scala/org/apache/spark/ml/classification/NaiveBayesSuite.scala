@@ -28,7 +28,6 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.types.DoubleType
 
 class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -186,32 +185,14 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings, checkModelData)
   }
 
-  test("should support all NumericType labels") {
-    val dfs = MLTestingUtils.genClassifDFWithNumericLabelCol(sqlContext, "label", "features")
-
-    val nb = new NaiveBayes().setFeaturesCol("features")
-
-    val expected = nb.setLabelCol("label").fit(dfs(DoubleType))
-    dfs.keys.filter(_ != DoubleType).foreach { t =>
-      val actual = nb.setLabelCol("label").fit(dfs(t))
-      assert(expected.pi === actual.pi)
-      assert(expected.theta === actual.theta)
-    }
-  }
-
-  test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels =
-      MLTestingUtils.generateDFWithStringLabelCol(sqlContext, "label", "features")
-
+  test("should support all NumericType labels and not support other types") {
     val nb = new NaiveBayes()
-      .setLabelCol("label")
-      .setFeaturesCol("features")
-
-    val thrown = intercept[IllegalArgumentException] {
-      nb.fit(dfWithStringLabels)
-    }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
+    MLTestingUtils.checkPredictorAcceptAllNumericTypes[NaiveBayesModel, NaiveBayes](
+      nb, sqlContext) { (expected, actual) =>
+        assert(expected.pi === actual.pi)
+        assert(expected.theta === actual.theta)
+      }
+    MLTestingUtils.checkPredictorRejectNotNumericTypes(nb, sqlContext)
   }
 }
 
