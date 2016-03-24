@@ -161,14 +161,10 @@ class AnalysisSuite extends AnalysisTest {
   }
 
   test("resolve relations") {
-    assertAnalysisError(
-      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table not found: tAbLe"))
-
+    assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq())
     checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
-
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
-
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
   }

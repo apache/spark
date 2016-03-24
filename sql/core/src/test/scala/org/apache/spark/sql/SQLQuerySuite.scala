@@ -1397,12 +1397,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-4699 case sensitivity SQL query") {
-    sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
-    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
-    rdd.toDF().registerTempTable("testTable1")
-    checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
-    sqlContext.setConf(SQLConf.CASE_SENSITIVE, true)
+    val orig = sqlContext.getConf(SQLConf.CASE_SENSITIVE)
+    try {
+      sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
+      val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
+      val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+      rdd.toDF().registerTempTable("testTable1")
+      checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
+    } finally {
+      sqlContext.setConf(SQLConf.CASE_SENSITIVE, orig)
+    }
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
@@ -1676,7 +1680,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         .format("parquet")
         .save(path)
 
-      val message = intercept[AnalysisException] {
+      // We don't support creating a temporary table while specifying a database
+      intercept[AnalysisException] {
         sqlContext.sql(
           s"""
           |CREATE TEMPORARY TABLE db.t
@@ -1686,9 +1691,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |)
         """.stripMargin)
       }.getMessage
-      assert(message.contains("Specifying database name or other qualifiers are not allowed"))
 
-      // If you use backticks to quote the name of a temporary table having dot in it.
+      // If you use backticks to quote the name then it's OK.
       sqlContext.sql(
         s"""
           |CREATE TEMPORARY TABLE `db.t`
@@ -1744,7 +1748,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e3 = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
     }
-    assert(e3.message.contains("Unable to infer schema"))
+    assert(e3.message.contains("Path does not exist"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {

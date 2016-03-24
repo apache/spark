@@ -34,7 +34,7 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
   errors.TreeNodeException(tree, s"Invalid call to $function on unresolved object", null)
 
 /**
- * Holds the name of a relation that has yet to be looked up in a [[Catalog]].
+ * Holds the name of a relation that has yet to be looked up in a catalog.
  */
 case class UnresolvedRelation(
     tableIdentifier: TableIdentifier,

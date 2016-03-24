@@ -22,7 +22,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.toCommentSafeString
@@ -104,11 +103,12 @@ trait CodegenSupport extends SparkPlan {
     *     # call child.produce()
     *     initialized = true;
     *   }
-    *   while (!shouldStop() && hashmap.hasNext()) {
+    *   while (hashmap.hasNext()) {
     *     row = hashmap.next();
     *     # build the aggregation results
     *     # create variables for results
     *     # call consume(), which will call parent.doConsume()
+   *      if (shouldStop()) return;
     *   }
     */
   protected def doProduce(ctx: CodegenContext): String
@@ -252,9 +252,10 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
     ctx.currentVars = null
     val columns = exprs.map(_.gen(ctx))
     s"""
-       | while (!shouldStop() && $input.hasNext()) {
+       | while ($input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
        |   ${consume(ctx, columns, row).trim}
+       |   if (shouldStop()) return;
        | }
      """.stripMargin
   }
@@ -321,7 +322,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
       /** Codegened pipeline for:
         * ${toCommentSafeString(child.treeString.trim)}
         */
-      class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
+      final class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
         private Object[] references;
         ${ctx.declareMutableStates()}
