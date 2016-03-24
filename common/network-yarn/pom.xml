@@ -91,7 +91,7 @@
           <relocations>
             <relocation>
               <pattern>com.fasterxml.jackson</pattern>
-              <shadedPattern>org.spark-project.com.fasterxml.jackson</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.com.fasterxml.jackson</shadedPattern>
               <includes>
                 <include>com.fasterxml.jackson.**</include>
               </includes>
