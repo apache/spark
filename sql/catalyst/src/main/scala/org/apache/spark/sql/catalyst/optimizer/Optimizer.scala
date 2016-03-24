@@ -1213,31 +1213,10 @@ object EliminateDistinct extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Eliminate the useless distinct.
     // Distinct has been replaced by Aggregate in the rule ReplaceDistinctWithAggregate
-    case a @ Aggregate(grouping, aggs, child) if isDistinct(a) && isDistinct(child) => child
-  }
-
-  // propagate the distinct property from the child
-  @tailrec
-  private def isDistinct(plan: LogicalPlan): Boolean = plan match {
-    // Distinct(left) or Aggregate(left.output, left.output, _) always returns distinct results
-    case _: Distinct => true
-    case Aggregate(grouping, aggs, _) if grouping.nonEmpty && grouping == aggs => true
-    // BinaryNode:
-    case p @ Join(_, _, LeftSemi, _) => isDistinct(p.left)
-    case p: Intersect => isDistinct(p.left)
-    case p: Except => isDistinct(p.left)
-    // UnaryNode:
-    case p: Project if p.child.outputSet.subsetOf(p.outputSet) => isDistinct(p.child)
-    case p: Aggregate if p.child.outputSet.subsetOf(p.outputSet) => isDistinct(p.child)
-    case p: Filter => isDistinct(p.child)
-    case p: GlobalLimit => isDistinct(p.child)
-    case p: LocalLimit => isDistinct(p.child)
-    case p: Sort => isDistinct(p.child)
-    case p: BroadcastHint => isDistinct(p.child)
-    case p: Sample => isDistinct(p.child)
-    case p: SubqueryAlias => isDistinct(p.child)
-    // Others:
-    case o => false
+    case a @ Aggregate(grouping, aggs, child)
+        if child.distinctSet.nonEmpty && child.distinctSet.subsetOf(AttributeSet(aggs)) &&
+          a.isForDistinct =>
+      child
   }
 }
 

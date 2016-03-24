@@ -51,6 +51,14 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
+  override def distinctSet: AttributeSet = {
+    if (child.outputSet.nonEmpty && child.outputSet.subsetOf(outputSet)) {
+      child.distinctSet
+    } else {
+      AttributeSet.empty
+    }
+  }
+
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(projectList))
 }
@@ -107,6 +115,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
+  override def distinctSet: AttributeSet = child.distinctSet
+
   override protected def validConstraints: Set[Expression] =
     child.constraints.union(splitConjunctivePredicates(condition).toSet)
 }
@@ -136,6 +146,8 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
+
+  override def distinctSet: AttributeSet = left.outputSet
 
   override protected def validConstraints: Set[Expression] =
     leftConstraints.union(rightConstraints)
@@ -167,6 +179,8 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
+
+  override def distinctSet: AttributeSet = left.outputSet
 
   override protected def validConstraints: Set[Expression] = leftConstraints
 
@@ -265,6 +279,9 @@ case class Join(
     }
   }
 
+  override def distinctSet: AttributeSet =
+    if (joinType == LeftSemi) left.distinctSet else AttributeSet.empty
+
   override protected def validConstraints: Set[Expression] = {
     joinType match {
       case Inner if condition.isDefined =>
@@ -312,6 +329,7 @@ case class Join(
  */
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  override def distinctSet: AttributeSet = child.distinctSet
 
   // We manually set statistics of BroadcastHint to smallest value to make sure
   // the plan wrapped by BroadcastHint will be considered to broadcast later.
@@ -367,6 +385,7 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
+  override def distinctSet: AttributeSet = child.distinctSet
 }
 
 /** Factory for constructing new `Range` nodes. */
@@ -422,6 +441,19 @@ case class Aggregate(
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
+  override def distinctSet: AttributeSet = {
+    if (isForDistinct) {
+      AttributeSet(aggregateExpressions)
+    } else if (child.outputSet.nonEmpty && child.outputSet.subsetOf(outputSet)) {
+      child.distinctSet
+    } else {
+      AttributeSet.empty
+    }
+  }
+
+  def isForDistinct: Boolean =
+    groupingExpressions.nonEmpty && groupingExpressions == aggregateExpressions
+
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(aggregateExpressions))
 
@@ -442,6 +474,8 @@ case class Window(
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
+
+  override def distinctSet: AttributeSet = child.distinctSet
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 }
@@ -585,6 +619,7 @@ object Limit {
 
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  override def distinctSet: AttributeSet = child.distinctSet
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -600,6 +635,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
 
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  override def distinctSet: AttributeSet = child.distinctSet
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -615,6 +651,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 
 case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
 
+  override def distinctSet: AttributeSet = child.distinctSet
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
 
@@ -638,6 +675,7 @@ case class Sample(
     val isTableSample: java.lang.Boolean = false) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+  override def distinctSet: AttributeSet = child.distinctSet
 
   override def statistics: Statistics = {
     val ratio = upperBound - lowerBound
@@ -658,6 +696,7 @@ case class Sample(
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  override def distinctSet: AttributeSet = child.outputSet
 }
 
 /**
