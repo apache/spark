@@ -59,6 +59,10 @@ class ReplSuite extends SparkFunSuite {
     return out.toString
   }
 
+  // Simulate the paste mode in Scala REPL.
+  def runInterpreterInPasteMode(master: String, input: String): String =
+    runInterpreter(master, ":paste\n" + input + 4.toChar)
+
   def assertContains(message: String, output: String) {
     val isContain = output.contains(message)
     assert(isContain,
@@ -382,10 +386,12 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  test("define case class and create Dataset together") {
-    val output = runInterpreter("local-cluster[1,1,1024]",
+  test("define case class and create Dataset together with paste mode") {
+    val output = runInterpreterInPasteMode("local-cluster[1,1,1024]",
       """
-        |case class A(value: Int); sqlContext.createDataset(Seq(A(1)))(newProductEncoder[A])
+        |import sqlContext.implicits._
+        |case class TestClass(value: Int)
+        |Seq(TestClass(1)).toDS()
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
