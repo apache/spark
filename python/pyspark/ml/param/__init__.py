@@ -389,7 +389,7 @@ class Params(Identifiable):
         if extra is None:
             extra = dict()
         that = copy.copy(self)
-        that._paramMap = copy.copy(self._paramMap)
+        that._paramMap = {}
         return self._copyValues(that, extra)
 
     def _shouldOwn(self, param):
@@ -435,7 +435,7 @@ class Params(Identifiable):
                 try:
                     value = p.typeConverter(value)
                 except TypeError as e:
-                    raise TypeError('Invalid param value given for param "%s". %s' % (p.name, e))
+                    raise TypeError('Invalid param value %s given for param "%s". %s' % (value, p.name, e))
             self._paramMap[p] = value
         return self
 

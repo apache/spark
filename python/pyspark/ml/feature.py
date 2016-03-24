@@ -1554,7 +1554,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     The indices are in [0, numLabels), ordered by label frequencies.
     So the most frequent label gets index 0.
 
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid='error')
     >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
