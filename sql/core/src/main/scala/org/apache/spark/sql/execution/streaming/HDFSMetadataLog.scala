@@ -32,7 +32,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.execution.streaming.HDFSMetadataLog.{FileSystemManager, FileContextManager, FileManager}
 
 
 /**
