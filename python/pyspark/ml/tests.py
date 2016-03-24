@@ -700,6 +700,10 @@ class TrainingSummaryTest(PySparkTestCase):
         self.assertTrue(isinstance(tValues, list) and isinstance(tValues[0], float))
         pValues = s.pValues
         self.assertTrue(isinstance(pValues, list) and isinstance(pValues[0], float))
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.explainedVariance, s.explainedVariance)
 
     def test_logistic_regression_summary(self):
         from pyspark.mllib.linalg import Vectors
@@ -725,6 +729,10 @@ class TrainingSummaryTest(PySparkTestCase):
         self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
         self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
         self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
 
 if __name__ == "__main__":

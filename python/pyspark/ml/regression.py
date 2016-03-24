@@ -171,16 +171,16 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("hasSummary")
 
-    """
-    TODO: enable once Scala API is made public
-    def evaluate(self, df):
-        ""
-        Evaluates the model on a testset.
-        @param dataset Test dataset to evaluate model on.
-        ""
-        java_lr_summary = self._call_java("evaluate", df)
+    @since("2.0.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on.
+        """
+        java_lr_summary = self._call_java("evaluate", dataset)
         return LinearRegressionSummary(java_lr_summary)
-    """
 
 
 class LinearRegressionSummary(JavaCallable):
