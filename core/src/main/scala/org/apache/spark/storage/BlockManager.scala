@@ -1150,6 +1150,9 @@ private[spark] class BlockManager(
    *
    * If `data` is not put on disk, it won't be created.
    *
+   * This method does _not_ use the MemoryManager to release storage memory; that is the caller's
+   * responsibility.
+   *
    * The caller of this method must hold a write lock on the block before calling this method.
    * This method does not release the write lock.
    *
@@ -1158,13 +1161,14 @@ private[spark] class BlockManager(
   private[storage] override def dropFromMemory[T: ClassTag](
       blockId: BlockId,
       data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
+    require(
+      memoryStore.contains(blockId),
+      s"Block $blockId could not be dropped from memory as it does not exist")
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfoManager.assertBlockIsLockedForWriting(blockId)
-    var blockIsUpdated = false
-    val level = info.level
 
     // Drop to disk, if storage level requires
-    if (level.useDisk && !diskStore.contains(blockId)) {
+    if (info.level.useDisk && !diskStore.contains(blockId)) {
       logInfo(s"Writing block $blockId to disk")
       data() match {
         case Left(elements) =>
@@ -1177,27 +1181,17 @@ private[spark] class BlockManager(
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes)
       }
-      blockIsUpdated = true
     }
 
     // Actually drop from memory store
-    val droppedMemorySize =
-      if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
-    val blockIsRemoved = memoryStore.remove(blockId)
-    if (blockIsRemoved) {
-      blockIsUpdated = true
-    } else {
-      logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
-    }
+    val droppedMemorySize = memoryStore.removeBlockAndKeepStorageMemory(blockId)
 
     val status = getCurrentBlockStatus(blockId, info)
     if (info.tellMaster) {
       reportBlockStatus(blockId, info, status, droppedMemorySize)
     }
-    if (blockIsUpdated) {
-      Option(TaskContext.get()).foreach { c =>
-        c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
-      }
+    Option(TaskContext.get()).foreach { c =>
+      c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
     }
     status.storageLevel
   }
