@@ -208,7 +208,7 @@ class KafkaRDD[
           val deepCopy = Arrays.copyOfRange(
             messageByteBuffer.array(),
             messageByteBuffer.arrayOffset(),
-            messageByteBuffer.capacity())
+            messageByteBuffer.arrayOffset() + messageByteBuffer.capacity())
 
           val copiedBuffer = ByteBuffer.wrap(deepCopy)
           val copiedMessage = new Message(copiedBuffer)
