@@ -51,6 +51,7 @@ from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
+from pyspark.ml.util import MLWritable
 from pyspark.ml.wrapper import JavaWrapper
 from pyspark.mllib.linalg import DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
@@ -654,6 +655,9 @@ class PersistenceTest(PySparkTestCase):
                 rmtree(temp_path)
             except OSError:
                 pass
+    def test_write_property(self):
+        wrt = MLWritable()
+        self.assertEqual(isinstance(type(wrt).write, property), True)
 
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)
