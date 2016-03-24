@@ -381,4 +381,13 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }
+
+  test("define case class and create Dataset together") {
+    val output = runInterpreter("local-cluster[1,1,1024]",
+      """
+        |case class A(value: Int); sqlContext.createDataset(Seq(A(1)))(newProductEncoder[A])
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
 }
