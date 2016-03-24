@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.
@@ -51,7 +51,7 @@ private[clustering] trait BisectingKMeansParams extends Params
 
   /** @group expertParam */
   @Since("2.0.0")
-  final val minDivisibleClusterSize = new Param[Double](
+  final val minDivisibleClusterSize = new DoubleParam(
     this,
     "minDivisibleClusterSize",
     "the minimum number of points (if >= 1.0) or the minimum proportion",
@@ -188,7 +188,7 @@ class BisectingKMeans @Since("2.0.0") (
   override def copy(extra: ParamMap): BisectingKMeans = defaultCopy(extra)
 
   @Since("2.0.0")
-  def this() = this(Identifiable.randomUID("bisecting k-means"))
+  def this() = this(Identifiable.randomUID("bisecting-kmeans"))
 
   /** @group setParam */
   @Since("2.0.0")
