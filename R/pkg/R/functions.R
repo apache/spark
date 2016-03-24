@@ -2674,6 +2674,9 @@ setMethod("histogram",
               stop("The number of bins must be a positive integer number greater than 1.")
             }
 
+            # Round nbins to the smallest integer
+            nbins <- floor(nbins)
+
             # Validate colname
             if (is.null(colname) | is.na(colname)) {
               stop("colname must be specified.")
