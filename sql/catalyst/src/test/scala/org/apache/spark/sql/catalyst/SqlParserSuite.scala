@@ -147,4 +147,8 @@ class SqlParserSuite extends PlanTest {
 
     intercept[RuntimeException](SqlParser.parse("SELECT .e3"))
   }
+
+  test("test special table identifier SPARK-13934") {
+    assert(TableIdentifier("104e4d676bac4d9aa3856f00b5b9f51c") === SqlParser.parseTableIdentifier("104e4d676bac4d9aa3856f00b5b9f51c"))
+  }
 }
