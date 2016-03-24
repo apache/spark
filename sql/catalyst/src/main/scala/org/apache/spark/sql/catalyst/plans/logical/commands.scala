@@ -37,7 +37,7 @@ private[sql] case class DescribeFunction(
     isExtended: Boolean) extends LogicalPlan with Command {
 
   override def children: Seq[LogicalPlan] = Seq.empty
-  override val output: Seq[Attribute] = Seq(
+  override val outputBeforeConstraints: Seq[Attribute] = Seq(
     AttributeReference("function_desc", StringType, nullable = false)())
 }
 
@@ -48,6 +48,6 @@ private[sql] case class DescribeFunction(
 private[sql] case class ShowFunctions(
     db: Option[String], pattern: Option[String]) extends LogicalPlan with Command {
   override def children: Seq[LogicalPlan] = Seq.empty
-  override val output: Seq[Attribute] = Seq(
+  override val outputBeforeConstraints: Seq[Attribute] = Seq(
     AttributeReference("function", StringType, nullable = false)())
 }

@@ -24,18 +24,32 @@ import org.apache.spark.sql.types.{DataType, StructType}
 abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
-  def output: Seq[Attribute]
+  def output: Seq[Attribute] = {
+    val isNotNulls = constraints.collect {
+      case IsNotNull(e) if e.isInstanceOf[Attribute] => e.asInstanceOf[Attribute].exprId
+    }
+    outputBeforeConstraints.map { o =>
+      if (isNotNulls.contains(o.exprId)) {
+        o.withNullability(false)
+      } else {
+        o
+      }
+    }
+  }
+
+  protected def outputBeforeConstraints: Seq[Attribute]
 
   /**
    * Extracts the relevant constraints from a given set of constraints based on the attributes that
-   * appear in the [[outputSet]].
+   * appear in the [[outputSetBeforeConstraints]].
    */
   protected def getRelevantConstraints(constraints: Set[Expression]): Set[Expression] = {
     constraints
       .union(inferAdditionalConstraints(constraints))
       .union(constructIsNotNullConstraints(constraints))
       .filter(constraint =>
-        constraint.references.nonEmpty && constraint.references.subsetOf(outputSet))
+        constraint.references.nonEmpty &&
+          constraint.references.subsetOf(outputSetBeforeConstraints))
   }
 
   /**
@@ -43,7 +57,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * For e.g., if an expression is of the form (`a > 5`), this returns a constraint of the form
    * `isNotNull(a)`
    */
-  protected def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
+  private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
     // Currently we only propagate constraints if the condition consists of equality
     // and ranges. For all other cases, we return an empty set of constraints
     constraints.map {
@@ -105,6 +119,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * Returns the set of attributes that are output by this node.
    */
   def outputSet: AttributeSet = AttributeSet(output)
+
+  /**
+   * Returns the set of attributes before affected by constraints that are output by this node.
+   */
+  def outputSetBeforeConstraints: AttributeSet = AttributeSet(outputBeforeConstraints)
 
   /**
    * All Attributes that appear in expressions from this operator.  Note that this set does not

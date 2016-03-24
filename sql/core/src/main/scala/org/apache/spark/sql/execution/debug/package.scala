@@ -70,7 +70,7 @@ package object debug {
   }
 
   private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode with CodegenSupport {
-    def output: Seq[Attribute] = child.output
+    override def outputBeforeConstraints: Seq[Attribute] = child.output
 
     implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {
       def zero(initialValue: HashSet[String]): HashSet[String] = {

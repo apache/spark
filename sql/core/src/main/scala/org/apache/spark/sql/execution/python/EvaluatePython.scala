@@ -44,7 +44,7 @@ case class EvaluatePython(
     resultAttribute: AttributeReference)
   extends logical.UnaryNode {
 
-  def output: Seq[Attribute] = child.output :+ resultAttribute
+  def outputBeforeConstraints: Seq[Attribute] = child.output :+ resultAttribute
 
   // References should not include the produced attribute.
   override def references: AttributeSet = udf.references

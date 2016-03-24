@@ -286,7 +286,7 @@ case class CatalogRelation(
   extends LeafNode {
 
   // TODO: implement this
-  override def output: Seq[Attribute] = Seq.empty
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty
 
   require(metadata.name.database == Some(db),
     "provided database does not much the one specified in the table definition")

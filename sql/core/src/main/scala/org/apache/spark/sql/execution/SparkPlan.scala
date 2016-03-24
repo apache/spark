@@ -42,6 +42,9 @@ import org.apache.spark.util.ThreadUtils
  */
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
+  // Constraints are not working on SparkPlan. So we make this as empty.
+  override protected def outputBeforeConstraints: Seq[Attribute] = Seq.empty[Attribute]
+
   /**
    * A handle to the SQL Context that was used to create this plan.   Since many operators need
    * access to the sqlContext for RDD operations or configuration this field is automatically

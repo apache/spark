@@ -201,7 +201,7 @@ case class Range(
     step: Long,
     numSlices: Int,
     numElements: BigInt,
-    output: Seq[Attribute])
+    override val output: Seq[Attribute])
   extends LeafNode with CodegenSupport {
 
   private[sql] override lazy val metrics = Map(
@@ -394,7 +394,7 @@ case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
  * (hopefully structurally equivalent) tree from a different optimization sequence into an already
  * resolved tree.
  */
-case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPlan {
+case class OutputFaker(override val output: Seq[Attribute], child: SparkPlan) extends SparkPlan {
   def children: Seq[SparkPlan] = child :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = child.execute()

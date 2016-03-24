@@ -30,12 +30,12 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * multiple output rows for a input row.
  * @param projections The group of expressions, all of the group expressions should
  *                    output the same schema specified bye the parameter `output`
- * @param output      The output Schema
+ * @param outputBeforeConstraints      The output Schema
  * @param child       Child operator
  */
 case class Expand(
     projections: Seq[Seq[Expression]],
-    output: Seq[Attribute],
+    override val output: Seq[Attribute],
     child: SparkPlan)
   extends UnaryNode with CodegenSupport {
 

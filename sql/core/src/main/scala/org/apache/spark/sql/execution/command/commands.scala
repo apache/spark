@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
  * wrapped in `ExecutedCommand` during execution.
  */
 private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
-  override def output: Seq[Attribute] = Seq.empty
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
   def run(sqlContext: SQLContext): Seq[Row]
 }
@@ -212,7 +212,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       (keyValueOutput, runFunc)
   }
 
-  override val output: Seq[Attribute] = _output
+  override val outputBeforeConstraints: Seq[Attribute] = _output
 
   override def run(sqlContext: SQLContext): Seq[Row] = runFunc(sqlContext)
 
@@ -226,7 +226,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
  */
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
-    override val output: Seq[Attribute] =
+    override val outputBeforeConstraints: Seq[Attribute] =
       Seq(AttributeReference("plan", StringType, nullable = true)()),
     extended: Boolean = false)
   extends RunnableCommand {
@@ -264,7 +264,7 @@ case class CacheTableCommand(
     Seq.empty[Row]
   }
 
-  override def output: Seq[Attribute] = Seq.empty
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty
 }
 
 
@@ -275,7 +275,7 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
     Seq.empty[Row]
   }
 
-  override def output: Seq[Attribute] = Seq.empty
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty
 }
 
 /**
@@ -288,13 +288,13 @@ case object ClearCacheCommand extends RunnableCommand {
     Seq.empty[Row]
   }
 
-  override def output: Seq[Attribute] = Seq.empty
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty
 }
 
 
 case class DescribeCommand(
     table: TableIdentifier,
-    override val output: Seq[Attribute],
+    override val outputBeforeConstraints: Seq[Attribute],
     isExtended: Boolean)
   extends RunnableCommand {
 
@@ -319,7 +319,7 @@ case class DescribeCommand(
 case class ShowTablesCommand(databaseName: Option[String]) extends RunnableCommand {
 
   // The result of SHOW TABLES has two columns, tableName and isTemporary.
-  override val output: Seq[Attribute] = {
+  override val outputBeforeConstraints: Seq[Attribute] = {
     val schema = StructType(
       StructField("tableName", StringType, false) ::
       StructField("isTemporary", BooleanType, false) :: Nil)
@@ -347,7 +347,7 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
  * TODO currently we are simply ignore the db
  */
 case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
-  override val output: Seq[Attribute] = {
+  override val outputBeforeConstraints: Seq[Attribute] = {
     val schema = StructType(
       StructField("function", StringType, nullable = false) :: Nil)
 
@@ -380,7 +380,7 @@ case class DescribeFunction(
     functionName: String,
     isExtended: Boolean) extends RunnableCommand {
 
-  override val output: Seq[Attribute] = {
+  override val outputBeforeConstraints: Seq[Attribute] = {
     val schema = StructType(
       StructField("function_desc", StringType, nullable = false) :: Nil)
 
@@ -421,5 +421,5 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
     Seq.empty[Row]
   }
 
-  override val output: Seq[Attribute] = Seq.empty
+  override val outputBeforeConstraints: Seq[Attribute] = Seq.empty
 }

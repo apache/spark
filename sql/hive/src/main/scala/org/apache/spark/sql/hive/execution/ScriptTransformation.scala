@@ -54,7 +54,7 @@ private[hive]
 case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
-    output: Seq[Attribute],
+    override val output: Seq[Attribute],
     child: SparkPlan,
     ioschema: HiveScriptIOSchema)(@transient private val sc: HiveContext)
   extends UnaryNode {

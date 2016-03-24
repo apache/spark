@@ -55,7 +55,7 @@ private[columnar]
 case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
 private[sql] case class InMemoryRelation(
-    output: Seq[Attribute],
+    override val outputBeforeConstraints: Seq[Attribute],
     useCompression: Boolean,
     batchSize: Int,
     storageLevel: StorageLevel,

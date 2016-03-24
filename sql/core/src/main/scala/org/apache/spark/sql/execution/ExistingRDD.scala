@@ -72,7 +72,7 @@ object RDDConversions {
 
 /** Logical plan node for scanning data from an RDD. */
 private[sql] case class LogicalRDD(
-    output: Seq[Attribute],
+    outputBeforeConstraints: Seq[Attribute],
     rdd: RDD[InternalRow])(sqlContext: SQLContext)
   extends LogicalPlan with MultiInstanceRelation {
 
@@ -99,7 +99,7 @@ private[sql] case class LogicalRDD(
 
 /** Physical plan node for scanning data from an RDD. */
 private[sql] case class PhysicalRDD(
-    output: Seq[Attribute],
+    override val output: Seq[Attribute],
     rdd: RDD[InternalRow],
     override val nodeName: String) extends LeafNode {
 
@@ -124,7 +124,7 @@ private[sql] case class PhysicalRDD(
 
 /** Physical plan node for scanning data from a relation. */
 private[sql] case class DataSourceScan(
-    output: Seq[Attribute],
+    override val output: Seq[Attribute],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val metadata: Map[String, String] = Map.empty)

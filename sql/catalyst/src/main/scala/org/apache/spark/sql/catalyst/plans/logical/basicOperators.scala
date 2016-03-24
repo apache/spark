@@ -33,11 +33,11 @@ import org.apache.spark.sql.types._
  * at the top of the logical query plan.
  */
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
 }
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override def outputBeforeConstraints: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
   override lazy val resolved: Boolean = {
@@ -91,7 +91,7 @@ case class Generate(
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
-  def output: Seq[Attribute] = {
+  def outputBeforeConstraints: Seq[Attribute] = {
     val qualified = qualifier.map(q =>
       // prepend the new qualifier to the existed one
       generatorOutput.map(a => a.withQualifiers(q +: a.qualifiers))
@@ -103,16 +103,7 @@ case class Generate(
 
 case class Filter(condition: Expression, child: LogicalPlan)
   extends UnaryNode with PredicateHelper {
-
-  private def notNulls =
-    constructIsNotNullConstraints(splitConjunctivePredicates(condition).toSet)
-      .filter(x => x.isInstanceOf[IsNotNull] && x.references.nonEmpty)
-      .filter(_.references.subsetOf(child.outputSet))
-      .flatMap(_.references.map(_.exprId))
-
-  override def output: Seq[Attribute] = child.output.map { o =>
-    if (notNulls.contains(o.exprId)) o.withNullability(false) else o
-  }
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
 
@@ -141,7 +132,7 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
-  override def output: Seq[Attribute] =
+  override def outputBeforeConstraints: Seq[Attribute] =
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
@@ -175,7 +166,7 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
   /** We don't use right.output because those rows get excluded from the set. */
-  override def output: Seq[Attribute] = left.output
+  override def outputBeforeConstraints: Seq[Attribute] = left.output
 
   override protected def validConstraints: Set[Expression] = leftConstraints
 
@@ -206,7 +197,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
   }
 
   // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] =
+  override def outputBeforeConstraints: Seq[Attribute] =
     children.map(_.output).transpose.map(attrs =>
       attrs.head.withNullability(attrs.exists(_.nullable)))
 
@@ -259,50 +250,18 @@ case class Join(
     condition: Option[Expression])
   extends BinaryNode with PredicateHelper {
 
-  private lazy val notNullsFromCondition: Set[Expression] =
-    constructIsNotNullConstraints(condition.toSet.flatMap(splitConjunctivePredicates))
-      .filter(_.references.nonEmpty)
-
-  private lazy val leftNotNulls = {
-    val constraints = joinType match {
-      case Inner | LeftSemi => left.constraints.union(notNullsFromCondition)
-      case _ => left.constraints
-    }
-    constraints.filter(_.isInstanceOf[IsNotNull])
-      .filter(_.references.subsetOf(left.outputSet))
-      .flatMap(_.references.map(_.exprId))
-  }
-
-  private lazy val notNullLeftOutput = left.output.map { o =>
-    if (leftNotNulls.contains(o.exprId)) o.withNullability(false) else o
-  }
-
-  private lazy val rightNotNulls = {
-    val constraints = joinType match {
-      case Inner => right.constraints.union(notNullsFromCondition)
-      case _ => right.constraints
-    }
-    constraints.filter(_.isInstanceOf[IsNotNull])
-      .filter(_.references.subsetOf(right.outputSet))
-      .flatMap(_.references.map(_.exprId))
-  }
-
-  private lazy val notNullRightOutput = right.output.map { o =>
-    if (rightNotNulls.contains(o.exprId)) o.withNullability(false) else o
-  }
-
-  override def output: Seq[Attribute] = {
+  override def outputBeforeConstraints: Seq[Attribute] = {
     joinType match {
       case LeftSemi =>
-        notNullLeftOutput
+        left.output
       case LeftOuter =>
-        notNullLeftOutput ++ right.output.map(_.withNullability(true))
+        left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
-        left.output.map(_.withNullability(true)) ++ notNullRightOutput
+        left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case _ =>
-        notNullLeftOutput ++ notNullRightOutput
+        left.output ++ right.output
     }
   }
 
@@ -351,7 +310,7 @@ case class Join(
  * A hint for the optimizer that we should broadcast the `child` if used in a join operator.
  */
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
 
   // We manually set statistics of BroadcastHint to smallest value to make sure
   // the plan wrapped by BroadcastHint will be considered to broadcast later.
@@ -367,7 +326,7 @@ case class InsertIntoTable(
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = Seq.empty
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty
 
   assert(overwrite || !ifNotExists)
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
@@ -386,13 +345,13 @@ case class InsertIntoTable(
  *                     value is the CTE definition.
  */
 case class With(child: LogicalPlan, cteRelations: Map[String, SubqueryAlias]) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
 }
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
 }
 
 /**
@@ -405,7 +364,7 @@ case class Sort(
     order: Seq[SortOrder],
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
 }
 
@@ -422,7 +381,7 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Int,
-    output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
+    outputBeforeConstraints: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
   require(step != 0, "step cannot be 0")
   val numElements: BigInt = {
     val safeStart = BigInt(start)
@@ -459,7 +418,7 @@ case class Aggregate(
     !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
-  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def outputBeforeConstraints: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
   override def validConstraints: Set[Expression] =
@@ -480,7 +439,7 @@ case class Window(
     orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] =
+  override def outputBeforeConstraints: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
@@ -552,12 +511,12 @@ private[sql] object Expand {
  * a input row.
  *
  * @param projections to apply
- * @param output of all projections.
+ * @param outputBeforeConstraints of all projections.
  * @param child operator.
  */
 case class Expand(
     projections: Seq[Seq[Expression]],
-    output: Seq[Attribute],
+    outputBeforeConstraints: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
 
   override def references: AttributeSet =
@@ -589,7 +548,7 @@ case class GroupingSets(
     child: LogicalPlan,
     aggregations: Seq[NamedExpression]) extends UnaryNode {
 
-  override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
+  override def outputBeforeConstraints: Seq[Attribute] = aggregations.map(_.toAttribute)
 
   // Needs to be unresolved before its translated to Aggregate + Expand because output attributes
   // will change in analysis.
@@ -602,12 +561,14 @@ case class Pivot(
     pivotValues: Seq[Literal],
     aggregates: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
-    case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
-    case _ => pivotValues.flatMap{ value =>
-      aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+  override def outputBeforeConstraints: Seq[Attribute] =
+    groupByExprs.map(_.toAttribute) ++ aggregates match {
+      case agg :: Nil =>
+        pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
+      case _ => pivotValues.flatMap{ value =>
+        aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+      }
     }
-  }
 }
 
 object Limit {
@@ -624,7 +585,7 @@ object Limit {
 }
 
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -639,7 +600,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
 }
 
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -655,7 +616,8 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 
 case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+  override def outputBeforeConstraints: Seq[Attribute] =
+    child.output.map(_.withQualifiers(alias :: Nil))
 }
 
 /**
@@ -677,7 +639,7 @@ case class Sample(
     child: LogicalPlan)(
     val isTableSample: java.lang.Boolean = false) extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
 
   override def statistics: Statistics = {
     val ratio = upperBound - lowerBound
@@ -697,7 +659,7 @@ case class Sample(
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
 }
 
 /**
@@ -708,7 +670,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
 }
 
 /**
@@ -716,7 +678,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
  */
 case object OneRowRelation extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
-  override def output: Seq[Attribute] = Nil
+  override def outputBeforeConstraints: Seq[Attribute] = Nil
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
