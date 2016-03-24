@@ -102,6 +102,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   protected def validConstraints: Set[Expression] = Set.empty
 
   /**
+   * The set of attributes whose combination can uniquely identify a row.
+   */
+  def distinctSet: AttributeSet = AttributeSet.empty
+
+  /**
    * Returns the set of attributes that are output by this node.
    */
   def outputSet: AttributeSet = AttributeSet(output)
