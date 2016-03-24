@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -426,6 +427,13 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
             val df = sqlContext.sql("SELECT * FROM dummy_orc WHERE key=0")
             checkAnswer(df, singleRowDF)
+
+            val queryExecution = df.queryExecution
+            queryExecution.analyzed.collectFirst {
+              case _: LogicalRelation => ()
+            }.getOrElse {
+              fail(s"Expecting the query plan to have LogicalRelation, but got:\n$queryExecution")
+            }
           }
         }
       }
