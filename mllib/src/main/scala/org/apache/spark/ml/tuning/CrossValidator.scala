@@ -160,8 +160,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
 
     validateParams(instance)
 
-    override protected def saveImpl(path: String): Unit =
-      saveImpl(path, instance, sc)
+    override protected def saveImpl(path: String): Unit = save(path, instance, sc)
   }
 
   private class CrossValidatorReader extends MLReader[CrossValidator] with MetaPipelineReadWrite {
@@ -241,7 +240,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     override protected def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
       val extraMetadata = "avgMetrics" -> instance.avgMetrics.toSeq
-      saveImpl(path, instance, sc, Some(extraMetadata))
+      save(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
     }

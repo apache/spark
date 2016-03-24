@@ -134,9 +134,6 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     copied
   }
 
-  // Currently, this only works if all [[Param]]s in [[estimatorParamMaps]] are simple types.
-  // E.g., this may fail if a [[Param]] is an instance of an [[Estimator]].
-  // However, this case should be unusual.
   @Since("2.0.0")
   override def write: MLWriter = new TrainValidationSplit.TrainValidationSplitWriter(this)
 }
@@ -150,14 +147,12 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
   @Since("2.0.0")
   override def load(path: String): TrainValidationSplit = super.load(path)
 
-  private[TrainValidationSplit]
-  class TrainValidationSplitWriter(instance: TrainValidationSplit)
+  private[TrainValidationSplit] class TrainValidationSplitWriter(instance: TrainValidationSplit)
     extends MLWriter with MetaPipelineReadWrite {
 
     validateParams(instance)
 
-    override protected def saveImpl(path: String): Unit =
-      saveImpl(path, instance, sc)
+    override protected def saveImpl(path: String): Unit = save(path, instance, sc)
   }
 
   private class TrainValidationSplitReader
@@ -238,7 +233,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     override protected def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
       val extraMetadata = "validationMetrics" -> instance.validationMetrics.toSeq
-      saveImpl(path, instance, sc, Some(extraMetadata))
+      save(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
     }

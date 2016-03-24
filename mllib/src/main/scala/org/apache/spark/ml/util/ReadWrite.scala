@@ -360,6 +360,9 @@ private[ml] object DefaultParamsReader {
   }
 }
 
+/**
+ * Default Meta-Pipeline read and write implementation.
+ */
 private[ml] trait MetaPipelineReadWrite {
   /**
    * Examine the given estimator (which may be a compound estimator) and extract a mapping
@@ -375,7 +378,7 @@ private[ml] trait MetaPipelineReadWrite {
     uidMap
   }
 
-  def getUidMapImpl(instance: Params): List[(String, Params)] = {
+  private def getUidMapImpl(instance: Params): List[(String, Params)] = {
     val subStages: Array[Params] = instance match {
       case p: Pipeline => p.getStages.asInstanceOf[Array[Params]]
       case pm: PipelineModel => pm.stages.asInstanceOf[Array[Params]]
@@ -417,7 +420,7 @@ private[ml] trait MetaPipelineReadWrite {
     }
   }
 
-  def saveImpl(
+  def save(
       path: String,
       instance: ValidatorParams,
       sc: SparkContext,
