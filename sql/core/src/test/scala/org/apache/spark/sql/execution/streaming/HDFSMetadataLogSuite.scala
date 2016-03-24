@@ -17,15 +17,27 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.net.URI
 import java.util.ConcurrentModificationException
 
+import scala.util.Random
+
+import org.apache.hadoop.fs._
 import org.scalatest.concurrent.AsyncAssertions._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
+
+
+  override protected val sparkConf =
+    new SparkConf()
+      .setMaster("local")
+      .setAppName(this.getClass.getSimpleName)
+      .set(s"spark.hadoop.fs.$scheme.impl.disable.cache", "true") // to avoid caching of FS objects
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
 
@@ -102,4 +114,50 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       assert(metadataLog.get(None, maxBatchId) === (0 to maxBatchId).map(i => (i, i.toString)))
     }
   }
+
+  testQuietly("fallback from FileContext to FileSystem") {
+    sqlContext.sparkContext.hadoopConfiguration.set(
+      s"fs.$scheme.impl",
+      classOf[FakeFileSystem].getName)
+    withTempDir { temp =>
+      val metadataLog = new HDFSMetadataLog[String](sqlContext, s"$scheme://$temp")
+
+      assert(metadataLog.add(0, "batch0"))
+      assert(metadataLog.getLatest() === Some(0 -> "batch0"))
+      assert(metadataLog.get(0) === Some("batch0"))
+      assert(metadataLog.getLatest() === Some(0 -> "batch0"))
+      assert(metadataLog.get(None, 0) === Array(0 -> "batch0"))
+
+      assert(metadataLog.add(1, "batch1"))
+      assert(metadataLog.get(0) === Some("batch0"))
+      assert(metadataLog.get(1) === Some("batch1"))
+      assert(metadataLog.getLatest() === Some(1 -> "batch1"))
+      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+
+      // Adding the same batch does nothing
+      metadataLog.add(1, "batch1-duplicated")
+      assert(metadataLog.get(0) === Some("batch0"))
+      assert(metadataLog.get(1) === Some("batch1"))
+      assert(metadataLog.getLatest() === Some(1 -> "batch1"))
+      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+
+      // Restarting recovers the same data
+      val metadataLog2 = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
+      assert(metadataLog2.get(0) === Some("batch0"))
+      assert(metadataLog2.get(1) === Some("batch1"))
+      assert(metadataLog2.getLatest() === Some(1 -> "batch1"))
+      assert(metadataLog2.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+    }
+  }
+}
+
+/** FakeFileSystem to test fallback of the HDFSMetadataLog from FileContext to FileSystem API */
+class FakeFileSystem extends RawLocalFileSystem {
+  override def getUri: URI = {
+    URI.create(s"$scheme:///")
+  }
+}
+
+object FakeFileSystem {
+  val scheme = s"HDFSMetadataLogSuite${math.abs(Random.nextInt)}"
 }

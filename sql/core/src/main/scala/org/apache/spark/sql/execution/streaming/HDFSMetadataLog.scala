@@ -24,6 +24,7 @@ import java.util.{ConcurrentModificationException, EnumSet}
 import scala.reflect.ClassTag
 
 import org.apache.commons.io.IOUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 
@@ -31,6 +32,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.execution.streaming.HDFSMetadataLog.{FileSystemManager, FileContextManager, FileManager}
+
 
 /**
  * A [[MetadataLog]] implementation based on HDFS. [[HDFSMetadataLog]] uses the specified `path`
@@ -47,17 +50,13 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
   extends MetadataLog[T]
   with Logging {
 
+  import HDFSMetadataLog._
+
   private val metadataPath = new Path(path)
+  private val fileManager = createFileManager()
 
-  private val fc =
-    if (metadataPath.toUri.getScheme == null) {
-      FileContext.getFileContext(sqlContext.sparkContext.hadoopConfiguration)
-    } else {
-      FileContext.getFileContext(metadataPath.toUri, sqlContext.sparkContext.hadoopConfiguration)
-    }
-
-  if (!fc.util().exists(metadataPath)) {
-    fc.mkdir(metadataPath, FsPermission.getDirDefault, true)
+  if (!fileManager.exists(metadataPath)) {
+    fileManager.mkdirs(metadataPath)
   }
 
   /**
@@ -105,9 +104,9 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
     var nextId = 0
     while (true) {
       val tempPath = new Path(metadataPath, s".${batchId}_$nextId.tmp")
-      fc.deleteOnExit(tempPath)
+      fileManager.deleteOnExit(tempPath)
       try {
-        val output = fc.create(tempPath, EnumSet.of(CreateFlag.CREATE))
+        val output = fileManager.create(tempPath)
         try {
           output.write(bytes)
         } finally {
@@ -117,7 +116,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
           // Try to commit the batch
           // It will fail if there is an existing file (someone has committed the batch)
           logDebug(s"Attempting to write log #${batchFile(batchId)}")
-          fc.rename(tempPath, batchFile(batchId), Options.Rename.NONE)
+          fileManager.rename(tempPath, batchFile(batchId))
           return
         } catch {
           case e: IOException if isFileAlreadyExistsException(e) =>
@@ -160,8 +159,8 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
 
   override def get(batchId: Long): Option[T] = {
     val batchMetadataFile = batchFile(batchId)
-    if (fc.util().exists(batchMetadataFile)) {
-      val input = fc.open(batchMetadataFile)
+    if (fileManager.exists(batchMetadataFile)) {
+      val input = fileManager.open(batchMetadataFile)
       val bytes = IOUtils.toByteArray(input)
       Some(serializer.deserialize[T](ByteBuffer.wrap(bytes)))
     } else {
@@ -171,7 +170,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
   }
 
   override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, T)] = {
-    val files = fc.util().listStatus(metadataPath, batchFilesFilter)
+    val files = fileManager.list(metadataPath, batchFilesFilter)
     val batchIds = files
       .map(_.getPath.getName.toLong)
       .filter { batchId =>
@@ -184,7 +183,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
   }
 
   override def getLatest(): Option[(Long, T)] = {
-    val batchIds = fc.util().listStatus(metadataPath, batchFilesFilter)
+    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
       .map(_.getPath.getName.toLong)
       .sorted
       .reverse
@@ -195,5 +194,108 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
       }
     }
     None
+  }
+
+  private def createFileManager(): FileManager = {
+    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
+    try {
+      new FileContextManager(metadataPath, hadoopConf)
+    } catch {
+      case e: UnsupportedFileSystemException =>
+        logWarning("Could not use FileContext API for managing metadata log file. The log may be" +
+          "inconsistent under failures.", e)
+        new FileSystemManager(metadataPath, hadoopConf)
+    }
+  }
+}
+
+object HDFSMetadataLog {
+
+  /** A simple trait to abstract out the file management operations needed by HDFSMetadataLog */
+  trait FileManager {
+    def list(path: Path, filter: PathFilter): Array[FileStatus]
+    def mkdirs(path: Path): Unit
+    def exists(path: Path): Boolean
+    def open(path: Path): FSDataInputStream
+    def create(path: Path): FSDataOutputStream
+    def rename(srcPath: Path, destPath: Path): Unit
+    def deleteOnExit(path: Path): Unit
+  }
+
+  /** Implementation of FileManager using newer FileContext API */
+  class FileContextManager(path: Path, hadoopConf: Configuration) extends FileManager {
+    private val fc = if (path.toUri.getScheme == null) {
+      FileContext.getFileContext(hadoopConf)
+    } else {
+      FileContext.getFileContext(path.toUri, hadoopConf)
+    }
+
+    override def list(path: Path, filter: PathFilter): Array[FileStatus] = {
+      fc.util.listStatus(path, filter)
+    }
+
+    override def rename(srcPath: Path, destPath: Path): Unit = {
+      fc.rename(srcPath, destPath)
+    }
+
+    override def mkdirs(path: Path): Unit = {
+      fc.mkdir(path, FsPermission.getDirDefault, true)
+    }
+
+    override def open(path: Path): FSDataInputStream = {
+      fc.open(path)
+    }
+
+    override def create(path: Path): FSDataOutputStream = {
+      fc.create(path, EnumSet.of(CreateFlag.CREATE))
+    }
+
+    override def exists(path: Path): Boolean = {
+      fc.util().exists(path)
+    }
+
+    override def deleteOnExit(path: Path): Unit = {
+      fc.deleteOnExit(path)
+    }
+  }
+
+  /** Implementation of FileManager using older FileSystem API */
+  class FileSystemManager(path: Path, hadoopConf: Configuration) extends FileManager {
+    private val fs = if (path.toUri.getScheme == null) {
+      FileSystem.get(hadoopConf)
+    } else {
+      FileSystem.get(path.toUri, hadoopConf)
+    }
+
+    override def list(path: Path, filter: PathFilter): Array[FileStatus] = {
+      fs.listStatus(path, filter)
+    }
+
+    override def rename(srcPath: Path, destPath: Path): Unit = {
+      if (fs.exists(destPath)) {
+        throw new FileAlreadyExistsException(s"File already exists: $destPath")
+      }
+      fs.rename(srcPath, destPath)
+    }
+
+    override def mkdirs(path: Path): Unit = {
+      fs.mkdirs(path, FsPermission.getDirDefault)
+    }
+
+    override def open(path: Path): FSDataInputStream = {
+      fs.open(path)
+    }
+
+    override def create(path: Path): FSDataOutputStream = {
+      fs.create(path, false)
+    }
+
+    override def exists(path: Path): Boolean = {
+      fs.exists(path)
+    }
+
+    override def deleteOnExit(path: Path): Unit = {
+      fs.deleteOnExit(path)
+    }
   }
 }
