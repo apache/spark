@@ -134,13 +134,29 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  test("pipe with non-zero exit status") {
+  test("pipe with process which cannot be launched due to bad command") {
     if (testCommandAvailable("cat")) {
       val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
-      val piped = nums.pipe(Seq("cat nonexistent_file", "2>", "/dev/null"))
-      intercept[SparkException] {
+      val command = Seq("cat nonexistent_file")
+      val piped = nums.pipe(command)
+      val exception = intercept[SparkException] {
         piped.collect()
       }
+      assert(exception.getMessage.contains(command.mkString(" ")))
+    } else {
+      assert(true)
+    }
+  }
+
+  test("pipe with process whnich is launched but fails with non-zero exit status") {
+    if (testCommandAvailable("cat")) {
+      val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+      val command = Seq("cat", "nonexistent_file")
+      val piped = nums.pipe(command)
+      val exception = intercept[SparkException] {
+        piped.collect()
+      }
+      assert(exception.getMessage.contains(command.mkString(" ")))
     } else {
       assert(true)
     }
