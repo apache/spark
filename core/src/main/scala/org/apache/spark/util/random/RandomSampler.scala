@@ -345,8 +345,9 @@ class GapSamplingReplacement(
       countForDropping -= 1
       0
     } else {
+      val r = poissonGE1
       advance()
-      poissonGE1
+      r
     }
   }
 
