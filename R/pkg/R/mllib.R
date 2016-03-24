@@ -285,6 +285,7 @@ setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', ':', '+', and '-'.
+#'                Note that operator '.' is not supported currently.
 #' @param data DataFrame for training.
 #' @return a fitted AFT survival regression model
 #' @rdname survreg

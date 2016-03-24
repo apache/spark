@@ -213,20 +213,11 @@ test_that("survreg", {
   #
   # -- output of 'summary(model)'
   #
-  # survreg(formula = Surv(time, status) ~ x + sex, data = data)
   #              Value Std. Error     z        p
   # (Intercept)  1.315      0.270  4.88 1.07e-06
   # x           -0.190      0.173 -1.10 2.72e-01
   # sex         -0.253      0.329 -0.77 4.42e-01
   # Log(scale)  -1.160      0.396 -2.93 3.41e-03
-  #
-  # Scale= 0.313
-  #
-  # Weibull distribution
-  # Loglik(model)= -7.7   Loglik(intercept only)= -8.2
-  #     Chisq= 1.16 on 2 degrees of freedom, p= 0.56
-  # Number of Newton-Raphson Iterations: 8
-  # n= 7
   #
   # -- output of 'predict(model, data)'
   #
@@ -274,7 +265,7 @@ test_that("survreg2", {
   rScale <- rModel$scale
 
   expect_equal(coefs, rCoefs, tolerance = 1e-4)
-  expect_true(abs(rScale - scale) < 1e-4)
+  expect_equal(scale, rScale, tolerance = 1e-4)
   expect_true(all(
     rownames(stats$coefficients) ==
     c("(Intercept)", "ecog_ps", "rx", "Log(scale)")))

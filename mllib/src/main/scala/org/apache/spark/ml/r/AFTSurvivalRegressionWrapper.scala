@@ -18,10 +18,10 @@
 package org.apache.spark.ml.r
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.RFormula
-import org.apache.spark.ml.regression.{AFTSurvivalRegressionModel, AFTSurvivalRegression}
+import org.apache.spark.ml.regression.{AFTSurvivalRegression, AFTSurvivalRegressionModel}
 import org.apache.spark.sql.DataFrame
 
 private[r] class AFTSurvivalRegressionWrapper private (
