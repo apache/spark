@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import com.google.common.base.Objects
+import java.net.URI
+
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.mapreduce.lib.input.{LineRecordReader, FileInputFormat, FileSplit}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -31,7 +34,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
-import org.apache.spark.sql.execution.datasources.CompressionCodecs
+import org.apache.spark.sql.execution.datasources.{CompressionCodecs, PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -40,7 +43,7 @@ import org.apache.spark.util.collection.BitSet
 /**
  * A data source for reading text files.
  */
-class DefaultSource extends FileFormat with DataSourceRegister {
+class DefaultSource extends FileFormat with DataSourceRegister with Serializable {
 
   override def shortName(): String = "text"
 
@@ -125,6 +128,41 @@ class DefaultSource extends FileFormat with DataSourceRegister {
             unsafeRow
           }
         }
+  }
+
+  override def buildReader(
+      sqlContext: SQLContext,
+      partitionSchema: StructType,
+      dataSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
+    verifySchema(dataSchema)
+
+    val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+    val broadcastedConf =
+      sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+
+    file => {
+      val fileSplit =
+        new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
+
+      val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
+      val hadoopAttemptContext = new TaskAttemptContextImpl(broadcastedConf.value.value, attemptId)
+
+      val reader = new LineRecordReader()
+      reader.initialize(fileSplit, hadoopAttemptContext)
+
+      val unsafeRow = new UnsafeRow(1)
+      val bufferHolder = new BufferHolder(unsafeRow)
+      val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
+      new RecordReaderIterator(reader).map { line =>
+        // Writes to an UnsafeRow directly
+        bufferHolder.reset()
+        unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
+        unsafeRow.setTotalSize(bufferHolder.totalSize())
+        unsafeRow
+      }
+    }
   }
 }
 
