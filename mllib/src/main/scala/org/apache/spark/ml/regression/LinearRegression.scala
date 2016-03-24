@@ -412,11 +412,10 @@ class LinearRegressionModel private[ml] (
   def hasSummary: Boolean = trainingSummary.isDefined
 
   /**
-   * Evaluates the model on a testset.
+   * Evaluates the model on a test dataset.
    * @param dataset Test dataset to evaluate model on.
    */
-  // TODO: decide on a good name before exposing to public API
-  private[regression] def evaluate(dataset: DataFrame): LinearRegressionSummary = {
+  def evaluate(dataset: DataFrame): LinearRegressionSummary = {
     // Handle possible missing or invalid prediction columns
     val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
     new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName,
