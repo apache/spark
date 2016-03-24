@@ -19,7 +19,7 @@ package org.apache.spark.ml.tree
 
 import org.codehaus.janino.ClassBodyEvaluator
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
