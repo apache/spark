@@ -149,6 +149,7 @@ private[spark] class Executor(
       tr.kill(interruptThread)
     }
   }
+
   def killAllTasks (interruptThread: Boolean) : Unit = {
     // kill all the running tasks
     for (taskRunner <- runningTasks.values().asScala) {
@@ -157,6 +158,7 @@ private[spark] class Executor(
       }
     }
   }
+
   def stop(): Unit = {
     env.metricsSystem.report()
     heartbeater.shutdown()

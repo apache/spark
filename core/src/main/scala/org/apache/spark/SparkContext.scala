@@ -2449,8 +2449,8 @@ object SparkContext extends Logging {
           case None => throw new SparkException("Could not parse Master URL: '" + master + "'")
         }
         try {
-          val scheduler = cm.createTaskScheduler(sc)
-          val backend = cm.createSchedulerBackend(sc, scheduler)
+          val scheduler = cm.createTaskScheduler(sc, masterUrl)
+          val backend = cm.createSchedulerBackend(sc, masterUrl, scheduler)
           cm.initialize(scheduler, backend)
           (backend, scheduler)
         } catch {
@@ -2469,8 +2469,8 @@ object SparkContext extends Logging {
       // exactly one registered manager
       case head :: Nil => Some(head)
       case Nil => None
-      case multipleMgrs => sys.error(s"Multiple Cluster Managers registered " +
-          s"for the url $url")
+      case multipleMgrs => sys.error(s"Multiple Cluster Managers ($multipleMgrs) registered " +
+          s"for the url $url:")
     }
   }
 }

@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 
@@ -30,24 +29,27 @@ class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext
     sc = new SparkContext(conf)
     // check if the scheduler components are created
     assert(sc.schedulerBackend.isInstanceOf[FakeSchedulerBackend])
-    assert(sc.taskScheduler.isInstanceOf[FakeScheduler])
+    assert(sc.taskScheduler.isInstanceOf[DummyTaskScheduler])
   }
 }
 
-class CheckExternalClusterManager extends ExternalClusterManager {
+class DummyExternalClusterManager extends ExternalClusterManager {
 
   def canCreate(masterURL: String): Boolean = masterURL == "myclusterManager"
 
-  def createTaskScheduler(sc: SparkContext): TaskScheduler = new FakeScheduler
+  def createTaskScheduler(sc: SparkContext,
+                          masterURL: String): TaskScheduler = new DummyTaskScheduler
 
-  def createSchedulerBackend(sc: SparkContext, scheduler: TaskScheduler): SchedulerBackend =
+  def createSchedulerBackend(sc: SparkContext,
+                             masterURL: String,
+                             scheduler: TaskScheduler): SchedulerBackend =
     new FakeSchedulerBackend()
 
   def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {}
 
 }
 
-class FakeScheduler extends TaskScheduler {
+class DummyTaskScheduler extends TaskScheduler {
   override def rootPool: Pool = null
   override def schedulingMode: SchedulingMode = SchedulingMode.NONE
   override def start(): Unit = {}
