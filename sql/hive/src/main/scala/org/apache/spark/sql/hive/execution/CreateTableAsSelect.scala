@@ -69,10 +69,10 @@ case class CreateTableAsSelect(
         withFormat
       }
 
-      hiveContext.sessionState.catalog.createTable(withSchema, ignoreIfExists = false)
+      hiveContext.sessionState.catalog.client.createTable(withSchema, ignoreIfExists = false)
 
       // Get the Metastore Relation
-      hiveContext.sessionState.catalog.lookupRelation(tableIdentifier) match {
+      hiveContext.sessionState.catalog.lookupRelation(tableIdentifier, None) match {
         case r: MetastoreRelation => r
       }
     }

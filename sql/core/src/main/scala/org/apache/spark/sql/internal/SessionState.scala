@@ -18,8 +18,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.{ContinuousQueryManager, ExperimentalMethods, SQLContext, UDFRegistration}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegistry, SimpleCatalog}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -46,7 +45,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Internal catalog for managing table and database states.
    */
-  lazy val catalog = new SessionCatalog(ctx.externalCatalog, conf)
+  lazy val catalog: Catalog = new SimpleCatalog(conf)
 
   /**
    * Internal catalog for managing functions registered by the user.
@@ -69,7 +68,7 @@ private[sql] class SessionState(ctx: SQLContext) {
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
+      override val extendedCheckRules = Seq(datasources.PreWriteCheck(catalog))
     }
   }
 

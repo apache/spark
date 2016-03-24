@@ -85,6 +85,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
     withClient { getTable(db, table) }
   }
 
+
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -179,10 +180,6 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
 
   override def getTable(db: String, table: String): CatalogTable = withClient {
     client.getTable(db, table)
-  }
-
-  override def tableExists(db: String, table: String): Boolean = withClient {
-    client.getTableOption(db, table).isDefined
   }
 
   override def listTables(db: String): Seq[String] = withClient {
