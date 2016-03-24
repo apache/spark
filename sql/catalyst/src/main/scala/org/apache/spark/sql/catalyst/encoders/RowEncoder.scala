@@ -137,8 +137,14 @@ object RowEncoder {
         CreateStruct(convertedFields))
   }
 
-  // This is used to get external type for an input with DateType dt. So this should
-  // be only used in extractorsFor.
+  /**
+   * Returns the `DataType` that can be used when generating code that converts input data
+   * into the Spark SQL internal format.  Unlike `externalDataTypeFor`, the `DataType` returned
+   * by this function can be more permissive since multiple external types may map to a single
+   * internal type.  For example, for an input with DecimalType in external row, its external types
+   * can be `scala.math.BigDecimal`, `java.math.BigDecimal`, or
+   * `org.apache.spark.sql.types.Decimal`.
+   */
   private def externalDataTypeForInput(dt: DataType): DataType = dt match {
     // In order to support both Decimal and java BigDecimal in external row, we make this
     // as java.lang.Object.
