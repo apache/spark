@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.orc
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -27,10 +29,10 @@ import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
-import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
-import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
+import org.apache.hadoop.mapred.{JobConf, RecordWriter, Reporter, InputFormat => MapRedInputFormat, OutputFormat => MapRedOutputFormat}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.hadoop.mapreduce._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{HadoopRDD, RDD}
@@ -44,7 +46,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 import org.apache.spark.util.collection.BitSet
 
-private[sql] class DefaultSource extends FileFormat with DataSourceRegister {
+private[sql] class DefaultSource
+  extends FileFormat with DataSourceRegister with HiveInspectors with Serializable {
 
   override def shortName(): String = "orc"
 
@@ -55,7 +58,9 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     OrcFileOperator.readSchema(
-      files.map(_.getPath.toUri.toString), Some(sqlContext.sparkContext.hadoopConfiguration))
+      files.map(_.getPath.toUri.toString),
+      Some(sqlContext.sparkContext.hadoopConfiguration)
+    )
   }
 
   override def prepareWrite(
@@ -80,8 +85,8 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister {
       job.getConfiguration.set(
         OrcTableProperties.COMPRESSION.getPropName,
         OrcRelation
-            .shortOrcCompressionCodecNames
-            .getOrElse(codecName, CompressionKind.NONE).name())
+          .shortOrcCompressionCodecNames
+          .getOrElse(codecName, CompressionKind.NONE).name())
     }
 
     job.getConfiguration match {
@@ -116,6 +121,87 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister {
       options: Map[String, String]): RDD[InternalRow] = {
     val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
     OrcTableScan(sqlContext, output, filters, inputFiles).execute()
+  }
+
+  override def buildReader(
+      sqlContext: SQLContext,
+      partitionSchema: StructType,
+      dataSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
+    val orcConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+
+    if (sqlContext.conf.orcFilterPushDown) {
+      // Sets pushed predicates
+      OrcFilters.createFilter(filters.toArray).foreach { f =>
+        orcConf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
+        orcConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
+      }
+    }
+
+    val broadcastedConf = sqlContext.sparkContext.broadcast(new SerializableConfiguration(orcConf))
+    // Temporary variables used to avoid serialization issue
+    val _dataSchema = dataSchema
+
+    (file: PartitionedFile) => {
+      val conf = broadcastedConf.value.value
+
+      // Sets required columns
+      // TODO De-duplicates this part and `OrcFileScan.addColumnIds`
+      val physicalSchema = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf)).getOrElse {
+        sys.error("Failed to read schema from target ORC files.")
+      }
+      val ids = _dataSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
+      val (sortedIDs, sortedNames) = ids.zip(_dataSchema.fieldNames).sorted.unzip
+      HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+
+      val recordReaders = {
+        val job = Job.getInstance(conf)
+        FileInputFormat.setInputPaths(job, file.filePath)
+
+        val inputFormat = new OrcNewInputFormat
+        val splits = inputFormat.getSplits(job)
+
+        splits.asScala.map { split =>
+          val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
+          val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+          inputFormat.createRecordReader(split, hadoopAttemptContext)
+        }
+      }
+
+      val orcStructIterator = recordReaders.iterator.flatMap {
+        new RecordReaderIterator[OrcStruct](_)
+      }
+
+      // TODO De-duplicates this part and `OrcFileScan.fillObject`
+      val deserializer = new OrcSerde
+      val maybeStructOI = OrcFileOperator.getObjectInspector(file.filePath, Some(conf))
+      val mutableRow = new SpecificMutableRow(_dataSchema.map(_.dataType))
+      val unsafeProjection = UnsafeProjection.create(_dataSchema)
+
+      maybeStructOI.map { oi =>
+        val (fieldRefs, fieldOrdinals) = _dataSchema.zipWithIndex.map {
+          case (field, ordinal) => oi.getStructFieldRef(field.name) -> ordinal
+        }.unzip
+
+        val unwrappers = fieldRefs.map(unwrapperFor)
+
+        orcStructIterator.map { value =>
+          val raw = deserializer.deserialize(value)
+          var i = 0
+          while (i < fieldRefs.length) {
+            val fieldValue = oi.getStructFieldData(raw, fieldRefs(i))
+            if (fieldValue == null) {
+              mutableRow.setNullAt(fieldOrdinals(i))
+            } else {
+              unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+            }
+            i += 1
+          }
+          unsafeProjection(mutableRow)
+        }
+      }.getOrElse(Iterator.empty)
+    }
   }
 }
 
@@ -291,8 +377,8 @@ private[orc] case class OrcTableScan(
     val orcFormat = new DefaultSource
     val dataSchema =
       orcFormat
-          .inferSchema(sqlContext, Map.empty, inputPaths)
-          .getOrElse(sys.error("Failed to read schema from target ORC files."))
+        .inferSchema(sqlContext, Map.empty, inputPaths)
+        .getOrElse(sys.error("Failed to read schema from target ORC files."))
     // Sets requested columns
     addColumnIds(dataSchema, attributes, conf)
 

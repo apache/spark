@@ -32,7 +32,7 @@ case class PartitionedFile(
     filePath: String,
     start: Long,
     length: Long) {
-  override def toString(): String = {
+  override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
 }
@@ -44,7 +44,7 @@ case class PartitionedFile(
  *
  * TODO: This currently does not take locality information about the files into account.
  */
-case class FilePartition(val index: Int, files: Seq[PartitionedFile]) extends Partition
+case class FilePartition(index: Int, files: Seq[PartitionedFile]) extends Partition
 
 class FileScanRDD(
     @transient val sqlContext: SQLContext,

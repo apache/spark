@@ -208,9 +208,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
               val bucketedRDD = new UnionRDD(t.sqlContext.sparkContext,
                 (0 until spec.numBuckets).map { bucketId =>
-                  bucketedDataMap.get(bucketId).getOrElse {
-                    t.sqlContext.emptyResult: RDD[InternalRow]
-                  }
+                  bucketedDataMap.getOrElse(bucketId, t.sqlContext.emptyResult: RDD[InternalRow])
                 })
               bucketedRDD
             }
@@ -387,7 +385,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         result.setColumn(resultIdx, input.column(inputIdx))
         inputIdx += 1
       } else {
-        require(partitionColumnSchema.fields.filter(_.name.equals(attr.name)).length == 1)
+        require(partitionColumnSchema.fields.count(_.name == attr.name) == 1)
         var partitionIdx = 0
         partitionColumnSchema.fields.foreach { f => {
           if (f.name.equals(attr.name)) {
