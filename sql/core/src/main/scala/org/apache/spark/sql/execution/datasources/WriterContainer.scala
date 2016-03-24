@@ -25,7 +25,9 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceF
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
@@ -35,9 +37,16 @@ import org.apache.spark.sql.sources.{HadoopFsRelation, OutputWriter, OutputWrite
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
+/** A container for all the details required when writing to a table. */
+case class WriteRelation(
+    sqlContext: SQLContext,
+    dataSchema: StructType,
+    path: String,
+    prepareJobForWrite: Job => OutputWriterFactory,
+    bucketSpec: Option[BucketSpec])
 
 private[sql] abstract class BaseWriterContainer(
-    @transient val relation: HadoopFsRelation,
+    @transient val relation: WriteRelation,
     @transient private val job: Job,
     isAppend: Boolean)
   extends Logging with Serializable {
@@ -67,12 +76,7 @@ private[sql] abstract class BaseWriterContainer(
   @transient private var taskAttemptId: TaskAttemptID = _
   @transient protected var taskAttemptContext: TaskAttemptContext = _
 
-  protected val outputPath: String = {
-    assert(
-      relation.paths.length == 1,
-      s"Cannot write to multiple destinations: ${relation.paths.mkString(",")}")
-    relation.paths.head
-  }
+  protected val outputPath: String = relation.path
 
   protected var outputWriterFactory: OutputWriterFactory = _
 
@@ -237,7 +241,7 @@ private[sql] abstract class BaseWriterContainer(
  * A writer that writes all of the rows in a partition to a single file.
  */
 private[sql] class DefaultWriterContainer(
-    relation: HadoopFsRelation,
+    relation: WriteRelation,
     job: Job,
     isAppend: Boolean)
   extends BaseWriterContainer(relation, job, isAppend) {
@@ -299,7 +303,7 @@ private[sql] class DefaultWriterContainer(
  * writer externally sorts the remaining rows and then writes out them out one file at a time.
  */
 private[sql] class DynamicPartitionWriterContainer(
-    relation: HadoopFsRelation,
+    relation: WriteRelation,
     job: Job,
     partitionColumns: Seq[Attribute],
     dataColumns: Seq[Attribute],
@@ -309,7 +313,7 @@ private[sql] class DynamicPartitionWriterContainer(
     isAppend: Boolean)
   extends BaseWriterContainer(relation, job, isAppend) {
 
-  private val bucketSpec = relation.maybeBucketSpec
+  private val bucketSpec = relation.bucketSpec
 
   private val bucketColumns: Seq[Attribute] = bucketSpec.toSeq.flatMap {
     spec => spec.bucketColumnNames.map(c => inputSchema.find(_.name == c).get)
@@ -374,7 +378,6 @@ private[sql] class DynamicPartitionWriterContainer(
 
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
     val sortingExpressions: Seq[Expression] = partitionColumns ++ bucketIdExpression ++ sortColumns
-
     val getSortingKey = UnsafeProjection.create(sortingExpressions, inputSchema)
 
     val sortingKeySchema = StructType(sortingExpressions.map {
@@ -396,6 +399,7 @@ private[sql] class DynamicPartitionWriterContainer(
       sortingKeySchema,
       StructType.fromAttributes(dataColumns),
       SparkEnv.get.blockManager,
+      SparkEnv.get.serializerManager,
       TaskContext.get().taskMemoryManager().pageSizeBytes)
 
     while (iterator.hasNext) {

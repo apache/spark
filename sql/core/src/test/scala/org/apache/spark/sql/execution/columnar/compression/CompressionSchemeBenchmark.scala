@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
 
 import org.apache.commons.lang3.RandomStringUtils
 import org.apache.commons.math3.distribution.LogNormalDistribution
@@ -313,7 +314,7 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     }
     for (i <- 0 until count) {
       testData.putInt(strLen)
-      testData.put(g().getBytes)
+      testData.put(g().getBytes(StandardCharsets.UTF_8))
     }
     testData.rewind()
 

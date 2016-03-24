@@ -26,7 +26,7 @@ if sys.version >= '3':
 else:
     from itertools import imap as map
 
-from pyspark import since
+from pyspark import copy_func, since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -173,8 +173,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        WholeStageCodegen
-        :  +- Scan ExistingRDD[age#0,name#1]
+        Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -830,8 +829,6 @@ class DataFrame(object):
             raise TypeError("condition should be string or Column")
         return DataFrame(jdf, self.sql_ctx)
 
-    where = filter
-
     @ignore_unicode_prefix
     @since(1.3)
     def groupBy(self, *cols):
@@ -914,14 +911,24 @@ class DataFrame(object):
         """
         return self.groupBy().agg(*exprs)
 
+    @since(2.0)
+    def union(self, other):
+        """ Return a new :class:`DataFrame` containing union of rows in this
+        frame and another frame.
+
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by a distinct.
+        """
+        return DataFrame(self._jdf.unionAll(other._jdf), self.sql_ctx)
+
     @since(1.3)
     def unionAll(self, other):
         """ Return a new :class:`DataFrame` containing union of rows in this
         frame and another frame.
 
-        This is equivalent to `UNION ALL` in SQL.
+        .. note:: Deprecated in 2.0, use union instead.
         """
-        return DataFrame(self._jdf.unionAll(other._jdf), self.sql_ctx)
+        return self.union(other)
 
     @since(1.3)
     def intersect(self, other):
@@ -1362,8 +1369,20 @@ class DataFrame(object):
     # Pandas compatibility
     ##########################################################################################
 
-    groupby = groupBy
-    drop_duplicates = dropDuplicates
+    groupby = copy_func(
+        groupBy,
+        sinceversion=1.4,
+        doc=":func:`groupby` is an alias for :func:`groupBy`.")
+
+    drop_duplicates = copy_func(
+        dropDuplicates,
+        sinceversion=1.4,
+        doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.")
+
+    where = copy_func(
+        filter,
+        sinceversion=1.3,
+        doc=":func:`where` is an alias for :func:`filter`.")
 
 
 def _to_scala_map(sc, jm):

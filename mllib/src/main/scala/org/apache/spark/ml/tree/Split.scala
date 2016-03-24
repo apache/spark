@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{FeatureType => OldFeatureType}
 import org.apache.spark.mllib.tree.model.{Split => OldSplit}
@@ -76,7 +76,7 @@ private[tree] object Split {
 final class CategoricalSplit private[ml] (
     override val featureIndex: Int,
     _leftCategories: Array[Double],
-    private val numCategories: Int)
+    @Since("2.0.0") val numCategories: Int)
   extends Split {
 
   require(_leftCategories.forall(cat => 0 <= cat && cat < numCategories), "Invalid leftCategories" +

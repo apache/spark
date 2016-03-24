@@ -78,11 +78,9 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setInitialModel(model: GaussianMixtureModel): this.type = {
-    if (model.k == k) {
-      initialModel = Some(model)
-    } else {
-      throw new IllegalArgumentException("mismatched cluster count (model.k != k)")
-    }
+    require(model.k == k,
+      s"Mismatched cluster count (model.k ${model.k} != k ${k})")
+    initialModel = Some(model)
     this
   }
 
@@ -97,6 +95,8 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setK(k: Int): this.type = {
+    require(k > 0,
+      s"Number of Gaussians must be positive but got ${k}")
     this.k = k
     this
   }
@@ -112,6 +112,8 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
+    require(maxIterations >= 0,
+      s"Maximum of iterations must be nonnegative but got ${maxIterations}")
     this.maxIterations = maxIterations
     this
   }
@@ -128,6 +130,8 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setConvergenceTol(convergenceTol: Double): this.type = {
+    require(convergenceTol >= 0.0,
+      s"Convergence tolerance must be nonnegative but got ${convergenceTol}")
     this.convergenceTol = convergenceTol
     this
   }

@@ -26,7 +26,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.types.{DoubleType, NumericType, StructType}
 
 /**
  * :: Experimental ::
@@ -66,11 +66,11 @@ class OneHotEncoder(override val uid: String) extends Transformer
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
 
-    SchemaUtils.checkColumnType(schema, inputColName, DoubleType)
+    require(schema(inputColName).dataType.isInstanceOf[NumericType],
+      s"Input column must be of type NumericType but got ${schema(inputColName).dataType}")
     val inputFields = schema.fields
     require(!inputFields.exists(_.name == outputColName),
       s"Output column $outputColName already exists.")
@@ -133,7 +133,9 @@ class OneHotEncoder(override val uid: String) extends Transformer
       val numAttrs = dataset.select(col(inputColName).cast(DoubleType)).rdd.map(_.getDouble(0))
         .aggregate(0.0)(
           (m, x) => {
-            assert(x >=0.0 && x == x.toInt,
+            assert(x <= Int.MaxValue,
+              s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got $x")
+            assert(x >= 0.0 && x == x.toInt,
               s"Values from column $inputColName must be indices, but got $x.")
             math.max(m, x)
           },
