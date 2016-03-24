@@ -108,6 +108,7 @@ private[spark] class ExternalSorter[K, V, C](
 
   private val blockManager = SparkEnv.get.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
+  private val serializerManager = SparkEnv.get.serializerManager
   private val serInstance = serializer.newInstance()
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
@@ -503,7 +504,7 @@ private[spark] class ExternalSorter[K, V, C](
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
-        val compressedStream = blockManager.wrapForCompression(spill.blockId, bufferedStream)
+        val compressedStream = serializerManager.wrapForCompression(spill.blockId, bufferedStream)
         serInstance.deserializeStream(compressedStream)
       } else {
         // No more batches left

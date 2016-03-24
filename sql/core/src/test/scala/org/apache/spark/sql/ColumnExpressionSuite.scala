@@ -105,10 +105,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row("a") :: Nil)
   }
 
-  test("alias") {
+  test("alias and name") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     assert(df.select(df("a").as("b")).columns.head === "b")
     assert(df.select(df("a").alias("b")).columns.head === "b")
+    assert(df.select(df("a").name("b")).columns.head === "b")
   }
 
   test("as propagates metadata") {

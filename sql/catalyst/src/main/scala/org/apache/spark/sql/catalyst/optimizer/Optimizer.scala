@@ -417,68 +417,57 @@ object ColumnPruning extends Rule[LogicalPlan] {
 object CollapseProject extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p @ Project(projectList1, Project(projectList2, child)) =>
-      // Create a map of Aliases to their values from the child projection.
-      // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-      val aliasMap = AttributeMap(projectList2.collect {
-        case a: Alias => (a.toAttribute, a)
-      })
-
-      // We only collapse these two Projects if their overlapped expressions are all
-      // deterministic.
-      val hasNondeterministic = projectList1.exists(_.collect {
-        case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
-      }.exists(!_.deterministic))
-
-      if (hasNondeterministic) {
+    case p1 @ Project(_, p2: Project) =>
+      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+        p1
+      } else {
+        p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
+      }
+    case p @ Project(_, agg: Aggregate) =>
+      if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions)) {
         p
       } else {
-        // Substitute any attributes that are produced by the child projection, so that we safely
-        // eliminate it.
-        // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
-        // TODO: Fix TransformBase to avoid the cast below.
-        val substitutedProjection = projectList1.map(_.transform {
-          case a: Attribute => aliasMap.getOrElse(a, a)
-        }).asInstanceOf[Seq[NamedExpression]]
-        // collapse 2 projects may introduce unnecessary Aliases, trim them here.
-        val cleanedProjection = substitutedProjection.map(p =>
-          CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
-        )
-        Project(cleanedProjection, child)
+        agg.copy(aggregateExpressions = buildCleanedProjectList(
+          p.projectList, agg.aggregateExpressions))
       }
+  }
 
-    // TODO Eliminate duplicate code
-    // This clause is identical to the one above except that the inner operator is an `Aggregate`
-    // rather than a `Project`.
-    case p @ Project(projectList1, agg @ Aggregate(_, projectList2, child)) =>
-      // Create a map of Aliases to their values from the child projection.
-      // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-      val aliasMap = AttributeMap(projectList2.collect {
-        case a: Alias => (a.toAttribute, a)
-      })
+  private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
+    AttributeMap(projectList.collect {
+      case a: Alias => a.toAttribute -> a
+    })
+  }
 
-      // We only collapse these two Projects if their overlapped expressions are all
-      // deterministic.
-      val hasNondeterministic = projectList1.exists(_.collect {
-        case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
-      }.exists(!_.deterministic))
+  private def haveCommonNonDeterministicOutput(
+      upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
+    // Create a map of Aliases to their values from the lower projection.
+    // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
+    val aliases = collectAliases(lower)
 
-      if (hasNondeterministic) {
-        p
-      } else {
-        // Substitute any attributes that are produced by the child projection, so that we safely
-        // eliminate it.
-        // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
-        // TODO: Fix TransformBase to avoid the cast below.
-        val substitutedProjection = projectList1.map(_.transform {
-          case a: Attribute => aliasMap.getOrElse(a, a)
-        }).asInstanceOf[Seq[NamedExpression]]
-        // collapse 2 projects may introduce unnecessary Aliases, trim them here.
-        val cleanedProjection = substitutedProjection.map(p =>
-          CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
-        )
-        agg.copy(aggregateExpressions = cleanedProjection)
-      }
+    // Collapse upper and lower Projects if and only if their overlapped expressions are all
+    // deterministic.
+    upper.exists(_.collect {
+      case a: Attribute if aliases.contains(a) => aliases(a).child
+    }.exists(!_.deterministic))
+  }
+
+  private def buildCleanedProjectList(
+      upper: Seq[NamedExpression],
+      lower: Seq[NamedExpression]): Seq[NamedExpression] = {
+    // Create a map of Aliases to their values from the lower projection.
+    // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
+    val aliases = collectAliases(lower)
+
+    // Substitute any attributes that are produced by the lower projection, so that we safely
+    // eliminate it.
+    // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
+    val rewrittenUpper = upper.map(_.transform {
+      case a: Attribute => aliases.getOrElse(a, a)
+    })
+    // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
+    rewrittenUpper.map { p =>
+      CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
+    }
   }
 }
 
