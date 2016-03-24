@@ -290,5 +290,15 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         IsNotNull(resolveColumn(tr, "c")),
         IsNotNull(resolveColumn(tr, "d")),
         IsNotNull(resolveColumn(tr, "e")))))
+
+    // The constraint IsNotNull(IsNotNull(expr)) doesn't guarantee expr is not null.
+    verifyConstraints(
+      tr.where('a.attr === 'c.attr &&
+        IsNotNull(IsNotNull(resolveColumn(tr, "b")))).analyze.constraints,
+      ExpressionSet(Seq(
+        resolveColumn(tr, "a") === resolveColumn(tr, "c"),
+        IsNotNull(IsNotNull(resolveColumn(tr, "b"))),
+        IsNotNull(resolveColumn(tr, "a")),
+        IsNotNull(resolveColumn(tr, "c")))))
   }
 }

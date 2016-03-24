@@ -55,7 +55,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   private def scanNullIntolerantExpr(expr: Expression): Seq[Attribute] = expr match {
     case a: Attribute => Seq(a)
-    case _: NullIntolerant | _: IsNotNull => expr.children.flatMap(scanNullIntolerantExpr)
+    case _: NullIntolerant | IsNotNull(_: NullIntolerant) =>
+      expr.children.flatMap(scanNullIntolerantExpr)
     case _ => Seq.empty[Attribute]
   }
 
