@@ -367,6 +367,7 @@ class SQLTests(ReusedPySparkTestCase):
         df2 = self.sqlCtx.createDataFrame(input)
         df2._schema = WrappedJStructType(df2._jdf.schema())
         df3 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
+        self.assertEqual(df.schema.fields, df2.schema.fields)
         self.assertEqual(df.schema, df2.schema)
         self.assertEqual(df.schema, df3.schema)
 
