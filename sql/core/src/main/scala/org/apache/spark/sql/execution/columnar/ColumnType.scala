@@ -66,6 +66,24 @@ private[columnar] object ByteBufferHelper {
     buffer.position(pos + 8)
     Platform.getDouble(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
   }
+
+  def putShort(buffer: ByteBuffer, value: Short): Unit = {
+    val pos = buffer.position()
+    buffer.position(pos + 2)
+    Platform.putShort(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos, value)
+  }
+
+  def putInt(buffer: ByteBuffer, value: Int): Unit = {
+    val pos = buffer.position()
+    buffer.position(pos + 4)
+    Platform.putInt(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos, value)
+  }
+
+  def putLong(buffer: ByteBuffer, value: Long): Unit = {
+    val pos = buffer.position()
+    buffer.position(pos + 8)
+    Platform.putLong(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos, value)
+  }
 }
 
 /**
