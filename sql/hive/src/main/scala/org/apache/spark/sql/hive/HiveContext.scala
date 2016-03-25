@@ -603,12 +603,12 @@ private[hive] object HiveContext {
     .doc("Version of the Hive metastore. Available options are " +
         s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
     .stringConf
-    .withDefault(hiveExecutionVersion)
+    .createWithDefault(hiveExecutionVersion)
 
   val HIVE_EXECUTION_VERSION = SQLConfigBuilder("spark.sql.hive.version")
     .doc("Version of Hive used internally by Spark SQL.")
     .stringConf
-    .withDefault(hiveExecutionVersion)
+    .createWithDefault(hiveExecutionVersion)
 
   val HIVE_METASTORE_JARS = SQLConfigBuilder("spark.sql.hive.metastore.jars")
     .doc(s"""
@@ -624,13 +624,13 @@ private[hive] object HiveContext {
       | 3. A classpath in the standard format for both Hive and Hadoop.
       """.stripMargin)
     .stringConf
-    .withDefault("builtin")
+    .createWithDefault("builtin")
 
   val CONVERT_METASTORE_PARQUET = SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet")
     .doc("When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
       "the built in support.")
     .booleanConf
-    .withDefault(true)
+    .createWithDefault(true)
 
   val CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING =
     SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet.mergeSchema")
@@ -638,13 +638,13 @@ private[hive] object HiveContext {
         "different Parquet data files. This configuration is only effective " +
         "when \"spark.sql.hive.convertMetastoreParquet\" is true.")
       .booleanConf
-      .withDefault(false)
+      .createWithDefault(false)
 
   val CONVERT_CTAS = SQLConfigBuilder("spark.sql.hive.convertCTAS")
     .doc("When true, a table created by a Hive CTAS statement (no USING clause) will be " +
       "converted to a data source table, using the data source set by spark.sql.sources.default.")
     .booleanConf
-    .withDefault(false)
+    .createWithDefault(false)
 
   val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
@@ -654,7 +654,7 @@ private[hive] object HiveContext {
       "shared. For example, custom appenders that are used by log4j.")
     .stringConf
     .toSequence
-    .withDefault(jdbcPrefixes)
+    .createWithDefault(jdbcPrefixes)
 
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
@@ -665,12 +665,12 @@ private[hive] object HiveContext {
       "declared in a prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).")
     .stringConf
     .toSequence
-    .withDefault(Nil)
+    .createWithDefault(Nil)
 
   val HIVE_THRIFT_SERVER_ASYNC = SQLConfigBuilder("spark.sql.hive.thriftServer.async")
     .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
     .booleanConf
-    .withDefault(true)
+    .createWithDefault(true)
 
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
   def newTemporaryConfiguration(useInMemoryDerby: Boolean): Map[String, String] = {

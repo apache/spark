@@ -104,12 +104,12 @@ private[spark] class TypedConfigBuilder[T](
   }
 
   /** Creates a [[ConfigEntry]] that does not require a default value. */
-  def optional: OptionalConfigEntry[T] = {
+  def createOptional: OptionalConfigEntry[T] = {
     new OptionalConfigEntry[T](parent.key, converter, stringConverter, parent._doc, parent._public)
   }
 
   /** Creates a [[ConfigEntry]] that has a default value. */
-  def withDefault(default: T): ConfigEntry[T] = {
+  def createWithDefault(default: T): ConfigEntry[T] = {
     val transformedDefault = converter(stringConverter(default))
     new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter, stringConverter,
       parent._doc, parent._public)
@@ -119,7 +119,7 @@ private[spark] class TypedConfigBuilder[T](
    * Creates a [[ConfigEntry]] that has a default value. The default value is provided as a
    * [[String]] and must be a valid value for the entry.
    */
-  def withDefaultString(default: String): ConfigEntry[T] = {
+  def createWithDefaultString(default: String): ConfigEntry[T] = {
     val typedDefault = converter(default)
     new ConfigEntryWithDefault[T](parent.key, typedDefault, converter, stringConverter, parent._doc,
       parent._public)
@@ -139,7 +139,7 @@ private[spark] case class ConfigBuilder(key: String) {
   var _public = true
   var _doc = ""
 
-  def internal: ConfigBuilder = {
+  def internal(): ConfigBuilder = {
     _public = false
     this
   }
