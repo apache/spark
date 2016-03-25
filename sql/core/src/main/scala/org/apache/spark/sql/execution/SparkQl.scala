@@ -126,7 +126,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             extractProps(propList, "TOK_TABLEPROPERTY")
           case _ => parseFailed("Invalid CREATE DATABASE command", node)
         }.toMap
-        CreateDatabase(databaseName, ifNotExists.isDefined, location, comment, props)(node.source)
+        CreateDatabase(databaseName, ifNotExists.isDefined, location, comment, props)
 
       // CREATE [TEMPORARY] FUNCTION [db_name.]function_name AS class_name
       // [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri'] ];

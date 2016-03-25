@@ -44,14 +44,6 @@ abstract class NativeDDLCommand(val sql: String) extends RunnableCommand {
 
 }
 
-case class CreateDatabase(
-    databaseName: String,
-    ifNotExists: Boolean,
-    path: Option[String],
-    comment: Option[String],
-    props: Map[String, String])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
 case class CreateFunction(
     functionName: String,
     alias: String,

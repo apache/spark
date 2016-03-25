@@ -40,7 +40,7 @@ class DDLCommandSuite extends PlanTest {
       ifNotExists = true,
       Some("/home/user/db"),
       Some("database_comment"),
-      Map("a" -> "a", "b" -> "b", "c" -> "c"))(sql)
+      Map("a" -> "a", "b" -> "b", "c" -> "c"))
     comparePlans(parsed, expected)
   }
 

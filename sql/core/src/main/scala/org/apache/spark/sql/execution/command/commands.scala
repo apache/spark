@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -315,6 +316,29 @@ case class DescribeCommand(
       Row(field.name, field.dataType.simpleString, comment)
     }
   }
+}
+
+case class CreateDatabase(
+    databaseName: String,
+    ifNotExists: Boolean,
+    path: Option[String],
+    comment: Option[String],
+    props: Map[String, String])
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    catalog.createDatabase(
+      CatalogDatabase(
+        databaseName,
+        comment.getOrElse(""),
+        path.getOrElse(catalog.getDefaultPath),
+        props),
+      ifNotExists)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
 }
 
 /**
