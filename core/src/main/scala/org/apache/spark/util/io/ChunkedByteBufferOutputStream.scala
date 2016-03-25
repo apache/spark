@@ -34,6 +34,8 @@ private[spark] class ChunkedByteBufferOutputStream(
     allocator: Int => ByteBuffer)
   extends OutputStream {
 
+  private[this] var toChunkedByteBufferWasCalled = false
+
   private val chunks = new ArrayBuffer[ByteBuffer]
 
   /** Index of the last chunk. Starting with -1 when the chunks array is empty. */
@@ -71,6 +73,7 @@ private[spark] class ChunkedByteBufferOutputStream(
 
   @inline
   private def allocateNewChunkIfNeeded(): Unit = {
+    require(!toChunkedByteBufferWasCalled, "cannot write after toChunkedByteBuffer() is called")
     if (position == chunkSize) {
       chunks += allocator(chunkSize)
       lastChunkIndex += 1
@@ -79,6 +82,8 @@ private[spark] class ChunkedByteBufferOutputStream(
   }
 
   def toChunkedByteBuffer: ChunkedByteBuffer = {
+    require(!toChunkedByteBufferWasCalled, "toChunkedByteBuffer() can only be called once")
+    toChunkedByteBufferWasCalled = true
     if (lastChunkIndex == -1) {
       new ChunkedByteBuffer(Array.empty[ByteBuffer])
     } else {

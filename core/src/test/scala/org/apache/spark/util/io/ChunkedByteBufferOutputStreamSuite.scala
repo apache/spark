@@ -26,8 +26,6 @@ import org.apache.spark.SparkFunSuite
 
 class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
 
-  // TODO(josh): only legal to call toChunkedByteBuffer once; enforce this and fix tests
-
   test("empty output") {
     val o = new ChunkedByteBufferOutputStream(1024, ByteBuffer.allocate)
     assert(o.toChunkedByteBuffer.size === 0)
@@ -36,16 +34,18 @@ class ChunkedByteBufferOutputStreamSuite extends SparkFunSuite {
   test("write a single byte") {
     val o = new ChunkedByteBufferOutputStream(1024, ByteBuffer.allocate)
     o.write(10)
-    assert(o.toChunkedByteBuffer.getChunks().length === 1)
-    assert(o.toChunkedByteBuffer.getChunks().head.array().toSeq === Seq(10.toByte))
+    val chunkedByteBuffer = o.toChunkedByteBuffer
+    assert(chunkedByteBuffer.getChunks().length === 1)
+    assert(chunkedByteBuffer.getChunks().head.array().toSeq === Seq(10.toByte))
   }
 
   test("write a single near boundary") {
     val o = new ChunkedByteBufferOutputStream(10, ByteBuffer.allocate)
     o.write(new Array[Byte](9))
     o.write(99)
-    assert(o.toChunkedByteBuffer.getChunks().length === 1)
-    assert(o.toChunkedByteBuffer.getChunks().head.array()(9) === 99.toByte)
+    val chunkedByteBuffer = o.toChunkedByteBuffer
+    assert(chunkedByteBuffer.getChunks().length === 1)
+    assert(chunkedByteBuffer.getChunks().head.array()(9) === 99.toByte)
   }
 
   test("write a single at boundary") {
