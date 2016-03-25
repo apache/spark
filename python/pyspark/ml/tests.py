@@ -657,8 +657,18 @@ class PersistenceTest(PySparkTestCase):
                 pass
 
     def test_write_property(self):
-        wrt = MLWritable()
-        self.assertEqual(isinstance(type(wrt).write, property), True)
+        lr = LinearRegression(maxIter=1)
+        path = tempfile.mkdtemp()
+        lr_path = path + "/lr"
+        lr.write.save(lr_path)
+        lr2 = LinearRegression.load(lr_path)
+        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
+                         "Loaded LinearRegression instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
 
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)

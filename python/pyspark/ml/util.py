@@ -142,7 +142,7 @@ class MLWritable(object):
 
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
+        self.write.save(path)
 
 
 @inherit_doc
@@ -151,6 +151,8 @@ class JavaMLWritable(MLWritable):
     (Private) Mixin for ML instances that provide :py:class:`JavaMLWriter`.
     """
 
+    @property
+    @since(2.0)
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
         return JavaMLWriter(self)
