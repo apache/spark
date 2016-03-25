@@ -249,24 +249,3 @@ test_that("survreg", {
     expect_equal(predict(model, rData)[[1]], 3.724591, tolerance = 1e-4)
   }
 })
-
-test_that("survreg2", {
-  library(survival)
-  data(ovarian)
-  df <- suppressWarnings(createDataFrame(sqlContext, ovarian))
-
-  model <- SparkR::survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
-  stats <- summary(model)
-  coefs <- as.vector(stats$coefficients[, 1][1:3])
-  scale <- exp(stats$coefficients[, 1][4])
-
-  rModel <- survival::survreg(Surv(futime, fustat) ~ ecog.ps + rx, ovarian)
-  rCoefs <- as.vector(coef(rModel))
-  rScale <- rModel$scale
-
-  expect_equal(coefs, rCoefs, tolerance = 1e-4)
-  expect_true(abs(scale - rScale) < 1e-4)
-  expect_true(all(
-    rownames(stats$coefficients) ==
-    c("(Intercept)", "ecog_ps", "rx", "Log(scale)")))
-})
