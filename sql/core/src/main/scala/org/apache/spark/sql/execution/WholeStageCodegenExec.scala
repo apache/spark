@@ -24,7 +24,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -234,10 +237,19 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
   }
 
   override def doProduce(ctx: CodegenContext): String = {
+    ctx.enableColumnCodeGen = true
     val input = ctx.freshName("input")
+    ctx.inputHolder = input
     // Right now, InputAdapter is only used when there is one input RDD.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
-    val row = ctx.freshName("row")
+
+    if (ctx.isRow) {
+      val exprRows = output.zipWithIndex.map(x =>
+        new BoundReference(x._2, x._1.dataType, x._1.nullable))
+      val row = ctx.freshName("row")
+      ctx.INPUT_ROW = row
+      ctx.currentVars = null
+      val columns = exprRows.map(_.gen(ctx))
     s"""
        | while ($input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
@@ -245,6 +257,39 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
        |   if (shouldStop()) return;
        | }
      """.stripMargin
+    } else {
+      val columnarBatchClz = "org.apache.spark.sql.execution.columnar.CachedBatch"
+      val columnarItrClz = "org.apache.spark.sql.execution.columnar.ColumnarIterator"
+      val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
+      val batch = ctx.columnarBatchName
+      val idx = ctx.columnarBatchIdxName
+      val rowidx = ctx.freshName("rowIdx")
+      val col = ctx.freshName("col")
+      val numrows = ctx.freshName("numRows")
+      val colVars = output.indices.map(i => ctx.freshName("col" + i))
+      val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
+        ctx.addMutableState(columnVectorClz, name, s"$name = null;", s"$name = null;")
+        s"$name = batch.column((($columnarItrClz)$input).getColumnIndexes()[$i]);" }
+
+      ctx.currentVars = null
+      val exprCols = (output zip colVars).map { case (attr, colVar) =>
+        new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable) }
+      val columns = exprCols.map(_.gen(ctx))
+    s"""
+       | org.apache.spark.sql.execution.columnar.CachedBatch batch =
+       |   (org.apache.spark.sql.execution.columnar.CachedBatch) $batch;
+       |
+       | if ($idx == 0) {
+       |   ${columnAssigns.mkString("", "\n", "")}
+       | }
+       |
+       | int $numrows = batch.numRows();
+       | while (!shouldStop() && ($idx < $numrows)) {
+       |   int $rowidx = $idx++;
+       |   ${consume(ctx, columns, col).trim}
+       | }
+     """.stripMargin
+    }
   }
 
   override def generateTreeString(
@@ -329,9 +374,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
         ${ctx.declareAddedFunctions()}
 
-        protected void processNext() throws java.io.IOException {
-          ${code.trim}
-        }
+        ${codeProcess}
       }
       """.trim
 
