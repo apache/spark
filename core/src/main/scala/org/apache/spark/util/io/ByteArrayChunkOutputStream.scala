@@ -30,10 +30,10 @@ import scala.collection.mutable.ArrayBuffer
 private[spark]
 class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
 
-  private val chunks = new ArrayBuffer[Array[Byte]]
+  private[this] val chunks = new ArrayBuffer[Array[Byte]]
 
   /** Index of the last chunk. Starting with -1 when the chunks array is empty. */
-  private var lastChunkIndex = -1
+  private[this] var lastChunkIndex = -1
 
   /**
    * Next position to write in the last chunk.
@@ -41,12 +41,16 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
    * If this equals chunkSize, it means for next write we need to allocate a new chunk.
    * This can also never be 0.
    */
-  private var position = chunkSize
+  private[this] var position = chunkSize
+  private[this] var _size = 0
+
+  def size: Long = _size
 
   override def write(b: Int): Unit = {
     allocateNewChunkIfNeeded()
     chunks(lastChunkIndex)(position) = b.toByte
     position += 1
+    _size += 1
   }
 
   override def write(bytes: Array[Byte], off: Int, len: Int): Unit = {
@@ -58,6 +62,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
       written += thisBatch
       position += thisBatch
     }
+    _size += len
   }
 
   @inline
