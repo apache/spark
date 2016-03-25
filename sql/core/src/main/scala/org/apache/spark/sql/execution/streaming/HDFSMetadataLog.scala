@@ -304,7 +304,7 @@ object HDFSMetadataLog {
      */
     override def rename(srcPath: Path, destPath: Path): Unit = {
       if (!fs.exists(srcPath)) {
-        throw new FileNotFoundException(s"Source path already exists: $srcPath")
+        throw new FileNotFoundException(s"Source path does not exist: $srcPath")
       }
       if (fs.exists(destPath)) {
         throw new FileAlreadyExistsException(s"Destination path already exists: $destPath")
