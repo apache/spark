@@ -2667,8 +2667,8 @@ setMethod("sort_array",
 #' plot <- plot + xlab("Sepal_Length") + ylab("Frequency")   
 #' } 
 setMethod("histogram",
-          signature(df = "DataFrame"),
-          function(df, colname, nbins = 10) {
+          signature(df = "DataFrame", col="characterOrColumn"),
+          function(df, col, nbins = 10) {
             # Validate nbins
             if (nbins < 2) {
               stop("The number of bins must be a positive integer number greater than 1.")
@@ -2677,19 +2677,28 @@ setMethod("histogram",
             # Round nbins to the smallest integer
             nbins <- floor(nbins)
 
-            # Validate colname
-            if (is.null(colname) | is.na(colname)) {
-              stop("colname must be specified.")
-            }
-            if (!colname %in% names(df)) {
-              stop("Specified colname does not belong to the given DataFrame.")
+            # Validate col
+            if (is.null(col)) {
+              stop("col must be specified.")
             }
 
-            # Filter NA values in the target column
-            df <- na.omit(df[, colname])
+            colname <- col
+            x <- if (class(col) == "character") {
+              if (!colname %in% names(df)) {
+                stop("Specified colname does not belong to the given DataFrame.")
+              }
 
-            # TODO: This will be when improved SPARK-9325 or SPARK-13436 are fixed
-            x <- eval(parse(text = paste0("df$", colname)))
+              # Filter NA values in the target column
+              df <- na.omit(df[, colname])
+
+              # TODO: This will be when improved SPARK-9325 or SPARK-13436 are fixed
+              eval(parse(text = paste0("df$", colname)))
+            } else if (class(col) == "Column") {
+              # Append the given column to the dataset
+              df$x <- col
+              colname <- "x"
+              col
+            }
 
             stats <- collect(describe(df[, colname]))
             min <- as.numeric(stats[4, 2])

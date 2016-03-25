@@ -1899,13 +1899,29 @@ test_that("Method str()", {
 
 test_that("Histogram", {
 
-  # Basic histogram test
+  # Basic histogram test with colname
   expect_equal(
     all(histogram(irisDF, "Petal_Width", 8) ==
         data.frame(bins = seq(0, 7),
                    counts = c(48, 2, 7, 21, 24, 19, 15, 14),
                    centroids = seq(0, 7) * 0.3 + 0.25)),
         TRUE)
+
+  # Basic histogram test with Column
+  expect_equal(
+    all(histogram(irisDF, irisDF$Petal_Width, 8) ==
+          data.frame(bins = seq(0, 7),
+                     counts = c(48, 2, 7, 21, 24, 19, 15, 14),
+                     centroids = seq(0, 7) * 0.3 + 0.25)),
+    TRUE)
+
+  # Basic histogram test with derived column
+  expect_equal(
+    all(round(histogram(irisDF, irisDF$Petal_Width + 1, 8), 2) ==
+          data.frame(bins = seq(0, 7),
+                     counts = c(48, 2, 7, 21, 24, 19, 15, 14),
+                     centroids = seq(0, 7) * 0.3 + 1.25)),
+    TRUE)
 
   # Missing nbins
   expect_equal(length(histogram(irisDF, "Petal_Width")$counts), 10)

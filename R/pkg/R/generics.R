@@ -101,7 +101,7 @@ setGeneric("glom", function(x) { standardGeneric("glom") })
 
 # @rdname histogram
 # @export
-setGeneric("histogram", function(df, colname, nbins=10) { standardGeneric("histogram") })
+setGeneric("histogram", function(df, col, nbins=10) { standardGeneric("histogram") })
 
 # @rdname keyBy
 # @export
