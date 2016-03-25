@@ -1700,9 +1700,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, M
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
-        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
-        defaultStopWords = stopWordsObj.loadStopWords("english")
-        self._setDefault(stopWords=defaultStopWords, caseSensitive=False)
+        self._setDefault(stopWords=self.loadStopWords("english"), caseSensitive=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1747,6 +1745,16 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, M
         Get whether to do a case sensitive comparison over the stop words.
         """
         return self.getOrDefault(self.caseSensitive)
+
+    @staticmethod
+    def loadStopWords(language):
+        """
+        Load stop words for the language
+        Supported languages: danish, dutch, english, finnish, french, german, hungarian,
+        italian, norwegian, portuguese, russian, spanish, swedish, turkish
+        """
+        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
+        return stopWordsObj.loadStopWords(language)
 
 
 @inherit_doc
