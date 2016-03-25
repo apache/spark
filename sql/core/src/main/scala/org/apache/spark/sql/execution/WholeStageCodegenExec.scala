@@ -284,7 +284,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
        | }
        |
        | int $numrows = batch.numRows();
-       | while ($idx < $numrows)) {
+       | while ($idx < $numrows) {
        |   int $rowidx = $idx++;
        |   ${consume(ctx, columns, col).trim}
        |   if (shouldStop()) return;
