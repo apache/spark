@@ -614,14 +614,14 @@ class WrappedJStructType(StructType):
     def dtypes(self):
         java_fields = list(self._jstructtype.fields())
         return list(map(lambda f: (str(f.name()),
-                              _parse_datatype_json_string(f.dataType().json()).simpleString()),
-                   java_fields))
+                                   _parse_datatype_json_string(f.dataType().json()).simpleString()),
+                        java_fields))
 
     @property
     def types(self):
         java_fields = list(self._jstructtype.fields())
         return list(map(lambda f: _parse_datatype_json_string(f.dataType().json()),
-                   java_fields))
+                        java_fields))
 
     @property
     def columns(self):
