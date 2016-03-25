@@ -26,10 +26,7 @@ import org.apache.spark.sql.SQLContext
  */
 trait SharedSQLContext extends SQLTestUtils {
 
-  protected val sparkConf =
-    new SparkConf()
-      .setMaster("local")
-      .setAppName(this.getClass.getSimpleName)
+  protected val sparkConf = new SparkConf()
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
@@ -50,7 +47,7 @@ trait SharedSQLContext extends SQLTestUtils {
   protected override def beforeAll(): Unit = {
     SQLContext.clearSqlListener()
     if (_ctx == null) {
-      _ctx = new TestSQLContext(new SparkContext(sparkConf))
+      _ctx = new TestSQLContext(sparkConf)
     }
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()

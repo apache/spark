@@ -35,11 +35,9 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
+  /** To avoid caching of FS objects */
   override protected val sparkConf =
-    new SparkConf()
-      .setMaster("local")
-      .setAppName(this.getClass.getSimpleName)
-      .set(s"spark.hadoop.fs.$scheme.impl.disable.cache", "true") // to avoid caching of FS objects
+    new SparkConf().set(s"spark.hadoop.fs.$scheme.impl.disable.cache", "true")
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
 
