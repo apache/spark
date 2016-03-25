@@ -18,8 +18,10 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.tree.DecisionTreeModel
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
@@ -33,6 +35,7 @@ private[ml] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to train a gradient boosting model
+   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @param seed Random seed.
    * @return tuple of ensemble models and weights:
@@ -58,6 +61,7 @@ private[ml] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to validate a gradient boosting model
+   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @param validationInput Validation dataset.
    *                        This dataset should be different from the training dataset,
@@ -93,6 +97,7 @@ private[ml] object GradientBoostedTrees extends Logging {
   /**
    * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
+   *
    * @param data: training data.
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
@@ -115,6 +120,7 @@ private[ml] object GradientBoostedTrees extends Logging {
   /**
    * Update a zipped predictionError RDD
    * (as obtained with computeInitialPredictionAndError)
+   *
    * @param data: training data.
    * @param predictionAndError: predictionError RDD
    * @param treeWeight: Learning rate.
@@ -142,6 +148,7 @@ private[ml] object GradientBoostedTrees extends Logging {
 
   /**
    * Internal method for performing regression using trees as base learners.
+   *
    * @param input training dataset
    * @param validationInput validation dataset, ignored if validate is set to false.
    * @param boostingStrategy boosting parameters
@@ -279,5 +286,25 @@ private[ml] object GradientBoostedTrees extends Logging {
     } else {
       (baseLearners, baseLearnerWeights)
     }
+  }
+
+  /**
+   * Given a boosted tree ensemble, compute the importance of each feature.
+   *
+   * This feature importance is the average of feature importances across all trees in the
+   * ensemble.
+   *
+   * References:
+   *  Jerome H. Friedman. "Greedy Function Approximation: A Gradient Boosting Machine,"
+   *  February, 1999.
+   *
+   * @param trees  Unweighted boosted collection of trees.
+   * @param numFeatures  Number of features in model (even if not all are explicitly used by
+   *                     the model).
+   *                     If -1, then numFeatures is set based on the max feature index in all trees.
+   * @return  Feature importance values, of length numFeatures.
+   */
+  private[ml] def featureImportances(trees: Array[DecisionTreeModel], numFeatures: Int): Vector = {
+    RandomForest.featureImportances(trees, numFeatures)
   }
 }

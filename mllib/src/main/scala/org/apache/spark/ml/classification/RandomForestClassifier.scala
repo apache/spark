@@ -222,16 +222,10 @@ final class RandomForestClassificationModel private[ml] (
   /**
    * Estimate of the importance of each feature.
    *
-   * This generalizes the idea of "Gini" importance to other losses,
-   * following the explanation of Gini importance from "Random Forests" documentation
-   * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+   * Each feature's importance is the average of that its importance across all trees in
+   * the ensemble.
    *
-   * This feature importance is calculated as follows:
-   *  - Average over trees:
-   *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
-   *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree to sum to 1.
-   *  - Normalize feature importance vector to sum to 1.
+   * @see [[DecisionTreeClassificationModel.featureImportances]]
    */
   @Since("1.5.0")
   lazy val featureImportances: Vector = RandomForest.featureImportances(trees, numFeatures)
