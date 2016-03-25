@@ -239,11 +239,12 @@ private[spark] class Executor(
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
           if (freedMemory > 0) {
-            val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
+            val errMsg = s"Potential managed memory leak detected; " +
+              s"size = $freedMemory bytes, TID = $taskId.  See SPARK-14168."
             if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false) && !threwException) {
               throw new SparkException(errMsg)
             } else {
-              logError(errMsg)
+              logWarning(errMsg)
             }
           }
 
