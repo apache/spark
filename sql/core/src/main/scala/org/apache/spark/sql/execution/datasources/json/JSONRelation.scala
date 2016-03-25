@@ -138,7 +138,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
     val fullSchema = dataSchema.toAttributes ++ partitionSchema.toAttributes
     val joinedRow = new JoinedRow()
-    val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
     file => {
       val lines = new HadoopFileLinesReader(file, broadcastedConf.value.value).map(_.toString)
@@ -149,6 +148,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         columnNameOfCorruptRecord,
         parsedOptions)
 
+      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
       rows.map { row =>
         appendPartitionColumns(joinedRow(row, file.partitionValues))
       }

@@ -36,6 +36,7 @@ class HadoopFileLinesReader(file: PartitionedFile, conf: Configuration) extends 
       new Path(new URI(file.filePath)),
       file.start,
       file.length,
+      // TODO: Implement Locality
       Array.empty)
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
