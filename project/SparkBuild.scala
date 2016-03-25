@@ -263,8 +263,14 @@ object SparkBuild extends PomBuild {
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
 
-  /* Set up tasks to copy dependencies during packaging. */
-  copyJarsProjects.foreach(enable(CopyDependencies.settings))
+  /*
+   * Set up tasks to copy dependencies during packaging. This step can be disabled in the command
+   * line, so that dev/mima can run without trying to copy these files again and potentially
+   * causing issues.
+   */
+  if (!"false".equals(System.getProperty("copyDependencies"))) {
+    copyJarsProjects.foreach(enable(CopyDependencies.settings))
+  }
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
