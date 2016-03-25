@@ -354,7 +354,7 @@ private[spark] class MemoryStore(
       // Synchronize so that transfer is atomic
       memoryManager.synchronized {
         releaseUnrollMemoryForThisTask(unrollMemoryUsedByThisBlock)
-        val success = memoryManager.acquireStorageMemory(blockId, entry.size)
+        val success = memoryManager.acquireStorageMemory(blockId, entry.size, MemoryMode.ON_HEAP)
         assert(success, "transferring unroll memory to storage memory failed")
       }
       entries.synchronized {
