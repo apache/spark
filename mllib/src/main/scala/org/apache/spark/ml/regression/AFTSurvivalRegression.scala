@@ -48,8 +48,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
    * Param for censor column name.
    * The value of this column could be 0 or 1.
    * If the value is 1, it means the event has occurred i.e. uncensored; otherwise censored.
-    *
-    * @group param
+   * @group param
    */
   @Since("1.6.0")
   final val censorCol: Param[String] = new Param(this, "censorCol", "censor column name")
@@ -63,8 +62,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
    * Param for quantile probabilities array.
    * Values of the quantile probabilities array should be in the range (0, 1)
    * and the array should be non-empty.
-    *
-    * @group param
+   * @group param
    */
   @Since("1.6.0")
   final val quantileProbabilities: DoubleArrayParam = new DoubleArrayParam(this,
@@ -79,8 +77,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   /**
    * Param for quantiles column name.
    * This column will output quantiles of corresponding quantileProbabilities if it is set.
-    *
-    * @group param
+   * @group param
    */
   @Since("1.6.0")
   final val quantilesCol: Param[String] = new Param(this, "quantilesCol", "quantiles column name")
@@ -96,8 +93,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 
   /**
    * Validates and transforms the input schema with the provided param map.
-    *
-    * @param schema input schema
+   * @param schema input schema
    * @param fitting whether this is in fitting or prediction
    * @return output schema
    */
@@ -158,8 +154,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   /**
    * Set if we should fit the intercept
    * Default is true.
-    *
-    * @group setParam
+   * @group setParam
    */
   @Since("1.6.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
@@ -168,8 +163,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   /**
    * Set the maximum number of iterations.
    * Default is 100.
-    *
-    * @group setParam
+   * @group setParam
    */
   @Since("1.6.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -179,8 +173,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    * Set the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-6.
-    *
-    * @group setParam
+   * @group setParam
    */
   @Since("1.6.0")
   def setTol(value: Double): this.type = set(tol, value)
@@ -438,8 +431,7 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
  *   \frac{\partial (-\iota)}{\partial (\log\sigma)}=
  *   \sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
  * }}}
-  *
-  * @param parameters including three part: The log of scale parameter, the intercept and
+ * @param parameters including three part: The log of scale parameter, the intercept and
  *                regression coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
  */
