@@ -23,6 +23,7 @@ private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
 
   def orderByOrdinal: Boolean
+  def groupByOrdinal: Boolean
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determin if two
@@ -48,11 +49,16 @@ object EmptyConf extends CatalystConf {
   override def orderByOrdinal: Boolean = {
     throw new UnsupportedOperationException
   }
+  override def groupByOrdinal: Boolean = {
+    throw new UnsupportedOperationException
+  }
 }
 
 /** A CatalystConf that can be used for local testing. */
 case class SimpleCatalystConf(
     caseSensitiveAnalysis: Boolean,
-    orderByOrdinal: Boolean = true)
+    orderByOrdinal: Boolean = true,
+    groupByOrdinal: Boolean = true)
+
   extends CatalystConf {
 }
