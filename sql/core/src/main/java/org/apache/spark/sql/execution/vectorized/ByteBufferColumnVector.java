@@ -137,7 +137,6 @@ public final class ByteBufferColumnVector extends ColumnVector {
 
   @Override
   public final boolean isNullAt(int rowId) {
-    System.out.println("isNullAt("+rowId+")="+nulls[rowId]);
     return nulls[rowId] == 1;
   }
 
