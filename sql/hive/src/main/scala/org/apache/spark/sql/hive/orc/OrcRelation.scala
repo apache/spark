@@ -26,19 +26,21 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
-import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, RecordWriter, Reporter, InputFormat => MapRedInputFormat, OutputFormat => MapRedOutputFormat}
+import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.hadoop.mapreduce._
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveMetastoreTypes, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
@@ -47,7 +49,7 @@ import org.apache.spark.util.SerializableConfiguration
 import org.apache.spark.util.collection.BitSet
 
 private[sql] class DefaultSource
-  extends FileFormat with DataSourceRegister with HiveInspectors with Serializable {
+  extends FileFormat with DataSourceRegister with Serializable {
 
   override def shortName(): String = "orc"
 
@@ -140,67 +142,52 @@ private[sql] class DefaultSource
     }
 
     val broadcastedConf = sqlContext.sparkContext.broadcast(new SerializableConfiguration(orcConf))
-    // Temporary variables used to avoid serialization issue
-    val _dataSchema = dataSchema
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
 
-      // Sets required columns
-      // TODO De-duplicates this part and `OrcFileScan.addColumnIds`
-      val physicalSchema = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf)).getOrElse {
-        sys.error("Failed to read schema from target ORC files.")
-      }
-      val ids = _dataSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
-      val (sortedIDs, sortedNames) = ids.zip(_dataSchema.fieldNames).sorted.unzip
-      HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+      // SPARK-8501: Empty ORC files always have an empty schema stored in their footer.  In this
+      // case, `OrcFileOperator.readSchema` returns `None`, and we can simply return an empty
+      // iterator.
+      val maybePhysicalSchema = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf))
 
-      val recordReaders = {
-        val job = Job.getInstance(conf)
-        FileInputFormat.setInputPaths(job, file.filePath)
+      maybePhysicalSchema.fold(Iterator.empty: Iterator[InternalRow]) { physicalSchema =>
+        OrcRelation.setRequiredColumns(conf, physicalSchema, dataSchema)
 
-        val inputFormat = new OrcNewInputFormat
-        val splits = inputFormat.getSplits(job)
+        // Creates `OrcRecordReader`s using a dummy `OrcNewInputFormat` containing only a single
+        // input file.
+        val orcRecordReaders = {
+          val job = Job.getInstance(conf)
+          FileInputFormat.setInputPaths(job, file.filePath)
 
-        splits.asScala.map { split =>
-          val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-          val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-          inputFormat.createRecordReader(split, hadoopAttemptContext)
-        }
-      }
+          val inputFormat = new OrcNewInputFormat
+          val splits = inputFormat.getSplits(job)
 
-      val orcStructIterator = recordReaders.iterator.flatMap {
-        new RecordReaderIterator[OrcStruct](_)
-      }
-
-      // TODO De-duplicates this part and `OrcFileScan.fillObject`
-      val deserializer = new OrcSerde
-      val maybeStructOI = OrcFileOperator.getObjectInspector(file.filePath, Some(conf))
-      val mutableRow = new SpecificMutableRow(_dataSchema.map(_.dataType))
-      val unsafeProjection = UnsafeProjection.create(_dataSchema)
-
-      maybeStructOI.map { oi =>
-        val (fieldRefs, fieldOrdinals) = _dataSchema.zipWithIndex.map {
-          case (field, ordinal) => oi.getStructFieldRef(field.name) -> ordinal
-        }.unzip
-
-        val unwrappers = fieldRefs.map(unwrapperFor)
-
-        orcStructIterator.map { value =>
-          val raw = deserializer.deserialize(value)
-          var i = 0
-          while (i < fieldRefs.length) {
-            val fieldValue = oi.getStructFieldData(raw, fieldRefs(i))
-            if (fieldValue == null) {
-              mutableRow.setNullAt(fieldOrdinals(i))
-            } else {
-              unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
-            }
-            i += 1
+          splits.asScala.map { split =>
+            val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
+            val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+            inputFormat.createRecordReader(split, hadoopAttemptContext)
           }
-          unsafeProjection(mutableRow)
         }
-      }.getOrElse(Iterator.empty)
+
+        val orcStructIterator = orcRecordReaders.iterator.flatMap {
+          new RecordReaderIterator[OrcStruct](_)
+        }
+
+        // Unwraps `OrcStruct`s to `UnsafeRow`s
+        val unsafeRowIterator = OrcRelation.unwrapOrcStructs(
+          file.filePath, conf, dataSchema, orcStructIterator
+        )
+
+        // Appends partition values
+        val fullOutput = dataSchema.toAttributes ++ partitionSchema.toAttributes
+        val joinedRow = new JoinedRow()
+        val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
+
+        unsafeRowIterator.map { dataRow =>
+          appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
+        }
+      }
     }
   }
 }
@@ -311,55 +298,6 @@ private[orc] case class OrcTableScan(
   extends Logging
   with HiveInspectors {
 
-  private def addColumnIds(
-      dataSchema: StructType,
-      output: Seq[Attribute],
-      conf: Configuration): Unit = {
-    val ids = output.map(a => dataSchema.fieldIndex(a.name): Integer)
-    val (sortedIds, sortedNames) = ids.zip(attributes.map(_.name)).sorted.unzip
-    HiveShim.appendReadColumns(conf, sortedIds, sortedNames)
-  }
-
-  // Transform all given raw `Writable`s into `InternalRow`s.
-  private def fillObject(
-      path: String,
-      conf: Configuration,
-      iterator: Iterator[Writable],
-      nonPartitionKeyAttrs: Seq[Attribute]): Iterator[InternalRow] = {
-    val deserializer = new OrcSerde
-    val maybeStructOI = OrcFileOperator.getObjectInspector(path, Some(conf))
-    val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
-    val unsafeProjection = UnsafeProjection.create(StructType.fromAttributes(nonPartitionKeyAttrs))
-
-    // SPARK-8501: ORC writes an empty schema ("struct<>") to an ORC file if the file contains zero
-    // rows, and thus couldn't give a proper ObjectInspector.  In this case we just return an empty
-    // partition since we know that this file is empty.
-    maybeStructOI.map { soi =>
-      val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.zipWithIndex.map {
-        case (attr, ordinal) =>
-          soi.getStructFieldRef(attr.name) -> ordinal
-      }.unzip
-      val unwrappers = fieldRefs.map(unwrapperFor)
-      // Map each tuple to a row object
-      iterator.map { value =>
-        val raw = deserializer.deserialize(value)
-        var i = 0
-        while (i < fieldRefs.length) {
-          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-          if (fieldValue == null) {
-            mutableRow.setNullAt(fieldOrdinals(i))
-          } else {
-            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
-          }
-          i += 1
-        }
-        unsafeProjection(mutableRow)
-      }
-    }.getOrElse {
-      Iterator.empty
-    }
-  }
-
   def execute(): RDD[InternalRow] = {
     val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
     val conf = job.getConfiguration
@@ -380,7 +318,7 @@ private[orc] case class OrcTableScan(
         .inferSchema(sqlContext, Map.empty, inputPaths)
         .getOrElse(sys.error("Failed to read schema from target ORC files."))
     // Sets requested columns
-    addColumnIds(dataSchema, attributes, conf)
+    OrcRelation.setRequiredColumns(conf, dataSchema, StructType.fromAttributes(attributes))
 
     if (inputPaths.isEmpty) {
       // the input path probably be pruned, return an empty RDD.
@@ -403,7 +341,12 @@ private[orc] case class OrcTableScan(
 
     rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iterator) =>
       val writableIterator = iterator.map(_._2)
-      fillObject(split.getPath.toString, wrappedConf.value, writableIterator, attributes)
+      OrcRelation.unwrapOrcStructs(
+        split.getPath.toString,
+        wrappedConf.value,
+        StructType.fromAttributes(attributes),
+        writableIterator
+      )
     }
   }
 }
@@ -413,7 +356,7 @@ private[orc] object OrcTableScan {
   private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 }
 
-private[orc] object OrcRelation {
+private[orc] object OrcRelation extends HiveInspectors {
   // The ORC compression short names
   val shortOrcCompressionCodecNames = Map(
     "none" -> CompressionKind.NONE,
@@ -429,5 +372,47 @@ private[orc] object OrcRelation {
     CompressionKind.ZLIB.name -> ".zlib",
     CompressionKind.LZO.name -> ".lzo"
   )
-}
 
+  def unwrapOrcStructs(
+      filePath: String,
+      conf: Configuration,
+      dataSchema: StructType,
+      iterator: Iterator[Writable]): Iterator[InternalRow] = {
+    val deserializer = new OrcSerde
+    val maybeStructOI = OrcFileOperator.getObjectInspector(filePath, Some(conf))
+    val mutableRow = new SpecificMutableRow(dataSchema.map(_.dataType))
+    val unsafeProjection = UnsafeProjection.create(dataSchema)
+
+    def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
+      val (fieldRefs, fieldOrdinals) = dataSchema.zipWithIndex.map {
+        case (field, ordinal) => oi.getStructFieldRef(field.name) -> ordinal
+      }.unzip
+
+      val unwrappers = fieldRefs.map(unwrapperFor)
+
+      iterator.map { value =>
+        val raw = deserializer.deserialize(value)
+        var i = 0
+        while (i < fieldRefs.length) {
+          val fieldValue = oi.getStructFieldData(raw, fieldRefs(i))
+          if (fieldValue == null) {
+            mutableRow.setNullAt(fieldOrdinals(i))
+          } else {
+            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          }
+          i += 1
+        }
+        unsafeProjection(mutableRow)
+      }
+    }
+
+    maybeStructOI.map(unwrap).getOrElse(Iterator.empty)
+  }
+
+  def setRequiredColumns(
+                          conf: Configuration, physicalSchema: StructType, requestedSchema: StructType): Unit = {
+    val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
+    val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
+    HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+  }
+}
