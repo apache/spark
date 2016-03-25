@@ -60,14 +60,21 @@ class SparkPlanner(
    * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
    */
   def pruneFilterProject(
-      projectList: Seq[NamedExpression],
-      filterPredicates: Seq[Expression],
+      inputProjectList: Seq[NamedExpression],
+      inputFilterPredicates: Seq[Expression],
       prunePushedDownFilters: Seq[Expression] => Seq[Expression],
       scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
-    val projectSet = AttributeSet(projectList.flatMap(_.references).map(_.withNullability(true)))
-    val filterSet =
-      AttributeSet(filterPredicates.flatMap(_.references).map(_.withNullability(true)))
+    val projectList = inputProjectList.map { _.transform {
+      case a: Attribute => a.withNullability(true)
+    }}.asInstanceOf[Seq[NamedExpression]]
+
+    val filterPredicates = inputFilterPredicates.map { _.transform {
+      case a: Attribute => a.withNullability(true)
+    }}
+
+    val projectSet = AttributeSet(projectList.flatMap(_.references))
+    val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
     val filterCondition: Option[Expression] =
       prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
 
