@@ -284,9 +284,10 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
        | }
        |
        | int $numrows = batch.numRows();
-       | while (!shouldStop() && ($idx < $numrows)) {
+       | while ($idx < $numrows)) {
        |   int $rowidx = $idx++;
        |   ${consume(ctx, columns, col).trim}
+       |   if (shouldStop()) return;
        | }
      """.stripMargin
     }
@@ -351,7 +352,79 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
    */
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
-    val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    ctx.isRow = true
+    val codeRow = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    val referUnsafeRow = child.find(c => c.isInstanceOf[CodegenSupport] &&
+      c.asInstanceOf[CodegenSupport].preferUnsafeRow) match {
+        case Some(c) => true
+        case None => false
+      }
+    val useInMemoryColumnar = child.find(c => c.isInstanceOf[InMemoryColumnarTableScan]) match {
+      case Some(c) => true
+      case None => false
+    }
+    val enableColumnCodeGen = ctx.enableColumnCodeGen && !referUnsafeRow && useInMemoryColumnar &&
+      sqlContext.getConf(SQLConf.COLUMN_VECTOR_CODEGEN.key).toBoolean
+    val codeCol = if (enableColumnCodeGen) {
+      ctx.isRow = false
+      child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    } else null
+
+    ctx.addMutableState("Object", ctx.columnarBatchName, s"${ctx.columnarBatchName} = null;")
+    ctx.addMutableState("int", ctx.columnarBatchIdxName, s"${ctx.columnarBatchIdxName} = 0;")
+
+    val codeProcess = if (codeCol == null) {
+      s"""
+      protected void processNext() throws java.io.IOException {
+        ${codeRow.trim}
+      }
+     """
+    } else {
+      s"""
+      private void processBatch(scala.collection.Iterator itr) throws java.io.IOException {
+        while (true) {
+          if (${ctx.columnarBatchIdxName} == 0) {
+            if (itr.hasNext()) {
+              ${ctx.columnarBatchName} = itr.next();
+            } else {
+              cleanup();
+              return;
+            }
+          }
+          ${codeCol.trim}
+
+          ${ctx.columnarBatchIdxName} = 0;
+        }
+      }
+
+      private void processRow() throws java.io.IOException {
+        ${codeRow.trim}
+      }
+
+      private void cleanup() {
+        ${ctx.columnarBatchName} = null;
+        ${ctx.cleanupMutableStates()}
+      }
+
+      protected void processNext() throws java.io.IOException {
+        org.apache.spark.sql.execution.columnar.ColumnarIterator columnItr = null;
+        if (${ctx.columnarBatchName} != null) {
+          columnItr = (org.apache.spark.sql.execution.columnar.ColumnarIterator)
+            ${ctx.inputHolder};
+          processBatch(columnItr.getInput());
+        } else if (${ctx.inputHolder} instanceof
+          org.apache.spark.sql.execution.columnar.ColumnarIterator &&
+          ((columnItr = (org.apache.spark.sql.execution.columnar.ColumnarIterator)
+              ${ctx.inputHolder}).isSupportColumnarCodeGen())) {
+          ${ctx.columnarBatchIdxName} = 0;
+          processBatch(columnItr.getInput());
+        } else {
+          processRow();
+        }
+      }
+     """.trim
+    }
+
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
