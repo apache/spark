@@ -136,7 +136,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("CreateMap") {
     def interlace(keys: Seq[Literal], values: Seq[Literal]): Seq[Literal] = {
-      keys.zip(values).flatMap { case (k, v) => Seq(k, v) }.map(Literal(_))
+      keys.zip(values).flatMap { case (k, v) => Seq(k, v) }
     }
 
     def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {

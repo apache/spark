@@ -160,7 +160,7 @@ object HiveTypeCoercion {
     })
   }
 
-  private def isSameType(exprs: Seq[Expression]): Boolean =
+  private def haveSameType(exprs: Seq[Expression]): Boolean =
     exprs.map(_.dataType).distinct.length == 1
 
   /**
@@ -446,7 +446,7 @@ object HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ CreateArray(children) if !isSameType(children) =>
+      case a @ CreateArray(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findTightestCommonTypeAndPromoteToString(types) match {
           case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
@@ -454,8 +454,8 @@ object HiveTypeCoercion {
         }
 
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
-        (!isSameType(m.keys) || !isSameType(m.values)) =>
-        val newKeys = if (isSameType(m.keys)) {
+        (!haveSameType(m.keys) || !haveSameType(m.values)) =>
+        val newKeys = if (haveSameType(m.keys)) {
           m.keys
         } else {
           val types = m.keys.map(_.dataType)
@@ -465,7 +465,7 @@ object HiveTypeCoercion {
           }
         }
 
-        val newValues = if (isSameType(m.values)) {
+        val newValues = if (haveSameType(m.values)) {
           m.values
         } else {
           val types = m.values.map(_.dataType)
@@ -495,21 +495,21 @@ object HiveTypeCoercion {
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
       // compatible with every child column.
-      case c @ Coalesce(es) if !isSameType(es) =>
+      case c @ Coalesce(es) if !haveSameType(es) =>
         val types = es.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
           case None => c
         }
 
-      case g @ Greatest(children) if !isSameType(children) =>
+      case g @ Greatest(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findTightestCommonType(types) match {
           case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
           case None => g
         }
 
-      case l @ Least(children) if !isSameType(children) =>
+      case l @ Least(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findTightestCommonType(types) match {
           case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
