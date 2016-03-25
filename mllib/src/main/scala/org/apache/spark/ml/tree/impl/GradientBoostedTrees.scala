@@ -286,8 +286,8 @@ private[ml] object GradientBoostedTrees extends Logging {
   /**
    * Given a boosted tree ensemble, compute the importance of each feature.
    *
-   * This feature importance is the average of feature importances across all trees in the
-   * ensemble.
+   * Each feature's importance is the average of its importance across all trees in
+   * the ensemble.
    *
    * References:
    *  - Jerome H. Friedman. "Greedy Function Approximation: A Gradient Boosting Machine,"

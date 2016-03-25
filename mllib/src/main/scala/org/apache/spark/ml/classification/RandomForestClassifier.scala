@@ -222,7 +222,7 @@ final class RandomForestClassificationModel private[ml] (
   /**
    * Estimate of the importance of each feature.
    *
-   * Each feature's importance is the average of that its importance across all trees in
+   * Each feature's importance is the average of its importance across all trees in
    * the ensemble.
    *
    * @see [[DecisionTreeClassificationModel.featureImportances]]
