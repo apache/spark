@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.{FileNotFoundException, IOException}
 import java.nio.ByteBuffer
-import java.util.{UUID, ConcurrentModificationException, EnumSet}
+import java.util.{ConcurrentModificationException, EnumSet, UUID}
 
 import scala.reflect.ClassTag
 
