@@ -80,11 +80,11 @@ class Analyzer(
       EliminateUnions),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
-      ResolveStar ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUpCast ::
+      ResolveOrdinalInOrderByAndGroupBy ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -374,79 +374,6 @@ class Analyzer(
   }
 
   /**
-   * Expand [[UnresolvedStar]] or [[ResolvedStar]] to the matching attributes in child's output.
-   */
-  object ResolveStar extends Rule[LogicalPlan] {
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case p: LogicalPlan if !p.childrenResolved => p
-
-      // If the projection list contains Stars, expand it.
-      case p: Project if containsStar(p.projectList) =>
-        val expanded = p.projectList.flatMap {
-          case s: Star => s.expand(p.child, resolver)
-          case ua @ UnresolvedAlias(_: UnresolvedFunction | _: CreateArray | _: CreateStruct, _) =>
-            UnresolvedAlias(child = expandStarExpression(ua.child, p.child)) :: Nil
-          case a @ Alias(_: UnresolvedFunction | _: CreateArray | _: CreateStruct, _) =>
-            a.withNewChildren(expandStarExpression(a.child, p.child) :: Nil)
-              .asInstanceOf[Alias] :: Nil
-          case o => o :: Nil
-        }
-        Project(projectList = expanded, p.child)
-      // If the aggregate function argument contains Stars, expand it.
-      case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        val expanded = a.aggregateExpressions.flatMap {
-          case s: Star => s.expand(a.child, resolver)
-          case o if containsStar(o :: Nil) => expandStarExpression(o, a.child) :: Nil
-          case o => o :: Nil
-        }.map(_.asInstanceOf[NamedExpression])
-        a.copy(aggregateExpressions = expanded)
-      // If the script transformation input contains Stars, expand it.
-      case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(
-          input = t.input.flatMap {
-            case s: Star => s.expand(t.child, resolver)
-            case o => o :: Nil
-          }
-        )
-      case g: Generate if containsStar(g.generator.children) =>
-        failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
-    }
-
-    /**
-     * Returns true if `exprs` contains a [[Star]].
-     */
-    def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
-
-    /**
-     * Expands the matching attribute.*'s in `child`'s output.
-     */
-    def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
-      expr.transformUp {
-        case f1: UnresolvedFunction if containsStar(f1.children) =>
-          f1.copy(children = f1.children.flatMap {
-            case s: Star => s.expand(child, resolver)
-            case o => o :: Nil
-          })
-        case c: CreateStruct if containsStar(c.children) =>
-          c.copy(children = c.children.flatMap {
-            case s: Star => s.expand(child, resolver)
-            case o => o :: Nil
-          })
-        case c: CreateArray if containsStar(c.children) =>
-          c.copy(children = c.children.flatMap {
-            case s: Star => s.expand(child, resolver)
-            case o => o :: Nil
-          })
-        // count(*) has been replaced by count(1)
-        case o if containsStar(o.children) =>
-          failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
-      }
-    }
-  }
-
-  /**
    * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from
    * a logical plan node's children.
    */
@@ -511,6 +438,29 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p: LogicalPlan if !p.childrenResolved => p
+
+      // If the projection list contains Stars, expand it.
+      case p: Project if containsStar(p.projectList) =>
+        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
+      // If the aggregate function argument contains Stars, expand it.
+      case a: Aggregate if containsStar(a.aggregateExpressions) =>
+        if (conf.groupByOrdinal && a.groupingExpressions.exists(IntegerIndex.unapply(_).nonEmpty)) {
+          failAnalysis(
+            "Group by position: star is not allowed to use in the select list " +
+              "when using ordinals in group by")
+        } else {
+          a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
+        }
+      // If the script transformation input contains Stars, expand it.
+      case t: ScriptTransformation if containsStar(t.input) =>
+        t.copy(
+          input = t.input.flatMap {
+            case s: Star => s.expand(t.child, resolver)
+            case o => o :: Nil
+          }
+        )
+      case g: Generate if containsStar(g.generator.children) =>
+        failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>
@@ -592,7 +542,7 @@ class Analyzer(
                 "access to the scope that this class was defined in.\n" +
                 "Try moving this class out of its parent class.")
           }
-          n.copy(outerPointer = Some(Literal.fromObject(outer)))
+          n.copy(outerPointer = Some(outer))
       }
     }
 
@@ -605,6 +555,59 @@ class Analyzer(
 
     def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
       AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
+    }
+
+    /**
+     * Build a project list for Project/Aggregate and expand the star if possible
+     */
+    private def buildExpandedProjectList(
+      exprs: Seq[NamedExpression],
+      child: LogicalPlan): Seq[NamedExpression] = {
+      exprs.flatMap {
+        // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
+        case s: Star => s.expand(child, resolver)
+        // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
+        case UnresolvedAlias(s: Star, _) => s.expand(child, resolver)
+        case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
+        case o => o :: Nil
+      }.map(_.asInstanceOf[NamedExpression])
+    }
+
+    /**
+     * Returns true if `exprs` contains a [[Star]].
+     */
+    def containsStar(exprs: Seq[Expression]): Boolean =
+      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+
+    /**
+     * Expands the matching attribute.*'s in `child`'s output.
+     */
+    def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
+      expr.transformUp {
+        case f1: UnresolvedFunction if containsStar(f1.children) =>
+          f1.copy(children = f1.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case c: CreateStruct if containsStar(c.children) =>
+          c.copy(children = c.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case c: CreateArray if containsStar(c.children) =>
+          c.copy(children = c.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case p: Murmur3Hash if containsStar(p.children) =>
+          p.copy(children = p.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        // count(*) has been replaced by count(1)
+        case o if containsStar(o.children) =>
+          failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
+      }
     }
   }
 
@@ -628,21 +631,23 @@ class Analyzer(
     }
   }
 
-  /**
-   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
-   * clause.  This rule detects such queries and adds the required attributes to the original
-   * projection, so that they will be available during sorting. Another projection is added to
-   * remove these attributes after sorting.
-   *
-   * This rule also resolves the position number in sort references. This support is introduced
-   * in Spark 2.0. Before Spark 2.0, the integers in Order By has no effect on output sorting.
-   * - When the sort references are not integer but foldable expressions, ignore them.
-   * - When spark.sql.orderByOrdinal is set to false, ignore the position numbers too.
-   */
-  object ResolveSortReferences extends Rule[LogicalPlan] {
+ /**
+  * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
+  * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
+  * select list. This support is introduced in Spark 2.0.
+  *
+  * - When the sort references or group by expressions are not integer but foldable expressions,
+  * just ignore them.
+  * - When spark.sql.orderByOrdinal/spark.sql.groupByOrdinal is set to false, ignore the position
+  * numbers too.
+  *
+  * Before the release of Spark 2.0, the literals in order/sort by and group by clauses
+  * have no effect on the results.
+  */
+  object ResolveOrdinalInOrderByAndGroupBy extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s: Sort if !s.child.resolved => s
-      // Replace the index with the related attribute for ORDER BY
+      case p if !p.childrenResolved => p
+      // Replace the index with the related attribute for ORDER BY,
       // which is a 1-base position of the projection list.
       case s @ Sort(orders, global, child)
           if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
@@ -659,10 +664,41 @@ class Analyzer(
         }
         Sort(newOrders, global, child)
 
+      // Replace the index with the corresponding expression in aggregateExpressions. The index is
+      // a 1-base position of aggregateExpressions, which is output columns (select expression)
+      case a @ Aggregate(groups, aggs, child)
+          if conf.groupByOrdinal && aggs.forall(_.resolved) &&
+            groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
+        val newGroups = groups.map {
+          case IntegerIndex(index) if index > 0 && index <= aggs.size =>
+            aggs(index - 1) match {
+              case e if ResolveAggregateFunctions.containsAggregate(e) =>
+                throw new UnresolvedException(a,
+                  s"Group by position: the '$index'th column in the select contains an " +
+                  s"aggregate function: ${e.sql}. Aggregate functions are not allowed in GROUP BY")
+              case o => o
+            }
+          case IntegerIndex(index) =>
+            throw new UnresolvedException(a,
+              s"Group by position: '$index' exceeds the size of the select list '${aggs.size}'.")
+          case o => o
+        }
+        Aggregate(newGroups, aggs, child)
+    }
+  }
+
+  /**
+   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
+   * clause.  This rule detects such queries and adds the required attributes to the original
+   * projection, so that they will be available during sorting. Another projection is added to
+   * remove these attributes after sorting.
+   */
+  object ResolveSortReferences extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if !s.resolved =>
+      case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
