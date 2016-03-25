@@ -104,11 +104,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * Tries to initialize the reader for this split. Returns true if this reader supports reading
    * this split and false otherwise.
    */
-  public boolean tryInitialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext) {
+  public boolean tryInitialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
+      throws IOException, InterruptedException {
     try {
       initialize(inputSplit, taskAttemptContext);
       return true;
-    } catch (Exception e) {
+    } catch (UnsupportedOperationException e) {
       return false;
     }
   }
@@ -118,7 +119,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
-      throws IOException, InterruptedException {
+      throws IOException, InterruptedException, UnsupportedOperationException {
     super.initialize(inputSplit, taskAttemptContext);
     initializeInternal();
   }
@@ -128,7 +129,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * objects to use this class. `columns` can contain the list of columns to project.
    */
   @Override
-  public void initialize(String path, List<String> columns) throws IOException {
+  public void initialize(String path, List<String> columns) throws IOException,
+      UnsupportedOperationException {
     super.initialize(path, columns);
     initializeInternal();
   }
@@ -248,7 +250,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     return true;
   }
 
-  private void initializeInternal() throws IOException {
+  private void initializeInternal() throws IOException, UnsupportedOperationException {
     /**
      * Check that the requested schema is supported.
      */
@@ -256,14 +258,14 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
       Type t = requestedSchema.getFields().get(i);
       if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
-        throw new IOException("Complex types not supported.");
+        throw new UnsupportedOperationException("Complex types not supported.");
       }
 
       String[] colPath = requestedSchema.getPaths().get(i);
       if (fileSchema.containsPath(colPath)) {
         ColumnDescriptor fd = fileSchema.getColumnDescription(colPath);
         if (!fd.equals(requestedSchema.getColumns().get(i))) {
-          throw new IOException("Schema evolution not supported.");
+          throw new UnsupportedOperationException("Schema evolution not supported.");
         }
         missingColumns[i] = false;
       } else {
