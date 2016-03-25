@@ -16,7 +16,8 @@ exportMethods("glm",
               "summary",
               "kmeans",
               "fitted",
-              "naiveBayes")
+              "naiveBayes",
+              "survreg")
 
 # Job group lifecycle management methods
 export("setJobGroup",
