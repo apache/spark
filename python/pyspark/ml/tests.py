@@ -42,13 +42,13 @@ import tempfile
 import numpy as np
 
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
-from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.classification import LogisticRegression, DecisionTreeClassifier
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
-from pyspark.ml.regression import LinearRegression
+from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaWrapper
@@ -654,6 +654,42 @@ class PersistenceTest(PySparkTestCase):
                 rmtree(temp_path)
             except OSError:
                 pass
+
+    def test_decisiontree_classifier(self):
+        dt = DecisionTreeClassifier(maxDepth=1)
+        path = tempfile.mkdtemp()
+        dtc_path = path + "/dtc"
+        dt.save(dtc_path)
+        dt2 = DecisionTreeClassifier.load(dtc_path)
+        self.assertEqual(dt2.uid, dt2.maxDepth.parent,
+                         "Loaded DecisionTreeClassifier instance uid (%s) "
+                         "did not match Param's uid (%s)"
+                         % (dt2.uid, dt2.maxDepth.parent))
+        self.assertEqual(dt._defaultParamMap[dt.maxDepth], dt2._defaultParamMap[dt2.maxDepth],
+                         "Loaded DecisionTreeClassifier instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+    def test_decisiontree_regressor(self):
+        dt = DecisionTreeRegressor(maxDepth=1)
+        path = tempfile.mkdtemp()
+        dtr_path = path + "/dtr"
+        dt.save(dtr_path)
+        dt2 = DecisionTreeClassifier.load(dtr_path)
+        self.assertEqual(dt2.uid, dt2.maxDepth.parent,
+                         "Loaded DecisionTreeRegressor instance uid (%s) "
+                         "did not match Param's uid (%s)"
+                         % (dt2.uid, dt2.maxDepth.parent))
+        self.assertEqual(dt._defaultParamMap[dt.maxDepth], dt2._defaultParamMap[dt2.maxDepth],
+                         "Loaded DecisionTreeRegressor instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
 
 
 class HasThrowableProperty(Params):

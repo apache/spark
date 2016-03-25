@@ -1300,7 +1300,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   }
 
   /**
-   * Partitioner used by ALS. We requires that getPartition is a projection. That is, for any key k,
+   * Partitioner used by ALS. We require that getPartition is a projection. That is, for any key k,
    * we have getPartition(getPartition(k)) = getPartition(k). Since the default HashPartitioner
    * satisfies this requirement, we simply use a type alias here.
    */

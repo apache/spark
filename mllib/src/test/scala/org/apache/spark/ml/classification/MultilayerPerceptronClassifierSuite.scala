@@ -18,31 +18,40 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 
-class MultilayerPerceptronClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
+class MultilayerPerceptronClassifierSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  test("XOR function learning as binary classification problem with two outputs.") {
-    val dataFrame = sqlContext.createDataFrame(Seq(
+  @transient var dataset: DataFrame = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    dataset = sqlContext.createDataFrame(Seq(
         (Vectors.dense(0.0, 0.0), 0.0),
         (Vectors.dense(0.0, 1.0), 1.0),
         (Vectors.dense(1.0, 0.0), 1.0),
         (Vectors.dense(1.0, 1.0), 0.0))
     ).toDF("features", "label")
+  }
+
+  test("XOR function learning as binary classification problem with two outputs.") {
     val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
       .setBlockSize(1)
       .setSeed(11L)
       .setMaxIter(100)
-    val model = trainer.fit(dataFrame)
-    val result = model.transform(dataFrame)
+    val model = trainer.fit(dataset)
+    val result = model.transform(dataset)
     val predictionAndLabels = result.select("prediction", "label").collect()
     predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
       assert(p == l)
@@ -91,5 +100,27 @@ class MultilayerPerceptronClassifierSuite extends SparkFunSuite with MLlibTestSp
     val lrMetrics = new MulticlassMetrics(lrPredictionAndLabels)
     val mlpMetrics = new MulticlassMetrics(mlpPredictionAndLabels)
     assert(mlpMetrics.confusionMatrix ~== lrMetrics.confusionMatrix absTol 100)
+  }
+
+  test("read/write: MultilayerPerceptronClassifier") {
+    val mlp = new MultilayerPerceptronClassifier()
+      .setLayers(Array(2, 3, 2))
+      .setMaxIter(5)
+      .setBlockSize(2)
+      .setSeed(42)
+      .setTol(0.1)
+      .setFeaturesCol("myFeatures")
+      .setLabelCol("myLabel")
+      .setPredictionCol("myPrediction")
+
+    testDefaultReadWrite(mlp, testParams = true)
+  }
+
+  test("read/write: MultilayerPerceptronClassificationModel") {
+    val mlp = new MultilayerPerceptronClassifier().setLayers(Array(2, 3, 2)).setMaxIter(5)
+    val mlpModel = mlp.fit(dataset)
+    val newMlpModel = testDefaultReadWrite(mlpModel, testParams = true)
+    assert(newMlpModel.layers === mlpModel.layers)
+    assert(newMlpModel.weights === mlpModel.weights)
   }
 }

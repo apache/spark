@@ -45,7 +45,7 @@ case class InsertIntoHiveTable(
 
   @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
-  @transient private lazy val client = sc.metadataHive
+  @transient private lazy val catalog = sc.sessionState.catalog
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -186,8 +186,8 @@ case class InsertIntoHiveTable(
       // TODO: Correctly set isSkewedStoreAsSubdir.
       val isSkewedStoreAsSubdir = false
       if (numDynamicPartitions > 0) {
-        client.synchronized {
-          client.loadDynamicPartitions(
+        catalog.synchronized {
+          catalog.client.loadDynamicPartitions(
             outputPath.toString,
             qualifiedTableName,
             orderedPartitionSpec,
@@ -202,12 +202,12 @@ case class InsertIntoHiveTable(
         // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
         // scalastyle:on
         val oldPart =
-          client.getPartitionOption(
-            client.getTable(table.databaseName, table.tableName),
+          catalog.client.getPartitionOption(
+            catalog.client.getTable(table.databaseName, table.tableName),
             partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
-            client.loadPartition(
+            catalog.client.loadPartition(
               outputPath.toString,
               qualifiedTableName,
               orderedPartitionSpec,
@@ -218,7 +218,7 @@ case class InsertIntoHiveTable(
         }
       }
     } else {
-      client.loadTable(
+      catalog.client.loadTable(
         outputPath.toString, // TODO: URI
         qualifiedTableName,
         overwrite,

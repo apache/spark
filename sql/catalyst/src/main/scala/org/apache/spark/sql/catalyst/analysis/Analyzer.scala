@@ -24,7 +24,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -37,22 +36,23 @@ import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.types._
 
 /**
- * A trivial [[Analyzer]] with an dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
- * Used for testing when all relations are already filled in and the analyzer needs only
- * to resolve attribute references.
+ * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
+ * when all relations are already filled in and the analyzer needs only to resolve attribute
+ * references.
  */
 object SimpleAnalyzer
-  extends SimpleAnalyzer(new SimpleCatalystConf(caseSensitiveAnalysis = true))
-class SimpleAnalyzer(conf: CatalystConf)
-  extends Analyzer(new SessionCatalog(new InMemoryCatalog, conf), EmptyFunctionRegistry, conf)
+  extends Analyzer(
+    EmptyCatalog,
+    EmptyFunctionRegistry,
+    new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
- * [[UnresolvedRelation]]s into fully typed objects using information in a
- * [[SessionCatalog]] and a [[FunctionRegistry]].
+ * [[UnresolvedRelation]]s into fully typed objects using information in a schema [[Catalog]] and
+ * a [[FunctionRegistry]].
  */
 class Analyzer(
-    catalog: SessionCatalog,
+    catalog: Catalog,
     registry: FunctionRegistry,
     conf: CatalystConf,
     maxIterations: Int = 100)
@@ -380,27 +380,12 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p: LogicalPlan if !p.childrenResolved => p
-
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
-        val expanded = p.projectList.flatMap {
-          case s: Star => s.expand(p.child, resolver)
-          case ua @ UnresolvedAlias(_: UnresolvedFunction | _: CreateArray | _: CreateStruct, _) =>
-            UnresolvedAlias(child = expandStarExpression(ua.child, p.child)) :: Nil
-          case a @ Alias(_: UnresolvedFunction | _: CreateArray | _: CreateStruct, _) =>
-            a.withNewChildren(expandStarExpression(a.child, p.child) :: Nil)
-              .asInstanceOf[Alias] :: Nil
-          case o => o :: Nil
-        }
-        Project(projectList = expanded, p.child)
+        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        val expanded = a.aggregateExpressions.flatMap {
-          case s: Star => s.expand(a.child, resolver)
-          case o if containsStar(o :: Nil) => expandStarExpression(o, a.child) :: Nil
-          case o => o :: Nil
-        }.map(_.asInstanceOf[NamedExpression])
-        a.copy(aggregateExpressions = expanded)
+        a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
       // If the script transformation input contains Stars, expand it.
       case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(
@@ -411,6 +396,22 @@ class Analyzer(
         )
       case g: Generate if containsStar(g.generator.children) =>
         failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
+    }
+
+    /**
+     * Build a project list for Project/Aggregate and expand the star if possible
+     */
+    private def buildExpandedProjectList(
+        exprs: Seq[NamedExpression],
+        child: LogicalPlan): Seq[NamedExpression] = {
+      exprs.flatMap {
+        // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
+        case s: Star => s.expand(child, resolver)
+        // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
+        case UnresolvedAlias(s: Star, _) => s.expand(child, resolver)
+        case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
+        case o => o :: Nil
+      }.map(_.asInstanceOf[NamedExpression])
     }
 
     /**
@@ -436,6 +437,11 @@ class Analyzer(
           })
         case c: CreateArray if containsStar(c.children) =>
           c.copy(children = c.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case p: Murmur3Hash if containsStar(p.children) =>
+          p.copy(children = p.children.flatMap {
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
           })

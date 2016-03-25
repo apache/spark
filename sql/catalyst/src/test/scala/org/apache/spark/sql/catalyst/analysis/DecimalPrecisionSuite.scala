@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -31,11 +30,11 @@ import org.apache.spark.sql.types._
 
 
 class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
-  private val conf = new SimpleCatalystConf(caseSensitiveAnalysis = true)
-  private val catalog = new SessionCatalog(new InMemoryCatalog, conf)
-  private val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
+  val conf = new SimpleCatalystConf(caseSensitiveAnalysis = true)
+  val catalog = new SimpleCatalog(conf)
+  val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
 
-  private val relation = LocalRelation(
+  val relation = LocalRelation(
     AttributeReference("i", IntegerType)(),
     AttributeReference("d1", DecimalType(2, 1))(),
     AttributeReference("d2", DecimalType(5, 2))(),
@@ -44,15 +43,15 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
     AttributeReference("b", DoubleType)()
   )
 
-  private val i: Expression = UnresolvedAttribute("i")
-  private val d1: Expression = UnresolvedAttribute("d1")
-  private val d2: Expression = UnresolvedAttribute("d2")
-  private val u: Expression = UnresolvedAttribute("u")
-  private val f: Expression = UnresolvedAttribute("f")
-  private val b: Expression = UnresolvedAttribute("b")
+  val i: Expression = UnresolvedAttribute("i")
+  val d1: Expression = UnresolvedAttribute("d1")
+  val d2: Expression = UnresolvedAttribute("d2")
+  val u: Expression = UnresolvedAttribute("u")
+  val f: Expression = UnresolvedAttribute("f")
+  val b: Expression = UnresolvedAttribute("b")
 
   before {
-    catalog.createTempTable("table", relation, ignoreIfExists = true)
+    catalog.registerTable(TableIdentifier("table"), relation)
   }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {

@@ -93,21 +93,15 @@ case class CreateTempTableUsing(
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
-  if (tableIdent.database.isDefined) {
-    throw new AnalysisException(
-      s"Temporary table '$tableIdent' should not have specified a database")
-  }
-
   def run(sqlContext: SQLContext): Seq[Row] = {
     val dataSource = DataSource(
       sqlContext,
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       options = options)
-    sqlContext.sessionState.catalog.createTempTable(
-      tableIdent.table,
-      Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
-      ignoreIfExists = true)
+    sqlContext.sessionState.catalog.registerTable(
+      tableIdent,
+      Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan)
 
     Seq.empty[Row]
   }
@@ -121,11 +115,6 @@ case class CreateTempTableUsingAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  if (tableIdent.database.isDefined) {
-    throw new AnalysisException(
-      s"Temporary table '$tableIdent' should not have specified a database")
-  }
-
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = Dataset.ofRows(sqlContext, query)
     val dataSource = DataSource(
@@ -135,10 +124,9 @@ case class CreateTempTableUsingAsSelect(
       bucketSpec = None,
       options = options)
     val result = dataSource.write(mode, df)
-    sqlContext.sessionState.catalog.createTempTable(
-      tableIdent.table,
-      Dataset.ofRows(sqlContext, LogicalRelation(result)).logicalPlan,
-      ignoreIfExists = true)
+    sqlContext.sessionState.catalog.registerTable(
+      tableIdent,
+      Dataset.ofRows(sqlContext, LogicalRelation(result)).logicalPlan)
 
     Seq.empty[Row]
   }

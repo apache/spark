@@ -189,8 +189,8 @@ private[sql] trait SQLTestUtils
    * `f` returns.
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
-    sqlContext.sessionState.catalog.setCurrentDatabase(db)
-    try f finally sqlContext.sessionState.catalog.setCurrentDatabase("default")
+    sqlContext.sql(s"USE $db")
+    try f finally sqlContext.sql(s"USE default")
   }
 
   /**

@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
@@ -98,33 +98,27 @@ private[hive] object HiveSerDe {
 }
 
 
-/**
- * Legacy catalog for interacting with the Hive metastore.
- *
- * This is still used for things like creating data source tables, but in the future will be
- * cleaned up to integrate more nicely with [[HiveCatalog]].
- */
+// TODO: replace this with o.a.s.sql.hive.HiveCatalog once we merge SQLContext and HiveContext
 private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveContext)
-  extends Logging {
+  extends Catalog with Logging {
 
   val conf = hive.conf
+
+  /** Usages should lock on `this`. */
+  protected[hive] lazy val hiveWarehouse = new Warehouse(hive.hiveconf)
 
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
 
-  private def getCurrentDatabase: String = {
-    hive.sessionState.catalog.getCurrentDatabase
-  }
-
-  def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
+  private def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
     QualifiedTableName(
-      tableIdent.database.getOrElse(getCurrentDatabase).toLowerCase,
+      tableIdent.database.getOrElse(client.currentDatabase).toLowerCase,
       tableIdent.table.toLowerCase)
   }
 
   private def getQualifiedTableName(t: CatalogTable): QualifiedTableName = {
     QualifiedTableName(
-      t.name.database.getOrElse(getCurrentDatabase).toLowerCase,
+      t.name.database.getOrElse(client.currentDatabase).toLowerCase,
       t.name.table.toLowerCase)
   }
 
@@ -200,7 +194,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
   }
 
-  def refreshTable(tableIdent: TableIdentifier): Unit = {
+  override def refreshTable(tableIdent: TableIdentifier): Unit = {
     // refreshTable does not eagerly reload the cache. It just invalidate the cache.
     // Next time when we use the table, it will be populated in the cache.
     // Since we also cache ParquetRelations converted from Hive Parquet tables and
@@ -414,7 +408,12 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     new Path(new Path(client.getDatabase(dbName).locationUri), tblName).toString
   }
 
-  def lookupRelation(
+  override def tableExists(tableIdent: TableIdentifier): Boolean = {
+    val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)
+    client.getTableOption(dbName, tblName).isDefined
+  }
+
+  override def lookupRelation(
       tableIdent: TableIdentifier,
       alias: Option[String]): LogicalPlan = {
     val qualifiedTableName = getQualifiedTableName(tableIdent)
@@ -554,6 +553,12 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       parquetRelation
     }
     result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
+  }
+
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
+    val db = databaseName.getOrElse(client.currentDatabase)
+
+    client.listTables(db).map(tableName => (tableName, false))
   }
 
   /**
@@ -711,6 +716,27 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     }
   }
 
+  /**
+   * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
+   * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
+   */
+  override def registerTable(tableIdent: TableIdentifier, plan: LogicalPlan): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  /**
+   * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
+   * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
+   */
+  override def unregisterTable(tableIdent: TableIdentifier): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def unregisterAllTables(): Unit = {}
+
+  override def setCurrentDatabase(databaseName: String): Unit = {
+    client.setCurrentDatabase(databaseName)
+  }
 }
 
 /**
