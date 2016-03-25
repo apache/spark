@@ -58,7 +58,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   def toDF()(implicit sqlContext: SQLContext): DataFrame = {
-    Dataset.newDataFrame(sqlContext, logicalPlan)
+    Dataset.ofRows(sqlContext, logicalPlan)
   }
 
   def addData(data: A*): Offset = {
@@ -97,7 +97,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
     newBlocks
       .map(_.toDF())
-      .reduceOption(_ unionAll _)
+      .reduceOption(_ union _)
       .getOrElse {
         sys.error("No data selected!")
       }

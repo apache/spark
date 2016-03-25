@@ -445,6 +445,11 @@ object SQLConf {
     doc = "When true, the ordinal numbers are treated as the position in the select list. " +
           "When false, the ordinal numbers in order/sort By clause are ignored.")
 
+  val GROUP_BY_ORDINAL = booleanConf("spark.sql.groupByOrdinal",
+    defaultValue = Some(true),
+    doc = "When true, the ordinal numbers in group by clauses are treated as the position " +
+      "in the select list. When false, the ordinal numbers are ignored.")
+
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   //
@@ -522,6 +527,19 @@ object SQLConf {
   val EXCHANGE_REUSE_ENABLED = booleanConf("spark.sql.exchange.reuse",
     defaultValue = Some(true),
     doc = "When true, the planner will try to find out duplicated exchanges and re-use them.",
+    isPublic = false)
+
+  val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT = intConf(
+    "spark.sql.streaming.stateStore.minDeltasForSnapshot",
+    defaultValue = Some(10),
+    doc = "Minimum number of state store delta files that needs to be generated before they " +
+      "consolidated into snapshots.",
+    isPublic = false)
+
+  val STATE_STORE_MIN_VERSIONS_TO_RETAIN = intConf(
+    "spark.sql.streaming.stateStore.minBatchesToRetain",
+    defaultValue = Some(2),
+    doc = "Minimum number of versions of a state store's data to retain after cleaning.",
     isPublic = false)
 
   val CHECKPOINT_LOCATION = stringConf("spark.sql.streaming.checkpointLocation",
@@ -655,6 +673,7 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
+  override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

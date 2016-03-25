@@ -189,8 +189,8 @@ private[sql] trait SQLTestUtils
    * `f` returns.
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
-    sqlContext.sql(s"USE $db")
-    try f finally sqlContext.sql(s"USE default")
+    sqlContext.sessionState.catalog.setCurrentDatabase(db)
+    try f finally sqlContext.sessionState.catalog.setCurrentDatabase("default")
   }
 
   /**
@@ -214,7 +214,7 @@ private[sql] trait SQLTestUtils
    * way to construct [[DataFrame]] directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
-    Dataset.newDataFrame(sqlContext, plan)
+    Dataset.ofRows(sqlContext, plan)
   }
 
   /**

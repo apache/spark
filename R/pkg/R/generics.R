@@ -1179,3 +1179,7 @@ setGeneric("fitted")
 #' @rdname naiveBayes
 #' @export
 setGeneric("naiveBayes", function(formula, data, ...) { standardGeneric("naiveBayes") })
+
+#' @rdname survreg
+#' @export
+setGeneric("survreg", function(formula, data, ...) { standardGeneric("survreg") })

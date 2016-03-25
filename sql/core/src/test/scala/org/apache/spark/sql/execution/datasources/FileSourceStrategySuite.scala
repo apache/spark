@@ -268,7 +268,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           l.copy(relation =
             r.copy(bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil))))
       }
-      Dataset.newDataFrame(sqlContext, bucketed)
+      Dataset.ofRows(sqlContext, bucketed)
     } else {
       df
     }

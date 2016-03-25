@@ -252,26 +252,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     /**
      * Check that the requested schema is supported.
      */
-    OriginalType[] originalTypes = new OriginalType[requestedSchema.getFieldCount()];
     missingColumns = new boolean[requestedSchema.getFieldCount()];
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
       Type t = requestedSchema.getFields().get(i);
       if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
         throw new IOException("Complex types not supported.");
       }
-      PrimitiveType primitiveType = t.asPrimitiveType();
 
-      originalTypes[i] = t.getOriginalType();
-
-      // TODO: Be extremely cautious in what is supported. Expand this.
-      if (originalTypes[i] != null && originalTypes[i] != OriginalType.DECIMAL &&
-          originalTypes[i] != OriginalType.UTF8 && originalTypes[i] != OriginalType.DATE &&
-          originalTypes[i] != OriginalType.INT_8 && originalTypes[i] != OriginalType.INT_16) {
-        throw new IOException("Unsupported type: " + t);
-      }
-      if (primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT96) {
-        throw new IOException("Int96 not supported.");
-      }
       String[] colPath = requestedSchema.getPaths().get(i);
       if (fileSchema.containsPath(colPath)) {
         ColumnDescriptor fd = fileSchema.getColumnDescription(colPath);
