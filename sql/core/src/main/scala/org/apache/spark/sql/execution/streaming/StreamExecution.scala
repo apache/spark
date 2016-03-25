@@ -122,7 +122,7 @@ class StreamExecution(
 
   /**
    * Interrupt "microBatchThread" if possible. If "microBatchThread" is in the uninterruptible
-   * status. "microBatchThread" won't be interrupted until it enters into the interruptible status.
+   * status, "microBatchThread" won't be interrupted until it enters into the interruptible status.
    */
   private def interruptMicroBatchThreadSafely(): Unit = {
     uninterruptibleLock.synchronized {
@@ -287,6 +287,12 @@ class StreamExecution(
     // Update committed offsets.
     committedOffsets ++= availableOffsets
 
+    // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
+    // If we interrupt some thread running Shell.runCommand, we may hit this issue.
+    // As "FileStreamSource.getOffset" will create a file using HDFS API and call "Shell.runCommand"
+    // to set the file permission, we should not interrupt "microBatchThread" when running this
+    // method. See SPARK-14131.
+    //
     // Check to see what new data is available.
     val newData = runUninterruptiblyInMicroBatchThread {
       uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
@@ -294,6 +300,11 @@ class StreamExecution(
     availableOffsets ++= newData
 
     if (dataAvailable) {
+      // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
+      // If we interrupt some thread running Shell.runCommand, we may hit this issue.
+      // As "offsetLog.add" will create a file using HDFS API and call "Shell.runCommand" to set
+      // the file permission, we should not interrupt "microBatchThread" when running this method.
+      // See SPARK-14131.
       runUninterruptiblyInMicroBatchThread {
         assert(
           offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
