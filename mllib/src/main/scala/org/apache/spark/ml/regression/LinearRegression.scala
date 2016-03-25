@@ -415,11 +415,12 @@ class LinearRegressionModel private[ml] (
    * Evaluates the model on a test dataset.
    * @param dataset Test dataset to evaluate model on.
    */
+  @Since("2.0.0")
   def evaluate(dataset: DataFrame): LinearRegressionSummary = {
     // Handle possible missing or invalid prediction columns
     val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
     new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName,
-      $(labelCol), this, Array(0D))
+      $(labelCol), summaryModel, Array(0D))
   }
 
   /**

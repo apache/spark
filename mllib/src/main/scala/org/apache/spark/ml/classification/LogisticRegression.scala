@@ -542,9 +542,10 @@ class LogisticRegressionModel private[spark] (
    * Evaluates the model on a test dataset.
    * @param dataset Test dataset to evaluate model on.
    */
+  @Since("2.0.0")
   def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
     // Handle possible missing or invalid prediction columns
-    val (summaryModel, probabilityColName) = this.findSummaryModelAndProbabilityCol()
+    val (summaryModel, probabilityColName) = findSummaryModelAndProbabilityCol()
     new BinaryLogisticRegressionSummary(summaryModel.transform(dataset),
       probabilityColName, $(labelCol), $(featuresCol))
   }
