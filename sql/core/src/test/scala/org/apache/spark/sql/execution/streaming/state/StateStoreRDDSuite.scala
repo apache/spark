@@ -70,12 +70,12 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
           store.iterator().map(rowsToStringInt)
         }
         val opId = 0
-        val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+        val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionsWithStateStore(
           increment, path, opId, storeVersion = 0, keySchema, valueSchema)
         assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
 
         // Generate next version of stores
-        val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionWithStateStore(
+        val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionsWithStateStore(
           increment, path, opId, storeVersion = 1, keySchema, valueSchema)
         assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
 
@@ -95,7 +95,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
           seq: Seq[String],
           storeVersion: Int): RDD[(String, Int)] = {
         implicit val sqlContext = new SQLContext(sc)
-        makeRDD(sc, Seq("a")).mapPartitionWithStateStore(
+        makeRDD(sc, Seq("a")).mapPartitionsWithStateStore(
           increment, path, opId, storeVersion, keySchema, valueSchema)
       }
 
@@ -130,7 +130,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
               Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
         }
 
-        val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+        val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionsWithStateStore(
           increment, path, opId, storeVersion = 0, keySchema, valueSchema)
         require(rdd.partitions.length === 2)
 
@@ -164,12 +164,12 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
           store.iterator().map(rowsToStringInt)
         }
         val opId = 0
-        val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+        val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionsWithStateStore(
           increment, path, opId, storeVersion = 0, keySchema, valueSchema)
         assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
 
         // Generate next version of stores
-        val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionWithStateStore(
+        val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionsWithStateStore(
           increment, path, opId, storeVersion = 1, keySchema, valueSchema)
         assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
 

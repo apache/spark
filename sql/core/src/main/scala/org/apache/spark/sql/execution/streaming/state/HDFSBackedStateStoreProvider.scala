@@ -100,9 +100,10 @@ private[state] class HDFSBackedStateStoreProvider(
      *       versions of the store data.
      */
     override def update(key: UnsafeRow, updateFunc: Option[UnsafeRow] => UnsafeRow): Unit = {
-      verify(state == UPDATING, "Cannot update after already committed or cancelled")
+      verify(state == UPDATING, s"Cannot update when in state $state")
       val oldValueOption = Option(mapToUpdate.get(key))
       val value = updateFunc(oldValueOption)
+      if(value == null) { return }
       mapToUpdate.put(key, value)
 
       Option(allUpdates.get(key)) match {

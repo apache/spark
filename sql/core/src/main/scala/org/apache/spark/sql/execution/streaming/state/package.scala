@@ -28,7 +28,7 @@ package object state {
   implicit class StateStoreOps[T: ClassTag](dataRDD: RDD[T]) {
 
     /** Map each partition of a RDD along with data in a [[StateStore]]. */
-    def mapPartitionWithStateStore[U: ClassTag](
+    def mapPartitionsWithStateStore[U: ClassTag](
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
         checkpointLocation: String,
         operatorId: Long,
@@ -37,28 +37,27 @@ package object state {
         valueSchema: StructType
       )(implicit sqlContext: SQLContext): StateStoreRDD[T, U] = {
 
-      mapPartitionWithStateStore(
-        storeUpdateFunction,
+      mapPartitionsWithStateStore(
         checkpointLocation,
         operatorId,
         storeVersion,
         keySchema,
         valueSchema,
         new StateStoreConf(sqlContext.conf),
-        Some(sqlContext.streams.stateStoreCoordinator))
+        Some(sqlContext.streams.stateStoreCoordinator))(
+        storeUpdateFunction)
     }
 
     /** Map each partition of a RDD along with data in a [[StateStore]]. */
-    private[state] def mapPartitionWithStateStore[U: ClassTag](
-        storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
+    private[streaming] def mapPartitionsWithStateStore[U: ClassTag](
         checkpointLocation: String,
         operatorId: Long,
         storeVersion: Long,
         keySchema: StructType,
         valueSchema: StructType,
         storeConf: StateStoreConf,
-        storeCoordinator: Option[StateStoreCoordinatorRef]
-      ): StateStoreRDD[T, U] = {
+        storeCoordinator: Option[StateStoreCoordinatorRef])(
+        storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       new StateStoreRDD(
         dataRDD,

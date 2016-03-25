@@ -20,18 +20,21 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution
+import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescribeCommand, _}
 import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.streaming.{StateStoreSave, StateStoreRestore}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.LongType
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -199,6 +202,104 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // --- Cases where this strategy does not apply ---------------------------------------------
 
+      case _ => Nil
+    }
+  }
+
+  /**
+   * Aggregate [a], [a, count()]
+   *   FullInput
+   *
+   * TA(value#1, count(1).final, [value#1, count#2]
+   *   Save/Replay (value#1, count(1).partialMerge, [value#1, count#2]
+   *     TA(value#1, count(1).partial, [value#1, count#2]
+   *       BatchInput
+   *
+   * requiredChildDistributionExpressions Some(ArrayBuffer(value#113))
+   * groupingExpressions ArrayBuffer(value#113)
+   * aggregateExpressions ArrayBuffer((count(1),mode=Final,isDistinct=false))
+   * aggregateAttributes ArrayBuffer(count(1)#123L)
+   * initialInputBufferOffset 1
+   * resultExpressions ArrayBuffer(value#113, count(1)#123L AS count(1)#118L)
+   * child INPUT
+   * [value#113, count#125L]
+   *
+   * requiredChildDistributionExpressions None
+   * groupingExpressions ArrayBuffer(value#113)
+   * aggregateExpressions ArrayBuffer((count(1),mode=Partial,isDistinct=false))
+   * aggregateAttributes ArrayBuffer(count#124L)
+   * initialInputBufferOffset 0
+   * resultExpressions ArrayBuffer(value#113, count#125L)
+   * ch ild INPUT [value#113]
+   *
+   */
+  class StatefulAggregationStrategy(
+      checkpointLocation: String,
+      batchId: Long) extends Strategy {
+    var operatorId = 0
+
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case Aggregate(
+             Seq(g: Attribute),
+             Seq(g2, c @ Alias(agg @ AggregateExpression(Count(_), _, _), _)),
+             child) if g == g2 =>
+        val partialCount = AttributeReference("partial", LongType)()
+
+        val partial = TungstenAggregate(
+          requiredChildDistributionExpressions = None,
+          groupingExpressions = g :: Nil,
+          aggregateExpressions = agg.copy(mode = Partial) :: Nil,
+          aggregateAttributes = agg.aggregateFunction.aggBufferAttributes,
+          initialInputBufferOffset = 0,
+          resultExpressions = g +: agg.aggregateFunction.inputAggBufferAttributes,
+          child = planLater(child))
+
+        val partialMerged1 = TungstenAggregate(
+          requiredChildDistributionExpressions = Some(g :: Nil),
+          groupingExpressions = g :: Nil,
+          aggregateExpressions = agg.copy(mode = PartialMerge) :: Nil,
+          aggregateAttributes = agg.aggregateFunction.aggBufferAttributes,
+          initialInputBufferOffset = 1,
+          resultExpressions = g +: agg.aggregateFunction.inputAggBufferAttributes,
+          child = partial)
+
+        val restored = StateStoreRestore(
+          g :: Nil,
+          checkpointLocation,
+          operatorId = operatorId,
+          batchId = batchId,
+          partialMerged1)
+
+        val partialMerged2 = TungstenAggregate(
+          requiredChildDistributionExpressions = Some(g :: Nil),
+          groupingExpressions = g :: Nil,
+          aggregateExpressions = agg.copy(mode = PartialMerge) :: Nil,
+          aggregateAttributes = agg.aggregateFunction.aggBufferAttributes,
+          initialInputBufferOffset = 1,
+          resultExpressions = g +: agg.aggregateFunction.inputAggBufferAttributes,
+          child = restored)
+
+        val saved = StateStoreSave(
+          g :: Nil,
+          checkpointLocation,
+          operatorId = operatorId,
+          batchId = batchId,
+          partialMerged2)
+
+        val finalOutput = TungstenAggregate(
+          requiredChildDistributionExpressions = Some(g :: Nil),
+          groupingExpressions = g :: Nil,
+          aggregateExpressions = agg.copy(mode = Final) :: Nil,
+          aggregateAttributes = partialCount :: Nil,
+          initialInputBufferOffset = 1,
+          resultExpressions = g :: partialCount :: Nil,
+          child = saved)
+
+        operatorId += 1
+        finalOutput :: Nil
+
+      case a: Aggregate =>
+        sys.error("Unsupported Aggregation!")
       case _ => Nil
     }
   }

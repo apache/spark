@@ -21,6 +21,8 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
+
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
@@ -160,6 +162,10 @@ class StreamExecution(
       }
     }
   }
+
+  private val stateDir = new Path(checkpointFile("state"))
+  private val fs = stateDir.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+  fs.mkdirs(stateDir)
 
   /** Whether the query is currently active or not */
   override def isActive: Boolean = state == ACTIVE
@@ -364,12 +370,18 @@ class StreamExecution(
 
     val optimizerStart = System.nanoTime()
 
-    lastExecution = new QueryExecution(sqlContext, newPlan)
+    val ctx = sqlContext.newSession()
+    ctx.experimental.extraStrategies =
+        new sqlContext.sessionState.planner.StatefulAggregationStrategy(
+          checkpointLocation = checkpointFile("state"),
+          batchId = currentBatchId - 1) :: Nil
+
+    lastExecution = new QueryExecution(ctx, newPlan)
     val executedPlan = lastExecution.executedPlan
     val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
     logDebug(s"Optimized batch in ${optimizerTime}ms")
 
-    val nextBatch = Dataset.ofRows(sqlContext, newPlan)
+    val nextBatch = new Dataset(ctx, lastExecution, RowEncoder(lastExecution.analyzed.schema))
     sink.addBatch(currentBatchId - 1, nextBatch)
 
     awaitBatchLock.synchronized {

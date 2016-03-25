@@ -61,7 +61,6 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
         storeId, keySchema, valueSchema, storeVersion, storeConf, confBroadcast.value.value)
       val inputIter = dataRDD.iterator(partition, ctxt)
       val outputIter = storeUpdateFunction(store, inputIter)
-      assert(store.hasCommitted)
       outputIter
     } {
       if (store != null) store.cancel()

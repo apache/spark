@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{Row, StreamTest}
+import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.{StreamTest, Row}
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
 class StreamSuite extends StreamTest with SharedSQLContext {
@@ -80,5 +82,46 @@ class StreamSuite extends StreamTest with SharedSQLContext {
     testStream(evens)(
       AddData(inputData, 1, 2, 3, 4),
       CheckAnswer(2, 4))
+  }
+
+  test("batch planner") {
+    val aggregatedBatch =
+      Seq(1, 2, 3).toDF()
+          .groupBy($"value")
+          .agg(count("*"))
+          .as[(Int, Long)]
+
+    aggregatedBatch.queryExecution.executedPlan.collect {
+      case ta: TungstenAggregate =>
+        println(
+          s"""
+             |requiredChildDistributionExpressions ${ta.requiredChildDistributionExpressions}
+             |groupingExpressions ${ta.groupingExpressions}
+             |aggregateExpressions ${ta.aggregateExpressions}
+             |aggregateAttributes ${ta.aggregateAttributes}
+             |initialInputBufferOffset ${ta.initialInputBufferOffset}
+             |resultExpressions ${ta.resultExpressions}
+             |child ${ta.child} [${ta.child.output.mkString(", ")}]
+          """.stripMargin)
+    }.foreach(println)
+  }
+
+  test("aggregation") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    testStream(aggregated)(
+      AddData(inputData, 3),
+      CheckAnswer((3, 1)),
+      AddData(inputData, 3, 2),
+      CheckAnswer((3, 2), (2, 1)),
+      AddData(inputData, 3, 2, 1),
+      CheckAnswer((3, 3), (2, 2), (1, 1))
+    )
   }
 }
