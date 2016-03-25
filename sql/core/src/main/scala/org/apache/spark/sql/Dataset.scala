@@ -54,20 +54,20 @@ private[sql] object Dataset {
     new Dataset(sqlContext, logicalPlan, implicitly[Encoder[T]])
   }
 
-  def newNamedDataset[T : Encoder](
+  def withAlias[T : Encoder](
       sqlContext: SQLContext,
       logicalPlan: LogicalPlan): Dataset[T] = {
     apply(sqlContext, uniquelyAlias(logicalPlan))
   }
 
-  def newDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
+  def ofRows(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sqlContext.executePlan(logicalPlan)
     qe.assertAnalyzed()
     new Dataset[Row](sqlContext, qe, RowEncoder(qe.analyzed.schema))
   }
 
-  def newNamedDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
-    newDataFrame(sqlContext, uniquelyAlias(logicalPlan))
+  def ofRowsWithAlias(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
+    ofRows(sqlContext, uniquelyAlias(logicalPlan))
   }
 
   private[this] val nextDatasetId = new AtomicLong(0)
@@ -1331,20 +1331,24 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def unionAll(other: Dataset[T]): Dataset[T] = withTypedPlan {
-    // This breaks caching, but it's usually ok because it addresses a very specific use case:
-    // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, other.logicalPlan))
-  }
+  @deprecated("use union()", "2.0.0")
+  def unionAll(other: Dataset[T]): Dataset[T] = union(other)
 
   /**
    * Returns a new [[Dataset]] containing union of rows in this Dataset and another Dataset.
    * This is equivalent to `UNION ALL` in SQL.
    *
+   * To do a SQL-style set union (that does deduplication of elements), use this function followed
+   * by a [[distinct]].
+   *
    * @group typedrel
    * @since 2.0.0
    */
-  def union(other: Dataset[T]): Dataset[T] = unionAll(other)
+  def union(other: Dataset[T]): Dataset[T] = withTypedPlan {
+    // This breaks caching, but it's usually ok because it addresses a very specific use case:
+    // using union to union many files or partitions.
+    CombineUnions(Union(logicalPlan, other.logicalPlan))
+  }
 
   /**
    * Returns a new [[Dataset]] containing rows only in both this Dataset and another Dataset.
@@ -1373,18 +1377,6 @@ class Dataset[T] private[sql](
   def except(other: Dataset[T]): Dataset[T] = withTypedPlan {
     Except(logicalPlan, other.logicalPlan)
   }
-
-  /**
-   * Returns a new [[Dataset]] containing rows in this Dataset but not in another Dataset.
-   * This is equivalent to `EXCEPT` in SQL.
-   *
-   * Note that, equality checking is performed directly on the encoded representation of the data
-   * and thus is not affected by a custom `equals` function defined on `T`.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  def subtract(other: Dataset[T]): Dataset[T] = except(other)
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows.
@@ -1737,7 +1729,7 @@ class Dataset[T] private[sql](
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
 
-      val row = agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
+      val row = groupBy().agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
 
       // Pivot the data so each summary is one row
       row.grouped(outputCols.size).toSeq.zip(statistics).map { case (aggregation, (statistic, _)) =>
@@ -2311,7 +2303,7 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
   @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
-    Dataset.newDataFrame(sqlContext, logicalPlan)
+    Dataset.ofRows(sqlContext, logicalPlan)
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */

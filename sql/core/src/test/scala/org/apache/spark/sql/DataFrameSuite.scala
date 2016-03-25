@@ -181,6 +181,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(structDf.select(array($"record.*").as("a")).first().getAs[Seq[Int]](0) === Seq(1, 1))
   }
 
+  test("Star Expansion - hash") {
+    val structDf = testData2.select("a", "b").as("record")
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(min(hash($"a", $"*"))),
+      structDf.groupBy($"a", $"b").agg(min(hash($"a", $"a", $"b"))))
+
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(hash($"a", $"*")),
+      structDf.groupBy($"a", $"b").agg(hash($"a", $"a", $"b")))
+
+    checkAnswer(
+      structDf.select(hash($"*")),
+      structDf.select(hash($"record.*")))
+
+    checkAnswer(
+      structDf.select(hash($"a", $"*")),
+      structDf.select(hash($"a", $"record.*")))
+  }
+
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
     val e = intercept[AnalysisException] {
@@ -956,7 +975,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      Dataset.newDataFrame(sqlContext, OneRowRelation).registerTempTable("one_row")
+      Dataset.ofRows(sqlContext, OneRowRelation).registerTempTable("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
