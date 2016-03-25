@@ -1268,6 +1268,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertUnsupportedFeature { sql("EXPORT TABLE my_table TO 'my_path'") }
   }
 
+  test("some show commands are not supported") {
+    assertUnsupportedFeature { sql("SHOW CREATE TABLE my_table") }
+    assertUnsupportedFeature { sql("SHOW COMPACTIONS") }
+    assertUnsupportedFeature { sql("SHOW TRANSACTIONS") }
+    assertUnsupportedFeature { sql("SHOW INDEXES ON my_table") }
+    assertUnsupportedFeature { sql("SHOW LOCKS my_table") }
+  }
+
 }
 
 // for SPARK-2180 test
