@@ -118,7 +118,7 @@ class StreamExecution(
    * zone.
    */
   @GuardedBy("uninterruptibleLock")
-  private var interrupted = false
+  private var shouldInterruptThread = false
 
   /**
    * Interrupt "microBatchThread" if possible. If "microBatchThread" is in the uninterruptible
@@ -127,7 +127,7 @@ class StreamExecution(
   private def interruptMicroBatchThreadSafely(): Unit = {
     uninterruptibleLock.synchronized {
       if (uninterruptible) {
-        interrupted = true
+        shouldInterruptThread = true
       } else {
         microBatchThread.interrupt()
       }
@@ -144,7 +144,7 @@ class StreamExecution(
       uninterruptible = true
       // Clear the interrupted status if it's set.
       if (Thread.interrupted()) {
-        interrupted = true
+        shouldInterruptThread = true
       }
     }
     try {
@@ -152,10 +152,10 @@ class StreamExecution(
     } finally {
       uninterruptibleLock.synchronized {
         uninterruptible = false
-        if (interrupted) {
+        if (shouldInterruptThread) {
           // Recover the interrupted status
           microBatchThread.interrupt()
-          interrupted = false
+          shouldInterruptThread = false
         }
       }
     }
