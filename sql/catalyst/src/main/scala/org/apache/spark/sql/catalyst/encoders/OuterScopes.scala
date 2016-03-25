@@ -42,7 +42,12 @@ object OuterScopes {
     outerScopes.putIfAbsent(outer.getClass.getName, outer)
   }
 
-  def getOuterScope(innerCls: Class[_]): AnyRef = {
+  /**
+   * Returns a function which can get the outer scope for the given inner class.  By using function
+   * as return type, we can delay the process of getting outer pointer to execution time, which is
+   * useful for inner class defined in REPL.
+   */
+  def getOuterScope(innerCls: Class[_]): () => AnyRef = {
     assert(innerCls.isMemberClass)
     val outerClassName = innerCls.getDeclaringClass.getName
     val outer = outerScopes.get(outerClassName)
@@ -53,24 +58,30 @@ object OuterScopes {
         // `INSTANCE()` method to get the single instance of class `$read`. Then call `$iw()`
         // method multiply times to get the single instance of the inner most `$iw` class.
         case REPLClass(baseClassName) =>
-          val objClass = Utils.classForName(baseClassName + "$")
-          val objInstance = objClass.getField("MODULE$").get(null)
-          val baseInstance = objClass.getMethod("INSTANCE").invoke(objInstance)
-          val baseClass = Utils.classForName(baseClassName)
+          () => {
+            val objClass = Utils.classForName(baseClassName + "$")
+            val objInstance = objClass.getField("MODULE$").get(null)
+            val baseInstance = objClass.getMethod("INSTANCE").invoke(objInstance)
+            val baseClass = Utils.classForName(baseClassName)
 
-          var getter = iwGetter(baseClass)
-          var obj = baseInstance
-          while (getter != null) {
-            obj = getter.invoke(obj)
-            getter = iwGetter(getter.getReturnType)
+            var getter = iwGetter(baseClass)
+            var obj = baseInstance
+            while (getter != null) {
+              obj = getter.invoke(obj)
+              getter = iwGetter(getter.getReturnType)
+            }
+
+            if (obj == null) {
+              throw new RuntimeException(s"Failed to get outer pointer for ${innerCls.getName}")
+            }
+
+            outerScopes.putIfAbsent(outerClassName, obj)
+            obj
           }
-
-          outerScopes.putIfAbsent(outerClassName, obj)
-          obj
         case _ => null
       }
     } else {
-      outer
+      () => outer
     }
   }
 
