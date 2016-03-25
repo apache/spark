@@ -90,7 +90,7 @@ object MLTestingUtils extends SparkFunSuite {
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
     types.map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName)))
-      .map { case (t, d) => t -> TreeTests.setMetadata(d, 2, "label") }
+      .map { case (t, d) => t -> TreeTests.setMetadata(d, 2, labelColName) }
       .toMap
   }
 
@@ -100,18 +100,20 @@ object MLTestingUtils extends SparkFunSuite {
       featuresColName: String = "features",
       censorColName: String = "censor"): Map[NumericType, DataFrame] = {
     val df = sqlContext.createDataFrame(Seq(
-      (0, Vectors.dense(0), 0.0),
-      (1, Vectors.dense(1), 1.0),
-      (2, Vectors.dense(2), 0.0),
-      (3, Vectors.dense(3), 1.0),
-      (4, Vectors.dense(4), 0.0)
-    )).toDF(labelColName, featuresColName, censorColName)
+      (0, Vectors.dense(0)),
+      (1, Vectors.dense(1)),
+      (2, Vectors.dense(2)),
+      (3, Vectors.dense(3)),
+      (4, Vectors.dense(4))
+    )).toDF(labelColName, featuresColName)
 
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
     types
-      .map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName), col(censorColName)))
-      .map { case (t, d) => t -> TreeTests.setMetadata(d, 2, "label") }
+      .map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName)))
+      .map { case (t, d) =>
+        t -> TreeTests.setMetadata(d, 2, labelColName).withColumn(censorColName, lit(0.0))
+      }
       .toMap
   }
 
