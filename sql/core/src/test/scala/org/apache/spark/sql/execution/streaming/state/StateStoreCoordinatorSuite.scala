@@ -71,7 +71,6 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         assert(coordinatorRef.verifyIfInstanceActive(id1, exec) === true)
         assert(coordinatorRef.verifyIfInstanceActive(id2, exec) === true)
         assert(coordinatorRef.verifyIfInstanceActive(id3, exec) === true)
-
       }
 
       coordinatorRef.deactivateInstances("x")
