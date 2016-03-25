@@ -3,7 +3,7 @@
   "name" : "0",
   "numPartitions" : 8,
   "numCachedPartitions" : 8,
-  "storageLevel" : "Memory Deserialized 1x Replicated",
+  "storageLevel" : "Memory (heap) Deserialized 1x Replicated",
   "memoryUsed" : 28000128,
   "diskUsed" : 0,
   "dataDistribution" : [ {
@@ -14,49 +14,49 @@
   } ],
   "partitions" : [ {
     "blockName" : "rdd_0_0",
-    "storageLevel" : "Memory Deserialized 1x Replicated",
+    "storageLevel" : "Memory (heap) Deserialized 1x Replicated",
     "memoryUsed" : 3500016,
     "diskUsed" : 0,
     "executors" : [ "localhost:57971" ]
   }, {
     "blockName" : "rdd_0_1",
-    "storageLevel" : "Memory Deserialized 1x Replicated",
+    "storageLevel" : "Memory (heap) Deserialized 1x Replicated",
     "memoryUsed" : 3500016,
     "diskUsed" : 0,
     "executors" : [ "localhost:57971" ]
   }, {
     "blockName" : "rdd_0_2",
-    "storageLevel" : "Memory Deserialized 1x Replicated",
+    "storageLevel" : "Memory (heap) Deserialized 1x Replicated",
     "memoryUsed" : 3500016,
     "diskUsed" : 0,
     "executors" : [ "localhost:57971" ]
   }, {
     "blockName" : "rdd_0_3",
-    "storageLevel" : "Memory Deserialized 1x Replicated",
+    "storageLevel" : "Memory (heap) Deserialized 1x Replicated",
     "memoryUsed" : 3500016,
     "diskUsed" : 0,
     "executors" : [ "localhost:57971" ]
   }, {
     "blockName" : "rdd_0_4",
-    "storageLevel" : "Memory Deserialized 1x Replicated",
+    "storageLevel" : "Memory (heap) Deserialized 1x Replicated",
     "memoryUsed" : 3500016,
     "diskUsed" : 0,
     "executors" : [ "localhost:57971" ]
   }, {
     "blockName" : "rdd_0_5",
-    "storageLevel" : "Memory Deserialized 1x Replicated",
+    "storageLevel" : "Memory (heap) Deserialized 1x Replicated",
     "memoryUsed" : 3500016,
     "diskUsed" : 0,
     "executors" : [ "localhost:57971" ]
   }, {
     "blockName" : "rdd_0_6",
-    "storageLevel" : "Memory Deserialized 1x Replicated",
+    "storageLevel" : "Memory (heap) Deserialized 1x Replicated",
     "memoryUsed" : 3500016,
     "diskUsed" : 0,
     "executors" : [ "localhost:57971" ]
   }, {
     "blockName" : "rdd_0_7",
-    "storageLevel" : "Memory Deserialized 1x Replicated",
+    "storageLevel" : "Memory (heap) Deserialized 1x Replicated",
     "memoryUsed" : 3500016,
     "diskUsed" : 0,
     "executors" : [ "localhost:57971" ]
