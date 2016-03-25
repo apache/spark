@@ -31,7 +31,6 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
@@ -98,7 +97,6 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
     "TOK_CREATEINDEX",
     "TOK_CREATEMACRO",
-    "TOK_CREATEROLE",
 
     "TOK_DESCDATABASE",
 
@@ -106,15 +104,11 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_DROPFUNCTION",
     "TOK_DROPINDEX",
     "TOK_DROPMACRO",
-    "TOK_DROPROLE",
     "TOK_DROPTABLE_PROPERTIES",
     "TOK_DROPVIEW",
     "TOK_DROPVIEW_PROPERTIES",
 
     "TOK_EXPORT",
-
-    "TOK_GRANT",
-    "TOK_GRANT_ROLE",
 
     "TOK_IMPORT",
 
@@ -124,15 +118,8 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
     "TOK_MSCK",
 
-    "TOK_REVOKE",
-
     "TOK_SHOW_COMPACTIONS",
     "TOK_SHOW_CREATETABLE",
-    "TOK_SHOW_GRANT",
-    "TOK_SHOW_ROLE_GRANT",
-    "TOK_SHOW_ROLE_PRINCIPALS",
-    "TOK_SHOW_ROLES",
-    "TOK_SHOW_SET_ROLE",
     "TOK_SHOW_TABLESTATUS",
     "TOK_SHOW_TBLPROPERTIES",
     "TOK_SHOW_TRANSACTIONS",
