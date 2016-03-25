@@ -21,9 +21,12 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.scalatest._
+
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
+@Ignore // AMPLab Jenkins needs to be updated before shared memory works on docker
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
     override val imageName = "lresende/db2express-c:10.5.0.5-3.10.0"
