@@ -42,6 +42,8 @@ private[columnar] trait Decoder[T <: AtomicType] {
   def next(row: MutableRow, ordinal: Int): Unit
 
   def hasNext: Boolean
+
+  def decompress(capacity: Int): (ByteBuffer, ByteBuffer)
 }
 
 private[columnar] trait CompressionScheme {

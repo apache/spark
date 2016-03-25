@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 import scala.collection.mutable
 
@@ -61,6 +62,12 @@ private[columnar] case object PassThrough extends CompressionScheme {
     }
 
     override def hasNext: Boolean = buffer.hasRemaining
+
+    override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      (buffer, nullsBuffer)
+    }
   }
 }
 
@@ -164,11 +171,183 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       } else {
         valueCount += 1
       }
-
       columnType.setField(row, ordinal, currentValue)
     }
 
     override def hasNext: Boolean = valueCount < run || buffer.hasRemaining
+
+    override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+      var runLocal = 0
+      var valueCountLocal = 0
+      columnType.dataType match {
+        case _: BooleanType => {
+          val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
+          var currentValueLocal: Boolean = false
+          while (valueCountLocal < runLocal || buffer.hasRemaining) {
+            if (pos != nextNullIndex) {
+              if (valueCountLocal == runLocal) {
+                currentValueLocal = buffer.get() == 1
+                runLocal = ByteBufferHelper.getInt(buffer)
+                valueCountLocal = 1
+              } else {
+                valueCountLocal += 1
+              }
+              out.put(if (currentValueLocal) 1: Byte else 0: Byte)
+            } else {
+              seenNulls += 1
+              if (seenNulls < nullCount) {
+                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+              }
+              out.position(out.position + 1)
+            }
+            pos += 1
+          }
+          out.rewind()
+          nullsBuffer.rewind()
+          (out, nullsBuffer)
+        }
+        case _: ByteType => {
+          val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
+          var currentValueLocal: Byte = 0
+          while (valueCountLocal < runLocal || buffer.hasRemaining) {
+            if (pos != nextNullIndex) {
+              if (valueCountLocal == runLocal) {
+                currentValueLocal = buffer.get()
+                runLocal = ByteBufferHelper.getInt(buffer)
+                valueCountLocal = 1
+              } else {
+                valueCountLocal += 1
+              }
+              out.put(currentValueLocal)
+            } else {
+              seenNulls += 1
+              if (seenNulls < nullCount) {
+                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+              }
+              out.position(out.position + 2)
+            }
+            pos += 1
+          }
+          out.rewind()
+          nullsBuffer.rewind()
+          (out, nullsBuffer)
+        }
+        case _: ShortType => {
+          val out = ByteBuffer.allocate(capacity * 2).order(ByteOrder.nativeOrder())
+          var currentValueLocal: Short = 0
+          while (valueCountLocal < runLocal || buffer.hasRemaining) {
+            if (pos != nextNullIndex) {
+              if (valueCountLocal == runLocal) {
+                currentValueLocal = buffer.getShort()
+                runLocal = ByteBufferHelper.getInt(buffer)
+                valueCountLocal = 1
+              } else {
+                valueCountLocal += 1
+              }
+              ByteBufferHelper.putShort(out, currentValueLocal)
+            } else {
+              seenNulls += 1
+              if (seenNulls < nullCount) {
+                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+              }
+              out.position(out.position + 2)
+            }
+            pos += 1
+          }
+          out.rewind()
+          nullsBuffer.rewind()
+          (out, nullsBuffer)
+        }
+        case _: IntegerType => {
+          val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
+/*
+          var currentValueLocal: Int = 0
+          while (valueCountLocal < runLocal || buffer.hasRemaining) {
+            if (valueCountLocal == runLocal) {
+              currentValueLocal = buffer.getInt()
+              runLocal = ByteBufferHelper.getInt(buffer)
+              valueCountLocal = 1
+            } else {
+              valueCountLocal += 1
+            }
+            ByteBufferHelper.putInt(out, currentValueLocal)
+          }
+*/
+
+          val inarray = buffer.array
+          var inoffset = buffer.position
+          val inlimit = buffer.limit
+          val outarray = out.array
+          var outoffset = 0
+          while (inoffset < inlimit) {
+            val currentValueLocal =
+              org.apache.spark.unsafe.Platform.getInt(inarray,
+                org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET +
+                  inoffset)
+            val runLocal0 =
+              org.apache.spark.unsafe.Platform.getInt(inarray,
+                org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET +
+                  inoffset + 4)
+            inoffset += 8
+            var i = 0
+            while (i < runLocal0) {
+              if (pos != nextNullIndex) {
+                org.apache.spark.unsafe.Platform.putInt(outarray,
+                  org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET +
+                    outoffset, currentValueLocal)
+                i += 1
+              } else {
+                seenNulls += 1
+                if (seenNulls < nullCount) {
+                  nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+                }
+              }
+              pos += 1
+              outoffset += 4
+            }
+          }
+          buffer.position(inoffset)
+
+          out.rewind()
+          nullsBuffer.rewind()
+          (out, nullsBuffer)
+        }
+        case _: LongType => {
+          val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+          val out = ByteBuffer.allocate(capacity * 8).order(ByteOrder.nativeOrder())
+          var currentValueLocal: Long = 0
+          while (valueCountLocal < runLocal || buffer.hasRemaining) {
+            if (pos != nextNullIndex) {
+              if (valueCountLocal == runLocal) {
+                currentValueLocal = buffer.getLong()
+                runLocal = ByteBufferHelper.getInt(buffer)
+                valueCountLocal = 1
+              } else {
+                valueCountLocal += 1
+              }
+              ByteBufferHelper.putLong(out, currentValueLocal)
+            } else {
+              seenNulls += 1
+              if (seenNulls < nullCount) {
+                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+              }
+              out.position(out.position + 8)
+            }
+            pos += 1
+          }
+          out.rewind()
+          nullsBuffer.rewind()
+          (out, nullsBuffer)
+        }
+        case _ => throw new IllegalStateException("Not supported type in RunLengthEncoding.")
+      }
+    }
   }
 }
 
@@ -278,6 +457,56 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     }
 
     override def hasNext: Boolean = buffer.hasRemaining
+
+    override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+      columnType.dataType match {
+        case _: IntegerType => {
+          val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
+          while (buffer.hasRemaining) {
+            if (pos != nextNullIndex) {
+              val value = dictionary(buffer.getShort()).asInstanceOf[Int]
+              ByteBufferHelper.putInt(out, value)
+            } else {
+              seenNulls += 1
+              if (seenNulls < nullCount) {
+                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+              }
+              out.position(out.position + 4)
+            }
+            pos += 1
+          }
+          out.rewind()
+          nullsBuffer.rewind()
+          (out, nullsBuffer)
+        }
+        case _: LongType => {
+          val out = ByteBuffer.allocate(capacity * 8).order(ByteOrder.nativeOrder())
+          while (buffer.hasRemaining) {
+            if (pos != nextNullIndex) {
+              val value = dictionary(buffer.getShort()).asInstanceOf[Long]
+              ByteBufferHelper.putLong(out, value)
+            } else {
+              seenNulls += 1
+              if (seenNulls < nullCount) {
+                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+              }
+              out.position(out.position + 8)
+            }
+            pos += 1
+          }
+          out.rewind()
+          nullsBuffer.rewind()
+          (out, nullsBuffer)
+        }
+        case _ => throw new IllegalStateException("Not supported type in DictionaryEncoding.")
+      }
+    }
   }
 }
 
@@ -368,6 +597,42 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
     }
 
     override def hasNext: Boolean = visited < count
+
+    override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
+      val countLocal = ByteBufferHelper.getInt(buffer)
+      var currentWordLocal: Long = 0
+      var visitedLocal: Int = 0
+      val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+
+      while (visitedLocal < countLocal) {
+        if (pos != nextNullIndex) {
+          val bit = visitedLocal % BITS_PER_LONG
+
+          visitedLocal += 1
+          if (bit == 0) {
+            currentWordLocal = ByteBufferHelper.getLong(buffer)
+          }
+
+          out.put(if (((currentWord >> bit) & 1) != 0) 1: Byte else 0: Byte)
+        } else {
+          seenNulls += 1
+          if (seenNulls < nullCount) {
+            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+          }
+          out.position(out.position + 1)
+        }
+        pos += 1
+      }
+      out.rewind()
+      nullsBuffer.rewind()
+      (out, nullsBuffer)
+    }
   }
 }
 
@@ -448,6 +713,37 @@ private[columnar] case object IntDelta extends CompressionScheme {
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getInt(buffer)
       row.setInt(ordinal, prev)
     }
+
+    override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
+      var prevLocal: Int = 0
+      val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+
+      while (buffer.hasRemaining) {
+        if (pos != nextNullIndex) {
+          val delta = buffer.get
+          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta } else
+            { ByteBufferHelper.getInt(buffer) }
+          val p = out.position
+          ByteBufferHelper.putInt(out, prevLocal)
+        } else {
+          seenNulls += 1
+          if (seenNulls < nullCount) {
+            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+          }
+          out.position(out.position + 4)
+        }
+        pos += 1
+      }
+      out.rewind()
+      nullsBuffer.rewind()
+      (out, nullsBuffer)
+    }
   }
 }
 
@@ -527,6 +823,36 @@ private[columnar] case object LongDelta extends CompressionScheme {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getLong(buffer)
       row.setLong(ordinal, prev)
+    }
+
+    override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
+      var prevLocal: Long = 0
+      val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
+      var pos = 0
+      var seenNulls = 0
+
+      while (buffer.hasRemaining) {
+        if (pos != nextNullIndex) {
+          val delta = buffer.get()
+          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta } else
+            { ByteBufferHelper.getLong(buffer) }
+          ByteBufferHelper.putLong(out, prevLocal)
+        } else {
+          seenNulls += 1
+          if (seenNulls < nullCount) {
+            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+          }
+          out.position(out.position + 8)
+        }
+        pos += 1
+      }
+      out.rewind()
+      nullsBuffer.rewind()
+      (out, nullsBuffer)
     }
   }
 }
