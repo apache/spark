@@ -124,7 +124,9 @@ test_that("kmeans", {
   take(training, 1)
 
   model <- kmeans(x = training, centers = 2)
-  sample <- take(select(predict(model, training), "prediction"), 1)
+  prediction <- predict(model, training)
+  expect_equal(dim(select(prediction, "features")), c(150,1))
+  sample <- take(select(prediction, "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
   expect_equal(sample$prediction, 1)
 
