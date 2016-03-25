@@ -49,7 +49,7 @@ object SQLConf {
 
   private[sql] object SQLConfigBuilder {
 
-    def apply(key: String): ConfigBuilder =  new ConfigBuilder(key).onCreate(register)
+    def apply(key: String): ConfigBuilder = new ConfigBuilder(key).onCreate(register)
 
   }
 
