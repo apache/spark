@@ -533,4 +533,11 @@ class SessionCatalog(
     dbFunctions ++ _tempFunctions
   }
 
+  /**
+   * Return a temporary function. For testing only.
+   */
+  private[catalog] def getTempFunction(name: String): Option[FunctionBuilder] = {
+    functionRegistry.lookupFunctionBuilder(name)
+  }
+
 }
