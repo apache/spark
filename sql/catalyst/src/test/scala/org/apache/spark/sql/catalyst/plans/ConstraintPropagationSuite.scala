@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.{StringType, IntegerType}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class ConstraintPropagationSuite extends SparkFunSuite {
 
