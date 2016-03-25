@@ -656,11 +656,11 @@ class Analyzer(
   */
   object ResolveOrdinalInOrderByAndGroupBy extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.childrenResolved => p
       // Replace the index with the related attribute for ORDER BY,
       // which is a 1-base position of the projection list.
       case s @ Sort(orders, global, child)
-          if conf.orderByOrdinal && child.resolved &&
-            orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+          if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
         val newOrders = orders map {
           case s @ SortOrder(IntegerIndex(index), direction) =>
             if (index > 0 && index <= child.output.size) {
@@ -677,7 +677,7 @@ class Analyzer(
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
       case a @ Aggregate(groups, aggs, child)
-          if conf.groupByOrdinal && child.resolved && aggs.forall(_.resolved) &&
+          if conf.groupByOrdinal && aggs.forall(_.resolved) &&
             groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
         val newGroups = groups.map {
           case IntegerIndex(index) if index > 0 && index <= aggs.size =>
