@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -100,6 +101,65 @@ class StreamExecution(
    */
   private val offsetLog =
     new HDFSMetadataLog[CompositeOffset](sqlContext, checkpointFile("offsets"))
+
+  /** A monitor to protect "uninterruptible" and "interrupted" */
+  private val uninterruptibleLock = new Object
+
+  /**
+   * Indicates if "microBatchThread" are in the uninterruptible status. If so, interrupting
+   * "microBatchThread" will be deferred until "microBatchThread" enters into the interruptible
+   * status.
+   */
+  @GuardedBy("uninterruptibleLock")
+  private var uninterruptible = false
+
+  /**
+   * Indicates if we should interrupt "microBatchThread" when we are leaving the uninterruptible
+   * zone.
+   */
+  @GuardedBy("uninterruptibleLock")
+  private var shouldInterruptThread = false
+
+  /**
+   * Interrupt "microBatchThread" if possible. If "microBatchThread" is in the uninterruptible
+   * status, "microBatchThread" won't be interrupted until it enters into the interruptible status.
+   */
+  private def interruptMicroBatchThreadSafely(): Unit = {
+    uninterruptibleLock.synchronized {
+      if (uninterruptible) {
+        shouldInterruptThread = true
+      } else {
+        microBatchThread.interrupt()
+      }
+    }
+  }
+
+  /**
+   * Run `f` uninterruptibly in "microBatchThread". "microBatchThread" won't be interrupted before
+   * returning from `f`.
+   */
+  private def runUninterruptiblyInMicroBatchThread[T](f: => T): T = {
+    assert(Thread.currentThread() == microBatchThread)
+    uninterruptibleLock.synchronized {
+      uninterruptible = true
+      // Clear the interrupted status if it's set.
+      if (Thread.interrupted()) {
+        shouldInterruptThread = true
+      }
+    }
+    try {
+      f
+    } finally {
+      uninterruptibleLock.synchronized {
+        uninterruptible = false
+        if (shouldInterruptThread) {
+          // Recover the interrupted status
+          microBatchThread.interrupt()
+          shouldInterruptThread = false
+        }
+      }
+    }
+  }
 
   /** Whether the query is currently active or not */
   override def isActive: Boolean = state == ACTIVE
@@ -227,14 +287,29 @@ class StreamExecution(
     // Update committed offsets.
     committedOffsets ++= availableOffsets
 
+    // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
+    // If we interrupt some thread running Shell.runCommand, we may hit this issue.
+    // As "FileStreamSource.getOffset" will create a file using HDFS API and call "Shell.runCommand"
+    // to set the file permission, we should not interrupt "microBatchThread" when running this
+    // method. See SPARK-14131.
+    //
     // Check to see what new data is available.
-    val newData = uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+    val newData = runUninterruptiblyInMicroBatchThread {
+      uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+    }
     availableOffsets ++= newData
 
     if (dataAvailable) {
-      assert(
-        offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
-        s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
+      // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
+      // If we interrupt some thread running Shell.runCommand, we may hit this issue.
+      // As "offsetLog.add" will create a file using HDFS API and call "Shell.runCommand" to set
+      // the file permission, we should not interrupt "microBatchThread" when running this method.
+      // See SPARK-14131.
+      runUninterruptiblyInMicroBatchThread {
+        assert(
+          offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
+          s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
+      }
       currentBatchId += 1
       logInfo(s"Committed offsets for batch $currentBatchId.")
       true
@@ -320,7 +395,7 @@ class StreamExecution(
     // intentionally
     state = TERMINATED
     if (microBatchThread.isAlive) {
-      microBatchThread.interrupt()
+      interruptMicroBatchThreadSafely()
       microBatchThread.join()
     }
     logInfo(s"Query $name was stopped")
