@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.{FileNotFoundException, IOException}
 import java.nio.ByteBuffer
-import java.util.{ConcurrentModificationException, EnumSet}
+import java.util.{UUID, ConcurrentModificationException, EnumSet}
 
 import scala.reflect.ClassTag
 
@@ -102,7 +102,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
     // Use nextId to create a temp file
     var nextId = 0
     while (true) {
-      val tempPath = new Path(metadataPath, s".${batchId}_$nextId.tmp")
+      val tempPath = new Path(metadataPath, s".${UUID.randomUUID.toString}.tmp")
       try {
         val output = fileManager.create(tempPath)
         try {

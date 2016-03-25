@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.{File, FileNotFoundException, IOException}
 import java.net.URI
-import java.nio.file.Files
 import java.util.ConcurrentModificationException
 
 import scala.util.Random
@@ -29,7 +28,6 @@ import org.apache.hadoop.fs._
 import org.scalatest.concurrent.AsyncAssertions._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog.{FileContextManager, FileManager, FileSystemManager}
@@ -90,6 +88,17 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       classOf[FakeFileSystem].getName)
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](sqlContext, s"$scheme://$temp")
+      assert(metadataLog.add(0, "batch0"))
+      assert(metadataLog.getLatest() === Some(0 -> "batch0"))
+      assert(metadataLog.get(0) === Some("batch0"))
+      assert(metadataLog.get(None, 0) === Array(0 -> "batch0"))
+
+
+      val metadataLog2 = new HDFSMetadataLog[String](sqlContext, s"$scheme://$temp")
+      assert(metadataLog2.get(0) === Some("batch0"))
+      assert(metadataLog2.getLatest() === Some(0 -> "batch0"))
+      assert(metadataLog2.get(None, 0) === Array(0 -> "batch0"))
+
     }
   }
 
