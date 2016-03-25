@@ -509,12 +509,8 @@ class LogisticRegressionModel private[spark] (
    * thrown if `trainingSummary == None`.
    */
   @Since("1.5.0")
-  def summary: LogisticRegressionTrainingSummary = trainingSummary match {
-    case Some(summ) => summ
-    case None =>
-      throw new SparkException(
-        "No training summary available for this LogisticRegressionModel",
-        new NullPointerException())
+  def summary: LogisticRegressionTrainingSummary = trainingSummary.getOrElse {
+    throw new SparkException("No training summary available for this LogisticRegressionModel")
   }
 
   /**

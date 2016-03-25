@@ -121,7 +121,8 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
     intercept[UnsupportedOperationException] {
       hiveContext.analyze("tempTable")
     }
-    hiveContext.sessionState.catalog.unregisterTable(TableIdentifier("tempTable"))
+    hiveContext.sessionState.catalog.dropTable(
+      TableIdentifier("tempTable"), ignoreIfNotExists = true)
   }
 
   test("estimates the size of a test MetastoreRelation") {
@@ -230,7 +231,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
       assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
       val shj = df.queryExecution.sparkPlan.collect {
-        case j: LeftSemiJoinHash => j
+        case j: ShuffledHashJoin => j
       }
       assert(shj.size === 1,
         "LeftSemiJoinHash should be planned when BroadcastHashJoin is turned off")

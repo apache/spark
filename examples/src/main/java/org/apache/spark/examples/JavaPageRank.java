@@ -84,13 +84,14 @@ public final class JavaPageRank {
     JavaRDD<String> lines = ctx.textFile(args[0], 1);
 
     // Loads all URLs from input file and initialize their neighbors.
-    JavaPairRDD<String, Iterable<String>> links = lines.mapToPair(new PairFunction<String, String, String>() {
-      @Override
-      public Tuple2<String, String> call(String s) {
-        String[] parts = SPACES.split(s);
-        return new Tuple2<>(parts[0], parts[1]);
-      }
-    }).distinct().groupByKey().cache();
+    JavaPairRDD<String, Iterable<String>> links = lines.mapToPair(
+      new PairFunction<String, String, String>() {
+        @Override
+        public Tuple2<String, String> call(String s) {
+          String[] parts = SPACES.split(s);
+          return new Tuple2<>(parts[0], parts[1]);
+        }
+      }).distinct().groupByKey().cache();
 
     // Loads all URLs with other URL(s) link to from input file and initialize ranks of them to one.
     JavaPairRDD<String, Double> ranks = links.mapValues(new Function<Iterable<String>, Double>() {

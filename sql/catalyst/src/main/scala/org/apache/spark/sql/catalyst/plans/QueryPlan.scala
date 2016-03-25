@@ -298,7 +298,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       // As the root of the expression, Alias will always take an arbitrary exprId, we need
       // to erase that for equality testing.
       val cleanedExprId =
-        Alias(a.child, a.name)(ExprId(-1), a.qualifiers, isGenerated = a.isGenerated)
+        Alias(a.child, a.name)(ExprId(-1), a.qualifier, isGenerated = a.isGenerated)
       BindReferences.bindReference(cleanedExprId, allAttributes, allowFailures = true)
     case other =>
       BindReferences.bindReference(other, allAttributes, allowFailures = true)

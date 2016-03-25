@@ -398,12 +398,8 @@ class LinearRegressionModel private[ml] (
    * thrown if `trainingSummary == None`.
    */
   @Since("1.5.0")
-  def summary: LinearRegressionTrainingSummary = trainingSummary match {
-    case Some(summ) => summ
-    case None =>
-      throw new SparkException(
-        "No training summary available for this LinearRegressionModel",
-        new NullPointerException())
+  def summary: LinearRegressionTrainingSummary = trainingSummary.getOrElse {
+    throw new SparkException("No training summary available for this LinearRegressionModel")
   }
 
   private[regression] def setSummary(summary: LinearRegressionTrainingSummary): this.type = {

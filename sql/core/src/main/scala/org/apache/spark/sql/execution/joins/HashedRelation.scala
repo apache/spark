@@ -109,51 +109,6 @@ private[execution] trait UniqueHashedRelation extends HashedRelation {
   }
 }
 
-/**
- * A general [[HashedRelation]] backed by a hash map that maps the key into a sequence of values.
- */
-private[joins] class GeneralHashedRelation(
-    private var hashTable: JavaHashMap[InternalRow, CompactBuffer[InternalRow]])
-  extends HashedRelation with Externalizable {
-
-  // Needed for serialization (it is public to make Java serialization work)
-  def this() = this(null)
-
-  override def get(key: InternalRow): Seq[InternalRow] = hashTable.get(key)
-
-  override def writeExternal(out: ObjectOutput): Unit = {
-    writeBytes(out, SparkSqlSerializer.serialize(hashTable))
-  }
-
-  override def readExternal(in: ObjectInput): Unit = {
-    hashTable = SparkSqlSerializer.deserialize(readBytes(in))
-  }
-}
-
-
-/**
- * A specialized [[HashedRelation]] that maps key into a single value. This implementation
- * assumes the key is unique.
- */
-private[joins] class UniqueKeyHashedRelation(
-  private var hashTable: JavaHashMap[InternalRow, InternalRow])
-  extends UniqueHashedRelation with Externalizable {
-
-  // Needed for serialization (it is public to make Java serialization work)
-  def this() = this(null)
-
-  override def getValue(key: InternalRow): InternalRow = hashTable.get(key)
-
-  override def writeExternal(out: ObjectOutput): Unit = {
-    writeBytes(out, SparkSqlSerializer.serialize(hashTable))
-  }
-
-  override def readExternal(in: ObjectInput): Unit = {
-    hashTable = SparkSqlSerializer.deserialize(readBytes(in))
-  }
-}
-
-
 private[execution] object HashedRelation {
 
   /**
@@ -162,51 +117,16 @@ private[execution] object HashedRelation {
    * Note: The caller should make sure that these InternalRow are different objects.
    */
   def apply(
+      canJoinKeyFitWithinLong: Boolean,
       input: Iterator[InternalRow],
       keyGenerator: Projection,
       sizeEstimate: Int = 64): HashedRelation = {
 
-    if (keyGenerator.isInstanceOf[UnsafeProjection]) {
-      return UnsafeHashedRelation(
-        input, keyGenerator.asInstanceOf[UnsafeProjection], sizeEstimate)
-    }
-
-    // TODO: Use Spark's HashMap implementation.
-    val hashTable = new JavaHashMap[InternalRow, CompactBuffer[InternalRow]](sizeEstimate)
-    var currentRow: InternalRow = null
-
-    // Whether the join key is unique. If the key is unique, we can convert the underlying
-    // hash map into one specialized for this.
-    var keyIsUnique = true
-
-    // Create a mapping of buildKeys -> rows
-    while (input.hasNext) {
-      currentRow = input.next()
-      val rowKey = keyGenerator(currentRow)
-      if (!rowKey.anyNull) {
-        val existingMatchList = hashTable.get(rowKey)
-        val matchList = if (existingMatchList == null) {
-          val newMatchList = new CompactBuffer[InternalRow]()
-          hashTable.put(rowKey.copy(), newMatchList)
-          newMatchList
-        } else {
-          keyIsUnique = false
-          existingMatchList
-        }
-        matchList += currentRow
-      }
-    }
-
-    if (keyIsUnique) {
-      val uniqHashTable = new JavaHashMap[InternalRow, InternalRow](hashTable.size)
-      val iter = hashTable.entrySet().iterator()
-      while (iter.hasNext) {
-        val entry = iter.next()
-        uniqHashTable.put(entry.getKey, entry.getValue()(0))
-      }
-      new UniqueKeyHashedRelation(uniqHashTable)
+    if (canJoinKeyFitWithinLong) {
+      LongHashedRelation(input, keyGenerator, sizeEstimate)
     } else {
-      new GeneralHashedRelation(hashTable)
+      UnsafeHashedRelation(
+        input, keyGenerator.asInstanceOf[UnsafeProjection], sizeEstimate)
     }
   }
 }
@@ -428,6 +348,7 @@ private[joins] object UnsafeHashedRelation {
       sizeEstimate: Int): HashedRelation = {
 
     // Use a Java hash table here because unsafe maps expect fixed size records
+    // TODO: Use BytesToBytesMap for memory efficiency
     val hashTable = new JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]](sizeEstimate)
 
     // Create a mapping of buildKeys -> rows
@@ -683,11 +604,7 @@ private[execution] case class HashedRelationBroadcastMode(
 
   override def transform(rows: Array[InternalRow]): HashedRelation = {
     val generator = UnsafeProjection.create(keys, attributes)
-    if (canJoinKeyFitWithinLong) {
-      LongHashedRelation(rows.iterator, generator, rows.length)
-    } else {
-      HashedRelation(rows.iterator, generator, rows.length)
-    }
+    HashedRelation(canJoinKeyFitWithinLong, rows.iterator, generator, rows.length)
   }
 
   private lazy val canonicalizedKeys: Seq[Expression] = {
@@ -703,4 +620,3 @@ private[execution] case class HashedRelationBroadcastMode(
     case _ => false
   }
 }
-

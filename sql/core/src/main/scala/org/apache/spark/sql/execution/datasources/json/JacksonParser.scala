@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,7 +35,7 @@ import org.apache.spark.util.Utils
 
 private[json] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
 
-object JacksonParser {
+object JacksonParser extends Logging {
 
   def parse(
       input: RDD[String],
@@ -257,13 +258,20 @@ object JacksonParser {
 
     def failedRecord(record: String): Seq[InternalRow] = {
       // create a row even if no corrupt record column is present
-      val row = new GenericMutableRow(schema.length)
-      for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
-        require(schema(corruptIndex).dataType == StringType)
-        row.update(corruptIndex, UTF8String.fromString(record))
+      if (configOptions.failFast) {
+        throw new RuntimeException(s"Malformed line in FAILFAST mode: $record")
       }
-
-      Seq(row)
+      if (configOptions.dropMalformed) {
+        logWarning(s"Dropping malformed line: $record")
+        Nil
+      } else {
+        val row = new GenericMutableRow(schema.length)
+        for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
+          require(schema(corruptIndex).dataType == StringType)
+          row.update(corruptIndex, UTF8String.fromString(record))
+        }
+        Seq(row)
+      }
     }
 
     val factory = new JsonFactory()

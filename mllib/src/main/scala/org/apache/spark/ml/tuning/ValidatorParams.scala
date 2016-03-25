@@ -17,20 +17,19 @@
 
 package org.apache.spark.ml.tuning
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.Estimator
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.sql.types.StructType
 
 /**
- * :: DeveloperApi ::
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
  */
-@DeveloperApi
 private[ml] trait ValidatorParams extends Params {
 
   /**
    * param for the estimator to be validated
+   *
    * @group param
    */
   val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
@@ -40,6 +39,7 @@ private[ml] trait ValidatorParams extends Params {
 
   /**
    * param for estimator param maps
+   *
    * @group param
    */
   val estimatorParamMaps: Param[Array[ParamMap]] =
@@ -50,6 +50,7 @@ private[ml] trait ValidatorParams extends Params {
 
   /**
    * param for the evaluator used to select hyper-parameters that maximize the validated metric
+   *
    * @group param
    */
   val evaluator: Param[Evaluator] = new Param(this, "evaluator",
@@ -57,4 +58,14 @@ private[ml] trait ValidatorParams extends Params {
 
   /** @group getParam */
   def getEvaluator: Evaluator = $(evaluator)
+
+  protected def transformSchemaImpl(schema: StructType): StructType = {
+    require($(estimatorParamMaps).nonEmpty, s"Validator requires non-empty estimatorParamMaps")
+    val firstEstimatorParamMap = $(estimatorParamMaps).head
+    val est = $(estimator)
+    for (paramMap <- $(estimatorParamMaps).tail) {
+      est.copy(paramMap).transformSchema(schema)
+    }
+    est.copy(firstEstimatorParamMap).transformSchema(schema)
+  }
 }

@@ -24,14 +24,16 @@ import java.util.logging.{Logger => JLogger}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Try}
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.apache.hadoop.mapreduce.task.JobContextImpl
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
+import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
 import org.apache.parquet.{Log => ApacheParquetLog}
+import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
@@ -45,16 +47,21 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
-import org.apache.spark.sql.execution.datasources.{PartitionSpec, _}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
 
-
-private[sql] class DefaultSource extends FileFormat with DataSourceRegister with Logging {
+private[sql] class DefaultSource
+  extends FileFormat
+  with DataSourceRegister
+  with Logging
+  with Serializable {
 
   override def shortName(): String = "parquet"
 
@@ -267,6 +274,137 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
   private def isSummaryFile(file: Path): Boolean = {
     file.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE ||
         file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
+  }
+
+  /**
+   * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
+   *
+   * @param partitionSchema The schema of the partition column row that will be present in each
+   *                        PartitionedFile.  These columns should be prepended to the rows that
+   *                        are produced by the iterator.
+   * @param dataSchema The schema of the data that should be output for each row.  This may be a
+   *                   subset of the columns that are present in the file if  column pruning has
+   *                   occurred.
+   * @param filters A set of filters than can optionally be used to reduce the number of rows output
+   * @param options A set of string -> string configuration options.
+   * @return
+   */
+  override def buildReader(
+      sqlContext: SQLContext,
+      partitionSchema: StructType,
+      dataSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
+    val parquetConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+    parquetConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
+    parquetConf.set(
+      CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+      CatalystSchemaConverter.checkFieldNames(dataSchema).json)
+    parquetConf.set(
+      CatalystWriteSupport.SPARK_ROW_SCHEMA,
+      CatalystSchemaConverter.checkFieldNames(dataSchema).json)
+
+    // We want to clear this temporary metadata from saving into Parquet file.
+    // This metadata is only useful for detecting optional columns when pushdowning filters.
+    val dataSchemaToWrite = StructType.removeMetadata(StructType.metadataKeyForOptionalField,
+      dataSchema).asInstanceOf[StructType]
+    CatalystWriteSupport.setSchema(dataSchemaToWrite, parquetConf)
+
+    // Sets flags for `CatalystSchemaConverter`
+    parquetConf.setBoolean(
+      SQLConf.PARQUET_BINARY_AS_STRING.key,
+      sqlContext.conf.getConf(SQLConf.PARQUET_BINARY_AS_STRING))
+    parquetConf.setBoolean(
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
+      sqlContext.conf.getConf(SQLConf.PARQUET_INT96_AS_TIMESTAMP))
+
+    // Try to push down filters when filter push-down is enabled.
+    val pushed = if (sqlContext.getConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key).toBoolean) {
+      filters
+          // Collects all converted Parquet filter predicates. Notice that not all predicates can be
+          // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
+          // is used here.
+          .flatMap(ParquetFilters.createFilter(dataSchema, _))
+          .reduceOption(FilterApi.and)
+    } else {
+      None
+    }
+
+    val broadcastedConf =
+      sqlContext.sparkContext.broadcast(new SerializableConfiguration(parquetConf))
+
+    // TODO: if you move this into the closure it reverts to the default values.
+    // If true, enable using the custom RecordReader for parquet. This only works for
+    // a subset of the types (no complex types).
+    val enableVectorizedParquetReader: Boolean =
+      sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
+    val enableWholestageCodegen: Boolean =
+      sqlContext.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key).toBoolean
+
+    (file: PartitionedFile) => {
+      assert(file.partitionValues.numFields == partitionSchema.size)
+
+      val fileSplit =
+        new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
+
+      val split =
+        new org.apache.parquet.hadoop.ParquetInputSplit(
+          fileSplit.getPath,
+          fileSplit.getStart,
+          fileSplit.getStart + fileSplit.getLength,
+          fileSplit.getLength,
+          fileSplit.getLocations,
+          null)
+
+      val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
+      val hadoopAttemptContext = new TaskAttemptContextImpl(broadcastedConf.value.value, attemptId)
+
+      val parquetReader = try {
+        if (!enableVectorizedParquetReader) sys.error("Vectorized reader turned off.")
+        val vectorizedReader = new VectorizedParquetRecordReader()
+        vectorizedReader.initialize(split, hadoopAttemptContext)
+        logDebug(s"Appending $partitionSchema ${file.partitionValues}")
+        vectorizedReader.initBatch(partitionSchema, file.partitionValues)
+        // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
+        // TODO: fix column appending
+        if (enableWholestageCodegen) {
+          logDebug(s"Enabling batch returning")
+          vectorizedReader.enableReturningBatches()
+        }
+        vectorizedReader
+      } catch {
+        case NonFatal(e) =>
+          logDebug(s"Falling back to parquet-mr: $e", e)
+          val reader = pushed match {
+            case Some(filter) =>
+              new ParquetRecordReader[InternalRow](
+                new CatalystReadSupport,
+                FilterCompat.get(filter, null))
+            case _ =>
+              new ParquetRecordReader[InternalRow](new CatalystReadSupport)
+          }
+          reader.initialize(split, hadoopAttemptContext)
+          reader
+      }
+
+      val iter = new RecordReaderIterator(parquetReader)
+
+      // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
+      if (parquetReader.isInstanceOf[VectorizedParquetRecordReader] &&
+          enableVectorizedParquetReader) {
+        iter.asInstanceOf[Iterator[InternalRow]]
+      } else {
+        val fullSchema = dataSchema.toAttributes ++ partitionSchema.toAttributes
+        val joinedRow = new JoinedRow()
+        val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+
+        // This is a horrible erasure hack...  if we type the iterator above, then it actually check
+        // the type in next() and we get a class cast exception.  If we make that function return
+        // Object, then we can defer the cast until later!
+        iter.asInstanceOf[Iterator[InternalRow]]
+            .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+      }
+    }
   }
 
   override def buildInternalScan(

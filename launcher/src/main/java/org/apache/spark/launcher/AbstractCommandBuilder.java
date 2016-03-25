@@ -57,7 +57,7 @@ abstract class AbstractCommandBuilder {
   // properties files multiple times.
   private Map<String, String> effectiveConfig;
 
-  public AbstractCommandBuilder() {
+  AbstractCommandBuilder() {
     this.appArgs = new ArrayList<>();
     this.childEnv = new HashMap<>();
     this.conf = new HashMap<>();

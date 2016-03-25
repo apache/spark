@@ -226,7 +226,7 @@ trait Unevaluable extends Expression {
  * `ScalaUDF`, `ScalaUDAF`, and object expressions like `MapObjects` and `Invoke`.
  */
 trait NonSQLExpression extends Expression {
-  override def sql: String = {
+  final override def sql: String = {
     transform {
       case a: Attribute => new PrettyAttribute(a)
     }.toString

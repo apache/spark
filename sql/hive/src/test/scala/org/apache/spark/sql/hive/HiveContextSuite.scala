@@ -15,23 +15,23 @@
 * limitations under the License.
 */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.hive
 
-/**
- * A container for a [[DataFrame]], used for implicit conversions.
- *
- * To use this, import implicit conversions in SQL:
- * {{{
- *   import sqlContext.implicits._
- * }}}
- *
- * @since 1.3.0
- */
-case class DataFrameHolder private[sql](private val df: DataFrame) {
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.hive.test.TestHive
 
-  // This is declared with parentheses to prevent the Scala compiler from treating
-  // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = df
 
-  def toDF(colNames: String*): DataFrame = df.toDF(colNames : _*)
+class HiveContextSuite extends SparkFunSuite {
+
+  test("HiveContext can access `spark.sql.*` configs") {
+    // Avoid creating another SparkContext in the same JVM
+    val sc = TestHive.sparkContext
+    require(sc.conf.get("spark.sql.hive.metastore.barrierPrefixes") ==
+      "org.apache.spark.sql.hive.execution.PairSerDe")
+    assert(TestHive.initialSQLConf.getConfString("spark.sql.hive.metastore.barrierPrefixes") ==
+      "org.apache.spark.sql.hive.execution.PairSerDe")
+    assert(TestHive.metadataHive.getConf("spark.sql.hive.metastore.barrierPrefixes", "") ==
+      "org.apache.spark.sql.hive.execution.PairSerDe")
+  }
+
 }

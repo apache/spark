@@ -27,6 +27,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SQLContext
@@ -42,7 +43,9 @@ import org.apache.spark.sql.SQLContext
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
  */
-class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends MetadataLog[T] {
+class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
+  extends MetadataLog[T]
+  with Logging {
 
   private val metadataPath = new Path(path)
 
@@ -113,6 +116,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends
         try {
           // Try to commit the batch
           // It will fail if there is an existing file (someone has committed the batch)
+          logDebug(s"Attempting to write log #${batchFile(batchId)}")
           fc.rename(tempPath, batchFile(batchId), Options.Rename.NONE)
           return
         } catch {
@@ -161,15 +165,17 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends
       val bytes = IOUtils.toByteArray(input)
       Some(serializer.deserialize[T](ByteBuffer.wrap(bytes)))
     } else {
+      logDebug(s"Unable to find batch $batchMetadataFile")
       None
     }
   }
 
-  override def get(startId: Option[Long], endId: Long): Array[(Long, T)] = {
-    val batchIds = fc.util().listStatus(metadataPath, batchFilesFilter)
+  override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, T)] = {
+    val files = fc.util().listStatus(metadataPath, batchFilesFilter)
+    val batchIds = files
       .map(_.getPath.getName.toLong)
       .filter { batchId =>
-      batchId <= endId && (startId.isEmpty || batchId >= startId.get)
+        (endId.isEmpty || batchId <= endId.get) && (startId.isEmpty || batchId >= startId.get)
     }
     batchIds.sorted.map(batchId => (batchId, get(batchId))).filter(_._2.isDefined).map {
       case (batchId, metadataOption) =>

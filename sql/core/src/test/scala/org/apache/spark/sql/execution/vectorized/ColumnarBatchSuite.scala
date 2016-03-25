@@ -68,7 +68,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.numNulls() == 4)
 
       reference.zipWithIndex.foreach { v =>
-        assert(v._1 == column.getIsNull(v._2))
+        assert(v._1 == column.isNullAt(v._2))
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.nullsNativeAddress()
           assert(v._1 == (Platform.getByte(null, addr + v._2) == 1), "index=" + v._2)
@@ -489,10 +489,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(batch.rowIterator().hasNext == true)
 
       assert(batch.column(0).getInt(0) == 1)
-      assert(batch.column(0).getIsNull(0) == false)
+      assert(batch.column(0).isNullAt(0) == false)
       assert(batch.column(1).getDouble(0) == 1.1)
-      assert(batch.column(1).getIsNull(0) == false)
-      assert(batch.column(2).getIsNull(0) == true)
+      assert(batch.column(1).isNullAt(0) == false)
+      assert(batch.column(2).isNullAt(0) == true)
       assert(batch.column(3).getUTF8String(0).toString == "Hello")
 
       // Verify the iterator works correctly.
