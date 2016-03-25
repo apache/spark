@@ -26,7 +26,7 @@ import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.{DecisionTreeModel, GBTParams, TreeClassifierParams,
   TreeEnsembleModel}
-import org.apache.spark.ml.tree.impl.{RandomForest, GradientBoostedTrees}
+import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint

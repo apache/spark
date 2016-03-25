@@ -136,7 +136,6 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
   /////////////////////////////////////////////////////////////////////////////
   test("Feature importance with toy data") {
     val gbt = new GBTRegressor()
-      .setImpurity("Gini")
       .setMaxDepth(3)
       .setMaxIter(5)
       .setSubsamplingRate(1.0)
