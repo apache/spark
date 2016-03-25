@@ -164,7 +164,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
           if (subStrings(i).indexOf("lastUpdatedEpoch") >= 0) {
             subStrings(i) = "\"lastUpdatedEpoch\":0"
           } else if (subStrings(i).indexOf("lastUpdated") >= 0) {
-            subStrings(i) = "\"lastUpdated\":0"
+            subStrings(i) = "\"lastUpdated\":\"\""
           }
         }
         subStrings.mkString(",")

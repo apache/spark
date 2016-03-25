@@ -7,7 +7,7 @@
     "lastUpdatedEpoch" : 0,
     "startTime" : "2015-02-03T16:42:59.720GMT",
     "endTime" : "2015-02-03T16:43:08.731GMT",
-    "lastUpdated" : 0,
+    "lastUpdated" : "",
     "duration" : 9011,
     "sparkUser" : "irashid",
     "completed" : true
@@ -21,7 +21,7 @@
     "lastUpdatedEpoch" : 0,
     "startTime" : "2015-02-03T16:42:38.277GMT",
     "endTime" : "2015-02-03T16:42:46.912GMT",
-    "lastUpdated" : 0,
+    "lastUpdated" : "",
     "duration" : 8635,
     "sparkUser" : "irashid",
     "completed" : true
