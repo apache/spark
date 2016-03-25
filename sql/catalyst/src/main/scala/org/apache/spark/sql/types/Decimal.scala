@@ -376,6 +376,14 @@ object Decimal {
 
   def apply(value: String): Decimal = new Decimal().set(BigDecimal(value))
 
+  // This is used for RowEncoder to handle Decimal inside external row.
+  def fromDecimal(value: Any): Decimal = {
+    value match {
+      case j: java.math.BigDecimal => apply(j)
+      case d: Decimal => d
+    }
+  }
+
   /**
    * Creates a decimal from unscaled, precision and scale without checking the bounds.
    */

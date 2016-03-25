@@ -79,7 +79,7 @@ object RowEncoder {
       StaticInvoke(
         Decimal.getClass,
         DecimalType.SYSTEM_DEFAULT,
-        "apply",
+        "fromDecimal",
         inputObject :: Nil)
 
     case StringType =>
@@ -95,7 +95,7 @@ object RowEncoder {
           classOf[GenericArrayData],
           inputObject :: Nil,
           dataType = t)
-      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeFor(et))
+      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeForInput(et))
     }
 
     case t @ MapType(kt, vt, valueNullable) =>
@@ -129,12 +129,27 @@ object RowEncoder {
           Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
           Literal.create(null, f.dataType),
           extractorsFor(
-            Invoke(inputObject, method, externalDataTypeFor(f.dataType), Literal(i) :: Nil),
+            Invoke(inputObject, method, externalDataTypeForInput(f.dataType), Literal(i) :: Nil),
             f.dataType))
       }
       If(IsNull(inputObject),
         Literal.create(null, inputType),
         CreateStruct(convertedFields))
+  }
+
+  /**
+   * Returns the `DataType` that can be used when generating code that converts input data
+   * into the Spark SQL internal format.  Unlike `externalDataTypeFor`, the `DataType` returned
+   * by this function can be more permissive since multiple external types may map to a single
+   * internal type.  For example, for an input with DecimalType in external row, its external types
+   * can be `scala.math.BigDecimal`, `java.math.BigDecimal`, or
+   * `org.apache.spark.sql.types.Decimal`.
+   */
+  private def externalDataTypeForInput(dt: DataType): DataType = dt match {
+    // In order to support both Decimal and java BigDecimal in external row, we make this
+    // as java.lang.Object.
+    case _: DecimalType => ObjectType(classOf[java.lang.Object])
+    case _ => externalDataTypeFor(dt)
   }
 
   private def externalDataTypeFor(dt: DataType): DataType = dt match {
