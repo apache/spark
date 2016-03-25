@@ -52,6 +52,12 @@ case class CreateDatabase(
     props: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+case class DropDatabase(
+    databaseName: String,
+    ifExists: Boolean,
+    restrict: Boolean)(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
 case class CreateFunction(
     functionName: String,
     alias: String,
