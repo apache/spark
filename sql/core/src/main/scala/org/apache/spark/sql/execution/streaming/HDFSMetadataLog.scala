@@ -230,9 +230,9 @@ object HDFSMetadataLog {
     def create(path: Path): FSDataOutputStream
 
     /**
-     * Atomically ename path, or throw exception if it cannot be done.
-     * Should throw FileAlreadyExistsException if file already exists.
-     * Should throw FileNotFound exception if the file does not exist.
+     * Atomically rename path, or throw exception if it cannot be done.
+     * Should throw FileNotFoundException if srcPath does not exist.
+     * Should throw FileAlreadyExistsException if destPath already exists.
      */
     def rename(srcPath: Path, destPath: Path): Unit
 
