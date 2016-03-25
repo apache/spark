@@ -246,29 +246,6 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
-  public void testGroupByColumn() {
-    List<String> data = Arrays.asList("a", "foo", "bar");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
-    KeyValueGroupedDataset<Integer, String> grouped =
-      ds.groupByKey(length(col("value"))).keyAs(Encoders.INT());
-
-    Dataset<String> mapped = grouped.mapGroups(
-      new MapGroupsFunction<Integer, String, String>() {
-        @Override
-        public String call(Integer key, Iterator<String> data) throws Exception {
-          StringBuilder sb = new StringBuilder(key.toString());
-          while (data.hasNext()) {
-            sb.append(data.next());
-          }
-          return sb.toString();
-        }
-      },
-      Encoders.STRING());
-
-    Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
-  }
-
-  @Test
   public void testSelect() {
     List<Integer> data = Arrays.asList(2, 6);
     Dataset<Integer> ds = context.createDataset(data, Encoders.INT());

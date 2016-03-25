@@ -60,16 +60,19 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
-    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-    TestHive.sessionState.functionRegistry.restore()
+    try {
+      TestHive.cacheTables = false
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+      TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+      TestHive.sessionState.functionRegistry.restore()
 
-    // For debugging dump some statistics about how much time was spent in various optimizer rules.
-    logWarning(RuleExecutor.dumpTimeSpent())
-    super.afterAll()
+      // For debugging dump some statistics about how much time was spent in various optimizer rules.
+      logWarning(RuleExecutor.dumpTimeSpent())
+    } finally {
+      super.afterAll()
+    }
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
@@ -337,6 +340,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_round",
     "udf_round_3",
     "view_cast",
+
+    // enable this after fixing SPARK-14137
+    "union20",
 
     // These tests check the VIEW table definition, but Spark handles CREATE VIEW itself and
     // generates different View Expanded Text.
@@ -1040,7 +1046,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union18",
     "union19",
     "union2",
-    "union20",
     "union22",
     "union23",
     "union24",
