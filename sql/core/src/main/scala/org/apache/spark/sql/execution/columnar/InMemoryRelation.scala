@@ -53,7 +53,35 @@ private[sql] object InMemoryRelation {
  * @param stats The stat of columns
  */
 private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]],
+                       dataTypes: Array[DataType], stats: InternalRow) {
+  def column(ordinal: Int): org.apache.spark.sql.execution.vectorized.ColumnVector = {
+    val dt = dataTypes(ordinal)
+    val buffer = ByteBuffer.wrap(buffers(ordinal)).order(nativeOrder)
+    val accessor: BasicColumnAccessor[_] = dt match {
+      case BooleanType => new BooleanColumnAccessor(buffer)
+      case ByteType => new ByteColumnAccessor(buffer)
+      case ShortType => new ShortColumnAccessor(buffer)
+      case IntegerType | DateType => new IntColumnAccessor(buffer)
+      case LongType | TimestampType => new LongColumnAccessor(buffer)
+      case FloatType => new FloatColumnAccessor(buffer)
+      case DoubleType => new DoubleColumnAccessor(buffer)
+    }
+
+    val (out, nullsBuffer) = if (accessor.isInstanceOf[NativeColumnAccessor[_]]) {
+      val nativeAccessor = accessor.asInstanceOf[NativeColumnAccessor[_]]
+      nativeAccessor.decompress(numRows);
+    } else {
+      val buffer = accessor.getByteBuffer
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      (buffer, nullsBuffer)
+    }
+
+    org.apache.spark.sql.execution.vectorized.ColumnVector.allocate(numRows, dt,
+      true, out, nullsBuffer)
+  }
+}
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],

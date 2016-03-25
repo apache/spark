@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.UserDefinedType
+import org.apache.spark.sql.types._
 
 
 private[sql] case class InMemoryTableScanExec(
@@ -133,9 +133,9 @@ private[sql] case class InMemoryTableScanExec(
         schema)
 
       // Find the ordinals and data types of the requested columns.
-      val (requestedColumnIndices, requestedColumnDataTypes) =
+      val (requestedColumnIndices, requestedColumnAttribute) =
         attributes.map { a =>
-          relOutput.indexOf(a.exprId) -> a.dataType
+          relOutput.indexOf(a.exprId) -> a
         }.unzip
 
       // Do partition batch pruning if enabled
@@ -167,12 +167,16 @@ private[sql] case class InMemoryTableScanExec(
         batch
       }
 
-      val columnTypes = requestedColumnDataTypes.map {
-        case udt: UserDefinedType[_] => udt.sqlType
-        case other => other
+      val columnTypes = requestedColumnAttribute.map { a =>
+        a.dataType match {
+          case udt: UserDefinedType[_] => udt.sqlType
+          case other => other
+        }
       }.toArray
+      val columnNullables = requestedColumnAttribute.map { _.nullable }.toArray
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
-      columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
+      columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray,
+        columnNullables)
       if (enableAccumulators && columnarIterator.hasNext) {
         readPartitions.add(1)
       }
