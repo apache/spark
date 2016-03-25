@@ -148,15 +148,15 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
   override def load(path: String): TrainValidationSplit = super.load(path)
 
   private[TrainValidationSplit] class TrainValidationSplitWriter(instance: TrainValidationSplit)
-    extends MLWriter with MetaPipelineReadWrite {
+    extends MLWriter {
 
     ValidatorParams.validateParams(instance)
 
-    override protected def saveImpl(path: String): Unit = save(path, instance, sc)
+    override protected def saveImpl(path: String): Unit =
+      MetaPipelineReadWrite.saveImpl(path, instance, sc)
   }
 
-  private class TrainValidationSplitReader
-    extends MLReader[TrainValidationSplit] with MetaPipelineReadWrite {
+  private class TrainValidationSplitReader extends MLReader[TrainValidationSplit] {
 
     /** Checked against metadata when loading model */
     private val className = classOf[TrainValidationSplit].getName
@@ -164,7 +164,8 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
     override def load(path: String): TrainValidationSplit = {
       implicit val format = DefaultFormats
 
-      val (metadata, estimator, evaluator, estimatorParamMaps) = load(path, sc, className)
+      val (metadata, estimator, evaluator, estimatorParamMaps) =
+        MetaPipelineReadWrite.load(path, sc, className)
       val trainRatio = (metadata.params \ "trainRatio").extract[Double]
       new TrainValidationSplit(metadata.uid)
         .setEstimator(estimator)
@@ -225,22 +226,20 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
   override def load(path: String): TrainValidationSplitModel = super.load(path)
 
   private[TrainValidationSplitModel]
-  class TrainValidationSplitModelWriter(instance: TrainValidationSplitModel)
-    extends MLWriter with MetaPipelineReadWrite {
+  class TrainValidationSplitModelWriter(instance: TrainValidationSplitModel) extends MLWriter {
 
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
       val extraMetadata = "validationMetrics" -> instance.validationMetrics.toSeq
-      save(path, instance, sc, Some(extraMetadata))
+      MetaPipelineReadWrite.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
     }
   }
 
-  private class TrainValidationSplitModelReader
-    extends MLReader[TrainValidationSplitModel] with MetaPipelineReadWrite {
+  private class TrainValidationSplitModelReader extends MLReader[TrainValidationSplitModel] {
 
     /** Checked against metadata when loading model */
     private val className = classOf[TrainValidationSplitModel].getName
@@ -248,7 +247,8 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     override def load(path: String): TrainValidationSplitModel = {
       implicit val format = DefaultFormats
 
-      val (metadata, estimator, evaluator, estimatorParamMaps) = load(path, sc, className)
+      val (metadata, estimator, evaluator, estimatorParamMaps) =
+        MetaPipelineReadWrite.load(path, sc, className)
       val trainRatio = (metadata.params \ "trainRatio").extract[Double]
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
