@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.{StringType, IntegerType}
 
 class ConstraintPropagationSuite extends SparkFunSuite {
 
@@ -216,5 +217,13 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         resolveColumn(tr, "a") === resolveColumn(tr, "b"),
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "b")))))
+  }
+
+  test("infer IsNotNull constraints from non-nullable attributes") {
+    val tr = LocalRelation('a.int, AttributeReference("b", IntegerType, nullable = false)(),
+      AttributeReference("c", StringType, nullable = false)())
+
+    verifyConstraints(tr.analyze.constraints,
+      ExpressionSet(Seq(IsNotNull(resolveColumn(tr, "b")), IsNotNull(resolveColumn(tr, "c")))))
   }
 }
