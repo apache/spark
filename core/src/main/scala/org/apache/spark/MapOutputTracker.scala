@@ -225,14 +225,14 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         s"${System.currentTimeMillis - startTime} ms")
 
       if (fetchedStatuses != null) {
-        return fetchedStatuses
+        fetchedStatuses
       } else {
         logError("Missing all output locations for shuffle " + shuffleId)
         throw new MetadataFetchFailedException(
           shuffleId, -1, "Missing all output locations for shuffle " + shuffleId)
       }
     } else {
-      return statuses
+      statuses
     }
   }
 

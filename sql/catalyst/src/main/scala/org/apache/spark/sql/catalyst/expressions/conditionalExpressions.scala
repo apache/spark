@@ -130,9 +130,9 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
       i += 1
     }
     if (elseValue.isDefined) {
-      return elseValue.get.eval(input)
+      elseValue.get.eval(input)
     } else {
-      return null
+      null
     }
   }
 

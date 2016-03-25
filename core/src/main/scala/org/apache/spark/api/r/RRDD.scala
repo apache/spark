@@ -79,7 +79,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
 
     try {
 
-      return new Iterator[U] {
+      new Iterator[U] {
         def next(): U = {
           val obj = _nextObj
           if (hasNext) {

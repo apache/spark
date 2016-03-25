@@ -48,7 +48,7 @@ private[graphx] object BytecodeUtils {
           return true
         }
       }
-      return false
+      false
     }
   }
 
@@ -72,7 +72,7 @@ private[graphx] object BytecodeUtils {
         }
       }
     }
-    return false
+    false
   }
 
   /**

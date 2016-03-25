@@ -225,7 +225,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
             val  parts = userInfo.split(":", 2)
             passAuth = new PasswordAuthentication(parts(0), parts(1).toCharArray())
           }
-          return passAuth
+          passAuth
         }
       }
     )
