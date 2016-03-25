@@ -54,11 +54,11 @@ object SQLConf {
   }
 
   val ALLOW_MULTIPLE_CONTEXTS = SQLConfigBuilder("spark.sql.allowMultipleContexts")
-    .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed." +
+    .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
       "When set to false, only one SQLContext/HiveContext is allowed to be created " +
       "through the constructor (new SQLContexts/HiveContexts created through newSession " +
-      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once" +
-      "a SQLContext/HiveContext has been created, changing the value of this conf will not" +
+      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once " +
+      "a SQLContext/HiveContext has been created, changing the value of this conf will not " +
       "have effect.")
     .booleanConf
     .createWithDefault(true)
@@ -129,7 +129,7 @@ object SQLConf {
       .doc("The advisory minimal number of post-shuffle partitions provided to " +
         "ExchangeCoordinator. This setting is used in our test to make sure we " +
         "have enough parallelism to expose issues that will not be exposed with a " +
-        "single partition. When the value is a non-positive value, this setting will" +
+        "single partition. When the value is a non-positive value, this setting will " +
         "not be provided to ExchangeCoordinator.")
       .intConf
       .createWithDefault(-1)
@@ -271,7 +271,7 @@ object SQLConf {
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = SQLConfigBuilder("spark.sql.thriftserver.scheduler.pool")
-    .doc("Set a Fair Scheduler pool for a JDBC client session")
+    .doc("Set a Fair Scheduler pool for a JDBC client session.")
     .stringConf
     .createOptional
 
@@ -386,7 +386,7 @@ object SQLConf {
 
   val RUN_SQL_ON_FILES = SQLConfigBuilder("spark.sql.runSQLOnFiles")
     .internal()
-    .doc("When true, we could use `datasource`.`path` as table in SQL query")
+    .doc("When true, we could use `datasource`.`path` as table in SQL query.")
     .booleanConf
     .createWithDefault(true)
 
@@ -408,7 +408,7 @@ object SQLConf {
   val WHOLESTAGE_CODEGEN_ENABLED = SQLConfigBuilder("spark.sql.codegen.wholeStage")
     .internal()
     .doc("When true, the whole stage (of multiple operators) will be compiled into single java" +
-      " method")
+      " method.")
     .booleanConf
     .createWithDefault(true)
 
@@ -419,7 +419,7 @@ object SQLConf {
 
   val EXCHANGE_REUSE_ENABLED = SQLConfigBuilder("spark.sql.exchange.reuse")
     .internal()
-    .doc("When true, the planner will try to find out duplicated exchanges and re-use them")
+    .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
     .booleanConf
     .createWithDefault(true)
 
