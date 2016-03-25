@@ -2667,7 +2667,7 @@ setMethod("sort_array",
 #' plot <- plot + xlab("Sepal_Length") + ylab("Frequency")   
 #' } 
 setMethod("histogram",
-          signature(df = "DataFrame", col="characterOrColumn"),
+          signature(df = "DataFrame", col = "characterOrColumn"),
           function(df, col, nbins = 10) {
             # Validate nbins
             if (nbins < 2) {
