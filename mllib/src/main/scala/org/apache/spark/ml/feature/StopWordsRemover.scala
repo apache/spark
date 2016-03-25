@@ -27,23 +27,6 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
 /**
- * stop words list
- */
-private[spark] object StopWords {
-
-  /** Read stop words list from resources */
-  def readStopWords(language: String): Array[String] = {
-    require(supportedLanguages.contains(language), s"$language is not in language list")
-    val is = getClass.getResourceAsStream(s"/org/apache/spark/ml/feature/stopwords/$language.txt")
-    scala.io.Source.fromInputStream(is)(scala.io.Codec.UTF8).getLines().toArray
-  }
-
-  /** Supported languages list must be lowercase */
-  private val supportedLanguages = Set("danish", "dutch", "english", "finnish", "french", "german",
-    "hungarian", "italian", "norwegian", "portuguese", "russian", "spanish", "swedish", "turkish")
-}
-
-/**
  * :: Experimental ::
  * A feature transformer that filters out stop words from input.
  * Note: null values from input array are preserved unless adding null to stopWords explicitly.
@@ -88,28 +71,11 @@ class StopWordsRemover(override val uid: String)
   /** @group getParam */
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  /**
-   * the language of stop words
-   * Supported languages: Danish, Dutch, English, Finnish, French, German, Hungarian,
-   * Italian, Norwegian, Portuguese, Russian, Spanish, Swedish, Turkish
-   * Default: "English"
-   * @group param
-   */
-  val language: Param[String] = new Param[String](this, "language", "stopwords language")
-
-  /** @group setParam */
-  def setLanguage(value: String): this.type = set(language, value.toLowerCase)
-
-  /** @group getParam */
-  def getLanguage: String = $(language)
-
-  setDefault(stopWords -> Array.empty[String],
-    language -> "english",
-    caseSensitive -> false)
+  setDefault(stopWords -> Array.empty[String], caseSensitive -> false)
 
   override def transform(dataset: DataFrame): DataFrame = {
     val stopWordsSet = if ($(stopWords).isEmpty) {
-      StopWords.readStopWords($(language)).toSet
+      StopWordsRemover.loadStopWords("english").toSet
     } else {
       $(stopWords).toSet
     }
@@ -145,13 +111,21 @@ class StopWordsRemover(override val uid: String)
 @Since("1.6.0")
 object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
 
+  private val supportedLanguages = Set("danish", "dutch", "english", "finnish", "french", "german",
+    "hungarian", "italian", "norwegian", "portuguese", "russian", "spanish", "swedish", "turkish")
+
   @Since("1.6.0")
   override def load(path: String): StopWordsRemover = super.load(path)
 
   /**
-   * Stop words for the language
-   * Supported languages: Danish, Dutch, English, Finnish, French, German, Hungarian,
-   * Italian, Norwegian, Portuguese, Russian, Spanish, Swedish, Turkish
+   * Load stop words for the language
+   * Supported languages: danish, dutch, english, finnish, french, german, hungarian,
+   * italian, norwegian, portuguese, russian, spanish, swedish, turkish
+   * @see [[http://anoncvs.postgresql.org/cvsweb.cgi/pgsql/src/backend/snowball/stopwords/]]
    */
-  def loadStopWords(language: String): Array[String] = StopWords.readStopWords(language.toLowerCase)
+  def loadStopWords(language: String): Array[String] = {
+    require(supportedLanguages.contains(language), s"$language is not in language list")
+    val is = getClass.getResourceAsStream(s"/org/apache/spark/ml/feature/stopwords/$language.txt")
+    scala.io.Source.fromInputStream(is)(scala.io.Codec.UTF8).getLines().toArray
+  }
 }

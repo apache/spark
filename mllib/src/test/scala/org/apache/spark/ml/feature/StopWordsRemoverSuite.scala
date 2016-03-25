@@ -85,6 +85,20 @@ class StopWordsRemoverSuite
     testStopWordsRemover(remover, dataSet)
   }
 
+  test("StopWordsRemover with language selection") {
+    val stopWords = StopWordsRemover.loadStopWords("turkish")
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered")
+      .setStopWords(stopWords)
+    val dataSet = sqlContext.createDataFrame(Seq(
+      (Seq("acaba", "ama", "biri"), Seq()),
+      (Seq("hep", "her", "scala"), Seq("scala"))
+    )).toDF("raw", "expected")
+
+    testStopWordsRemover(remover, dataSet)
+  }
+
   test("StopWordsRemover with ignored words") {
     val stopWords = StopWordsRemover.loadStopWords("english").toSet -- Set("a")
     val remover = new StopWordsRemover()
@@ -108,19 +122,6 @@ class StopWordsRemoverSuite
     val dataSet = sqlContext.createDataFrame(Seq(
       (Seq("python", "scala", "a"), Seq()),
       (Seq("Python", "Scala", "swift"), Seq("swift"))
-    )).toDF("raw", "expected")
-
-    testStopWordsRemover(remover, dataSet)
-  }
-
-  test("StopWordsRemover with language selection") {
-    val remover = new StopWordsRemover()
-      .setInputCol("raw")
-      .setOutputCol("filtered")
-      .setLanguage("turkish")
-    val dataSet = sqlContext.createDataFrame(Seq(
-      (Seq("acaba", "ama", "biri"), Seq()),
-      (Seq("hep", "her", "scala"), Seq("scala"))
     )).toDF("raw", "expected")
 
     testStopWordsRemover(remover, dataSet)
