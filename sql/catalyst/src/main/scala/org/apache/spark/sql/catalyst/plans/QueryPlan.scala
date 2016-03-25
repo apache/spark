@@ -62,6 +62,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case _ =>
         Set.empty[Expression]
     }.foldLeft(Set.empty[Expression])(_ union _.toSet)
+      .union(output.filterNot(_.nullable).map(IsNotNull).toSet)
   }
 
   /**
