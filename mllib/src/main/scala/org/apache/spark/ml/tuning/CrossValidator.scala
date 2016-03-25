@@ -155,15 +155,15 @@ object CrossValidator extends MLReadable[CrossValidator] {
   @Since("1.6.0")
   override def load(path: String): CrossValidator = super.load(path)
 
-  private[CrossValidator] class CrossValidatorWriter(instance: CrossValidator)
-    extends MLWriter with MetaPipelineReadWrite {
+  private[CrossValidator] class CrossValidatorWriter(instance: CrossValidator) extends MLWriter {
 
-    validateParams(instance)
+    ValidatorParams.validateParams(instance)
 
-    override protected def saveImpl(path: String): Unit = save(path, instance, sc)
+    override protected def saveImpl(path: String): Unit =
+      MetaPipelineReadWrite.saveImpl(path, instance, sc)
   }
 
-  private class CrossValidatorReader extends MLReader[CrossValidator] with MetaPipelineReadWrite {
+  private class CrossValidatorReader extends MLReader[CrossValidator] {
 
     /** Checked against metadata when loading model */
     private val className = classOf[CrossValidator].getName
@@ -171,7 +171,8 @@ object CrossValidator extends MLReadable[CrossValidator] {
     override def load(path: String): CrossValidator = {
       implicit val format = DefaultFormats
 
-      val (metadata, estimator, evaluator, estimatorParamMaps) = load(path, sc, className)
+      val (metadata, estimator, evaluator, estimatorParamMaps) =
+        MetaPipelineReadWrite.load(path, sc, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
       new CrossValidator(metadata.uid)
         .setEstimator(estimator)
@@ -232,22 +233,20 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
   override def load(path: String): CrossValidatorModel = super.load(path)
 
   private[CrossValidatorModel]
-  class CrossValidatorModelWriter(instance: CrossValidatorModel)
-    extends MLWriter with MetaPipelineReadWrite {
+  class CrossValidatorModelWriter(instance: CrossValidatorModel) extends MLWriter {
 
-    validateParams(instance)
+    ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
       val extraMetadata = "avgMetrics" -> instance.avgMetrics.toSeq
-      save(path, instance, sc, Some(extraMetadata))
+      MetaPipelineReadWrite.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
     }
   }
 
-  private class CrossValidatorModelReader
-    extends MLReader[CrossValidatorModel] with MetaPipelineReadWrite {
+  private class CrossValidatorModelReader extends MLReader[CrossValidatorModel] {
 
     /** Checked against metadata when loading model */
     private val className = classOf[CrossValidatorModel].getName
@@ -255,7 +254,8 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     override def load(path: String): CrossValidatorModel = {
       implicit val format = DefaultFormats
 
-      val (metadata, estimator, evaluator, estimatorParamMaps) = load(path, sc, className)
+      val (metadata, estimator, evaluator, estimatorParamMaps) =
+        MetaPipelineReadWrite.load(path, sc, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)

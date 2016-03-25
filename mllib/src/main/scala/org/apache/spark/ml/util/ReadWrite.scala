@@ -361,9 +361,9 @@ private[ml] object DefaultParamsReader {
 }
 
 /**
- * Default Meta-Pipeline read and write implementation.
+ * Default Meta-Algorithm read and write implementation.
  */
-private[ml] trait MetaPipelineReadWrite {
+private[ml] object MetaPipelineReadWrite {
   /**
    * Examine the given estimator (which may be a compound estimator) and extract a mapping
    * from UIDs to corresponding [[Params]] instances.
@@ -372,8 +372,8 @@ private[ml] trait MetaPipelineReadWrite {
     val uidList = getUidMapImpl(instance)
     val uidMap = uidList.toMap
     if (uidList.size != uidMap.size) {
-      throw new RuntimeException("CrossValidator.load found a compound estimator with stages" +
-        s" with duplicate UIDs.  List of UIDs: ${uidList.map(_._1).mkString(", ")}")
+      throw new RuntimeException(s"${instance.getClass.getName}.load found a compound estimator" +
+        s" with stages with duplicate UIDs. List of UIDs: ${uidList.map(_._1).mkString(", ")}.")
     }
     uidMap
   }
@@ -385,8 +385,8 @@ private[ml] trait MetaPipelineReadWrite {
       case v: ValidatorParams => Array(v.getEstimator, v.getEvaluator)
       case ovr: OneVsRestParams =>
         // TODO: SPARK-11892: This case may require special handling.
-        throw new UnsupportedOperationException("CrossValidator write will fail because it" +
-          " cannot yet handle an estimator containing type: ${ovr.getClass.getName}")
+        throw new UnsupportedOperationException(s"${instance.getClass.getName} write will fail" +
+          s" because it cannot yet handle an estimator containing type: ${ovr.getClass.getName}.")
       case rformModel: RFormulaModel => Array(rformModel.pipelineModel)
       case _: Params => Array()
     }
@@ -394,33 +394,7 @@ private[ml] trait MetaPipelineReadWrite {
     List((instance.uid, instance)) ++ subStageMaps
   }
 
-  /**
-   * Check that [[ValidatorParams.evaluator]] and [[ValidatorParams.estimator]] are Writable.
-   * This does not check [[ValidatorParams.estimatorParamMaps]].
-   */
-  def validateParams(instance: ValidatorParams): Unit = {
-    def checkElement(elem: Params, name: String): Unit = elem match {
-      case stage: MLWritable => // good
-      case other =>
-        throw new UnsupportedOperationException("CrossValidator write will fail " +
-          s" because it contains $name which does not implement Writable." +
-          s" Non-Writable $name: ${other.uid} of type ${other.getClass}")
-    }
-    checkElement(instance.getEvaluator, "evaluator")
-    checkElement(instance.getEstimator, "estimator")
-    // Check to make sure all Params apply to this estimator.  Throw an error if any do not.
-    // Extraneous Params would cause problems when loading the estimatorParamMaps.
-    val uidToInstance: Map[String, Params] = getUidMap(instance)
-    instance.getEstimatorParamMaps.foreach { case pMap: ParamMap =>
-      pMap.toSeq.foreach { case ParamPair(p, v) =>
-        require(uidToInstance.contains(p.parent), s"ValidatorParams save requires all Params in" +
-          s" estimatorParamMaps to apply to this ValidatorParams, its Estimator, or its" +
-          s" Evaluator. An extraneous Param was found: $p")
-      }
-    }
-  }
-
-  def save(
+  def saveImpl(
       path: String,
       instance: ValidatorParams,
       sc: SparkContext,

@@ -150,7 +150,7 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
   private[TrainValidationSplit] class TrainValidationSplitWriter(instance: TrainValidationSplit)
     extends MLWriter with MetaPipelineReadWrite {
 
-    validateParams(instance)
+    ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = save(path, instance, sc)
   }
@@ -228,7 +228,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
   class TrainValidationSplitModelWriter(instance: TrainValidationSplitModel)
     extends MLWriter with MetaPipelineReadWrite {
 
-    validateParams(instance)
+    ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
