@@ -135,7 +135,6 @@ class MLWritable(object):
     """
 
     @property
-    @since(2.0)
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
         raise NotImplementedError("MLWritable is not yet implemented for type: %r" % type(self))
@@ -152,7 +151,6 @@ class JavaMLWritable(MLWritable):
     """
 
     @property
-    @since(2.0)
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
         return JavaMLWriter(self)
