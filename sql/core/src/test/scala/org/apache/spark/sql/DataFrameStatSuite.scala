@@ -57,7 +57,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
       assert(splits.length == 3, "wrong number of splits")
 
-      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
+      assert(splits.reduce((a, b) => a.union(b)).sort("id").collect().toList ==
         data.collect().toList, "incomplete or wrong split")
 
       val s = splits.map(_.count())

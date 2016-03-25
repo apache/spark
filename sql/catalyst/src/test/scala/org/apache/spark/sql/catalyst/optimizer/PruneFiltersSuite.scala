@@ -60,8 +60,8 @@ class PruneFiltersSuite extends PlanTest {
 
     val query =
       tr1.where('a.attr > 10)
-        .unionAll(tr2.where('d.attr > 10)
-        .unionAll(tr3.where('g.attr > 10)))
+        .union(tr2.where('d.attr > 10)
+        .union(tr3.where('g.attr > 10)))
     val queryWithUselessFilter = query.where('a.attr > 10)
 
     val optimized = Optimize.execute(queryWithUselessFilter.analyze)
