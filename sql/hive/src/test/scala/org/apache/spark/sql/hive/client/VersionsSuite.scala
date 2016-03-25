@@ -107,7 +107,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   // connecting to an auto-populated, in-process metastore.  Let's make sure we are getting the
   // versions right by forcing a known compatibility failure.
   // TODO: currently only works on mysql where we manually create the schema...
-  test("failure sanity check") {
+  ignore("failure sanity check") {
     val e = intercept[Throwable] {
       val badClient = quietly {
         IsolatedClientLoader.forVersion(
