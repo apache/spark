@@ -167,7 +167,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       new BisectingKMeansModel(rootNode)
     }
 
-    def buildTree(rootId: Int, data: Map[Int, Data]): ClusteringTreeNode = {
+    private def buildTree(rootId: Int, data: Map[Int, Data]): ClusteringTreeNode = {
       val root = data.get(rootId).get
       if (root.children.isEmpty) {
         new ClusteringTreeNode(root.index, root.size, new VectorWithNorm(root.center, root.norm),
