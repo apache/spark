@@ -84,6 +84,10 @@ object SQLConf {
     .intConf
     .createWithDefault(10000)
 
+  val COLUMN_VECTOR_CODEGEN = booleanConf("spark.sql.inMemoryColumnarStorage.codegen",
+    defaultValue = Some(true),
+    doc = "When set to true Spark SQL will generate code to access columnar storage.")
+
   val IN_MEMORY_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.inMemoryColumnarStorage.partitionPruning")
       .internal()
