@@ -777,7 +777,7 @@ object TestSettings {
     // Make sure the test temp directory exists.
     resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
       if (!new File(testTempDir).isDirectory()) {
-        require(new File(testTempDir).mkdirs())
+        require(new File(testTempDir).mkdirs(), s"Error creating temp directory $testTempDir.")
       }
       Seq[File]()
     },
