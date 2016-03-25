@@ -80,7 +80,6 @@ class Analyzer(
       EliminateUnions),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
-      ResolveStar ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
@@ -374,85 +373,6 @@ class Analyzer(
   }
 
   /**
-   * Expand [[UnresolvedStar]] or [[ResolvedStar]] to the matching attributes in child's output.
-   */
-  object ResolveStar extends Rule[LogicalPlan] {
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case p: LogicalPlan if !p.childrenResolved => p
-      // If the projection list contains Stars, expand it.
-      case p: Project if containsStar(p.projectList) =>
-        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
-      // If the aggregate function argument contains Stars, expand it.
-      case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
-      // If the script transformation input contains Stars, expand it.
-      case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(
-          input = t.input.flatMap {
-            case s: Star => s.expand(t.child, resolver)
-            case o => o :: Nil
-          }
-        )
-      case g: Generate if containsStar(g.generator.children) =>
-        failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
-    }
-
-    /**
-     * Build a project list for Project/Aggregate and expand the star if possible
-     */
-    private def buildExpandedProjectList(
-        exprs: Seq[NamedExpression],
-        child: LogicalPlan): Seq[NamedExpression] = {
-      exprs.flatMap {
-        // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
-        case s: Star => s.expand(child, resolver)
-        // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
-        case UnresolvedAlias(s: Star, _) => s.expand(child, resolver)
-        case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
-        case o => o :: Nil
-      }.map(_.asInstanceOf[NamedExpression])
-    }
-
-    /**
-     * Returns true if `exprs` contains a [[Star]].
-     */
-    def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
-
-    /**
-     * Expands the matching attribute.*'s in `child`'s output.
-     */
-    def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
-      expr.transformUp {
-        case f1: UnresolvedFunction if containsStar(f1.children) =>
-          f1.copy(children = f1.children.flatMap {
-            case s: Star => s.expand(child, resolver)
-            case o => o :: Nil
-          })
-        case c: CreateStruct if containsStar(c.children) =>
-          c.copy(children = c.children.flatMap {
-            case s: Star => s.expand(child, resolver)
-            case o => o :: Nil
-          })
-        case c: CreateArray if containsStar(c.children) =>
-          c.copy(children = c.children.flatMap {
-            case s: Star => s.expand(child, resolver)
-            case o => o :: Nil
-          })
-        case p: Murmur3Hash if containsStar(p.children) =>
-          p.copy(children = p.children.flatMap {
-            case s: Star => s.expand(child, resolver)
-            case o => o :: Nil
-          })
-        // count(*) has been replaced by count(1)
-        case o if containsStar(o.children) =>
-          failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
-      }
-    }
-  }
-
-  /**
    * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from
    * a logical plan node's children.
    */
@@ -517,6 +437,23 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p: LogicalPlan if !p.childrenResolved => p
+
+      // If the projection list contains Stars, expand it.
+      case p: Project if containsStar(p.projectList) =>
+        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
+      // If the aggregate function argument contains Stars, expand it.
+      case a: Aggregate if containsStar(a.aggregateExpressions) =>
+        a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
+      // If the script transformation input contains Stars, expand it.
+      case t: ScriptTransformation if containsStar(t.input) =>
+        t.copy(
+          input = t.input.flatMap {
+            case s: Star => s.expand(t.child, resolver)
+            case o => o :: Nil
+          }
+        )
+      case g: Generate if containsStar(g.generator.children) =>
+        failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>
@@ -611,6 +548,59 @@ class Analyzer(
 
     def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
       AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
+    }
+
+    /**
+     * Build a project list for Project/Aggregate and expand the star if possible
+     */
+    private def buildExpandedProjectList(
+      exprs: Seq[NamedExpression],
+      child: LogicalPlan): Seq[NamedExpression] = {
+      exprs.flatMap {
+        // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
+        case s: Star => s.expand(child, resolver)
+        // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
+        case UnresolvedAlias(s: Star, _) => s.expand(child, resolver)
+        case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
+        case o => o :: Nil
+      }.map(_.asInstanceOf[NamedExpression])
+    }
+
+    /**
+     * Returns true if `exprs` contains a [[Star]].
+     */
+    def containsStar(exprs: Seq[Expression]): Boolean =
+      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+
+    /**
+     * Expands the matching attribute.*'s in `child`'s output.
+     */
+    def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
+      expr.transformUp {
+        case f1: UnresolvedFunction if containsStar(f1.children) =>
+          f1.copy(children = f1.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case c: CreateStruct if containsStar(c.children) =>
+          c.copy(children = c.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case c: CreateArray if containsStar(c.children) =>
+          c.copy(children = c.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case p: Murmur3Hash if containsStar(p.children) =>
+          p.copy(children = p.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        // count(*) has been replaced by count(1)
+        case o if containsStar(o.children) =>
+          failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
+      }
     }
   }
 

@@ -29,7 +29,7 @@ class AnalysisSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
-    val plan = (1 to 100)
+    val plan = (1 to 120)
       .map(_ => testRelation)
       .fold[LogicalPlan](testRelation) { (a, b) =>
         a.select(UnresolvedStar(None)).select('a).unionAll(b.select(UnresolvedStar(None)))
