@@ -655,6 +655,7 @@ class PersistenceTest(PySparkTestCase):
                 rmtree(temp_path)
             except OSError:
                 pass
+            
     def test_write_property(self):
         wrt = MLWritable()
         self.assertEqual(isinstance(type(wrt).write, property), True)
