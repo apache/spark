@@ -709,6 +709,10 @@ private[storage] class PartiallySerializedBlock[T](
    */
   def discard(): Unit = {
     try {
+      // We want to close the output stream in order to free any resources associated with the
+      // serializer itself (such as Kryo's internal buffers). close() might cause data to be
+      // written, so redirect the output stream to discard that data.
+      redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
       serializationStream.close()
     } finally {
       memoryStore.releaseUnrollMemoryForThisTask(unrollMemory)
