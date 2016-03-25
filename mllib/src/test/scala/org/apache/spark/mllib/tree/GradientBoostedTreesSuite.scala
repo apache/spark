@@ -17,7 +17,8 @@
 
 package org.apache.spark.mllib.tree
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -170,13 +171,13 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
         categoricalFeaturesInfo = Map.empty)
       val boostingStrategy =
         new BoostingStrategy(treeStrategy, loss, numIterations, validationTol = 0.0)
-      val gbtValidate = new GradientBoostedTrees(boostingStrategy)
+      val gbtValidate = new GradientBoostedTrees(boostingStrategy, seed = 0)
         .runWithValidation(trainRdd, validateRdd)
       val numTrees = gbtValidate.numTrees
       assert(numTrees !== numIterations)
 
       // Test that it performs better on the validation dataset.
-      val gbt = new GradientBoostedTrees(boostingStrategy).run(trainRdd)
+      val gbt = new GradientBoostedTrees(boostingStrategy, seed = 0).run(trainRdd)
       val (errorWithoutValidation, errorWithValidation) = {
         if (algo == Classification) {
           val remappedRdd = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))

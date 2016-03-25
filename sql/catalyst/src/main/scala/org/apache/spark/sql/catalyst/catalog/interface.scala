@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalyst.catalog
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 
 /**
@@ -87,6 +90,8 @@ abstract class ExternalCatalog {
   def alterTable(db: String, tableDefinition: CatalogTable): Unit
 
   def getTable(db: String, table: String): CatalogTable
+
+  def tableExists(db: String, table: String): Boolean
 
   def listTables(db: String): Seq[String]
 
@@ -167,7 +172,7 @@ abstract class ExternalCatalog {
  * @param name name of the function
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
  */
-case class CatalogFunction(name: String, className: String)
+case class CatalogFunction(name: FunctionIdentifier, className: String)
 
 
 /**
@@ -211,8 +216,7 @@ case class CatalogTablePartition(
  * future once we have a better understanding of how we want to handle skewed columns.
  */
 case class CatalogTable(
-    specifiedDatabase: Option[String],
-    name: String,
+    name: TableIdentifier,
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
@@ -226,12 +230,12 @@ case class CatalogTable(
     viewText: Option[String] = None) {
 
   /** Return the database this table was specified to belong to, assuming it exists. */
-  def database: String = specifiedDatabase.getOrElse {
+  def database: String = name.database.getOrElse {
     throw new AnalysisException(s"table $name did not specify database")
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
-  def qualifiedName: String = s"$database.$name"
+  def qualifiedName: String = name.unquotedString
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -271,4 +275,21 @@ object ExternalCatalog {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+}
+
+
+/**
+ * A [[LogicalPlan]] that wraps [[CatalogTable]].
+ */
+case class CatalogRelation(
+    db: String,
+    metadata: CatalogTable,
+    alias: Option[String] = None)
+  extends LeafNode {
+
+  // TODO: implement this
+  override def output: Seq[Attribute] = Seq.empty
+
+  require(metadata.name.database == Some(db),
+    "provided database does not much the one specified in the table definition")
 }

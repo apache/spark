@@ -81,7 +81,6 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
@@ -149,12 +148,9 @@ class KMeansModel private[ml] (
    * thrown if `trainingSummary == None`.
    */
   @Since("2.0.0")
-  def summary: KMeansSummary = trainingSummary match {
-    case Some(summ) => summ
-    case None =>
-      throw new SparkException(
-        s"No training summary available for the ${this.getClass.getSimpleName}",
-        new NullPointerException())
+  def summary: KMeansSummary = trainingSummary.getOrElse {
+    throw new SparkException(
+      s"No training summary available for the ${this.getClass.getSimpleName}")
   }
 }
 

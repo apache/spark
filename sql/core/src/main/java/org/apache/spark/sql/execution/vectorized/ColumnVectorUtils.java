@@ -105,7 +105,7 @@ public class ColumnVectorUtils {
       int[] result = new int[array.length];
       ColumnVector data = array.data;
       for (int i = 0; i < result.length; i++) {
-        if (data.getIsNull(array.offset + i)) {
+        if (data.isNullAt(array.offset + i)) {
           throw new RuntimeException("Cannot handle NULL values.");
         }
         result[i] = data.getInt(array.offset + i);

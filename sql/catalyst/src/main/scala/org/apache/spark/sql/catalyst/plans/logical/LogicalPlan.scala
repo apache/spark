@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types.StructType
 
 
@@ -177,7 +177,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
     assert(nameParts.length > 1)
-    if (attribute.qualifiers.exists(resolver(_, nameParts.head))) {
+    if (attribute.qualifier.exists(resolver(_, nameParts.head))) {
       // At least one qualifier matches. See if remaining parts match.
       val remainingParts = nameParts.tail
       resolveAsColumn(remainingParts, resolver, attribute)

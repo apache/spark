@@ -26,8 +26,9 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
@@ -110,12 +111,6 @@ class Pipeline @Since("1.4.0") (
   @Since("1.2.0")
   def getStages: Array[PipelineStage] = $(stages).clone()
 
-  @Since("1.4.0")
-  override def validateParams(): Unit = {
-    super.validateParams()
-    $(stages).foreach(_.validateParams())
-  }
-
   /**
    * Fits the pipeline to the input dataset with additional parameters. If a stage is an
    * [[Estimator]], its [[Estimator#fit]] method will be called on the input dataset to fit a model.
@@ -175,7 +170,6 @@ class Pipeline @Since("1.4.0") (
 
   @Since("1.2.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val theStages = $(stages)
     require(theStages.toSet.size == theStages.length,
       "Cannot have duplicate components in a pipeline.")
@@ -297,12 +291,6 @@ class PipelineModel private[ml] (
     this(uid, stages.asScala.toArray)
   }
 
-  @Since("1.4.0")
-  override def validateParams(): Unit = {
-    super.validateParams()
-    stages.foreach(_.validateParams())
-  }
-
   @Since("1.2.0")
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
@@ -311,7 +299,6 @@ class PipelineModel private[ml] (
 
   @Since("1.2.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur))
   }
 

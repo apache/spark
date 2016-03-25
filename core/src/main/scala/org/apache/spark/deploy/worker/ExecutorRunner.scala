@@ -24,9 +24,10 @@ import scala.collection.JavaConverters._
 
 import com.google.common.io.Files
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender

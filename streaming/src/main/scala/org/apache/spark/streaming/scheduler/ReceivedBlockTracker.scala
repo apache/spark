@@ -27,7 +27,8 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}

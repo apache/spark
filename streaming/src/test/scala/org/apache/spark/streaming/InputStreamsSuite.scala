@@ -34,7 +34,7 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}

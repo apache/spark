@@ -37,7 +37,6 @@ private[feature] trait MaxAbsScalerParams extends Params with HasInputCol with H
 
    /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${$(inputCol)} must be a vector column")

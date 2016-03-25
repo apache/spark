@@ -49,6 +49,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   override def beforeAll() {
+    super.beforeAll()
     TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -57,11 +58,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    sql("DROP TEMPORARY FUNCTION udtf_count2")
-    super.afterAll()
+    try {
+      TestHive.cacheTables = false
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      sql("DROP TEMPORARY FUNCTION udtf_count2")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("SPARK-4908: concurrent hive native commands") {
@@ -269,12 +273,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("modulus",
     "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), " +
       "(101 / 2) % 10 FROM src LIMIT 1")
-
-  test("Query expressed in SQL") {
-    setConf("spark.sql.dialect", "sql")
-    assert(sql("SELECT 1").collect() === Array(Row(1)))
-    setConf("spark.sql.dialect", "hiveql")
-  }
 
   test("Query expressed in HiveQL") {
     sql("FROM src SELECT key").collect()
@@ -956,9 +954,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(checkAddFileRDD.first())
   }
 
-  case class LogEntry(filename: String, message: String)
-  case class LogFile(name: String)
-
   createQueryTest("dynamic_partition",
     """
       |DROP TABLE IF EXISTS dynamic_part_table;
@@ -1218,7 +1213,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("USE hive_test_db")
     assert("hive_test_db" == sql("select current_database()").first().getString(0))
 
-    intercept[NoSuchDatabaseException] {
+    intercept[AnalysisException] {
       sql("USE not_existing_db")
     }
 
@@ -1255,3 +1250,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
 // for SPARK-2180 test
 case class HavingRow(key: Int, value: String, attr: Int)
+
+case class LogEntry(filename: String, message: String)
+case class LogFile(name: String)

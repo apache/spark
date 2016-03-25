@@ -26,6 +26,7 @@ import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import com.typesafe.tools.mima.plugin.MimaKeys
 
 import spray.revolver.RevolverPlugin._
 
@@ -247,12 +248,14 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  allProjects.filterNot { x =>
+  val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, testTags, sketch
     ).contains(x)
-  }.foreach { x =>
+  }
+
+  mimaProjects.foreach { x =>
     enable(MimaBuild.mimaSettings(sparkHome, x))(x)
   }
 
@@ -371,22 +374,23 @@ object ExcludedDependencies {
 }
 
 /**
- * Following project only exists to pull previous artifacts of Spark for generating
- * Mima ignores. For more information see: SPARK 2071
+ * Project to pull previous artifacts of Spark for generating Mima excludes.
  */
 object OldDeps {
 
   lazy val project = Project("oldDeps", file("dev"), settings = oldDepsSettings)
 
+  lazy val allPreviousArtifactKeys = Def.settingDyn[Seq[Option[ModuleID]]] {
+    SparkBuild.mimaProjects
+      .map { project => MimaKeys.previousArtifact in project }
+      .map(k => Def.setting(k.value))
+      .join
+  }
+
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.5",
-    libraryDependencies := Seq(
-      "spark-streaming",
-      "spark-mllib",
-      "spark-graphx",
-      "spark-core"
-    ).map(id => "org.apache.spark" % (id + "_2.11") % "1.2.0")
+    libraryDependencies := allPreviousArtifactKeys.value.flatten
   )
 }
 

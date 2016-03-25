@@ -50,6 +50,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
@@ -1193,21 +1194,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a block of code that evaluates to Unit, re-throwing any non-fatal uncaught
-   * exceptions as IOException.  This is used when implementing Externalizable and Serializable's
-   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
-   * see SPARK-4080 for more context.
-   */
-  def tryOrIOException(block: => Unit) {
-    try {
-      block
-    } catch {
-      case e: IOException => throw e
-      case NonFatal(t) => throw new IOException(t)
-    }
-  }
-
-  /**
    * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
    * exceptions as IOException. This is used when implementing Externalizable and Serializable's
    * read and write methods, since Java's serializer will not report non-IOExceptions properly;
@@ -1217,8 +1203,12 @@ private[spark] object Utils extends Logging {
     try {
       block
     } catch {
-      case e: IOException => throw e
-      case NonFatal(t) => throw new IOException(t)
+      case e: IOException =>
+        logError("Exception encountered", e)
+        throw e
+      case NonFatal(e) =>
+        logError("Exception encountered", e)
+        throw new IOException(e)
     }
   }
 

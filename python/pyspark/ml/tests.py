@@ -18,8 +18,11 @@
 """
 Unit tests for Spark ML Python APIs.
 """
-
+import array
 import sys
+if sys.version > '3':
+    xrange = range
+
 try:
     import xmlrunner
 except ImportError:
@@ -36,18 +39,20 @@ else:
 
 from shutil import rmtree
 import tempfile
+import numpy as np
 
-from pyspark.ml import Estimator, Model, Pipeline, Transformer
-from pyspark.ml.classification import LogisticRegression
+from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
+from pyspark.ml.classification import LogisticRegression, DecisionTreeClassifier
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import *
-from pyspark.ml.param import Param, Params
+from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
-from pyspark.ml.regression import LinearRegression
+from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
-from pyspark.mllib.linalg import DenseVector
+from pyspark.ml.wrapper import JavaWrapper
+from pyspark.mllib.linalg import DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
@@ -103,20 +108,65 @@ class ParamTypeConversionTests(PySparkTestCase):
     Test that param type conversion happens.
     """
 
-    def test_int_to_float(self):
-        from pyspark.mllib.linalg import Vectors
-        df = self.sc.parallelize([
-            Row(label=1.0, weight=2.0, features=Vectors.dense(1.0))]).toDF()
-        lr = LogisticRegression(elasticNetParam=0)
-        lr.fit(df)
-        lr.setElasticNetParam(0)
-        lr.fit(df)
+    def test_int(self):
+        lr = LogisticRegression(maxIter=5.0)
+        self.assertEqual(lr.getMaxIter(), 5)
+        self.assertTrue(type(lr.getMaxIter()) == int)
+        self.assertRaises(TypeError, lambda: LogisticRegression(maxIter="notAnInt"))
+        self.assertRaises(TypeError, lambda: LogisticRegression(maxIter=5.1))
 
-    def test_invalid_to_float(self):
-        from pyspark.mllib.linalg import Vectors
-        self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
-        lr = LogisticRegression(elasticNetParam=0)
-        self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
+    def test_float(self):
+        lr = LogisticRegression(tol=1)
+        self.assertEqual(lr.getTol(), 1.0)
+        self.assertTrue(type(lr.getTol()) == float)
+        self.assertRaises(TypeError, lambda: LogisticRegression(tol="notAFloat"))
+
+    def test_vector(self):
+        ewp = ElementwiseProduct(scalingVec=[1, 3])
+        self.assertEqual(ewp.getScalingVec(), DenseVector([1.0, 3.0]))
+        ewp = ElementwiseProduct(scalingVec=np.array([1.2, 3.4]))
+        self.assertEqual(ewp.getScalingVec(), DenseVector([1.2, 3.4]))
+        self.assertRaises(TypeError, lambda: ElementwiseProduct(scalingVec=["a", "b"]))
+
+    def test_list(self):
+        l = [0, 1]
+        for lst_like in [l, np.array(l), DenseVector(l), SparseVector(len(l), range(len(l)), l),
+                         array.array('l', l), xrange(2), tuple(l)]:
+            converted = TypeConverters.toList(lst_like)
+            self.assertEqual(type(converted), list)
+            self.assertListEqual(converted, l)
+
+    def test_list_int(self):
+        for indices in [[1.0, 2.0], np.array([1.0, 2.0]), DenseVector([1.0, 2.0]),
+                        SparseVector(2, {0: 1.0, 1: 2.0}), xrange(1, 3), (1.0, 2.0),
+                        array.array('d', [1.0, 2.0])]:
+            vs = VectorSlicer(indices=indices)
+            self.assertListEqual(vs.getIndices(), [1, 2])
+            self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
+        self.assertRaises(TypeError, lambda: VectorSlicer(indices=["a", "b"]))
+
+    def test_list_float(self):
+        b = Bucketizer(splits=[1, 4])
+        self.assertEqual(b.getSplits(), [1.0, 4.0])
+        self.assertTrue(all([type(v) == float for v in b.getSplits()]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", 1.0]))
+
+    def test_list_string(self):
+        for labels in [np.array(['a', u'b']), ['a', u'b'], np.array(['a', 'b'])]:
+            idx_to_string = IndexToString(labels=labels)
+            self.assertListEqual(idx_to_string.getLabels(), ['a', 'b'])
+        self.assertRaises(TypeError, lambda: IndexToString(labels=['a', 2]))
+
+    def test_string(self):
+        lr = LogisticRegression()
+        for col in ['features', u'features', np.str_('features')]:
+            lr.setFeaturesCol(col)
+            self.assertEqual(lr.getFeaturesCol(), 'features')
+        self.assertRaises(TypeError, lambda: LogisticRegression(featuresCol=2.3))
+
+    def test_bool(self):
+        self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept=1))
+        self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept="false"))
 
 
 class PipelineTests(PySparkTestCase):
@@ -493,6 +543,148 @@ class PersistenceTest(PySparkTestCase):
                          % (lr2.uid, lr2.maxIter.parent))
         self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
                          "Loaded LinearRegression instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+    def test_logistic_regression(self):
+        lr = LogisticRegression(maxIter=1)
+        path = tempfile.mkdtemp()
+        lr_path = path + "/logreg"
+        lr.save(lr_path)
+        lr2 = LogisticRegression.load(lr_path)
+        self.assertEqual(lr2.uid, lr2.maxIter.parent,
+                         "Loaded LogisticRegression instance uid (%s) "
+                         "did not match Param's uid (%s)"
+                         % (lr2.uid, lr2.maxIter.parent))
+        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
+                         "Loaded LogisticRegression instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+    def _compare_pipelines(self, m1, m2):
+        """
+        Compare 2 ML types, asserting that they are equivalent.
+        This currently supports:
+         - basic types
+         - Pipeline, PipelineModel
+        This checks:
+         - uid
+         - type
+         - Param values and parents
+        """
+        self.assertEqual(m1.uid, m2.uid)
+        self.assertEqual(type(m1), type(m2))
+        if isinstance(m1, JavaWrapper):
+            self.assertEqual(len(m1.params), len(m2.params))
+            for p in m1.params:
+                self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
+                self.assertEqual(p.parent, m2.getParam(p.name).parent)
+        elif isinstance(m1, Pipeline):
+            self.assertEqual(len(m1.getStages()), len(m2.getStages()))
+            for s1, s2 in zip(m1.getStages(), m2.getStages()):
+                self._compare_pipelines(s1, s2)
+        elif isinstance(m1, PipelineModel):
+            self.assertEqual(len(m1.stages), len(m2.stages))
+            for s1, s2 in zip(m1.stages, m2.stages):
+                self._compare_pipelines(s1, s2)
+        else:
+            raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
+
+    def test_pipeline_persistence(self):
+        """
+        Pipeline[HashingTF, PCA]
+        """
+        sqlContext = SQLContext(self.sc)
+        temp_path = tempfile.mkdtemp()
+
+        try:
+            df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
+            tf = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
+            pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+            pl = Pipeline(stages=[tf, pca])
+            model = pl.fit(df)
+
+            pipeline_path = temp_path + "/pipeline"
+            pl.save(pipeline_path)
+            loaded_pipeline = Pipeline.load(pipeline_path)
+            self._compare_pipelines(pl, loaded_pipeline)
+
+            model_path = temp_path + "/pipeline-model"
+            model.save(model_path)
+            loaded_model = PipelineModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+        finally:
+            try:
+                rmtree(temp_path)
+            except OSError:
+                pass
+
+    def test_nested_pipeline_persistence(self):
+        """
+        Pipeline[HashingTF, Pipeline[PCA]]
+        """
+        sqlContext = SQLContext(self.sc)
+        temp_path = tempfile.mkdtemp()
+
+        try:
+            df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
+            tf = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
+            pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+            p0 = Pipeline(stages=[pca])
+            pl = Pipeline(stages=[tf, p0])
+            model = pl.fit(df)
+
+            pipeline_path = temp_path + "/pipeline"
+            pl.save(pipeline_path)
+            loaded_pipeline = Pipeline.load(pipeline_path)
+            self._compare_pipelines(pl, loaded_pipeline)
+
+            model_path = temp_path + "/pipeline-model"
+            model.save(model_path)
+            loaded_model = PipelineModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+        finally:
+            try:
+                rmtree(temp_path)
+            except OSError:
+                pass
+
+    def test_decisiontree_classifier(self):
+        dt = DecisionTreeClassifier(maxDepth=1)
+        path = tempfile.mkdtemp()
+        dtc_path = path + "/dtc"
+        dt.save(dtc_path)
+        dt2 = DecisionTreeClassifier.load(dtc_path)
+        self.assertEqual(dt2.uid, dt2.maxDepth.parent,
+                         "Loaded DecisionTreeClassifier instance uid (%s) "
+                         "did not match Param's uid (%s)"
+                         % (dt2.uid, dt2.maxDepth.parent))
+        self.assertEqual(dt._defaultParamMap[dt.maxDepth], dt2._defaultParamMap[dt2.maxDepth],
+                         "Loaded DecisionTreeClassifier instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+    def test_decisiontree_regressor(self):
+        dt = DecisionTreeRegressor(maxDepth=1)
+        path = tempfile.mkdtemp()
+        dtr_path = path + "/dtr"
+        dt.save(dtr_path)
+        dt2 = DecisionTreeClassifier.load(dtr_path)
+        self.assertEqual(dt2.uid, dt2.maxDepth.parent,
+                         "Loaded DecisionTreeRegressor instance uid (%s) "
+                         "did not match Param's uid (%s)"
+                         % (dt2.uid, dt2.maxDepth.parent))
+        self.assertEqual(dt._defaultParamMap[dt.maxDepth], dt2._defaultParamMap[dt2.maxDepth],
+                         "Loaded DecisionTreeRegressor instance default params did not match " +
                          "original defaults")
         try:
             rmtree(path)

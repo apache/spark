@@ -30,8 +30,9 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Logging, Partitioner}
+import org.apache.spark.Partitioner
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -162,7 +163,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     val ratingType = schema($(ratingCol)).dataType
@@ -220,7 +220,6 @@ class ALSModel private[ml] (
 
   @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
@@ -1301,7 +1300,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   }
 
   /**
-   * Partitioner used by ALS. We requires that getPartition is a projection. That is, for any key k,
+   * Partitioner used by ALS. We require that getPartition is a projection. That is, for any key k,
    * we have getPartition(getPartition(k)) = getPartition(k). Since the default HashPartitioner
    * satisfies this requirement, we simply use a type alias here.
    */

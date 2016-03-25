@@ -50,6 +50,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat,
   WholeTextFileInputFormat}
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -1278,12 +1279,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     assertNotStopped()
-    if (classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass)) {
-      // This is a warning instead of an exception in order to avoid breaking user programs that
-      // might have created RDD broadcast variables but not used them:
-      logWarning("Can not directly broadcast RDDs; instead, call collect() and "
-        + "broadcast the result (see SPARK-5063)")
-    }
+    require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
+      "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)

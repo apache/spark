@@ -69,7 +69,6 @@ class HashingTF(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
       s"The input column must be ArrayType, but got $inputType.")

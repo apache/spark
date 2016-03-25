@@ -24,7 +24,7 @@ import scala.language.existentials
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
@@ -76,6 +76,16 @@ class CodegenContext {
     * BoundReference to generate code.
     */
   var currentVars: Seq[ExprCode] = null
+
+  /**
+   * Whether should we copy the result rows or not.
+   *
+   * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
+   * example, Join), this should be true.
+   *
+   * If an operator starts a new pipeline, this should be reset to false before calling `consume()`.
+   */
+  var copyResult: Boolean = false
 
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a

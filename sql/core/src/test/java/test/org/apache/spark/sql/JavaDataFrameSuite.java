@@ -220,7 +220,8 @@ public class JavaDataFrameSuite {
     StructType schema1 = StructType$.MODULE$.apply(fields1);
     Assert.assertEquals(0, schema1.fieldIndex("id"));
 
-    List<StructField> fields2 = Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    List<StructField> fields2 =
+        Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
     StructType schema2 = StructType$.MODULE$.apply(fields2);
     Assert.assertEquals(0, schema2.fieldIndex("id"));
   }
@@ -328,7 +329,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testCountMinSketch() {
-    Dataset<Row> df = context.range(1000);
+    Dataset<Long> df = context.range(1000);
 
     CountMinSketch sketch1 = df.stat().countMinSketch("id", 10, 20, 42);
     Assert.assertEquals(sketch1.totalCount(), 1000);
@@ -353,7 +354,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testBloomFilter() {
-    Dataset<Row> df = context.range(1000);
+    Dataset<Long> df = context.range(1000);
 
     BloomFilter filter1 = df.stat().bloomFilter("id", 1000, 0.03);
     Assert.assertTrue(filter1.expectedFpp() - 0.03 < 1e-3);

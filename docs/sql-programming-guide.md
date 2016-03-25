@@ -122,13 +122,6 @@ Spark build. If these dependencies are not a problem for your application then u
 is recommended for the 1.3 release of Spark. Future releases will focus on bringing `SQLContext` up
 to feature parity with a `HiveContext`.
 
-The specific variant of SQL that is used to parse queries can also be selected using the
-`spark.sql.dialect` option. This parameter can be changed using either the `setConf` method on
-a `SQLContext` or by using a `SET key=value` command in SQL. For a `SQLContext`, the only dialect
-available is "sql" which uses a simple SQL parser provided by Spark SQL. In a `HiveContext`, the
-default is "hiveql", though "sql" is also available. Since the HiveQL parser is much more complete,
-this is recommended for most use cases.
-
 
 ## Creating DataFrames
 
@@ -2355,51 +2348,6 @@ Python UDF registration is unchanged.
 
 When using DataTypes in Python you will need to construct them (i.e. `StringType()`) instead of
 referencing a singleton.
-
-## Migration Guide for Shark Users
-
-### Scheduling
-To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
-users can set the `spark.sql.thriftserver.scheduler.pool` variable:
-
-    SET spark.sql.thriftserver.scheduler.pool=accounting;
-
-### Reducer number
-
-In Shark, default reducer number is 1 and is controlled by the property `mapred.reduce.tasks`. Spark
-SQL deprecates this property in favor of `spark.sql.shuffle.partitions`, whose default value
-is 200. Users may customize this property via `SET`:
-
-    SET spark.sql.shuffle.partitions=10;
-    SELECT page, count(*) c
-    FROM logs_last_month_cached
-    GROUP BY page ORDER BY c DESC LIMIT 10;
-
-You may also put this property in `hive-site.xml` to override the default value.
-
-For now, the `mapred.reduce.tasks` property is still recognized, and is converted to
-`spark.sql.shuffle.partitions` automatically.
-
-### Caching
-
-The `shark.cache` table property no longer exists, and tables whose name end with `_cached` are no
-longer automatically cached. Instead, we provide `CACHE TABLE` and `UNCACHE TABLE` statements to
-let user control table caching explicitly:
-
-    CACHE TABLE logs_last_month;
-    UNCACHE TABLE logs_last_month;
-
-**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don't need to trigger cache materialization manually anymore.
-
-Spark SQL newly introduced a statement to let user control table caching whether or not lazy since Spark 1.2.0:
-
-	CACHE [LAZY] TABLE [AS SELECT] ...
-
-Several caching related features are not supported yet:
-
-* User defined partition level cache eviction policy
-* RDD reloading
-* In-memory cache write through policy
 
 ## Compatibility with Apache Hive
 

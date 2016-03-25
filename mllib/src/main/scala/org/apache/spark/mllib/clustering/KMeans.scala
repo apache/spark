@@ -19,8 +19,8 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.util.MLUtils
@@ -65,6 +65,8 @@ class KMeans private (
    */
   @Since("0.8.0")
   def setK(k: Int): this.type = {
+    require(k > 0,
+      s"Number of clusters must be positive but got ${k}")
     this.k = k
     this
   }
@@ -80,6 +82,8 @@ class KMeans private (
    */
   @Since("0.8.0")
   def setMaxIterations(maxIterations: Int): this.type = {
+    require(maxIterations >= 0,
+      s"Maximum of iterations must be nonnegative but got ${maxIterations}")
     this.maxIterations = maxIterations
     this
   }
@@ -147,9 +151,8 @@ class KMeans private (
    */
   @Since("0.8.0")
   def setInitializationSteps(initializationSteps: Int): this.type = {
-    if (initializationSteps <= 0) {
-      throw new IllegalArgumentException("Number of initialization steps must be positive")
-    }
+    require(initializationSteps > 0,
+      s"Number of initialization steps must be positive but got ${initializationSteps}")
     this.initializationSteps = initializationSteps
     this
   }
@@ -166,6 +169,8 @@ class KMeans private (
    */
   @Since("0.8.0")
   def setEpsilon(epsilon: Double): this.type = {
+    require(epsilon >= 0,
+      s"Distance threshold must be nonnegative but got ${epsilon}")
     this.epsilon = epsilon
     this
   }

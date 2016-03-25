@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ro
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.util.Utils
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -65,7 +66,7 @@ import org.apache.spark.sql.execution.streaming._
 trait StreamTest extends QueryTest with Timeouts {
 
   implicit class RichSource(s: Source) {
-    def toDF(): DataFrame = Dataset.newDataFrame(sqlContext, StreamingRelation(s))
+    def toDF(): DataFrame = Dataset.ofRows(sqlContext, StreamingRelation(s))
 
     def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingRelation(s))
   }
@@ -125,8 +126,6 @@ trait StreamTest extends QueryTest with Timeouts {
       extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"CheckAnswer: ${expectedAnswer.mkString(",")}"
   }
-
-  case class DropBatches(num: Int) extends StreamAction
 
   /** Stops the stream.  It must currently be running. */
   case object StopStream extends StreamAction with StreamMustBeRunning
@@ -202,7 +201,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }.mkString("\n")
 
     def currentOffsets =
-      if (currentStream != null) currentStream.streamProgress.toString else "not started"
+      if (currentStream != null) currentStream.committedOffsets.toString else "not started"
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
@@ -266,6 +265,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }
 
     val testThread = Thread.currentThread()
+    val metadataRoot = Utils.createTempDir("streaming.metadata").getCanonicalPath
 
     try {
       startedTest.foreach { action =>
@@ -276,7 +276,7 @@ trait StreamTest extends QueryTest with Timeouts {
             currentStream =
               sqlContext
                 .streams
-                .startQuery(StreamExecution.nextName, stream, sink)
+                .startQuery(StreamExecution.nextName, metadataRoot, stream, sink)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
@@ -307,10 +307,6 @@ trait StreamTest extends QueryTest with Timeouts {
               lastStream = currentStream
               currentStream = null
             }
-
-          case DropBatches(num) =>
-            verify(currentStream == null, "dropping batches while running leads to corruption")
-            sink.dropBatches(num)
 
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")

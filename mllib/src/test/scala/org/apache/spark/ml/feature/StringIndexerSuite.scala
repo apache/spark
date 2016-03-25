@@ -114,7 +114,7 @@ class StringIndexerSuite
     val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
       .setInputCol("label")
       .setOutputCol("labelIndex")
-    val df = sqlContext.range(0L, 10L)
+    val df = sqlContext.range(0L, 10L).toDF()
     assert(indexerModel.transform(df).eq(df))
   }
 

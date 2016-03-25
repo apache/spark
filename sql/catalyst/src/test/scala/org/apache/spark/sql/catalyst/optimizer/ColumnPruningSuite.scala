@@ -34,8 +34,8 @@ class ColumnPruningSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Column pruning", FixedPoint(100),
+      PushPredicateThroughProject,
       ColumnPruning,
-      EliminateOperators,
       CollapseProject) :: Nil
   }
 
@@ -134,12 +134,16 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on Filter") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val plan1 = Filter('a > 1, input).analyze
+    comparePlans(Optimize.execute(plan1), plan1)
     val query = Project('a :: Nil, Filter('c > Literal(0.0), input)).analyze
-    val expected =
-      Project('a :: Nil,
-        Filter('c > Literal(0.0),
-          Project(Seq('a, 'c), input))).analyze
-    comparePlans(Optimize.execute(query), expected)
+    comparePlans(Optimize.execute(query), query)
+    val plan2 = Filter('b > 1, Project(Seq('a, 'b), input)).analyze
+    val expected2 = Project(Seq('a, 'b), Filter('b > 1, input)).analyze
+    comparePlans(Optimize.execute(plan2), expected2)
+    val plan3 = Project(Seq('a), Filter('b > 1, Project(Seq('a, 'b), input))).analyze
+    val expected3 = Project(Seq('a), Filter('b > 1, input)).analyze
+    comparePlans(Optimize.execute(plan3), expected3)
   }
 
   test("Column pruning on except/intersect/distinct") {
@@ -298,7 +302,7 @@ class ColumnPruningSuite extends PlanTest {
             SortOrder('b, Ascending) :: Nil,
             UnspecifiedFrame)).as('window) :: Nil,
           'a :: Nil, 'b.asc :: Nil)
-        .select('a, 'c, 'window).where('window > 1).select('a, 'c).analyze
+        .where('window > 1).select('a, 'c).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -328,8 +332,8 @@ class ColumnPruningSuite extends PlanTest {
     val input2 = LocalRelation('c.int, 'd.string, 'e.double)
     val query = Project('b :: Nil,
       Union(input1 :: input2 :: Nil)).analyze
-    val expected =
-      Union(Project('b :: Nil, input1) :: Project('d :: Nil, input2) :: Nil).analyze
+    val expected = Project('b :: Nil,
+      Union(Project('b :: Nil, input1) :: Project('d :: Nil, input2) :: Nil)).analyze
     comparePlans(Optimize.execute(query), expected)
   }
 

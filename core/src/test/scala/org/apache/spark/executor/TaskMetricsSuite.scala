@@ -285,8 +285,8 @@ class TaskMetricsSuite extends SparkFunSuite {
     // set and increment values
     in.setBytesRead(1L)
     in.setBytesRead(2L)
-    in.incRecordsRead(1L)
-    in.incRecordsRead(2L)
+    in.incRecordsReadInternal(1L)
+    in.incRecordsReadInternal(2L)
     in.setReadMethod(DataReadMethod.Disk)
     // assert new values exist
     assertValEquals(_.bytesRead, BYTES_READ, 2L)

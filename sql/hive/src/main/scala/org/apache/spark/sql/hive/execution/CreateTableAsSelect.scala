@@ -38,7 +38,7 @@ case class CreateTableAsSelect(
     allowExisting: Boolean)
   extends RunnableCommand {
 
-  val tableIdentifier = TableIdentifier(tableDesc.name, Some(tableDesc.database))
+  private val tableIdentifier = tableDesc.name
 
   override def children: Seq[LogicalPlan] = Seq(query)
 
@@ -69,10 +69,10 @@ case class CreateTableAsSelect(
         withFormat
       }
 
-      hiveContext.sessionState.catalog.client.createTable(withSchema, ignoreIfExists = false)
+      hiveContext.sessionState.catalog.createTable(withSchema, ignoreIfExists = false)
 
       // Get the Metastore Relation
-      hiveContext.sessionState.catalog.lookupRelation(tableIdentifier, None) match {
+      hiveContext.sessionState.catalog.lookupRelation(tableIdentifier) match {
         case r: MetastoreRelation => r
       }
     }
@@ -93,6 +93,6 @@ case class CreateTableAsSelect(
   }
 
   override def argString: String = {
-    s"[Database:${tableDesc.database}}, TableName: ${tableDesc.name}, InsertIntoHiveTable]"
+    s"[Database:${tableDesc.database}}, TableName: ${tableDesc.name.table}, InsertIntoHiveTable]"
   }
 }

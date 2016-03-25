@@ -26,7 +26,7 @@ import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Duration
 
 /**

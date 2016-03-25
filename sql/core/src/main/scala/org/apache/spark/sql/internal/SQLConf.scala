@@ -24,7 +24,7 @@ import scala.collection.immutable
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
@@ -84,6 +84,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PREFER_SORTMERGEJOIN = SQLConfigBuilder("spark.sql.join.preferSortMergeJoin")
+    .internal()
+    .doc("When true, prefer sort merge join over shuffle hash join.")
+    .booleanConf
+    .createWithDefault(true)
+
   val AUTO_BROADCASTJOIN_THRESHOLD = SQLConfigBuilder("spark.sql.autoBroadcastJoinThreshold")
     .doc("Configures the maximum size in bytes for a table that will be broadcast to all worker " +
       "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
@@ -96,8 +102,8 @@ object SQLConf {
     .internal()
     .doc("The default table size used in query planning. By default, it is set to a larger " +
       "value than `spark.sql.autoBroadcastJoinThreshold` to be more conservative. That is to say " +
-      "by default the optimizer will not choose to broadcast a table unless it knows for sure its" +
-      "size is small enough.")
+      "by default the optimizer will not choose to broadcast a table unless it knows for sure " +
+      "its size is small enough.")
     .longConf
     .createWithDefault(-1)
 
@@ -137,6 +143,12 @@ object SQLConf {
 
   val CASE_SENSITIVE = SQLConfigBuilder("spark.sql.caseSensitive")
     .doc("Whether the query analyzer should be case sensitive or not.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val PARQUET_FILE_SCAN = SQLConfigBuilder("spark.sql.parquet.fileScan")
+    .internal()
+    .doc("Use the new FileScanRDD path for reading parquet data.")
     .booleanConf
     .createWithDefault(true)
 
@@ -204,12 +216,6 @@ object SQLConf {
     .stringConf
     .createWithDefault(classOf[ParquetOutputCommitter].getName)
 
-  val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED =
-    SQLConfigBuilder("spark.sql.parquet.enableUnsafeRowRecordReader")
-      .doc("Enables using the custom ParquetUnsafeRowRecordReader.")
-      .booleanConf
-      .createWithDefault(true)
-
   val PARQUET_VECTORIZED_READER_ENABLED =
     SQLConfigBuilder("spark.sql.parquet.enableVectorizedReader")
       .doc("Enables vectorized parquet decoding.")
@@ -242,7 +248,7 @@ object SQLConf {
          "view should be fully qualified, i.e. use `tbl1`.`col1` instead of `*` whenever " +
          "possible, or you may get wrong result.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val CANONICAL_NATIVE_VIEW = SQLConfigBuilder("spark.sql.nativeView.canonical")
     .internal()
@@ -318,6 +324,18 @@ object SQLConf {
 
   val BUCKETING_ENABLED = SQLConfigBuilder("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
+    .booleanConf
+    .createWithDefault(true)
+
+  val ORDER_BY_ORDINAL = SQLConfigBuilder("spark.sql.orderByOrdinal")
+    .doc("When true, the ordinal numbers are treated as the position in the select list. " +
+         "When false, the ordinal numbers in order/sort By clause are ignored.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val GROUP_BY_ORDINAL = SQLConfigBuilder("spark.sql.groupByOrdinal")
+    .doc("When true, the ordinal numbers in group by clauses are treated as the position " +
+      "in the select list. When false, the ordinal numbers are ignored.")
     .booleanConf
     .createWithDefault(true)
 
@@ -405,6 +423,26 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
+    SQLConfigBuilder("spark.sql.streaming.stateStore.minDeltasForSnapshot")
+      .internal()
+      .doc("Minimum number of state store delta files that needs to be generated before they " +
+        "consolidated into snapshots.")
+      .intConf
+      .createWithDefault(10)
+
+  val STATE_STORE_MIN_VERSIONS_TO_RETAIN =
+    SQLConfigBuilder("spark.sql.streaming.stateStore.minBatchesToRetain")
+      .internal()
+      .doc("Minimum number of versions of a state store's data to retain after cleaning.")
+      .intConf
+      .createWithDefault(2)
+
+  val CHECKPOINT_LOCATION = SQLConfigBuilder("spark.sql.streaming.checkpointLocation")
+    .doc("The default location for storing checkpoint data for continuously executing queries.")
+    .stringConf
+    .createWithDefault(null)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -413,6 +451,7 @@ object SQLConf {
     val CODEGEN_ENABLED = "spark.sql.codegen"
     val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
     val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
+    val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = "spark.sql.parquet.enableUnsafeRowRecordReader"
   }
 }
 
@@ -434,11 +473,15 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
 
   /** ************************ Spark SQL Params/Hints ******************* */
 
+  def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
+
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+
+  def parquetFileScan: Boolean = getConf(PARQUET_FILE_SCAN)
 
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
@@ -476,6 +519,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
   def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)
@@ -522,6 +567,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
 
   def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
 
+  override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
+
+  override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

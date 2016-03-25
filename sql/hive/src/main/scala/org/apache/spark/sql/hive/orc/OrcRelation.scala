@@ -31,8 +31,8 @@ import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, Outp
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
-import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow

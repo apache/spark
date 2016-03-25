@@ -185,6 +185,7 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
   }
 }
 
+
 /**
  * A function that calculates hash value for a group of expressions.  Note that the `seed` argument
  * is not exposed to users and should only be set inside spark SQL.
@@ -213,14 +214,10 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
  *                        `result`.
  *
  * Finally we aggregate the hash values for each expression by the same way of struct.
- *
- * We should use this hash function for both shuffle and bucket, so that we can guarantee shuffle
- * and bucketing have same data distribution.
  */
-case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression {
-  def this(arguments: Seq[Expression]) = this(arguments, 42)
-
-  override def dataType: DataType = IntegerType
+abstract class HashExpression[E] extends Expression {
+  /** Seed of the HashExpression. */
+  val seed: E
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -234,8 +231,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 
-  override def prettyName: String = "hash"
-
   override def eval(input: InternalRow): Any = {
     var hash = seed
     var i = 0
@@ -247,80 +242,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     hash
   }
 
-  private def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
-    def hashInt(i: Int): Int = Murmur3_x86_32.hashInt(i, seed)
-    def hashLong(l: Long): Int = Murmur3_x86_32.hashLong(l, seed)
-
-    value match {
-      case null => seed
-      case b: Boolean => hashInt(if (b) 1 else 0)
-      case b: Byte => hashInt(b)
-      case s: Short => hashInt(s)
-      case i: Int => hashInt(i)
-      case l: Long => hashLong(l)
-      case f: Float => hashInt(java.lang.Float.floatToIntBits(f))
-      case d: Double => hashLong(java.lang.Double.doubleToLongBits(d))
-      case d: Decimal =>
-        val precision = dataType.asInstanceOf[DecimalType].precision
-        if (precision <= Decimal.MAX_LONG_DIGITS) {
-          hashLong(d.toUnscaledLong)
-        } else {
-          val bytes = d.toJavaBigDecimal.unscaledValue().toByteArray
-          Murmur3_x86_32.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, seed)
-        }
-      case c: CalendarInterval => Murmur3_x86_32.hashInt(c.months, hashLong(c.microseconds))
-      case a: Array[Byte] =>
-        Murmur3_x86_32.hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
-      case s: UTF8String =>
-        Murmur3_x86_32.hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
-
-      case array: ArrayData =>
-        val elementType = dataType match {
-          case udt: UserDefinedType[_] => udt.sqlType.asInstanceOf[ArrayType].elementType
-          case ArrayType(et, _) => et
-        }
-        var result = seed
-        var i = 0
-        while (i < array.numElements()) {
-          result = computeHash(array.get(i, elementType), elementType, result)
-          i += 1
-        }
-        result
-
-      case map: MapData =>
-        val (kt, vt) = dataType match {
-          case udt: UserDefinedType[_] =>
-            val mapType = udt.sqlType.asInstanceOf[MapType]
-            mapType.keyType -> mapType.valueType
-          case MapType(kt, vt, _) => kt -> vt
-        }
-        val keys = map.keyArray()
-        val values = map.valueArray()
-        var result = seed
-        var i = 0
-        while (i < map.numElements()) {
-          result = computeHash(keys.get(i, kt), kt, result)
-          result = computeHash(values.get(i, vt), vt, result)
-          i += 1
-        }
-        result
-
-      case struct: InternalRow =>
-        val types: Array[DataType] = dataType match {
-          case udt: UserDefinedType[_] =>
-            udt.sqlType.asInstanceOf[StructType].map(_.dataType).toArray
-          case StructType(fields) => fields.map(_.dataType)
-        }
-        var result = seed
-        var i = 0
-        val len = struct.numFields
-        while (i < len) {
-          result = computeHash(struct.get(i, types(i)), types(i), result)
-          i += 1
-        }
-        result
-    }
-  }
+  protected def computeHash(value: Any, dataType: DataType, seed: E): E
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     ev.isNull = "false"
@@ -332,7 +254,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }.mkString("\n")
 
     s"""
-      int ${ev.value} = $seed;
+      ${ctx.javaType(dataType)} ${ev.value} = $seed;
       $childrenHash
     """
   }
@@ -360,7 +282,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
       dataType: DataType,
       result: String,
       ctx: CodegenContext): String = {
-    val hasher = classOf[Murmur3_x86_32].getName
+    val hasher = hasherClassName
 
     def hashInt(i: String): String = s"$result = $hasher.hashInt($i, $result);"
     def hashLong(l: String): String = s"$result = $hasher.hashLong($l, $result);"
@@ -423,6 +345,125 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
       case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, result, ctx)
     }
   }
+
+  protected def hasherClassName: String
+}
+
+/**
+ * Base class for interpreted hash functions.
+ */
+abstract class InterpretedHashFunction {
+  protected def hashInt(i: Int, seed: Long): Long
+
+  protected def hashLong(l: Long, seed: Long): Long
+
+  protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
+
+  def hash(value: Any, dataType: DataType, seed: Long): Long = {
+    value match {
+      case null => seed
+      case b: Boolean => hashInt(if (b) 1 else 0, seed)
+      case b: Byte => hashInt(b, seed)
+      case s: Short => hashInt(s, seed)
+      case i: Int => hashInt(i, seed)
+      case l: Long => hashLong(l, seed)
+      case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
+      case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
+      case d: Decimal =>
+        val precision = dataType.asInstanceOf[DecimalType].precision
+        if (precision <= Decimal.MAX_LONG_DIGITS) {
+          hashLong(d.toUnscaledLong, seed)
+        } else {
+          val bytes = d.toJavaBigDecimal.unscaledValue().toByteArray
+          hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, seed)
+        }
+      case c: CalendarInterval => hashInt(c.months, hashLong(c.microseconds, seed))
+      case a: Array[Byte] =>
+        hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
+      case s: UTF8String =>
+        hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
+
+      case array: ArrayData =>
+        val elementType = dataType match {
+          case udt: UserDefinedType[_] => udt.sqlType.asInstanceOf[ArrayType].elementType
+          case ArrayType(et, _) => et
+        }
+        var result = seed
+        var i = 0
+        while (i < array.numElements()) {
+          result = hash(array.get(i, elementType), elementType, result)
+          i += 1
+        }
+        result
+
+      case map: MapData =>
+        val (kt, vt) = dataType match {
+          case udt: UserDefinedType[_] =>
+            val mapType = udt.sqlType.asInstanceOf[MapType]
+            mapType.keyType -> mapType.valueType
+          case MapType(kt, vt, _) => kt -> vt
+        }
+        val keys = map.keyArray()
+        val values = map.valueArray()
+        var result = seed
+        var i = 0
+        while (i < map.numElements()) {
+          result = hash(keys.get(i, kt), kt, result)
+          result = hash(values.get(i, vt), vt, result)
+          i += 1
+        }
+        result
+
+      case struct: InternalRow =>
+        val types: Array[DataType] = dataType match {
+          case udt: UserDefinedType[_] =>
+            udt.sqlType.asInstanceOf[StructType].map(_.dataType).toArray
+          case StructType(fields) => fields.map(_.dataType)
+        }
+        var result = seed
+        var i = 0
+        val len = struct.numFields
+        while (i < len) {
+          result = hash(struct.get(i, types(i)), types(i), result)
+          i += 1
+        }
+        result
+    }
+  }
+}
+
+/**
+ * A MurMur3 Hash expression.
+ *
+ * We should use this hash function for both shuffle and bucket, so that we can guarantee shuffle
+ * and bucketing have same data distribution.
+ */
+case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
+  def this(arguments: Seq[Expression]) = this(arguments, 42)
+
+  override def dataType: DataType = IntegerType
+
+  override def prettyName: String = "hash"
+
+  override protected def hasherClassName: String = classOf[Murmur3_x86_32].getName
+
+  override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
+    Murmur3HashFunction.hash(value, dataType, seed).toInt
+  }
+}
+
+object Murmur3HashFunction extends InterpretedHashFunction {
+  override protected def hashInt(i: Int, seed: Long): Long = {
+    Murmur3_x86_32.hashInt(i, seed.toInt)
+  }
+
+  override protected def hashLong(l: Long, seed: Long): Long = {
+    Murmur3_x86_32.hashLong(l, seed.toInt)
+  }
+
+  override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
+    Murmur3_x86_32.hashUnsafeBytes(base, offset, len, seed.toInt)
+  }
 }
 
 /**
@@ -440,5 +481,32 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
          | System.err.println("Result of ${child.simpleString} is " + $c);
          | ${ev.value} = $c;
        """.stripMargin)
+  }
+}
+
+/**
+ * A xxHash64 64-bit hash expression.
+ */
+case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
+  def this(arguments: Seq[Expression]) = this(arguments, 42L)
+
+  override def dataType: DataType = LongType
+
+  override def prettyName: String = "xxHash"
+
+  override protected def hasherClassName: String = classOf[XXH64].getName
+
+  override protected def computeHash(value: Any, dataType: DataType, seed: Long): Long = {
+    XxHash64Function.hash(value, dataType, seed)
+  }
+}
+
+object XxHash64Function extends InterpretedHashFunction {
+  override protected def hashInt(i: Int, seed: Long): Long = XXH64.hashInt(i, seed)
+
+  override protected def hashLong(l: Long, seed: Long): Long = XXH64.hashLong(l, seed)
+
+  override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
+    XXH64.hashUnsafeBytes(base, offset, len, seed)
   }
 }

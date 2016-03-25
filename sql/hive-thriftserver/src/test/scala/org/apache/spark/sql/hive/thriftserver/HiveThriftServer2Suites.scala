@@ -40,7 +40,8 @@ import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}

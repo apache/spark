@@ -24,9 +24,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -35,20 +37,22 @@ import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.types._
 
 /**
- * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
- * when all relations are already filled in and the analyzer needs only to resolve attribute
- * references.
+ * A trivial [[Analyzer]] with an dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
+ * Used for testing when all relations are already filled in and the analyzer needs only
+ * to resolve attribute references.
  */
 object SimpleAnalyzer
-  extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(true))
+  extends SimpleAnalyzer(new SimpleCatalystConf(caseSensitiveAnalysis = true))
+class SimpleAnalyzer(conf: CatalystConf)
+  extends Analyzer(new SessionCatalog(new InMemoryCatalog, conf), EmptyFunctionRegistry, conf)
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
- * [[UnresolvedRelation]]s into fully typed objects using information in a schema [[Catalog]] and
- * a [[FunctionRegistry]].
+ * [[UnresolvedRelation]]s into fully typed objects using information in a
+ * [[SessionCatalog]] and a [[FunctionRegistry]].
  */
 class Analyzer(
-    catalog: Catalog,
+    catalog: SessionCatalog,
     registry: FunctionRegistry,
     conf: CatalystConf,
     maxIterations: Int = 100)
@@ -80,6 +84,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUpCast ::
+      ResolveOrdinalInOrderByAndGroupBy ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -87,7 +92,7 @@ class Analyzer(
       ResolveSubquery ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
-      ResolveNaturalJoin ::
+      ResolveNaturalAndUsingJoin ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -374,24 +379,6 @@ class Analyzer(
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     /**
-     * Foreach expression, expands the matching attribute.*'s in `child`'s input for the subtree
-     * rooted at each expression.
-     */
-    def expandStarExpressions(exprs: Seq[Expression], child: LogicalPlan): Seq[Expression] = {
-      exprs.flatMap {
-        case s: Star => s.expand(child, resolver)
-        case e =>
-          e.transformDown {
-            case f1: UnresolvedFunction if containsStar(f1.children) =>
-              f1.copy(children = f1.children.flatMap {
-                case s: Star => s.expand(child, resolver)
-                case o => o :: Nil
-              })
-          } :: Nil
-      }
-    }
-
-    /**
      * Generate a new logical plan for the right child with different expression IDs
      * for all conflicting attributes.
      */
@@ -442,7 +429,7 @@ class Analyzer(
           } transformUp {
             case other => other transformExpressions {
               case a: Attribute =>
-                attributeRewrites.get(a).getOrElse(a).withQualifiers(a.qualifiers)
+                attributeRewrites.get(a).getOrElse(a).withQualifier(a.qualifier)
             }
           }
           newRight
@@ -453,33 +440,18 @@ class Analyzer(
       case p: LogicalPlan if !p.childrenResolved => p
 
       // If the projection list contains Stars, expand it.
-      case p @ Project(projectList, child) if containsStar(projectList) =>
-        Project(
-          projectList.flatMap {
-            case s: Star => s.expand(child, resolver)
-            case UnresolvedAlias(f @ UnresolvedFunction(_, args, _), _) if containsStar(args) =>
-              val newChildren = expandStarExpressions(args, child)
-              UnresolvedAlias(child = f.copy(children = newChildren)) :: Nil
-            case a @ Alias(f @ UnresolvedFunction(_, args, _), name) if containsStar(args) =>
-              val newChildren = expandStarExpressions(args, child)
-              Alias(child = f.copy(children = newChildren), name)(
-                isGenerated = a.isGenerated) :: Nil
-            case UnresolvedAlias(c @ CreateArray(args), _) if containsStar(args) =>
-              val expandedArgs = args.flatMap {
-                case s: Star => s.expand(child, resolver)
-                case o => o :: Nil
-              }
-              UnresolvedAlias(c.copy(children = expandedArgs)) :: Nil
-            case UnresolvedAlias(c @ CreateStruct(args), _) if containsStar(args) =>
-              val expandedArgs = args.flatMap {
-                case s: Star => s.expand(child, resolver)
-                case o => o :: Nil
-              }
-              UnresolvedAlias(c.copy(children = expandedArgs)) :: Nil
-            case o => o :: Nil
-          },
-          child)
-
+      case p: Project if containsStar(p.projectList) =>
+        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
+      // If the aggregate function argument contains Stars, expand it.
+      case a: Aggregate if containsStar(a.aggregateExpressions) =>
+        if (conf.groupByOrdinal && a.groupingExpressions.exists(IntegerIndex.unapply(_).nonEmpty)) {
+          failAnalysis(
+            "Group by position: star is not allowed to use in the select list " +
+              "when using ordinals in group by")
+        } else {
+          a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
+        }
+      // If the script transformation input contains Stars, expand it.
       case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(
           input = t.input.flatMap {
@@ -487,12 +459,8 @@ class Analyzer(
             case o => o :: Nil
           }
         )
-
-      // If the aggregate function argument contains Stars, expand it.
-      case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        val expanded = expandStarExpressions(a.aggregateExpressions, a.child)
-            .map(_.asInstanceOf[NamedExpression])
-        a.copy(aggregateExpressions = expanded)
+      case g: Generate if containsStar(g.generator.children) =>
+        failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>
@@ -567,14 +535,14 @@ class Analyzer(
           if n.outerPointer.isEmpty &&
              n.cls.isMemberClass &&
              !Modifier.isStatic(n.cls.getModifiers) =>
-          val outer = OuterScopes.outerScopes.get(n.cls.getDeclaringClass.getName)
+          val outer = OuterScopes.getOuterScope(n.cls)
           if (outer == null) {
             throw new AnalysisException(
               s"Unable to generate an encoder for inner class `${n.cls.getName}` without " +
                 "access to the scope that this class was defined in.\n" +
                 "Try moving this class out of its parent class.")
           }
-          n.copy(outerPointer = Some(Literal.fromObject(outer)))
+          n.copy(outerPointer = Some(outer))
       }
     }
 
@@ -590,13 +558,63 @@ class Analyzer(
     }
 
     /**
+     * Build a project list for Project/Aggregate and expand the star if possible
+     */
+    private def buildExpandedProjectList(
+      exprs: Seq[NamedExpression],
+      child: LogicalPlan): Seq[NamedExpression] = {
+      exprs.flatMap {
+        // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
+        case s: Star => s.expand(child, resolver)
+        // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
+        case UnresolvedAlias(s: Star, _) => s.expand(child, resolver)
+        case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
+        case o => o :: Nil
+      }.map(_.asInstanceOf[NamedExpression])
+    }
+
+    /**
      * Returns true if `exprs` contains a [[Star]].
      */
     def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+
+    /**
+     * Expands the matching attribute.*'s in `child`'s output.
+     */
+    def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
+      expr.transformUp {
+        case f1: UnresolvedFunction if containsStar(f1.children) =>
+          f1.copy(children = f1.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case c: CreateStruct if containsStar(c.children) =>
+          c.copy(children = c.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case c: CreateArray if containsStar(c.children) =>
+          c.copy(children = c.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case p: Murmur3Hash if containsStar(p.children) =>
+          p.copy(children = p.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        // count(*) has been replaced by count(1)
+        case o if containsStar(o.children) =>
+          failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
+      }
+    }
   }
 
-  private def resolveExpression(expr: Expression, plan: LogicalPlan, throws: Boolean = false) = {
+  protected[sql] def resolveExpression(
+      expr: Expression,
+      plan: LogicalPlan,
+      throws: Boolean = false) = {
     // Resolve expression in one round.
     // If throws == false or the desired attribute doesn't exist
     // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
@@ -610,6 +628,62 @@ class Analyzer(
       }
     } catch {
       case a: AnalysisException if !throws => expr
+    }
+  }
+
+ /**
+  * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
+  * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
+  * select list. This support is introduced in Spark 2.0.
+  *
+  * - When the sort references or group by expressions are not integer but foldable expressions,
+  * just ignore them.
+  * - When spark.sql.orderByOrdinal/spark.sql.groupByOrdinal is set to false, ignore the position
+  * numbers too.
+  *
+  * Before the release of Spark 2.0, the literals in order/sort by and group by clauses
+  * have no effect on the results.
+  */
+  object ResolveOrdinalInOrderByAndGroupBy extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.childrenResolved => p
+      // Replace the index with the related attribute for ORDER BY,
+      // which is a 1-base position of the projection list.
+      case s @ Sort(orders, global, child)
+          if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+        val newOrders = orders map {
+          case s @ SortOrder(IntegerIndex(index), direction) =>
+            if (index > 0 && index <= child.output.size) {
+              SortOrder(child.output(index - 1), direction)
+            } else {
+              throw new UnresolvedException(s,
+                s"Order/sort By position: $index does not exist " +
+                s"The Select List is indexed from 1 to ${child.output.size}")
+            }
+          case o => o
+        }
+        Sort(newOrders, global, child)
+
+      // Replace the index with the corresponding expression in aggregateExpressions. The index is
+      // a 1-base position of aggregateExpressions, which is output columns (select expression)
+      case a @ Aggregate(groups, aggs, child)
+          if conf.groupByOrdinal && aggs.forall(_.resolved) &&
+            groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
+        val newGroups = groups.map {
+          case IntegerIndex(index) if index > 0 && index <= aggs.size =>
+            aggs(index - 1) match {
+              case e if ResolveAggregateFunctions.containsAggregate(e) =>
+                throw new UnresolvedException(a,
+                  s"Group by position: the '$index'th column in the select contains an " +
+                  s"aggregate function: ${e.sql}. Aggregate functions are not allowed in GROUP BY")
+              case o => o
+            }
+          case IntegerIndex(index) =>
+            throw new UnresolvedException(a,
+              s"Group by position: '$index' exceeds the size of the select list '${aggs.size}'.")
+          case o => o
+        }
+        Aggregate(newGroups, aggs, child)
     }
   }
 
@@ -893,8 +967,6 @@ class Analyzer(
    */
   object ResolveGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case g: Generate if ResolveReferences.containsStar(g.generator.children) =>
-        failAnalysis("Cannot explode *, explode can only be applied on a specific column.")
       case p: Generate if !p.child.resolved || !p.generator.resolved => p
       case g: Generate if !g.resolved =>
         g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
@@ -1329,48 +1401,69 @@ class Analyzer(
   }
 
   /**
-   * Removes natural joins by calculating output columns based on output from two sides,
-   * Then apply a Project on a normal Join to eliminate natural join.
+   * Removes natural or using joins by calculating output columns based on output from two sides,
+   * Then apply a Project on a normal Join to eliminate natural or using join.
    */
-  object ResolveNaturalJoin extends Rule[LogicalPlan] {
+  object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case j @ Join(left, right, UsingJoin(joinType, usingCols), condition)
+          if left.resolved && right.resolved && j.duplicateResolved =>
+        // Resolve the column names referenced in using clause from both the legs of join.
+        val lCols = usingCols.flatMap(col => left.resolveQuoted(col.name, resolver))
+        val rCols = usingCols.flatMap(col => right.resolveQuoted(col.name, resolver))
+        if ((lCols.length == usingCols.length) && (rCols.length == usingCols.length)) {
+          val joinNames = lCols.map(exp => exp.name)
+          commonNaturalJoinProcessing(left, right, joinType, joinNames, None)
+        } else {
+          j
+        }
       case j @ Join(left, right, NaturalJoin(joinType), condition) if j.resolvedExceptNatural =>
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
-        val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
-        val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
-        val joinPairs = leftKeys.zip(rightKeys)
-
-        // Add joinPairs to joinConditions
-        val newCondition = (condition ++ joinPairs.map {
-          case (l, r) => EqualTo(l, r)
-        }).reduceOption(And)
-
-        // columns not in joinPairs
-        val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
-        val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
-
-        // the output list looks like: join keys, columns from left, columns from right
-        val projectList = joinType match {
-          case LeftOuter =>
-            leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
-          case RightOuter =>
-            rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
-          case FullOuter =>
-            // in full outer join, joinCols should be non-null if there is.
-            val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
-            joinedCols ++
-              lUniqueOutput.map(_.withNullability(true)) ++
-              rUniqueOutput.map(_.withNullability(true))
-          case Inner =>
-            rightKeys ++ lUniqueOutput ++ rUniqueOutput
-          case _ =>
-            sys.error("Unsupported natural join type " + joinType)
-        }
-        // use Project to trim unnecessary fields
-        Project(projectList, Join(left, right, joinType, newCondition))
+        commonNaturalJoinProcessing(left, right, joinType, joinNames, condition)
     }
   }
+
+  private def commonNaturalJoinProcessing(
+     left: LogicalPlan,
+     right: LogicalPlan,
+     joinType: JoinType,
+     joinNames: Seq[String],
+     condition: Option[Expression]) = {
+    val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
+    val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
+    val joinPairs = leftKeys.zip(rightKeys)
+
+    val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
+
+    // columns not in joinPairs
+    val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
+    val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
+
+    // the output list looks like: join keys, columns from left, columns from right
+    val projectList = joinType match {
+      case LeftOuter =>
+        leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
+      case LeftSemi =>
+        leftKeys ++ lUniqueOutput
+      case RightOuter =>
+        rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
+      case FullOuter =>
+        // in full outer join, joinCols should be non-null if there is.
+        val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
+        joinedCols ++
+          lUniqueOutput.map(_.withNullability(true)) ++
+          rUniqueOutput.map(_.withNullability(true))
+      case Inner =>
+        leftKeys ++ lUniqueOutput ++ rUniqueOutput
+      case _ =>
+        sys.error("Unsupported natural join type " + joinType)
+    }
+    // use Project to trim unnecessary fields
+    Project(projectList, Join(left, right, joinType, newCondition))
+  }
+
+
 }
 
 /**
@@ -1416,8 +1509,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
   def trimNonTopLevelAliases(e: Expression): Expression = e match {
     case a: Alias =>
-      Alias(trimAliases(a.child), a.name)(
-        a.exprId, a.qualifiers, a.explicitMetadata, a.isGenerated)
+      a.withNewChildren(trimAliases(a.child) :: Nil)
     case other => trimAliases(other)
   }
 

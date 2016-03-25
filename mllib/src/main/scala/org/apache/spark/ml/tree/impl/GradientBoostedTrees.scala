@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tree.impl
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -34,20 +34,23 @@ private[ml] object GradientBoostedTrees extends Logging {
   /**
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
    */
-  def run(input: RDD[LabeledPoint],
-      boostingStrategy: OldBoostingStrategy
-      ): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+  def run(
+      input: RDD[LabeledPoint],
+      boostingStrategy: OldBoostingStrategy,
+      seed: Long): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
-        GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false)
+        GradientBoostedTrees.boost(input, input, boostingStrategy, validate = false, seed)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
-        GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false)
+        GradientBoostedTrees.boost(remappedInput, remappedInput, boostingStrategy, validate = false,
+          seed)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by gradient boosting.")
     }
@@ -61,18 +64,19 @@ private[ml] object GradientBoostedTrees extends Logging {
    *                        but it should follow the same distribution.
    *                        E.g., these two datasets could be created from an original dataset
    *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
+   * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
    */
   def runWithValidation(
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
-      boostingStrategy: OldBoostingStrategy
-      ): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      boostingStrategy: OldBoostingStrategy,
+      seed: Long): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
       case OldAlgo.Regression =>
-        GradientBoostedTrees.boost(input, validationInput, boostingStrategy, validate = true)
+        GradientBoostedTrees.boost(input, validationInput, boostingStrategy, validate = true, seed)
       case OldAlgo.Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(
@@ -80,7 +84,7 @@ private[ml] object GradientBoostedTrees extends Logging {
         val remappedValidationInput = validationInput.map(
           x => new LabeledPoint((x.label * 2) - 1, x.features))
         GradientBoostedTrees.boost(remappedInput, remappedValidationInput, boostingStrategy,
-          validate = true)
+          validate = true, seed)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
@@ -142,6 +146,7 @@ private[ml] object GradientBoostedTrees extends Logging {
    * @param validationInput validation dataset, ignored if validate is set to false.
    * @param boostingStrategy boosting parameters
    * @param validate whether or not to use the validation dataset.
+   * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
    */
@@ -149,7 +154,8 @@ private[ml] object GradientBoostedTrees extends Logging {
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint],
       boostingStrategy: OldBoostingStrategy,
-      validate: Boolean): (Array[DecisionTreeRegressionModel], Array[Double]) = {
+      validate: Boolean,
+      seed: Long): (Array[DecisionTreeRegressionModel], Array[Double]) = {
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
@@ -191,7 +197,7 @@ private[ml] object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val firstTree = new DecisionTreeRegressor()
+    val firstTree = new DecisionTreeRegressor().setSeed(seed)
     val firstTreeModel = firstTree.train(input, treeStrategy)
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
@@ -223,7 +229,7 @@ private[ml] object GradientBoostedTrees extends Logging {
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
-      val dt = new DecisionTreeRegressor()
+      val dt = new DecisionTreeRegressor().setSeed(seed + m)
       val model = dt.train(data, treeStrategy)
       timer.stop(s"building tree $m")
       // Update partial model

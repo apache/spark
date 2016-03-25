@@ -24,8 +24,9 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
@@ -273,7 +274,29 @@ private[ml] object DefaultParamsReader {
       sparkVersion: String,
       params: JValue,
       metadata: JValue,
-      metadataJson: String)
+      metadataJson: String) {
+
+    /**
+     * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
+     * This can be useful for getting a Param value before an instance of [[Params]]
+     * is available.
+     */
+    def getParamValue(paramName: String): JValue = {
+      implicit val format = DefaultFormats
+      params match {
+        case JObject(pairs) =>
+          val values = pairs.filter { case (pName, jsonValue) =>
+            pName == paramName
+          }.map(_._2)
+          assert(values.length == 1, s"Expected one instance of Param '$paramName' but found" +
+            s" ${values.length} in JSON Params: " + pairs.map(_.toString).mkString(", "))
+          values.head
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot recognize JSON metadata: $metadataJson.")
+      }
+    }
+  }
 
   /**
    * Load metadata from file.
@@ -302,6 +325,7 @@ private[ml] object DefaultParamsReader {
   /**
    * Extract Params from metadata, and set them in the instance.
    * This works if all Params implement [[org.apache.spark.ml.param.Param.jsonDecode()]].
+   * TODO: Move to [[Metadata]] method
    */
   def getAndSetParams(instance: Params, metadata: Metadata): Unit = {
     implicit val format = DefaultFormats

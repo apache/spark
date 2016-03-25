@@ -43,7 +43,6 @@ class JoinOptimizationSuite extends PlanTest {
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
         ColumnPruning,
-        EliminateOperators,
         CollapseProject) :: Nil
 
   }
