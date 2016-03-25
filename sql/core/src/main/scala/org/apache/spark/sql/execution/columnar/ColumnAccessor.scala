@@ -61,6 +61,8 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
   }
 
   protected def underlyingBuffer = buffer
+
+  def getByteBuffer: ByteBuffer = buffer
 }
 
 private[columnar] class NullColumnAccessor(buffer: ByteBuffer)
