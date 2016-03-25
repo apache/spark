@@ -41,65 +41,15 @@ object SQLConf {
   private val sqlConfEntries = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, ConfigEntry[_]]())
 
-  private def register[T <: ConfigEntry[_]](entry: T): T = sqlConfEntries.synchronized {
+  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
     require(!sqlConfEntries.containsKey(entry.key),
       s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
     sqlConfEntries.put(entry.key, entry)
-    entry
-  }
-
-  private class SQLTypedConfigBuilder[T](parent: TypedConfigBuilder[T])
-    extends TypedConfigBuilder(parent.parent, parent.converter, parent.stringConverter) {
-
-    override def transform(fn: T => T): TypedConfigBuilder[T] = {
-      new SQLTypedConfigBuilder(super.transform(fn))
-    }
-
-    override def toSequence: TypedConfigBuilder[Seq[T]] = {
-      new SQLTypedConfigBuilder(super.toSequence)
-    }
-
-    override def createOptional: OptionalConfigEntry[T] = register(super.createOptional)
-
-    override def createWithDefault(default: T): ConfigEntry[T] =
-      register(super.createWithDefault(default))
-
-    override def createWithDefaultString(default: String): ConfigEntry[T] =
-      register(super.createWithDefaultString(default))
-
   }
 
   private[sql] object SQLConfigBuilder {
 
-    def apply(key: String): SQLConfigBuilder = new SQLConfigBuilder(key)
-
-  }
-
-  private[sql] class SQLConfigBuilder(key: String) extends ConfigBuilder(key) {
-
-    override def intConf: TypedConfigBuilder[Int] = {
-      new SQLTypedConfigBuilder(super.intConf)
-    }
-
-    override def longConf: TypedConfigBuilder[Long] = {
-      new SQLTypedConfigBuilder(super.longConf)
-    }
-
-    override def booleanConf: TypedConfigBuilder[Boolean] = {
-      new SQLTypedConfigBuilder(super.booleanConf)
-    }
-
-    override def doubleConf: TypedConfigBuilder[Double] = {
-      new SQLTypedConfigBuilder(super.doubleConf)
-    }
-
-    override def stringConf: TypedConfigBuilder[String] = {
-      new SQLTypedConfigBuilder(super.stringConf)
-    }
-
-    override def bytesConf(unit: ByteUnit): TypedConfigBuilder[Long] = {
-      new SQLTypedConfigBuilder(super.bytesConf(unit))
-    }
+    def apply(key: String): ConfigBuilder =  new ConfigBuilder(key).onCreate(register)
 
   }
 
