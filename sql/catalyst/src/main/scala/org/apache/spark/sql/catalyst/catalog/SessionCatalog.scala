@@ -24,6 +24,9 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 
 
@@ -32,15 +35,22 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
  * proxy to the underlying metastore (e.g. Hive Metastore) and it also manages temporary
  * tables and functions of the Spark Session that it belongs to.
  */
-class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
+class SessionCatalog(
+    externalCatalog: ExternalCatalog,
+    functionRegistry: FunctionRegistry,
+    conf: CatalystConf) {
   import ExternalCatalog._
 
+  def this(externalCatalog: ExternalCatalog, functionRegistry: FunctionRegistry) {
+    this(externalCatalog, functionRegistry, new SimpleCatalystConf(true))
+  }
+
+  // For testing only.
   def this(externalCatalog: ExternalCatalog) {
-    this(externalCatalog, new SimpleCatalystConf(true))
+    this(externalCatalog, EmptyFunctionRegistry)
   }
 
   protected[this] val tempTables = new ConcurrentHashMap[String, LogicalPlan]
-  protected[this] val tempFunctions = new ConcurrentHashMap[String, CatalogFunction]
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
@@ -430,6 +440,18 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
     externalCatalog.alterFunction(db, newFuncDefinition)
   }
 
+  /**
+   * Retrieve the metadata of a metastore function.
+   *
+   * If a database is specified in `name`, this will return the function in that database.
+   * If no database is specified, this will return the function in the current database.
+   */
+  def getFunction(name: FunctionIdentifier): CatalogFunction = {
+    val db = name.database.getOrElse(currentDb)
+    externalCatalog.getFunction(db, name.funcName)
+  }
+
+
   // ----------------------------------------------------------------
   // | Methods that interact with temporary and metastore functions |
   // ----------------------------------------------------------------
@@ -438,14 +460,14 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * Create a temporary function.
    * This assumes no database is specified in `funcDefinition`.
    */
-  def createTempFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
-    require(funcDefinition.name.database.isEmpty,
-      "attempted to create a temporary function while specifying a database")
-    val name = funcDefinition.name.funcName
-    if (tempFunctions.containsKey(name) && !ignoreIfExists) {
+  def createTempFunction(
+      name: String,
+      funcDefinition: FunctionBuilder,
+      ignoreIfExists: Boolean): Unit = {
+    if (functionRegistry.lookupFunctionBuilder(name).isDefined && !ignoreIfExists) {
       throw new AnalysisException(s"Temporary function '$name' already exists.")
     }
-    tempFunctions.put(name, funcDefinition)
+    functionRegistry.registerFunction(name, funcDefinition)
   }
 
   /**
@@ -455,11 +477,10 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
   // Hive has DROP FUNCTION and DROP TEMPORARY FUNCTION. We may want to consolidate
   // dropFunction and dropTempFunction.
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {
-    if (!tempFunctions.containsKey(name) && !ignoreIfNotExists) {
+    if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
       throw new AnalysisException(
         s"Temporary function '$name' cannot be dropped because it does not exist!")
     }
-    tempFunctions.remove(name)
   }
 
   /**
@@ -476,32 +497,28 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
       throw new AnalysisException("rename does not support moving functions across databases")
     }
     val db = oldName.database.getOrElse(currentDb)
-    if (oldName.database.isDefined || !tempFunctions.containsKey(oldName.funcName)) {
+    lazy val oldBuilder = functionRegistry.lookupFunctionBuilder(oldName.funcName)
+    if (oldName.database.isDefined || oldBuilder.isEmpty) {
       externalCatalog.renameFunction(db, oldName.funcName, newName.funcName)
     } else {
-      val func = tempFunctions.remove(oldName.funcName)
-      val newFunc = func.copy(name = func.name.copy(funcName = newName.funcName))
-      tempFunctions.put(newName.funcName, newFunc)
+      val oldExpressionInfo = functionRegistry.lookupFunction(oldName.funcName).get
+      val newExpressionInfo = new ExpressionInfo(
+        oldExpressionInfo.getClassName,
+        newName.funcName,
+        oldExpressionInfo.getUsage,
+        oldExpressionInfo.getExtended)
+      functionRegistry.dropFunction(oldName.funcName)
+      functionRegistry.registerFunction(newName.funcName, newExpressionInfo, oldBuilder.get)
     }
   }
 
   /**
-   * Retrieve the metadata of an existing function.
-   *
-   * If a database is specified in `name`, this will return the function in that database.
-   * If no database is specified, this will first attempt to return a temporary function with
-   * the same name, then, if that does not exist, return the function in the current database.
+   * Return an [[Expression]] that represents the specified function, assuming it exists.
+   * Note: This is currently only used for temporary functions.
    */
-  def getFunction(name: FunctionIdentifier): CatalogFunction = {
-    val db = name.database.getOrElse(currentDb)
-    if (name.database.isDefined || !tempFunctions.containsKey(name.funcName)) {
-      externalCatalog.getFunction(db, name.funcName)
-    } else {
-      tempFunctions.get(name.funcName)
-    }
+  def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    functionRegistry.lookupFunction(name, children)
   }
-
-  // TODO: implement lookupFunction that returns something from the registry itself
 
   /**
    * List all matching functions in the specified database, including temporary functions.
@@ -510,17 +527,10 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
     val dbFunctions =
       externalCatalog.listFunctions(db, pattern).map { f => FunctionIdentifier(f, Some(db)) }
     val regex = pattern.replaceAll("\\*", ".*").r
-    val _tempFunctions = tempFunctions.keys().asScala
+    val _tempFunctions = functionRegistry.listFunction()
       .filter { f => regex.pattern.matcher(f).matches() }
       .map { f => FunctionIdentifier(f) }
     dbFunctions ++ _tempFunctions
-  }
-
-  /**
-   * Return a temporary function. For testing only.
-   */
-  private[catalog] def getTempFunction(name: String): Option[CatalogFunction] = {
-    Option(tempFunctions.get(name))
   }
 
 }
