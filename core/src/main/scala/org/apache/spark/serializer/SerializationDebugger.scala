@@ -123,7 +123,7 @@ private[spark] object SerializationDebugger extends Logging {
         }
         i += 1
       }
-      List.empty
+      return List.empty
     }
 
     /**
@@ -145,7 +145,7 @@ private[spark] object SerializationDebugger extends Logging {
         }
         i += 1
       }
-      List.empty
+      return List.empty
     }
 
     private def visitSerializable(o: Object, stack: List[String]): List[String] = {
@@ -212,7 +212,7 @@ private[spark] object SerializationDebugger extends Logging {
         }
         i += 1
       }
-      List.empty
+      return List.empty
     }
 
     /**
@@ -249,7 +249,7 @@ private[spark] object SerializationDebugger extends Logging {
       } else {
         visited ++= innerObjectsCatcher.outputArray
       }
-      List.empty
+      return List.empty
     }
   }
 

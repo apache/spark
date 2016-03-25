@@ -65,7 +65,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
       }
       i += 1
     }
-    0
+    return 0
   }
 }
 

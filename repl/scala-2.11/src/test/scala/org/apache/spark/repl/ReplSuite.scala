@@ -56,7 +56,7 @@ class ReplSuite extends SparkFunSuite {
     } else {
       System.clearProperty(CONF_EXECUTOR_CLASSPATH)
     }
-    out.toString
+    return out.toString
   }
 
   // Simulate the paste mode in Scala REPL.

@@ -61,7 +61,7 @@ class ReplSuite extends SparkFunSuite {
     } else {
       System.clearProperty(CONF_EXECUTOR_CLASSPATH)
     }
-    out.toString
+    return out.toString
   }
 
   def assertContains(message: String, output: String) {

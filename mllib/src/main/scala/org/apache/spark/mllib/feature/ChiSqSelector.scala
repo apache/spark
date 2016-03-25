@@ -165,7 +165,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
         case Row(feature: Int) => (feature)
       }.collect()
 
-      new ChiSqSelectorModel(features)
+      return new ChiSqSelectorModel(features)
     }
   }
 }

@@ -261,7 +261,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       return false
     }
     logDebug(s"$pathStr accepted with mod time $modTime")
-    true
+    return true
   }
 
   /** Generate one RDD from an array of files */

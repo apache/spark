@@ -269,7 +269,7 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
-    launchedTask
+    return launchedTask
   }
 
   /**

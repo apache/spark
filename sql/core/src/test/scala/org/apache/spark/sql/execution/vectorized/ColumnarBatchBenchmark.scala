@@ -351,7 +351,7 @@ object ColumnarBatchBenchmark {
         sb.append(chars.charAt(random.nextInt(chars.length())));
         i += 1
       }
-      sb.toString
+      return sb.toString
     }
 
     val minString = 3

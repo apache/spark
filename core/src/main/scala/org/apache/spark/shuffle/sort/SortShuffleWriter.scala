@@ -81,11 +81,11 @@ private[spark] class SortShuffleWriter[K, V, C](
       }
       stopping = true
       if (success) {
-        Option(mapStatus)
+        return Option(mapStatus)
       } else {
         // The map task failed, so delete our output data.
         shuffleBlockResolver.removeDataByMap(dep.shuffleId, mapId)
-        None
+        return None
       }
     } finally {
       // Clean up our sorter, which may have its own intermediate files
