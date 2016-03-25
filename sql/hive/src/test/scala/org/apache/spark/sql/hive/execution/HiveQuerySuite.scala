@@ -1263,6 +1263,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertUnsupportedFeature { sql("REVOKE ALL ON my_table FROM USER my_user") }
   }
 
+  test("import/export commands are not supported") {
+    assertUnsupportedFeature { sql("IMPORT TABLE my_table FROM 'my_path'") }
+    assertUnsupportedFeature { sql("EXPORT TABLE my_table TO 'my_path'") }
+  }
+
 }
 
 // for SPARK-2180 test

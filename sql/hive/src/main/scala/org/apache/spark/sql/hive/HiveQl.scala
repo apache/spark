@@ -108,10 +108,6 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_DROPVIEW",
     "TOK_DROPVIEW_PROPERTIES",
 
-    "TOK_EXPORT",
-
-    "TOK_IMPORT",
-
     "TOK_LOAD",
 
     "TOK_LOCKTABLE",
