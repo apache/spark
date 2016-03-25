@@ -133,6 +133,7 @@ class MLWritable(object):
 
     .. versionadded:: 2.0.0
     """
+
     @property
     @since(2.0)
     def write(self):
