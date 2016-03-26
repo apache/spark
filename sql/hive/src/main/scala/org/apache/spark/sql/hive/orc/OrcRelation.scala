@@ -149,8 +149,10 @@ private[sql] class DefaultSource
       // case, `OrcFileOperator.readSchema` returns `None`, and we can simply return an empty
       // iterator.
       val maybePhysicalSchema = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf))
-
-      maybePhysicalSchema.fold(Iterator.empty: Iterator[InternalRow]) { physicalSchema =>
+      if (maybePhysicalSchema.isEmpty) {
+        Iterator.empty
+      } else {
+        val physicalSchema = maybePhysicalSchema.get
         OrcRelation.setRequiredColumns(conf, physicalSchema, dataSchema)
 
         val orcRecordReader = {
