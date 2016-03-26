@@ -109,9 +109,9 @@ case class Invoke(
     targetObject: Expression,
     functionName: String,
     dataType: DataType,
-    arguments: Seq[Expression] = Nil) extends Expression with NonSQLExpression {
+    arguments: Seq[Expression] = Nil,
+    val nullable: Boolean = true) extends Expression with NonSQLExpression {
 
-  override def nullable: Boolean = true
   override def children: Seq[Expression] = arguments.+:(targetObject)
 
   override def eval(input: InternalRow): Any =

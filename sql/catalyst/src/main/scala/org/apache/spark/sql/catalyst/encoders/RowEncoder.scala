@@ -125,12 +125,18 @@ object RowEncoder {
         } else {
           "get"
         }
-        If(
-          Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
-          Literal.create(null, f.dataType),
-          extractorsFor(
-            Invoke(inputObject, method, externalDataTypeFor(f.dataType), Literal(i) :: Nil),
-            f.dataType))
+        val x = extractorsFor(
+          Invoke(inputObject, method, externalDataTypeFor(f.dataType), Literal(i) :: Nil,
+            f.nullable),
+          f.dataType)
+        if (f.nullable) {
+          If(
+            Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
+            Literal.create(null, f.dataType),
+            x)
+        } else {
+          x
+        }
       }
       If(IsNull(inputObject),
         Literal.create(null, inputType),

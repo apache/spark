@@ -27,6 +27,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.exchange.{BroadcastExchange, ReusedExchange, ShuffleExchange}
@@ -1431,5 +1432,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val e1 = intercept[AnalysisException] (sqlContext.read.json("/mnt/*/*-xyz.json").rdd).
       getMessage()
     assert(e1.startsWith("Path does not exist"))
+  }
+
+  test("SPARK-14139: map on row and preserve schema nullability") {
+    val df1 = Seq(1, 2, 3).toDF
+    assert(df1.map(row => Row(row.getInt(0) + 1))(RowEncoder(df1.schema)).schema === df1.schema)
   }
 }
