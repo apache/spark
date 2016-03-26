@@ -128,6 +128,20 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         }.toMap
         CreateDatabase(databaseName, ifNotExists.isDefined, location, comment, props)(node.source)
 
+      // DROP DATABASE [IF EXISTS] database_name [RESTRICT|CASCADE];
+      case Token("TOK_DROPDATABASE", Token(dbName, Nil) :: otherArgs) =>
+        // Example format:
+        //
+        //   TOK_DROPDATABASE
+        //   :- database_name
+        //   :- TOK_IFEXISTS
+        //   +- TOK_RESTRICT/TOK_CASCADE
+        val databaseName = unquoteString(dbName)
+        // The default is RESTRICT
+        val Seq(ifExists, _, cascade) = getClauses(Seq(
+          "TOK_IFEXISTS", "TOK_RESTRICT", "TOK_CASCADE"), otherArgs)
+        DropDatabase(databaseName, ifExists.isDefined, restrict = cascade.isEmpty)(node.source)
+
       // CREATE [TEMPORARY] FUNCTION [db_name.]function_name AS class_name
       // [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri'] ];
       case Token("TOK_CREATEFUNCTION", args) =>
