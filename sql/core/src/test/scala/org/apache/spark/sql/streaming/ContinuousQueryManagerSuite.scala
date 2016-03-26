@@ -243,7 +243,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
                 StreamExecution.nextName,
                 metadataRoot,
                 df,
-                new MemorySink(df.schema))
+                new MemorySink(df.schema),
+                10L)
               .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>

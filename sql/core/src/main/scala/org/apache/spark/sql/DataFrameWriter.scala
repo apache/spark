@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
 
@@ -74,6 +75,26 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
         "Accepted modes are 'overwrite', 'append', 'ignore', 'error'.")
     }
+    this
+  }
+
+  /**
+   * Set the trigger period for the stream query.
+   *
+   * @since 2.0.0
+   */
+  def trigger(period: Duration): DataFrameWriter = {
+    this.extraOptions += ("period" -> period.toMillis.toString)
+    this
+  }
+
+  /**
+   * Set the trigger period for the stream query.
+   *
+   * @since 2.0.0
+   */
+  def trigger(period: Long, unit: TimeUnit): DataFrameWriter = {
+    this.extraOptions += ("period" -> unit.toMillis(period).toString)
     this
   }
 
@@ -257,11 +278,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     val checkpointLocation = extraOptions.getOrElse("checkpointLocation", {
       new Path(df.sqlContext.conf.checkpointLocation, queryName).toUri.toString
     })
+    val triggerPeriodMs = extraOptions.getOrElse("period", "0").toLong
+    require(triggerPeriodMs >= 0, "the period of trigger should not be negative")
     df.sqlContext.sessionState.continuousQueryManager.startQuery(
       queryName,
       checkpointLocation,
       df,
-      dataSource.createSink())
+      dataSource.createSink(),
+      triggerPeriodMs)
   }
 
   /**

@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.streaming.test
 
+import java.util.concurrent.TimeUnit
+
+import scala.concurrent.duration._
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
@@ -273,5 +277,29 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     val q5 = startQueryWithName("name")
     assert(activeStreamNames.contains("name"))
     sqlContext.streams.active.foreach(_.stop())
+  }
+
+  test("trigger") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream("/test")
+
+    df.write
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .trigger(10.seconds)
+      .startStream()
+      .stop()
+
+    assert(LastOptions.parameters("period") == "10000")
+
+    df.write
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .trigger(100, TimeUnit.SECONDS)
+      .startStream()
+      .stop()
+
+    assert(LastOptions.parameters("period") == "100000")
   }
 }
