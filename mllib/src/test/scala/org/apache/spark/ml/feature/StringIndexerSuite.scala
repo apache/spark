@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
@@ -43,10 +43,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
-
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(indexer)
+    indexer.fit(df)
 
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
@@ -68,7 +65,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    indexer.fit(df)
     // Verify we throw by default with unseen values
     intercept[SparkException] {
       indexer.transform(df2).collect()
@@ -77,7 +74,7 @@ class StringIndexerSuite
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .setHandleInvalid("skip")
-      .fit(df)
+    indexerSkipInvalid.fit(df)
     // Verify that we skip the c record
     val transformed = indexerSkipInvalid.transform(df2)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
@@ -97,7 +94,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    indexer.fit(df)
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
@@ -123,7 +120,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("input")
       .setOutputCol("output")
-      .fit(df)
+    indexer.fit(df)
     intercept[IllegalArgumentException] {
       indexer.transform(df)
     }
@@ -184,7 +181,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    indexer.fit(df)
     val transformed = indexer.transform(df)
     val idx2str = new IndexToString()
       .setInputCol("labelIndex")
@@ -217,7 +214,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    indexer.fit(df)
     val transformed = indexer.transform(df)
     val attrs =
       NominalAttribute.decodeStructField(transformed.schema("labelIndex"), preserveName = true)

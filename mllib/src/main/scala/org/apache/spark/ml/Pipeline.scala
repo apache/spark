@@ -72,6 +72,8 @@ abstract class PipelineStage extends Params with Logging {
   }
 
   override def copy(extra: ParamMap): PipelineStage
+
+  def copy(): PipelineStage = copy(ParamMap.empty)
 }
 
 /**
@@ -89,8 +91,7 @@ abstract class PipelineStage extends Params with Logging {
 @Since("1.2.0")
 @Experimental
 class Pipeline @Since("1.4.0") (
-  @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel]
-  with MLWritable {
+  @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel] with MLWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("pipeline"))
@@ -134,6 +135,8 @@ class Pipeline @Since("1.4.0") (
       stage match {
         case _: Estimator[_] =>
           indexOfLastEstimator = index
+        case _: MutableEstimator[_] =>
+          indexOfLastEstimator = index
         case _ =>
       }
     }
@@ -144,6 +147,11 @@ class Pipeline @Since("1.4.0") (
         val transformer = stage match {
           case estimator: Estimator[_] =>
             estimator.fit(curDataset)
+          case estimator: MutableEstimator[_] =>
+            // Currently, we make a copy.  This will change when we merge Pipeline, PipelineModel.
+            val e = estimator.copy().asInstanceOf[MutableEstimator[_]]
+            e.fit(curDataset)
+            e
           case t: Transformer =>
             t
           case _ =>

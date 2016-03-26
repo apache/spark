@@ -63,7 +63,8 @@ public class JavaStringIndexerSuite {
     StringIndexer indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex");
-    Dataset<Row> output = indexer.fit(dataset).transform(dataset);
+    indexer.fit(dataset);
+    Dataset<Row> output = indexer.transform(dataset);
 
     Assert.assertEquals(
       Arrays.asList(cr(0, 0.0), cr(1, 2.0), cr(2, 1.0), cr(3, 0.0), cr(4, 0.0), cr(5, 1.0)),

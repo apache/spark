@@ -626,11 +626,29 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
+   * Sets parameter in the embedded param map.
+   */
+  final def set(paramMap: ParamMap): Unit = {
+    paramMap.toSeq.foreach(set)
+  }
+
+  /**
    * Sets a parameter in the embedded param map.
    */
-  protected final def set(paramPair: ParamPair[_]): this.type = {
+  final def set(paramPair: ParamPair[_]): this.type = {
     shouldOwn(paramPair.param)
     paramMap.put(paramPair)
+    this
+  }
+
+  /**
+   * Sets a parameter in the embedded param map.
+   */
+  final def set(paramPair: ParamPair[_], other: ParamPair[_]*): this.type = {
+    (paramPair +: other.toSeq).foreach { p =>
+      shouldOwn(p.param)
+      paramMap.put(p)
+    }
     this
   }
 

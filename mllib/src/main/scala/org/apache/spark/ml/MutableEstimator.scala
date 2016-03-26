@@ -17,72 +17,53 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.ml.param.{ParamPair, ParamMap}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.sql._
 
 import scala.annotation.varargs
 
+
 /**
-  * An estimator that also acts as a transformer and that updates itself when being fit.
-  * @tparam T
-  */
-abstract class MutableEstimator[T <: MutableEstimator[T]] extends PipelineStage {
+ * :: DeveloperApi ::
+ * An estimator that also acts as a transformer and that updates itself when being fit.
+ *
+ * @tparam T  Type of Estimator implementing this abstraction
+ */
+// NOTE: This class temporarily overrides Transformer during the process of merging Estimator
+//       and Model.  This helps with handling meta-algorithms.  We will later extend PipelineStage
+//       instead of Transformer.
+@DeveloperApi
+abstract class MutableEstimator[T <: MutableEstimator[T]] extends Transformer {
 
-  def setParams(paramMap: ParamMap): Unit = {
-    paramMap.toSeq.foreach(set)
-  }
-
-  def setParams(first: ParamPair[_], other: ParamPair[_]*): Unit = {
-    set(first)
-    other.foreach(set)
-  }
-
-  /**
-    * Fits a single model to the input data with optional parameters.
-    *
-    * @param dataset input dataset
-    * @param firstParamPair the first param pair, overrides embedded params
-    * @param otherParamPairs other param pairs.  These values override any specified in this
-    *                        Estimator's embedded ParamMap.
-    * @return fitted model
-    */
-  @deprecated("2.0.0", "You should use setParams() followed by fit() instead")
-  @varargs
-  def fit(
-      dataset: DataFrame,
-      firstParamPair: ParamPair[_],
-      otherParamPairs: ParamPair[_]*): Unit = {
-    setParams(firstParamPair, otherParamPairs: _*)
-    fit(dataset)
-  }
+  // TODO: Decide on multi-model fitting API, or hide for 2.0.
 
   /**
-    * Fits a single model to the input data with provided parameter map.
-    *
-    * @param dataset input dataset
-    * @param paramMap Parameter map.
-    *                 These values override any specified in this Estimator's embedded ParamMap.
-    * @return fitted model
-    */
-  @deprecated("2.0.0", "You should use setParams() followed by fit() instead")
-  def fit(
-      dataset: DataFrame,
-      paramMap: ParamMap): Unit = {
-    setParams(paramMap)
-    fit(dataset)
-  }
-
-  /**
-    * Fits a model to the input data.
-    */
+   * Fits this model to the input data, modifying this instance in-place.
+   */
   def fit(dataset: DataFrame): Unit
 
   /**
-    * Transforms the input dataset.
-    */
+   * Transforms the given dataset.
+   */
   def transform(dataset: DataFrame): DataFrame
 
   // TODO: check that this is not changing the signature in the documentation.
+  /**
+   * Copy this instance, returning the copy.
+   *
+   * @param extra Any parameters specified in this map will be set to the given values
+   *              in the copied instance.
+   */
   override def copy(extra: ParamMap): T
 
+  // TEMP METHODS from Transformer, to be removed after merge is complete
+  @varargs
+  override def transform(
+      dataset: DataFrame,
+      firstParamPair: ParamPair[_],
+      otherParamPairs: ParamPair[_]*): DataFrame = throw new RuntimeException
+
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame =
+    throw new RuntimeException
 }

@@ -36,7 +36,7 @@ class OneHotEncoderSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    indexer.fit(df)
     indexer.transform(df)
   }
 

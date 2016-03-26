@@ -27,17 +27,12 @@ import org.apache.spark.ml.param.ParamMap
  * @tparam M model type
  */
 @DeveloperApi
-trait Model[M <: Model[M]] extends Transformer {
-
+abstract class Model[M <: Model[M]] extends Transformer {
   /**
    * The parent estimator that produced this model.
    * Note: For ensembles' component Models, this value can be null.
    */
-  @transient private[this] var _parent: Estimator[M] = null
-
-  def parent: Estimator[M] = _parent
-
-  def parent_=(p: Estimator[M]): Unit = { _parent = p }
+  @transient var parent: Estimator[M] = _
 
   /**
    * Sets the parent of this model (Java API).

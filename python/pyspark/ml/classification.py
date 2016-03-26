@@ -292,8 +292,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
-    >>> si_model = stringIndexer.fit(df)
-    >>> td = si_model.transform(df)
+    >>> stringIndexer.fit(df)
+    >>> td = stringIndexer.transform(df)
     >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
     >>> model = dt.fit(td)
     >>> model.numNodes
@@ -420,8 +420,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
-    >>> si_model = stringIndexer.fit(df)
-    >>> td = si_model.transform(df)
+    >>> stringIndexer.fit(df)
+    >>> td = stringIndexer.transform(df)
     >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = rf.fit(td)
     >>> model.featureImportances
@@ -530,8 +530,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
-    >>> si_model = stringIndexer.fit(df)
-    >>> td = si_model.transform(df)
+    >>> stringIndexer.fit(df)
+    >>> td = stringIndexer.transform(df)
     >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = gbt.fit(td)
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
