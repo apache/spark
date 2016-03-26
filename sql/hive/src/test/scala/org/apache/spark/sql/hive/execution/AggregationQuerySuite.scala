@@ -189,10 +189,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   override def afterAll(): Unit = {
-    sqlContext.sql("DROP TABLE IF EXISTS agg1")
-    sqlContext.sql("DROP TABLE IF EXISTS agg2")
-    sqlContext.sql("DROP TABLE IF EXISTS agg3")
-    sqlContext.dropTempTable("emptyTable")
+    try {
+      sqlContext.sql("DROP TABLE IF EXISTS agg1")
+      sqlContext.sql("DROP TABLE IF EXISTS agg2")
+      sqlContext.sql("DROP TABLE IF EXISTS agg3")
+      sqlContext.dropTempTable("emptyTable")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("group by function") {

@@ -445,6 +445,11 @@ object SQLConf {
     doc = "When true, the ordinal numbers are treated as the position in the select list. " +
           "When false, the ordinal numbers in order/sort By clause are ignored.")
 
+  val GROUP_BY_ORDINAL = booleanConf("spark.sql.groupByOrdinal",
+    defaultValue = Some(true),
+    doc = "When true, the ordinal numbers in group by clauses are treated as the position " +
+      "in the select list. When false, the ordinal numbers are ignored.")
+
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   //
@@ -668,6 +673,7 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
+  override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
