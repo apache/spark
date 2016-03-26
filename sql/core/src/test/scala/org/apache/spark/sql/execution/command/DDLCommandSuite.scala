@@ -78,8 +78,8 @@ class DDLCommandSuite extends PlanTest {
   test("drop function") {
     val sql1 = "DROP TEMPORARY FUNCTION helloworld"
     val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS helloworld"
-    val sql3 = "DROP FUNCTION helloworld"
-    val sql4 = "DROP FUNCTION IF EXISTS helloworld"
+    val sql3 = "DROP FUNCTION hello.world"
+    val sql4 = "DROP FUNCTION IF EXISTS hello.world"
 
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
@@ -87,19 +87,23 @@ class DDLCommandSuite extends PlanTest {
     val parsed4 = parser.parsePlan(sql4)
 
     val expected1 = DropFunction(
+      None,
       "helloworld",
       ifExists = false,
       isTemp = true)(sql1)
     val expected2 = DropFunction(
+      None,
       "helloworld",
       ifExists = true,
       isTemp = true)(sql2)
     val expected3 = DropFunction(
-      "helloworld",
+      Some("hello"),
+      "world",
       ifExists = false,
       isTemp = false)(sql3)
     val expected4 = DropFunction(
-      "helloworld",
+      Some("hello"),
+      "world",
       ifExists = true,
       isTemp = false)(sql4)
 

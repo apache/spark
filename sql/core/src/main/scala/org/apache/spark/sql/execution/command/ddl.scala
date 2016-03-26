@@ -62,6 +62,7 @@ case class CreateFunction(
   extends NativeDDLCommand(sql) with Logging
 
 case class DropFunction(
+    databaseName: Option[String],
     functionName: String,
     ifExists: Boolean,
     isTemp: Boolean)(sql: String)

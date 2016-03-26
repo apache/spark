@@ -179,19 +179,34 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         CreateFunction(dbName, funcName, alias, resources, temp.isDefined)(node.source)
 
       // DROP [TEMPORARY] FUNCTION [IF EXISTS] function_name;
-      case Token("TOK_DROPFUNCTION", Token(fname, Nil) :: otherArgs) =>
+      case Token("TOK_DROPFUNCTION", args) =>
         // Example format:
         //
         //   TOK_DROPFUNCTION
+        //   :- db_name
         //   :- func_name
         //   :- TOK_IFEXISTS
         //   +- TOK_TEMPORARY
-        val funcName = unquoteString(fname)
+        val (funcNameArgs, otherArgs) = args.partition {
+          case Token("TOK_IFEXISTS", _) => false
+          case Token("TOK_TEMPORARY", _) => false
+          case Token(_, Nil) => true
+          case _ => parseFailed("Invalid DROP FUNCTION command", node)
+        }
+        // If database name is specified, there are 2 tokens, otherwise 1.
+        val (dbName, funcName) = funcNameArgs match {
+          case Token(dbName, Nil) :: Token(fname, Nil) :: Nil =>
+            (Some(unquoteString(dbName)), unquoteString(fname))
+          case Token(fname, Nil) :: Nil =>
+            (None, unquoteString(fname))
+          case _ =>
+            parseFailed("Invalid DROP FUNCTION command", node)
+        }
 
         val Seq(ifExists, temp) = getClauses(Seq(
           "TOK_IFEXISTS", "TOK_TEMPORARY"), otherArgs)
 
-        DropFunction(funcName, ifExists.isDefined, temp.isDefined)(node.source)
+        DropFunction(dbName, funcName, ifExists.isDefined, temp.isDefined)(node.source)
 
       case Token("TOK_ALTERTABLE", alterTableArgs) =>
         AlterTableCommandParser.parse(node)
