@@ -1585,3 +1585,36 @@ object ResolveUpCast extends Rule[LogicalPlan] {
     }
   }
 }
+
+/**
+ * Replace the `UpCast` expression by `Cast`, and throw exceptions if the cast may truncate.
+ */
+object TimeWindowing extends Rule[LogicalPlan] {
+
+  private def generateWindows(p: LogicalPlan): (LogicalPlan, AttributeReference) = {
+    val windowExpr = p.expressions.collect { case window: TimeWindow => window }.head
+    val expandedWindow = AttributeReference("window", StructType(Seq(
+      StructField("start", TimestampType), StructField("end", TimestampType))))()
+    val projections = Seq.tabulate(windowExpr.numOverlapping) { i =>
+
+      ???
+    }
+    (Expand(projections, expandedWindow :: Nil, p.children.head), expandedWindow)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p: LogicalPlan if p.expressions.exists(_.isInstanceOf[TimeWindow]) &&
+      p.children.length == 1 =>
+      val (windowed, columnRef) = generateWindows(p)
+      val rewritten = p transformExpressions {
+        case windowExpr: TimeWindow =>
+          windowExpr.validate() match {
+            case Some(e) => throw new AnalysisException(e)
+            case _ => // valid expression
+          }
+          columnRef
+      }
+      rewritten.withNewChildren(windowed :: Nil)
+  }
+
+}

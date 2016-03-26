@@ -1153,6 +1153,22 @@ object functions {
     CaseWhen(Seq((condition.expr, lit(value).expr)))
   }
 
+  def window(
+      timeColumn: Column,
+      windowDuration: String,
+      slideDuration: String,
+      startTime: String): Column = withExpr {
+    ???
+  }
+
+  def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
+    window(timeColumn, windowDuration, slideDuration, "0s")
+  }
+
+  def window(timeColumn: Column, windowDuration: String): Column = {
+    window(timeColumn, windowDuration, windowDuration, "0s")
+  }
+
   /**
    * Computes bitwise NOT.
    *
