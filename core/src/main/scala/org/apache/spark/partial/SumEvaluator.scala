@@ -42,6 +42,14 @@ private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
       new BoundedDouble(counter.sum, 1.0, counter.sum, counter.sum)
     } else if (outputsMerged == 0) {
       new BoundedDouble(0, 0.0, Double.NegativeInfinity, Double.PositiveInfinity)
+    } else if (counter.count == 0) {
+      new BoundedDouble(0, 0.0, Double.NegativeInfinity, Double.PositiveInfinity)
+    } else if (counter.count == 1) {
+      val p = outputsMerged.toDouble / totalOutputs
+      val meanEstimate = counter.mean
+      val countEstimate = (counter.count + 1 - p) / p
+      val sumEstimate = meanEstimate * countEstimate
+      new BoundedDouble(sumEstimate, 0.0, Double.NegativeInfinity, Double.PositiveInfinity)
     } else {
       val p = outputsMerged.toDouble / totalOutputs
       val meanEstimate = counter.mean
