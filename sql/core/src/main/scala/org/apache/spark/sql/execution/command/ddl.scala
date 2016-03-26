@@ -52,13 +52,6 @@ case class CreateDatabase(
     props: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
-case class CreateFunction(
-    functionName: String,
-    alias: String,
-    resources: Seq[(String, String)],
-    isTemp: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
 case class AlterTableRename(
     oldName: TableIdentifier,
     newName: TableIdentifier)(sql: String)

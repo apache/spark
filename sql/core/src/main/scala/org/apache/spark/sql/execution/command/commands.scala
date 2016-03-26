@@ -21,8 +21,9 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.{Dataset, Row, SQLContext}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -429,6 +430,30 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     sqlContext.sessionState.catalog.setCurrentDatabase(databaseName)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
+}
+
+/**
+  * A command for users to create a function.
+  * The syntax of using this command in SQL is
+  * {{{
+  *   CREATE TEMPORARY FUNCTION function_name AS class_name;
+  *   CREATE FUNCTION [db_name.]function_name AS class_name
+  *     [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri'] ];
+  * }}}
+  */
+case class CreateFunction(
+                           functionName: String,
+                           alias: String,
+                           resources: Seq[(String, String)],
+                           isTemp: Boolean)(sql: String) extends RunnableCommand {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val functionIdentifier = FunctionIdentifier(functionName, Some(catalog.getCurrentDatabase))
+    catalog.createFunction(CatalogFunction(functionIdentifier, alias))
     Seq.empty[Row]
   }
 
