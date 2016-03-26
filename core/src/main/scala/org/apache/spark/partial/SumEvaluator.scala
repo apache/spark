@@ -60,8 +60,8 @@ private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
           val degreesOfFreedom = (counter.count - 1).toInt
           new TDistribution(degreesOfFreedom).inverseCumulativeProbability(1 - (1 - confidence) / 2)
         } else {
-          // this may not be statistically meaningful
-          confidence
+          // No way to meaningfully estimate confidence, so we signal no particular confidence interval
+          Double.PositiveInfinity
         }
       }
       val low = sumEstimate - confFactor * sumStdev
