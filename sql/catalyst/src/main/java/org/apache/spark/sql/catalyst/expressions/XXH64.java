@@ -17,10 +17,8 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.util.SystemClock;
 
 // scalastyle: off
-
 /**
  * xxHash64. A high quality and fast 64 bit hash code by Yann Colet and Mathias Westerdahl. The
  * class below is modelled like its Murmur3_x86_32 cousin.

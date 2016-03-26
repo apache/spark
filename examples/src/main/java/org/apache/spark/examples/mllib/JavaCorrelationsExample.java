@@ -58,7 +58,8 @@ public class JavaCorrelationsExample {
       )
     );
 
-    // calculate the correlation matrix using Pearson's method. Use "spearman" for Spearman's method.
+    // calculate the correlation matrix using Pearson's method.
+    // Use "spearman" for Spearman's method.
     // If a method is not specified, Pearson's method will be used by default.
     Matrix correlMatrix = Statistics.corr(data.rdd(), "pearson");
     System.out.println(correlMatrix.toString());
