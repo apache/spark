@@ -1158,7 +1158,7 @@ object functions {
       windowDuration: String,
       slideDuration: String,
       startTime: String): Column = withExpr {
-    ???
+    TimeWindow(timeColumn.expr, windowDuration, slideDuration, startTime)
   }
 
   def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {

@@ -77,6 +77,7 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
+      TimeWindowing,
       EliminateUnions),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
@@ -1587,19 +1588,38 @@ object ResolveUpCast extends Rule[LogicalPlan] {
 }
 
 /**
- * Replace the `UpCast` expression by `Cast`, and throw exceptions if the cast may truncate.
+ * Maps a time column to multiple time windows using the Expand operator. Since it's non-trivial to
+ * figure out how many windows a time column can map to, we over-estimate the number of windows and
+ * filter out the rows where the time column is not inside the time window.
  */
 object TimeWindowing extends Rule[LogicalPlan] {
+
+  private def addSlideDurationAndOffset(
+      expr: Expression,
+      windowExpr: TimeWindow,
+      window: Int): Expression = {
+    Add(Add(expr, Multiply(Literal(window), Literal(windowExpr.slideDuration))),
+      Literal(windowExpr.startTime))
+  }
 
   private def generateWindows(p: LogicalPlan): (LogicalPlan, AttributeReference) = {
     val windowExpr = p.expressions.collect { case window: TimeWindow => window }.head
     val expandedWindow = AttributeReference("window", StructType(Seq(
       StructField("start", TimestampType), StructField("end", TimestampType))))()
-    val projections = Seq.tabulate(windowExpr.numOverlapping) { i =>
-
-      ???
+    val projections = Seq.tabulate(windowExpr.maxNumOverlapping + 1) { i =>
+      val division = Divide(windowExpr.timeColumn, Literal(windowExpr.windowDuration))
+      val windowStart = addSlideDurationAndOffset(Multiply(Floor(division),
+        Literal(windowExpr.windowDuration)), windowExpr, i - 1)
+      val windowEnd = addSlideDurationAndOffset(Multiply(Ceil(division),
+        Literal(windowExpr.windowDuration)), windowExpr, i - 1)
+      CreateStruct(windowStart :: windowEnd :: Nil) :: Nil
     }
-    (Expand(projections, expandedWindow :: Nil, p.children.head), expandedWindow)
+    val windowStartCol = expandedWindow.children.head
+    val windowEndCol = expandedWindow.children.last
+    val filterExpr = And(GreaterThanOrEqual(windowExpr.timeColumn, windowStartCol),
+      LessThan(windowExpr.timeColumn, windowEndCol))
+    (Filter(filterExpr,
+      Expand(projections, expandedWindow :: Nil, p.children.head)), expandedWindow)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

@@ -26,19 +26,26 @@ case class TimeWindow(
 	val startTime = getIntervalInMillis(CalendarInterval.fromString(_startTime))
 
 	def validate(): Option[String] = {
+		if (windowDuration <= 0) {
+			return Some(s"The window duration ($windowDuration) must be greater than 0.")
+		}
+		if (slideDuration <= 0) {
+			return Some(s"The slide duration ($slideDuration) must be greater than 0.")
+		}
 		if (slideDuration > windowDuration) {
 			return Some(s"The slide duration ($slideDuration) must be less than or equal to the " +
 				s"windowDuration ($windowDuration).")
 		}
-		if (startTime >= windowDuration) {
+		if (startTime >= slideDuration) {
 			return Some(s"The start time ($startTime) must be less than the " +
-				s"windowDuration ($windowDuration).")
+				s"slideDuration ($slideDuration).")
 		}
 		None
 	}
 
 	/**
-	 * Returns number of overlapping windows we will have with the given window and slide durations.
+	 * Returns the maximum possible number of overlapping windows we will have with the given
+	 * window and slide durations.
 	 */
-	def numOverlapping: Int = math.ceil(windowDuration * 1.0 / slideDuration).toInt
+	def maxNumOverlapping: Int = math.ceil(windowDuration * 1.0 / slideDuration).toInt
 }
