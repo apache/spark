@@ -40,7 +40,7 @@ private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
   override def currentResult(): BoundedDouble = {
     if (outputsMerged == totalOutputs) {
       new BoundedDouble(counter.sum, 1.0, counter.sum, counter.sum)
-    } else if (outputsMerged == 0) {
+    } else if (outputsMerged == 0 || counter.count == 0) {
       new BoundedDouble(0, 0.0, Double.NegativeInfinity, Double.PositiveInfinity)
     } else {
       val p = outputsMerged.toDouble / totalOutputs
@@ -56,9 +56,12 @@ private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
       val confFactor = {
         if (counter.count > 100) {
           new NormalDistribution().inverseCumulativeProbability(1 - (1 - confidence) / 2)
-        } else {
+        } else if (counter.count > 1) {
           val degreesOfFreedom = (counter.count - 1).toInt
           new TDistribution(degreesOfFreedom).inverseCumulativeProbability(1 - (1 - confidence) / 2)
+        } else {
+          // this may not be statistically meaningful
+          confidence
         }
       }
       val low = sumEstimate - confFactor * sumStdev
