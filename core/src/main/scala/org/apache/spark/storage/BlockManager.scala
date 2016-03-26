@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.MemoryManager
+import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NettyManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
@@ -94,7 +94,7 @@ private[spark] class BlockManager(
   // However, since we use this only for reporting and logging, what we actually want here is
   // the absolute maximum value that `maxStorageMemory` can ever possibly reach. We may need
   // to revisit whether reporting this value as the "max" is intuitive to the user.
-  private val maxMemory = memoryManager.maxStorageMemory
+  private val maxMemory = memoryManager.maxOnHeapStorageMemory
 
   // Port used by the external shuffle service. In Yarn mode, this may be already be
   // set through the Hadoop configuration as the server is launched in the Yarn NM.
