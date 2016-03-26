@@ -187,7 +187,8 @@ private[joins] class UnsafeHashedRelation(
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeInt(numFields)
     // TODO: move these into BytesToBytesMap
-    out.writeInt(binaryMap.numElements())
+    out.writeInt(binaryMap.numKeys())
+    out.writeInt(binaryMap.numValues())
 
     var buffer = new Array[Byte](64)
     def write(base: Object, offset: Long, length: Int): Unit = {
@@ -212,6 +213,7 @@ private[joins] class UnsafeHashedRelation(
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     numFields = in.readInt()
     val nKeys = in.readInt()
+    val nValues = in.readInt()
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     // TODO(josh): This needs to be revisited before we merge this patch; making this change now
     // so that tests compile:
@@ -237,7 +239,7 @@ private[joins] class UnsafeHashedRelation(
     var i = 0
     var keyBuffer = new Array[Byte](1024)
     var valuesBuffer = new Array[Byte](1024)
-    while (i < nKeys) {
+    while (i < nValues) {
       val keySize = in.readInt()
       val valuesSize = in.readInt()
       if (keySize > keyBuffer.length) {
@@ -319,11 +321,10 @@ private[joins] object UnsafeHashedRelation {
       numFields = row.numFields()
       val key = keyGenerator(row)
       if (!key.anyNull) {
-        if (allUnique) {
-          val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
-          allUnique = !loc.isDefined
-        }
         val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
+        if (loc.isDefined) {
+          allUnique = false
+        }
         val success = loc.append(
           key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
           row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)

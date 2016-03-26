@@ -133,7 +133,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Number of keys defined in the map.
    */
-  private int numElements;
+  private int numKeys;
+
+  /**
+   * Number of values defined in the map. A key could have multiple values.
+   */
+  private int numValues;
 
   /**
    * The map will be expanded once the number of keys exceeds this threshold.
@@ -224,7 +229,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Returns the number of keys defined in the map.
    */
-  public int numElements() { return numElements; }
+  public int numKeys() { return numKeys; }
+
+  /**
+   * Returns the number of values defined in the map. A key could have multiple values.
+   */
+  public int numValues() { return numValues; }
 
   public final class MapIterator implements Iterator<Location> {
 
@@ -397,7 +407,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
   public MapIterator iterator() {
-    return new MapIterator(numElements, loc, false);
+    return new MapIterator(numValues, loc, false);
   }
 
   /**
@@ -411,7 +421,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
   public MapIterator destructiveIterator() {
-    return new MapIterator(numElements, loc, true);
+    return new MapIterator(numValues, loc, true);
   }
 
   /**
@@ -572,7 +582,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         return false;
       }
       updateAddressesAndSizes(nextAddr);
-      return false;
+      return true;
     }
 
     /**
@@ -672,16 +682,15 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * @return true if the put() was successful and false if the put() failed because memory could
      *         not be acquired.
      */
-    public boolean append(Object keyBase, long keyOffset, int keyLength,
-                          Object valueBase, long valueOffset, int valueLength) {
-      assert (keyLength % 8 == 0);
-      assert (valueLength % 8 == 0);
-      assert(longArray != null);
+    public boolean append(Object kbase, long koff, int klen, Object vbase, long voff, int vlen) {
+      assert (klen % 8 == 0);
+      assert (vlen % 8 == 0);
+      assert (longArray != null);
 
-      if (numElements == MAX_CAPACITY
+      if (numKeys == MAX_CAPACITY
         // The map could be reused from last spill (because of no enough memory to grow),
         // then we don't try to grow again if hit the `growthThreshold`.
-        || !canGrowArray && numElements > growthThreshold) {
+        || !canGrowArray && numKeys > growthThreshold) {
         return false;
       }
 
@@ -689,7 +698,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
       // (8 byte key length) (key) (value) (8 byte pointer to next value)
-      final long recordLength = 8 + keyLength + valueLength + 8;
+      final long recordLength = 8 + klen + vlen + 8;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
         if (!acquireNewPage(recordLength + 4L)) {
           return false;
@@ -700,13 +709,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
       final Object base = currentPage.getBaseObject();
       long offset = currentPage.getBaseOffset() + pageCursor;
       final long recordOffset = offset;
-      Platform.putInt(base, offset, keyLength + valueLength + 4);
-      Platform.putInt(base, offset + 4, keyLength);
+      Platform.putInt(base, offset, klen + vlen + 4);
+      Platform.putInt(base, offset + 4, klen);
       offset += 8;
-      Platform.copyMemory(keyBase, keyOffset, base, offset, keyLength);
-      offset += keyLength;
-      Platform.copyMemory(valueBase, valueOffset, base, offset, valueLength);
-      offset += valueLength;
+      Platform.copyMemory(kbase, koff, base, offset, klen);
+      offset += klen;
+      Platform.copyMemory(vbase, voff, base, offset, vlen);
+      offset += vlen;
       Platform.putLong(base, offset, 0);
 
       // --- Update bookkeeping data structures ----------------------------------------------------
@@ -715,26 +724,25 @@ public final class BytesToBytesMap extends MemoryConsumer {
       pageCursor += recordLength;
       final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
         currentPage, recordOffset);
+      numValues++;
       if (isDefined) {
         // put this pair at the end of chain
-        while (nextValue()) {
-          // do nothing
-        }
+        while (nextValue()) { /* do nothing */ }
         Platform.putLong(baseObject, valueOffset + valueLength, storedKeyAddress);
         nextValue();  // point to new added value
       } else {
-        numElements++;
+        numKeys++;
         longArray.set(pos * 2, storedKeyAddress);
         longArray.set(pos * 2 + 1, keyHashcode);
         updateAddressesAndSizes(storedKeyAddress);
         isDefined = true;
-      }
 
-      if (numElements > growthThreshold && longArray.size() < MAX_CAPACITY) {
-        try {
-          growAndRehash();
-        } catch (OutOfMemoryError oom) {
-          canGrowArray = false;
+        if (numKeys > growthThreshold && longArray.size() < MAX_CAPACITY) {
+          try {
+            growAndRehash();
+          } catch (OutOfMemoryError oom) {
+            canGrowArray = false;
+          }
         }
       }
       return true;
@@ -890,7 +898,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Reset this map to initialized state.
    */
   public void reset() {
-    numElements = 0;
+    numKeys = 0;
+    numValues = 0;
     longArray.zeroOut();
 
     while (dataPages.size() > 0) {
