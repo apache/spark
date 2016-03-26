@@ -61,6 +61,11 @@ case class CreateFunction(
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * The DDL command that drops a function.
+ * ifExists: returns an error if the function doesn't exist, unless this is true.
+ * isTemp: indicates if it is a temporary function.
+ */
 case class DropFunction(
     databaseName: Option[String],
     functionName: String,
