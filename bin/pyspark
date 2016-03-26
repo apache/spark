@@ -53,6 +53,7 @@ if [[ -n "$IPYTHON_OPTS" || "$IPYTHON" == "1" ]]; then
     PYSPARK_DRIVER_PYTHON="jupyter"
   else
     PYSPARK_DRIVER_PYTHON="ipython"
+  fi
 elif [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
   PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"$DEFAULT_PYTHON"}"
 fi
