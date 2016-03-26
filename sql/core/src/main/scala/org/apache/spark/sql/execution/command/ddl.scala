@@ -52,6 +52,24 @@ case class CreateDatabase(
     props: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * Drop Database: Removes a database from the system.
+ *
+ * 'ifExists':
+ * - true, if database_name does't exist, no action
+ * - false (default), if database_name does't exist, a warning message will be issued
+ * 'restric':
+ * - true (default), the database cannot be dropped if it is not empty. The inclusive
+ * tables must be dropped at first.
+ * - false, it is in the Cascade mode. The dependent objects are automatically dropped
+ * before dropping database.
+ */
+case class DropDatabase(
+    databaseName: String,
+    ifExists: Boolean,
+    restrict: Boolean)(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
 case class CreateFunction(
     functionName: String,
     alias: String,
