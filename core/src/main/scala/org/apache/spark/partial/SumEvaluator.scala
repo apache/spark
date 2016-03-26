@@ -40,9 +40,7 @@ private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
   override def currentResult(): BoundedDouble = {
     if (outputsMerged == totalOutputs) {
       new BoundedDouble(counter.sum, 1.0, counter.sum, counter.sum)
-    } else if (outputsMerged == 0) {
-      new BoundedDouble(0, 0.0, Double.NegativeInfinity, Double.PositiveInfinity)
-    } else if (counter.count == 0) {
+    } else if (outputsMerged == 0 || counter.count == 0) {
       new BoundedDouble(0, 0.0, Double.NegativeInfinity, Double.PositiveInfinity)
     } else if (counter.count == 1) {
       val p = outputsMerged.toDouble / totalOutputs
