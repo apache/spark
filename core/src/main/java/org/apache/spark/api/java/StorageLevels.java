@@ -40,19 +40,6 @@ public class StorageLevels {
    * Create a new StorageLevel object.
    * @param useDisk saved to disk, if true
    * @param useMemory saved to memory, if true
-   * @param deserialized saved as deserialized objects, if true
-   * @param replication replication factor
-   */
-  @Deprecated
-  public static StorageLevel create(boolean useDisk, boolean useMemory, boolean deserialized,
-      int replication) {
-    return StorageLevel.apply(useDisk, useMemory, false, deserialized, replication);
-  }
-
-  /**
-   * Create a new StorageLevel object.
-   * @param useDisk saved to disk, if true
-   * @param useMemory saved to memory, if true
    * @param useOffHeap saved to Tachyon, if true
    * @param deserialized saved as deserialized objects, if true
    * @param replication replication factor

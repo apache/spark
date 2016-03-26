@@ -110,18 +110,6 @@ object MLUtils {
     }
   }
 
-  // Convenient methods for `loadLibSVMFile`.
-
-  @Since("1.0.0")
-  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
-  def loadLibSVMFile(
-      sc: SparkContext,
-      path: String,
-      multiclass: Boolean,
-      numFeatures: Int,
-      minPartitions: Int): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, numFeatures, minPartitions)
-
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the default number of
    * partitions.
@@ -132,23 +120,6 @@ object MLUtils {
       path: String,
       numFeatures: Int): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, numFeatures, sc.defaultMinPartitions)
-
-  @Since("1.0.0")
-  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
-  def loadLibSVMFile(
-      sc: SparkContext,
-      path: String,
-      multiclass: Boolean,
-      numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, numFeatures)
-
-  @Since("1.0.0")
-  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
-  def loadLibSVMFile(
-      sc: SparkContext,
-      path: String,
-      multiclass: Boolean): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path)
 
   /**
    * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint], with number of
@@ -215,48 +186,6 @@ object MLUtils {
   @Since("1.1.0")
   def loadLabeledPoints(sc: SparkContext, dir: String): RDD[LabeledPoint] =
     loadLabeledPoints(sc, dir, sc.defaultMinPartitions)
-
-  /**
-   * Load labeled data from a file. The data format used here is
-   * L, f1 f2 ...
-   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
-   *
-   * @param sc SparkContext
-   * @param dir Directory to the input data files.
-   * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
-   *         the label, and the second element represents the feature values (an array of Double).
-   *
-   * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
-   *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
-   */
-  @Since("1.0.0")
-  @deprecated("Should use MLUtils.loadLabeledPoints instead.", "1.0.1")
-  def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
-    sc.textFile(dir).map { line =>
-      val parts = line.split(',')
-      val label = parts(0).toDouble
-      val features = Vectors.dense(parts(1).trim().split(' ').map(_.toDouble))
-      LabeledPoint(label, features)
-    }
-  }
-
-  /**
-   * Save labeled data to a file. The data format used here is
-   * L, f1 f2 ...
-   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
-   *
-   * @param data An RDD of LabeledPoints containing data to be saved.
-   * @param dir Directory to save the data.
-   *
-   * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
-   *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
-   */
-  @Since("1.0.0")
-  @deprecated("Should use RDD[LabeledPoint].saveAsTextFile instead.", "1.0.1")
-  def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
-    val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
-    dataStr.saveAsTextFile(dir)
-  }
 
   /**
    * Return a k element array of pairs of RDDs with the first element of each pair
