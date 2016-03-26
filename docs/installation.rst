@@ -205,16 +205,30 @@ Logs
 Users can specify a logs folder in ``airflow.cfg``. By default, it is in
 the ``AIRFLOW_HOME`` directory.
 
-In addition, users can supply an S3 location for storing log backups. If
-logs are not found in the local filesystem (for example, if a worker is
-lost or reset), the S3 logs will be displayed in the Airflow UI. Note that
-logs are only sent to S3 once a task completes (including failure).
+In addition, users can supply a remote location for storing logs and log backups
+in cloud storage. At this time, Amazon S3 and Google Cloud Storage are supported. 
+To enable this feature, ``airflow.cfg`` must be configured as in this example:
 
 .. code-block:: bash
 
     [core]
-    base_log_folder = {AIRFLOW_HOME}/logs
-    s3_log_folder = s3://{YOUR S3 LOG PATH}
+    # Airflow can store logs remotely in AWS S3 or Google Cloud Storage. Users
+    # must supply a remote location URL (starting with either 's3://...' or
+    # 'gs://...') and an Airflow connection id that provides access to the storage
+    # location.
+    remote_base_log_folder = s3://my-bucket/path/to/logs
+    remote_log_conn_id = MyS3Conn
+    # Use server-side encryption for logs stored in S3
+    encrypt_s3_logs = False
+
+Remote logging uses an existing Airflow connection to read/write logs. If you don't
+have a connection properly setup, this will fail. In the above example, Airflow will
+try to use ``S3Hook('MyS3Conn')``.
+
+In the Airflow Web UI, local logs take precedance over remote logs. If local logs
+can not be found or accessed, the remote logs will be displayed. Note that logs
+are only sent to remote storage once a task completes (including failure). In other
+words, remote logs for running tasks are unavailable.
 
 Scaling Out on Mesos (community contributed)
 ''''''''''''''''''''''''''''''''''''''''''''
