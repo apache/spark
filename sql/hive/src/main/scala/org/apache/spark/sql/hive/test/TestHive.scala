@@ -24,6 +24,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.implicitConversions
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.processors._
@@ -35,9 +37,11 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.command.CacheTableCommand
+import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -55,10 +59,6 @@ object TestHive
         // SPARK-8910
         .set("spark.ui.enabled", "false")))
 
-trait TestHiveSingleton {
-  protected val sqlContext: SQLContext = TestHive
-  protected val hiveContext: TestHiveContext = TestHive
-}
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -71,10 +71,87 @@ trait TestHiveSingleton {
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * test cases that rely on TestHive must be serialized.
  */
-class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
-  self =>
+class TestHiveContext private[hive](
+    sc: SparkContext,
+    cacheManager: CacheManager,
+    listener: SQLListener,
+    executionHive: HiveClientImpl,
+    metadataHive: HiveClient,
+    isRootContext: Boolean,
+    hiveCatalog: HiveCatalog,
+    val warehousePath: File,
+    val scratchDirPath: File,
+    metastoreTemporaryConf: Map[String, String])
+  extends HiveContext(
+    sc,
+    cacheManager,
+    listener,
+    executionHive,
+    metadataHive,
+    isRootContext,
+    hiveCatalog) { self =>
 
-  import HiveContext._
+  // Unfortunately, due to the complex interactions between the construction parameters
+  // and the limitations in scala constructors, we need many of these constructors to
+  // provide a shorthand to create a new TestHiveContext with only a SparkContext.
+  // This is not a great design pattern but it's necessary here.
+
+  private def this(
+      sc: SparkContext,
+      executionHive: HiveClientImpl,
+      metadataHive: HiveClient,
+      warehousePath: File,
+      scratchDirPath: File,
+      metastoreTemporaryConf: Map[String, String]) {
+    this(
+      sc,
+      new CacheManager,
+      SQLContext.createListenerAndUI(sc),
+      executionHive,
+      metadataHive,
+      true,
+      new HiveCatalog(metadataHive),
+      warehousePath,
+      scratchDirPath,
+      metastoreTemporaryConf)
+  }
+
+  private def this(
+      sc: SparkContext,
+      warehousePath: File,
+      scratchDirPath: File,
+      metastoreTemporaryConf: Map[String, String]) {
+    this(
+      sc,
+      HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
+      TestHiveContext.newClientForMetadata(
+        sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf),
+      warehousePath,
+      scratchDirPath,
+      metastoreTemporaryConf)
+  }
+
+  def this(sc: SparkContext) {
+    this(
+      sc,
+      Utils.createTempDir(namePrefix = "warehouse"),
+      TestHiveContext.makeScratchDir(),
+      HiveContext.newTemporaryConfiguration(useInMemoryDerby = false))
+  }
+
+  override def newSession(): HiveContext = {
+    new TestHiveContext(
+      sc = sc,
+      cacheManager = cacheManager,
+      listener = listener,
+      executionHive = executionHive.newSession(),
+      metadataHive = metadataHive.newSession(),
+      isRootContext = false,
+      hiveCatalog = hiveCatalog,
+      warehousePath = warehousePath,
+      scratchDirPath = scratchDirPath,
+      metastoreTemporaryConf = metastoreTemporaryConf)
+  }
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
@@ -83,24 +160,12 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   hiveconf.set("hive.plan.serialization.format", "javaXML")
 
-  lazy val warehousePath = Utils.createTempDir(namePrefix = "warehouse-")
-
-  lazy val scratchDirPath = {
-    val dir = Utils.createTempDir(namePrefix = "scratch-")
-    dir.delete()
-    dir
-  }
-
-  private lazy val temporaryConfig = newTemporaryConfiguration(useInMemoryDerby = false)
-
-  /** Sets up the system initially or after a RESET command */
-  protected override def configure(): Map[String, String] = {
-    super.configure() ++ temporaryConfig ++ Map(
-      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
-      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
-      ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
-      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1"
-    )
+  // A snapshot of the entries in the starting SQLConf
+  // We save this because tests can mutate this singleton object if they want
+  val initialSQLConf: SQLConf = {
+    val snapshot = new SQLConf
+    conf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
+    snapshot
   }
 
   val testTempDir = Utils.createTempDir()
@@ -427,9 +492,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
       cacheManager.clearCache()
       loadedTables.clear()
-      sessionState.catalog.cachedDataSourceTables.invalidateAll()
-      sessionState.catalog.client.reset()
-      sessionState.catalog.unregisterAllTables()
+      sessionState.catalog.clearTempTables()
+      sessionState.catalog.invalidateCache()
+      metadataHive.reset()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
@@ -448,13 +513,13 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       // Lots of tests fail if we do not change the partition whitelist from the default.
       runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
-      configure().foreach {
-        case (k, v) =>
-          metadataHive.runSqlHive(s"SET $k=$v")
-      }
+      // In case a test changed any of these values, restore all the original ones here.
+      TestHiveContext.hiveClientConfigurations(
+        hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
+          .foreach { case (k, v) => metadataHive.runSqlHive(s"SET $k=$v") }
       defaultOverrides()
 
-      runSqlHive("USE default")
+      sessionState.catalog.setCurrentDatabase("default")
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
@@ -490,4 +555,43 @@ private[hive] object TestHiveContext {
       // Fewer shuffle partitions to speed up testing.
       SQLConf.SHUFFLE_PARTITIONS.key -> "5"
     )
+
+  /**
+   * Create a [[HiveClient]] used to retrieve metadata from the Hive MetaStore.
+   */
+  private def newClientForMetadata(
+      conf: SparkConf,
+      hadoopConf: Configuration,
+      warehousePath: File,
+      scratchDirPath: File,
+      metastoreTemporaryConf: Map[String, String]): HiveClient = {
+    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
+    HiveContext.newClientForMetadata(
+      conf,
+      hiveConf,
+      hadoopConf,
+      hiveClientConfigurations(hiveConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
+  }
+
+  /**
+   * Configurations needed to create a [[HiveClient]].
+   */
+  private def hiveClientConfigurations(
+      hiveconf: HiveConf,
+      warehousePath: File,
+      scratchDirPath: File,
+      metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
+    HiveContext.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
+      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
+      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
+      ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+  }
+
+  private def makeScratchDir(): File = {
+    val scratchDir = Utils.createTempDir(namePrefix = "scratch")
+    scratchDir.delete()
+    scratchDir
+  }
+
 }
