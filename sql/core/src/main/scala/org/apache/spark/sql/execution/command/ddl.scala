@@ -58,7 +58,7 @@ case class CreateDatabase(
  * 'ifExists':
  * - true, if database_name does't exist, no action
  * - false (default), if database_name does't exist, a warning message will be issued
- * `restric`:
+ * 'restric':
  * - true (default), the database cannot be dropped if it is not empty. The inclusive
  * tables must be dropped at first.
  * - false, it is in the Cascade mode. The dependent objects are automatically dropped
