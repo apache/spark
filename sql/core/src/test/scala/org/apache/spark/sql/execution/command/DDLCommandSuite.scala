@@ -44,6 +44,63 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed, expected)
   }
 
+  test("drop database") {
+    val sql1 = "DROP DATABASE IF EXISTS database_name RESTRICT"
+    val sql2 = "DROP DATABASE IF EXISTS database_name CASCADE"
+    val sql3 = "DROP SCHEMA IF EXISTS database_name RESTRICT"
+    val sql4 = "DROP SCHEMA IF EXISTS database_name CASCADE"
+    // The default is restrict=true
+    val sql5 = "DROP DATABASE IF EXISTS database_name"
+    // The default is ifExists=false
+    val sql6 = "DROP DATABASE database_name"
+    val sql7 = "DROP DATABASE database_name CASCADE"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+    val parsed3 = parser.parsePlan(sql3)
+    val parsed4 = parser.parsePlan(sql4)
+    val parsed5 = parser.parsePlan(sql5)
+    val parsed6 = parser.parsePlan(sql6)
+    val parsed7 = parser.parsePlan(sql7)
+
+    val expected1 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = true)(sql1)
+    val expected2 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = false)(sql2)
+    val expected3 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = true)(sql3)
+    val expected4 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = false)(sql4)
+    val expected5 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = true)(sql5)
+    val expected6 = DropDatabase(
+      "database_name",
+      ifExists = false,
+      restrict = true)(sql6)
+    val expected7 = DropDatabase(
+      "database_name",
+      ifExists = false,
+      restrict = false)(sql7)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+    comparePlans(parsed5, expected5)
+    comparePlans(parsed6, expected6)
+    comparePlans(parsed7, expected7)
+  }
+
   test("create function") {
     val sql1 =
       """
