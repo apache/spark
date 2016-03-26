@@ -21,5 +21,20 @@ package org.apache.spark.partial
  * A Double value with error bars and associated confidence.
  */
 class BoundedDouble(val mean: Double, val confidence: Double, val low: Double, val high: Double) {
-  override def toString(): String = "[%.3f, %.3f]".format(low, high)
+  override def toString(): String = "BoundedDouble(%.3f, %.3f, %.3f, %.3f)".format(mean, confidence, low, high)
+
+  override def hashCode:Int = this.mean.hashCode ^ this.confidence.hashCode ^ this.low.hashCode ^ this.high.hashCode
+
+  override def equals(that: Any): Boolean =
+        that match {
+          case that: BoundedDouble => {
+            this.mean == that.mean &&
+            this.confidence == that.confidence &&
+            this.low == that.low &&
+            this.high == that.high
+          }
+          case _ => false
+        }
+
+
 }
