@@ -113,7 +113,7 @@ Currently **officially** using Airflow:
 * [Full documentation on pythonhosted.org](http://pythonhosted.org/airflow/)
 * [Airflow Google Group (mailing list / forum)](https://groups.google.com/forum/#!forum/airbnb_airflow)
 * [Airbnb Blog Post about Airflow](http://nerds.airbnb.com/airflow/)
-* [Airflow Common Pitfalls](https://github.com/airbnb/airflow/wiki/Airflow-Common-Pitfalls)
+* [Airflow Common Pitfalls](https://github.com/airbnb/airflow/wiki/Common-Pitfalls)
 * [Hadoop Summit Airflow Video](https://www.youtube.com/watch?v=oYp49mBwH60)
 * [Airflow at Agari Blog Post](http://agari.com/blog/airflow-agari)
 * [Best practices with Airflow (Max) nov 2015](https://youtu.be/dgaoqOZlvEA)
