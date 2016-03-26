@@ -64,7 +64,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
       assert(store.hasCommitted)
       outputIter
     } {
-      if (store != null) store.cancel()
+      if (store != null) store.abort()
     }
   }
 }
