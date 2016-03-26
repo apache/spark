@@ -1,7 +1,7 @@
-### Please provide the following information about your PR below:
-### - What changes were proposed in this pull request?
-### - How was this patch tested?
-### - If this patch involves UI changes, please attach a screenshot
-###
-### If you haven't done so, please also check the following wiki page:
-###   https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark
+> Please provide the following information about your PR:
+> - What changes are proposed in this pull request?
+> - How was this patch tested?
+> - If this patch involves UI changes, please attach a screenshot.
+>
+> If you haven't done so, please also check the following wiki page:
+>   https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark

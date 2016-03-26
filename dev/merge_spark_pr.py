@@ -402,7 +402,7 @@ def main():
     # Remove all leading lines that start with '###', and any empty lines before actual content
     # starts, so that we remove the PR template from commit messages.
     body = pr["body"].split("\n")
-    while body and (body[0].startswith("###") or not body[0].strip()):
+    while body and (body[0].startswith(">") or not body[0].strip()):
       del body[0]
     body = "\n".join(body)
 
