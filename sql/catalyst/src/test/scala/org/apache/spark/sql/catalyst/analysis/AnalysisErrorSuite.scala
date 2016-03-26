@@ -250,7 +250,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "union with unequal number of columns",
-    testRelation.unionAll(testRelation2),
+    testRelation.union(testRelation2),
     "union" :: "number of columns" :: testRelation2.output.length.toString ::
       testRelation.output.length.toString :: Nil)
 
