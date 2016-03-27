@@ -66,7 +66,7 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
     val n = data.count().toDouble
     val ksStat = data.sortBy(x => x).zipWithIndex().map { case (v, i) =>
       val f = cdf(v)
-      math.max(f - i.toDouble / n, (i + 1).toDouble / n - f)
+      math.max(f - i / n, (i + 1) / n - f)
     }.max()
     evalOneSampleP(ksStat, n.toLong)
   }
