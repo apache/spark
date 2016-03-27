@@ -12,7 +12,7 @@ from dateutil.relativedelta import relativedelta  # for doctest
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
-from email.Utils import formatdate
+from email.utils import formatdate
 import errno
 from functools import wraps
 import imp
