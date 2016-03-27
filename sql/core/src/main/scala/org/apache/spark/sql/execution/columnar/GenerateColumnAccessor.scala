@@ -95,16 +95,16 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       ctx.addMutableState(accessorCls, accessorName, "")
 
       val createCode = {
-        val shortAccCls = accessorCls.substring(accessorCls.lastIndexOf(".") + 1)
+        val shortCls = accessorCls.substring(accessorCls.lastIndexOf(".") + 1)
         dt match {
           case t if ctx.isPrimitiveType(dt) =>
-            s"$accessorName = get${accessorClasses.getOrElseUpdate(accessorCls, shortAccCls)}($index);"
+            s"$accessorName = get${accessorClasses.getOrElseUpdate(accessorCls, shortCls)}($index);"
           case NullType | StringType | BinaryType =>
-            s"$accessorName = get${accessorClasses.getOrElseUpdate(accessorCls, shortAccCls)}($index);"
+            s"$accessorName = get${accessorClasses.getOrElseUpdate(accessorCls, shortCls)}($index);"
           case other =>
             val shortDTCls = dt.getClass.getName.substring(dt.getClass.getName.lastIndexOf(".") + 1)
-            accessorStructClasses.getOrElseUpdate((accessorCls, dt), (shortAccCls, shortDTCls))
-            s"$accessorName = get${shortAccCls}_${shortDTCls}($index);"
+            accessorStructClasses.getOrElseUpdate((accessorCls, dt), (shortCls, shortDTCls))
+            s"$accessorName = get${shortCls}_${shortDTCls}($index);"
         }
       }
 
@@ -160,17 +160,17 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
                |}
              """.stripMargin
           }.mkString(""),
-	  (0 to groupedAccessorsLength - 1).map { i => s"accessors$i();" }.mkString("\n"),
-	  groupedExtractorsItr.zipWithIndex.map { case (body, i) =>
-	    groupedExtractorsLength += 1
-	    s"""
+          (0 to groupedAccessorsLength - 1).map { i => s"accessors$i();" }.mkString("\n"),
+          groupedExtractorsItr.zipWithIndex.map { case (body, i) =>
+            groupedExtractorsLength += 1
+            s"""
                |private void extractors$i() {
                |  ${body.mkString("\n")}
                |}
              """.stripMargin
-	  }.mkString(""),
-	  (0 to groupedExtractorsLength - 1).map { i => s"extractors$i();" }.mkString("\n")
-	)
+          }.mkString(""),
+          (0 to groupedExtractorsLength - 1).map { i => s"extractors$i();" }.mkString("\n")
+        )
       }
 
     val code = s"""
