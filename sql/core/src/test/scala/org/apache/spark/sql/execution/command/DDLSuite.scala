@@ -25,6 +25,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 class DDLSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-14123: Create / drop function DDL") {
+    // test the create functions
     val sql1 =
       """
         |CREATE TEMPORARY FUNCTION helloworld1 AS
@@ -49,9 +50,14 @@ class DDLSuite extends QueryTest with SharedSQLContext {
     assert(f1 == CatalogFunction(id1, "spark.example.SimpleUDFExample1"))
     assert(f2 == CatalogFunction(id2, "spark.example.SimpleUDFExample2"))
 
+    // test the drop functions
     assert(catalog.listFunctions(catalog.getCurrentDatabase, "helloworld*").size == 2)
-    catalog.dropFunction(id1)
-    catalog.dropFunction(id2)
+
+    val sql3 = "DROP TEMPORARY FUNCTION helloworld1"
+    val sql4 = "DROP FUNCTION IF EXISTS helloworld2"
+    sql(sql3)
+    sql(sql4)
+
     assert(catalog.listFunctions(catalog.getCurrentDatabase, "helloworld*").isEmpty)
   }
 }
