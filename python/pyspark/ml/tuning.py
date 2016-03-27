@@ -94,6 +94,92 @@ class ParamGridBuilder(object):
         return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
+class ValidatorParams(Params):
+    """
+    Validator Params
+    """
+
+    estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
+    estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
+    evaluator = Param(
+        Params._dummy(), "evaluator",
+        "evaluator used to select hyper-parameters that maximize the validator metric")
+
+    def __init__(self):
+        super(ValidatorParams, self).__init__()
+
+    def setEstimator(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        self._paramMap[self.estimator] = value
+        return self
+
+    def getEstimator(self):
+        """
+        Gets the value of estimator or its default value.
+        """
+        return self.getOrDefault(self.estimator)
+
+    def setEstimatorParamMaps(self, value):
+        """
+        Sets the value of :py:attr:`estimatorParamMaps`.
+        """
+        self._paramMap[self.estimatorParamMaps] = value
+        return self
+
+    def getEstimatorParamMaps(self):
+        """
+        Gets the value of estimatorParamMaps or its default value.
+        """
+        return self.getOrDefault(self.estimatorParamMaps)
+
+    def setEvaluator(self, value):
+        """
+        Sets the value of :py:attr:`evaluator`.
+        """
+        self._paramMap[self.evaluator] = value
+        return self
+
+    def getEvaluator(self):
+        """
+        Gets the value of evaluator or its default value.
+        """
+        return self.getOrDefault(self.evaluator)
+
+    @classmethod
+    def _from_java(cls, java_stage):
+        """
+        Given a Java CrossValidator, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+
+        # Load information from java_stage to the instance.
+        estimator = JavaWrapper._from_java(java_stage.getEstimator())
+        evaluator = JavaWrapper._from_java(java_stage.getEvaluator())
+        epms = [estimator._transfer_extra_params_from_java(epm)
+                for epm in java_stage.getEstimatorParamMaps()]
+        return estimator, epms, evaluator
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java CrossValidator.  Used for ML persistence.
+
+        :return: Java object equivalent to this instance.
+        """
+
+        gateway = SparkContext._gateway
+        cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
+
+        java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
+        for idx, epm in enumerate(self.getEstimatorParamMaps()):
+            java_epms[idx] = self.getEstimator()._transfer_extra_params_to_java(epm)
+
+        java_estimator = self.getEstimator()._to_java()
+        java_evaluator = self.getEvaluator()._to_java()
+        return java_estimator, java_epms, java_evaluator
+
+
 @inherit_doc
 class CrossValidatorMLWriter(JavaMLWriter):
     """
@@ -112,7 +198,7 @@ class CrossValidatorMLReader(JavaMLReader):
     """
 
 
-class CrossValidator(Estimator, HasSeed, MLReadable, MLWritable):
+class CrossValidator(Estimator, ValidatorParams, HasSeed, MLReadable, MLWritable):
     """
     K-fold cross validation.
 
@@ -151,11 +237,6 @@ class CrossValidator(Estimator, HasSeed, MLReadable, MLWritable):
     .. versionadded:: 1.4.0
     """
 
-    estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
-    estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
-    evaluator = Param(
-        Params._dummy(), "evaluator",
-        "evaluator used to select hyper-parameters that maximize the cross-validated metric")
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
                      typeConverter=TypeConverters.toInt)
 
@@ -182,51 +263,6 @@ class CrossValidator(Estimator, HasSeed, MLReadable, MLWritable):
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
-
-    @since("1.4.0")
-    def setEstimator(self, value):
-        """
-        Sets the value of :py:attr:`estimator`.
-        """
-        self._paramMap[self.estimator] = value
-        return self
-
-    @since("1.4.0")
-    def getEstimator(self):
-        """
-        Gets the value of estimator or its default value.
-        """
-        return self.getOrDefault(self.estimator)
-
-    @since("1.4.0")
-    def setEstimatorParamMaps(self, value):
-        """
-        Sets the value of :py:attr:`estimatorParamMaps`.
-        """
-        self._paramMap[self.estimatorParamMaps] = value
-        return self
-
-    @since("1.4.0")
-    def getEstimatorParamMaps(self):
-        """
-        Gets the value of estimatorParamMaps or its default value.
-        """
-        return self.getOrDefault(self.estimatorParamMaps)
-
-    @since("1.4.0")
-    def setEvaluator(self, value):
-        """
-        Sets the value of :py:attr:`evaluator`.
-        """
-        self._paramMap[self.evaluator] = value
-        return self
-
-    @since("1.4.0")
-    def getEvaluator(self):
-        """
-        Gets the value of evaluator or its default value.
-        """
-        return self.getOrDefault(self.evaluator)
 
     @since("1.4.0")
     def setNumFolds(self, value):
@@ -271,8 +307,10 @@ class CrossValidator(Estimator, HasSeed, MLReadable, MLWritable):
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return CrossValidatorModel(bestModel, self.getEstimator(), self.getEvaluator(),
-                                   self.getEstimatorParamMaps())
+        return CrossValidatorModel(bestModel)\
+            .setEstimator(self.getEstimator())\
+            .setEstimatorParamMaps(self.getEstimatorParamMaps())\
+            .setEvaluator(self.getEvaluator())
 
     @since("1.4.0")
     def copy(self, extra=None):
@@ -317,13 +355,12 @@ class CrossValidator(Estimator, HasSeed, MLReadable, MLWritable):
         Used for ML persistence.
         """
 
-        # Load information from java_stage to the instance.
-        estimator = JavaWrapper._from_java(java_stage.getEstimator())
-        epms = [estimator._transfer_extra_params_from_java(epm)
-                for epm in java_stage.getEstimatorParamMaps()]
-        evaluator = JavaWrapper._from_java(java_stage.getEvaluator())
+        estimator, epms, evaluator = super(CrossValidator, cls)._from_java(java_stage)
+        numFolds = java_stage.getNumFolds()
+        seed = java_stage.getSeed()
         # Create a new instance of this stage.
-        py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator)
+        py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
+                       numFolds=numFolds, seed=seed)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -334,17 +371,14 @@ class CrossValidator(Estimator, HasSeed, MLReadable, MLWritable):
         :return: Java object equivalent to this instance.
         """
 
-        gateway = SparkContext._gateway
-        cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
-
-        java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
-        for idx, epm in enumerate(self.getEstimatorParamMaps()):
-            java_epms[idx] = self.getEstimator()._transfer_extra_params_to_java(epm)
+        estimator, epms, evaluator = super(CrossValidator, self)._to_java()
 
         _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.tuning.CrossValidator", self.uid)
-        _java_obj.setEstimatorParamMaps(java_epms)
-        _java_obj.setEvaluator(self.getEvaluator()._to_java())
-        _java_obj.setEstimator(self.getEstimator()._to_java())
+        _java_obj.setEstimatorParamMaps(epms)
+        _java_obj.setEvaluator(evaluator)
+        _java_obj.setEstimator(estimator)
+        _java_obj.setSeed(self.getSeed())
+        _java_obj.setNumFolds(self.getNumFolds())
 
         return _java_obj
 
@@ -367,20 +401,17 @@ class CrossValidatorModelMLReader(JavaMLReader):
     """
 
 
-class CrossValidatorModel(Model, MLReadable, MLWritable):
+class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
     """
     Model from k-fold cross validation.
 
     .. versionadded:: 1.4.0
     """
 
-    def __init__(self, bestModel, estimator, evaluator, estimatorParamMaps):
+    def __init__(self, bestModel):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
-        self._estimator = estimator
-        self._evaluator = evaluator
-        self._estimatorParamMaps = estimatorParamMaps
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -425,13 +456,10 @@ class CrossValidatorModel(Model, MLReadable, MLWritable):
 
         # Load information from java_stage to the instance.
         bestModel = JavaWrapper._from_java(java_stage.bestModel())
-        estimator = JavaWrapper._from_java(java_stage.getEstimator())
-        evaluator = JavaWrapper._from_java(java_stage.getEvaluator())
-        epms = [estimator._transfer_extra_params_from_java(epm)
-                for epm in java_stage.getEstimatorParamMaps()]
+        estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java(java_stage)
         # Create a new instance of this stage.
-        py_stage = cls(bestModel=bestModel, estimator=estimator, evaluator=evaluator,
-                       estimatorParamMaps=epms)
+        py_stage = cls(bestModel=bestModel)\
+            .setEstimator(estimator).setEstimatorParamMaps(epms).setEvaluator(evaluator)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -443,20 +471,16 @@ class CrossValidatorModel(Model, MLReadable, MLWritable):
         """
 
         sc = SparkContext._active_spark_context
+
         _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
                                               self.uid,
                                               self.bestModel._to_java(),
                                               _py2java(sc, []))
-        gateway = SparkContext._gateway
-        cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
+        estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java()
 
-        java_epms = gateway.new_array(cls, len(self._estimatorParamMaps))
-        for idx, epm in enumerate(self._estimatorParamMaps):
-            java_epms[idx] = self._estimator._transfer_extra_params_to_java(epm)
-
-        _java_obj.set("evaluator", self._evaluator._to_java())
-        _java_obj.set("estimator", self._estimator._to_java())
-        _java_obj.set("estimatorParamMaps", java_epms)
+        _java_obj.set("evaluator", evaluator)
+        _java_obj.set("estimator", estimator)
+        _java_obj.set("estimatorParamMaps", epms)
         return _java_obj
 
 
