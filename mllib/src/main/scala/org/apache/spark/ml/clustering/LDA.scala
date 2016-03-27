@@ -34,6 +34,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
 import org.apache.spark.sql.types.StructType
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods._
 
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
@@ -455,6 +457,34 @@ sealed abstract class LDAModel private[ml] (
 
   @Since("1.6.0")
   def describeTopics(): DataFrame = describeTopics(10)
+}
+
+object LDAModel extends MLReadable[LDAModel] {
+
+  private class LDAModelReader extends MLReader[LDAModel] {
+
+    override def load(path: String): LDAModel = {
+      val metadataPath = new Path(path, "metadata").toString
+      val metadataStr = sc.textFile(metadataPath, 1).first()
+      val metadata = parse(metadataStr)
+
+      val className = (metadata \ "class").extract[String]
+      val localName = classOf[LocalLDAModel].getName
+      val distributeName = classOf[DistributedLDAModel].getName
+      className match {
+        case local if classOf[LocalLDAModel].getName =>
+          LocalLDAModel.load(path)
+        case distributeName =>
+          DistributedLDAModel.load(path)
+      }
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[LDAModel] = new LDAModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): LDAModel = super.load(path)
 }
 
 
