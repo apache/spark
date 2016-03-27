@@ -22,6 +22,8 @@ performing complex surgeries on DAGs a snap. The rich user interface
 makes it easy to visualize pipelines running in production,
 monitor progress, and troubleshoot issues when needed.
 
+For more information and documentation, please visit the [Airflow Wiki](https://github.com/airbnb/airflow/wiki).
+
 ## Beyond the Horizon
 
 Airflow **is not** a data streaming solution. Tasks do not move data from
