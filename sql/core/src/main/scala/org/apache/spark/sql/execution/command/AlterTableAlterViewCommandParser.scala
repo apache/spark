@@ -302,7 +302,8 @@ object AlterTableAlterViewCommandParser {
         }.toMap
         AlterTableSkewedLocation(tableIdent, skewedMaps)(node.source)
 
-      // ALTER TABLE view_name ADD [IF NOT EXISTS] PARTITION spec1[, PARTITION spec2, ...]
+      // ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION spec1
+      // [LOCATION 'location1'] PARTITION spec2 [LOCATION 'location2'] ...
       // ALTER VIEW view_name ADD [IF NOT EXISTS] PARTITION spec1[, PARTITION spec2, ...]
       case Token(fieldName, args) :: _
           if fieldName == "TOK_ALTERTABLE_ADDPARTS" || fieldName == "TOK_ALTERVIEW_ADDPARTS" =>
@@ -318,7 +319,11 @@ object AlterTableAlterViewCommandParser {
             parsedParts += ((parsePartitionSpec(t), None))
           case Token("TOK_PARTITIONLOCATION", loc :: Nil) =>
             // Update the location of the last partition we just added
-            if (parsedParts.nonEmpty) {
+            if (fieldName == "TOK_ALTERVIEW_ADDPARTS") {
+              // Location clause is not allowed in ALTER VIEW
+              parseFailed("Invalid ALTER VIEW command", node)
+            }
+            else if (parsedParts.nonEmpty) {
               val (spec, _) = parsedParts.remove(parsedParts.length - 1)
               parsedParts += ((spec, Some(unquoteString(loc.text))))
             }

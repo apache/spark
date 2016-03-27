@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.BucketSpec
@@ -58,7 +57,7 @@ case class CreateDatabase(
  *
  * 'ifExists':
  * - true, if database_name does't exist, no action
- * - false (default), if database_name does't exist, a warning message will be issued
+ * - false (default), if database_name does't exist, an error message will be issued
  * 'restric':
  * - true (default), the database cannot be dropped if it is not empty. The inclusive
  * tables must be dropped at first.
@@ -106,16 +105,19 @@ case class DropFunction(
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/** Rename in ALTER TABLE/VIEW: change the name of a table/view to a different name. */
 case class AlterTableAlterViewRename(
     oldName: TableIdentifier,
     newName: TableIdentifier)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/** Set Properties in ALTER TABLE/VIEW: add metadata to a table/view. */
 case class AlterTableAlterViewSetProperties(
     tableName: TableIdentifier,
     properties: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/** Unset Properties in ALTER TABLE/VIEW: remove metadata from a table/view. */
 case class AlterTableAlterViewUnsetProperties(
     tableName: TableIdentifier,
     properties: Map[String, String],
@@ -164,6 +166,12 @@ case class AlterTableSkewedLocation(
     skewedMap: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * Add Partition in ALTER TABLE/VIEW: add the table/view partitions.
+ * 'partitionSpecsAndLocs': the syntax of ALTER VIEW is identical to ALTER TABLE,
+ * EXCEPT that it is ILLEGAL to specify a LOCATION clause.
+ * An error message will be issued if the partition exists, unless 'ifNotExists' is false.
+ */
 case class AlterTableAlterViewAddPartition(
     tableName: TableIdentifier,
     partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
@@ -182,6 +190,13 @@ case class AlterTableExchangePartition(
     spec: TablePartitionSpec)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * Drop Partition in ALTER TABLE: to drop a particular partition for a table.
+ * This removes the data and metadata for this partition.
+ * The data is actually moved to the .Trash/Current directory if Trash is configured,
+ * unless 'purge' is true, but the metadata is completely lost.
+ * An error message will be issued if the partition does not exist, unless 'ifExists' is false.
+ */
 case class AlterTableDropPartition(
     tableName: TableIdentifier,
     specs: Seq[TablePartitionSpec],
@@ -189,6 +204,10 @@ case class AlterTableDropPartition(
     purge: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * Drop Partition in ALTER VIEW: drop the related partition metadata for a view.
+ * An error message will be issued if the partition does not exist, unless 'ifExists' is false.
+ */
 case class AlterViewDropPartition(
     viewName: TableIdentifier,
     specs: Seq[TablePartitionSpec],

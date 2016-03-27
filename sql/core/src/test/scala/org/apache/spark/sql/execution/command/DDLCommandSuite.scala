@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.execution.datasources.BucketSpec
@@ -417,41 +416,60 @@ class DDLCommandSuite extends PlanTest {
   }
 
   // ALTER TABLE view_name ADD [IF NOT EXISTS] PARTITION spec1[, PARTITION spec2, ...]
-  // ALTER VIEW view_name ADD [IF NOT EXISTS] PARTITION spec1[, PARTITION spec2, ...]
-  test("alter table/view: add partition") {
-    val sql1_table =
+  test("alter table: add partition") {
+    val sql1 =
       """
        |ALTER TABLE table_name ADD IF NOT EXISTS PARTITION
        |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
        |(dt='2009-09-09', country='uk')
       """.stripMargin
-    val sql1_view = sql1_table.replace("TABLE", "VIEW")
+    val sql2 = "ALTER TABLE table_name ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
 
-    val sql2_table = "ALTER TABLE table_name ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
-    val sql2_view = sql2_table.replace("TABLE", "VIEW")
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
 
-    val parsed1_table = parser.parsePlan(sql1_table)
-    val parsed1_view = parser.parsePlan(sql1_view)
-    val parsed2_table = parser.parsePlan(sql2_table)
-    val parsed2_view = parser.parsePlan(sql2_view)
-
-    val expected1_table = AlterTableAlterViewAddPartition(
+    val expected1 = AlterTableAlterViewAddPartition(
       TableIdentifier("table_name", None),
       Seq(
         (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
         (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)(sql1_table)
-    val expected1_view = expected1_table.copy()(sql = sql1_view)
-    val expected2_table = AlterTableAlterViewAddPartition(
+      ifNotExists = true)(sql1)
+    val expected2 = AlterTableAlterViewAddPartition(
       TableIdentifier("table_name", None),
       Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
-      ifNotExists = false)(sql2_table)
-    val expected2_view = expected2_table.copy()(sql = sql2_view)
+      ifNotExists = false)(sql2)
 
-    comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
-    comparePlans(parsed1_view, expected1_view)
-    comparePlans(parsed2_view, expected2_view)
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  // ALTER VIEW view_name ADD [IF NOT EXISTS] PARTITION spec1[, PARTITION spec2, ...]
+  // Location clause is not allowed.
+  test("alter view: add partition") {
+    val sql1 =
+      """
+        |ALTER VIEW view_name ADD IF NOT EXISTS PARTITION
+        |(dt='2008-08-08', country='us') PARTITION
+        |(dt='2009-09-09', country='uk')
+      """.stripMargin
+    val sql2 = "ALTER VIEW view_name ADD PARTITION (dt='2008-08-08')"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+
+    val expected1 = AlterTableAlterViewAddPartition(
+      TableIdentifier("view_name", None),
+      Seq(
+        (Map("dt" -> "2008-08-08", "country" -> "us"), None),
+        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
+      ifNotExists = true)(sql1)
+    val expected2 = AlterTableAlterViewAddPartition(
+      TableIdentifier("view_name", None),
+      Seq((Map("dt" -> "2008-08-08"), None)),
+      ifNotExists = false)(sql2)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
   }
 
   test("alter table: rename partition") {
