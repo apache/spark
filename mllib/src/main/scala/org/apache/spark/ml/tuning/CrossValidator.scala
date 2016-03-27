@@ -17,6 +17,10 @@
 
 package org.apache.spark.ml.tuning
 
+import java.{util => ju}
+
+import scala.collection.JavaConverters._
+
 import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
@@ -318,6 +322,11 @@ class CrossValidatorModel private[ml] (
     @Since("1.2.0") val bestModel: Model[_],
     @Since("1.5.0") val avgMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams with MLWritable {
+
+  /** A Java/Python-friendly auxiliary constructor. */
+  private[ml] def this(uid: String, bestModel: Model[_], avgMetrics: ju.List[Double]) = {
+    this(uid, bestModel, avgMetrics.asScala.toArray)
+  }
 
   @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
