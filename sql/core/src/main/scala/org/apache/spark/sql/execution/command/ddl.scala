@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.BucketSpec
@@ -71,9 +72,22 @@ case class DropDatabase(
   extends NativeDDLCommand(sql) with Logging
 
 case class CreateFunction(
+    databaseName: Option[String],
     functionName: String,
     alias: String,
     resources: Seq[(String, String)],
+    isTemp: Boolean)(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
+/**
+ * The DDL command that drops a function.
+ * ifExists: returns an error if the function doesn't exist, unless this is true.
+ * isTemp: indicates if it is a temporary function.
+ */
+case class DropFunction(
+    databaseName: Option[String],
+    functionName: String,
+    ifExists: Boolean,
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
