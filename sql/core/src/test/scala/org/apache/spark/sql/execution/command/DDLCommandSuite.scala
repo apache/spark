@@ -117,17 +117,57 @@ class DDLCommandSuite extends PlanTest {
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
     val expected1 = CreateFunction(
+      None,
       "helloworld",
       "com.matthewrathbone.example.SimpleUDFExample",
       Seq(("jar", "/path/to/jar1"), ("jar", "/path/to/jar2")),
       isTemp = true)(sql1)
     val expected2 = CreateFunction(
-      "hello.world",
+      Some("hello"),
+      "world",
       "com.matthewrathbone.example.SimpleUDFExample",
       Seq(("archive", "/path/to/archive"), ("file", "/path/to/file")),
       isTemp = false)(sql2)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
+  }
+
+  test("drop function") {
+    val sql1 = "DROP TEMPORARY FUNCTION helloworld"
+    val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS helloworld"
+    val sql3 = "DROP FUNCTION hello.world"
+    val sql4 = "DROP FUNCTION IF EXISTS hello.world"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+    val parsed3 = parser.parsePlan(sql3)
+    val parsed4 = parser.parsePlan(sql4)
+
+    val expected1 = DropFunction(
+      None,
+      "helloworld",
+      ifExists = false,
+      isTemp = true)(sql1)
+    val expected2 = DropFunction(
+      None,
+      "helloworld",
+      ifExists = true,
+      isTemp = true)(sql2)
+    val expected3 = DropFunction(
+      Some("hello"),
+      "world",
+      ifExists = false,
+      isTemp = false)(sql3)
+    val expected4 = DropFunction(
+      Some("hello"),
+      "world",
+      ifExists = true,
+      isTemp = false)(sql4)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
   }
 
   test("alter table: rename table") {

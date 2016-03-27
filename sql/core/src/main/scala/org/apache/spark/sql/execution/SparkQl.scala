@@ -165,11 +165,11 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           case _ => parseFailed("Invalid CREATE FUNCTION command", node)
         }
         // If database name is specified, there are 3 tokens, otherwise 2.
-        val (funcName, alias) = funcNameArgs match {
+        val (dbName, funcName, alias) = funcNameArgs match {
           case Token(dbName, Nil) :: Token(fname, Nil) :: Token(aname, Nil) :: Nil =>
-            (unquoteString(dbName) + "." + unquoteString(fname), unquoteString(aname))
+            (Some(unquoteString(dbName)), unquoteString(fname), unquoteString(aname))
           case Token(fname, Nil) :: Token(aname, Nil) :: Nil =>
-            (unquoteString(fname), unquoteString(aname))
+            (None, unquoteString(fname), unquoteString(aname))
           case _ =>
             parseFailed("Invalid CREATE FUNCTION command", node)
         }
@@ -190,7 +190,37 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             }
           case _ => parseFailed("Invalid CREATE FUNCTION command", node)
         }
-        CreateFunction(funcName, alias, resources, temp.isDefined)(node.source)
+        CreateFunction(dbName, funcName, alias, resources, temp.isDefined)(node.source)
+
+      // DROP [TEMPORARY] FUNCTION [IF EXISTS] function_name;
+      case Token("TOK_DROPFUNCTION", args) =>
+        // Example format:
+        //
+        //   TOK_DROPFUNCTION
+        //   :- db_name
+        //   :- func_name
+        //   :- TOK_IFEXISTS
+        //   +- TOK_TEMPORARY
+        val (funcNameArgs, otherArgs) = args.partition {
+          case Token("TOK_IFEXISTS", _) => false
+          case Token("TOK_TEMPORARY", _) => false
+          case Token(_, Nil) => true
+          case _ => parseFailed("Invalid DROP FUNCTION command", node)
+        }
+        // If database name is specified, there are 2 tokens, otherwise 1.
+        val (dbName, funcName) = funcNameArgs match {
+          case Token(dbName, Nil) :: Token(fname, Nil) :: Nil =>
+            (Some(unquoteString(dbName)), unquoteString(fname))
+          case Token(fname, Nil) :: Nil =>
+            (None, unquoteString(fname))
+          case _ =>
+            parseFailed("Invalid DROP FUNCTION command", node)
+        }
+
+        val Seq(ifExists, temp) = getClauses(Seq(
+          "TOK_IFEXISTS", "TOK_TEMPORARY"), otherArgs)
+
+        DropFunction(dbName, funcName, ifExists.isDefined, temp.isDefined)(node.source)
 
       case Token("TOK_ALTERTABLE", alterTableArgs) =>
         AlterTableCommandParser.parse(node)
