@@ -101,6 +101,44 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed7, expected7)
   }
 
+  test("alter database set dbproperties") {
+    // ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
+    val sql1 = "ALTER DATABASE database_name SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"
+    val sql2 = "ALTER SCHEMA database_name SET DBPROPERTIES ('a'='a')"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+
+    val expected1 = AlterDatabaseProperties(
+      "database_name",
+      Map("a" -> "a", "b" -> "b", "c" -> "c"))(sql1)
+    val expected2 = AlterDatabaseProperties(
+      "database_name",
+      Map("a" -> "a"))(sql2)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("describe database") {
+    // DESCRIBE DATABASE [EXTENDED] db_name;
+    val sql1 = "DESCRIBE DATABASE EXTENDED db_name"
+    val sql2 = "DESCRIBE DATABASE db_name"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+
+    val expected1 = DescribeDatabase(
+      "db_name",
+      extended = true)(sql1)
+    val expected2 = DescribeDatabase(
+      "db_name",
+      extended = false)(sql2)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
   test("create function") {
     val sql1 =
       """

@@ -142,6 +142,33 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           "TOK_IFEXISTS", "TOK_RESTRICT", "TOK_CASCADE"), otherArgs)
         DropDatabase(databaseName, ifExists.isDefined, restrict = cascade.isEmpty)(node.source)
 
+      // ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
+      case Token("TOK_ALTERDATABASE_PROPERTIES", Token(dbName, Nil) :: args) =>
+        val databaseName = unquoteString(dbName)
+        val dbprops = getClause("TOK_DATABASEPROPERTIES", args)
+        val props = dbprops match {
+          case Token("TOK_DATABASEPROPERTIES", Token("TOK_DBPROPLIST", propList) :: Nil) =>
+            // Example format:
+            //
+            //   TOK_DATABASEPROPERTIES
+            //   +- TOK_DBPROPLIST
+            //      :- TOK_TABLEPROPERTY
+            //      :  :- 'k1'
+            //      :  +- 'v1'
+            //      :- TOK_TABLEPROPERTY
+            //         :- 'k2'
+            //         +- 'v2'
+            extractProps(propList, "TOK_TABLEPROPERTY")
+          case _ => parseFailed("Invalid ALTER DATABASE command", node)
+        }
+        AlterDatabaseProperties(databaseName, props.toMap)(node.source)
+
+      // DESCRIBE DATABASE [EXTENDED] db_name
+      case Token("TOK_DESCDATABASE", Token(dbName, Nil) :: describeArgs) =>
+        val databaseName = unquoteString(dbName)
+        val extended = getClauseOption("EXTENDED", describeArgs)
+        DescribeDatabase(databaseName, extended.isDefined)(node.source)
+
       // CREATE [TEMPORARY] FUNCTION [db_name.]function_name AS class_name
       // [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri'] ];
       case Token("TOK_CREATEFUNCTION", args) =>
