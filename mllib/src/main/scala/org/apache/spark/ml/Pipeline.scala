@@ -21,15 +21,13 @@ import java.{util => ju}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -40,6 +38,22 @@ import org.apache.spark.sql.types.StructType
  */
 @DeveloperApi
 abstract class PipelineStage extends Params with Logging {
+
+  /**
+   * Sets parameter in the embedded param map.
+   */
+  final def set(paramMap: ParamMap): Unit = {
+    paramMap.toSeq.foreach(set)
+  }
+
+  /**
+   * Sets a parameter in the embedded param map.
+   */
+  @scala.annotation.varargs
+  final def set(paramPair: ParamPair[_], paramPair2: ParamPair[_], other: ParamPair[_]*): this.type = {
+    (Seq(paramPair, paramPair2) ++ other.toSeq).foreach(set)
+    this
+  }
 
   /**
    * :: DeveloperApi ::
