@@ -71,6 +71,21 @@ case class DropDatabase(
     restrict: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/** ALTER DATABASE: add new (key, value) pairs into DBPROPERTIES */
+case class AlterDatabaseProperties(
+    databaseName: String,
+    props: Map[String, String])(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
+/**
+ * DESCRIBE DATABASE: shows the name of the database, its comment (if one has been set), and its
+ * root location on the filesystem. When extended is true, it also shows the database's properties
+ */
+case class DescribeDatabase(
+    databaseName: String,
+    extended: Boolean)(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
 case class CreateFunction(
     databaseName: Option[String],
     functionName: String,
