@@ -322,10 +322,12 @@ case class DescribeCommand(
  * If a databaseName is not given, the current database will be used.
  * The syntax of using this command in SQL is:
  * {{{
- *    SHOW TABLES [IN databaseName]
+ *    SHOW TABLES [(IN|FROM) database_name] ['identifier_with_wildcards'];
  * }}}
  */
-case class ShowTablesCommand(databaseName: Option[String]) extends RunnableCommand {
+case class ShowTablesCommand(
+    databaseName: Option[String],
+    tableIdentifierPattern: Option[String]) extends RunnableCommand {
 
   // The result of SHOW TABLES has two columns, tableName and isTemporary.
   override val output: Seq[Attribute] = {
@@ -341,10 +343,42 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
     // instead of calling tables in sqlContext.
     val catalog = sqlContext.sessionState.catalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
-    val rows = catalog.listTables(db).map { t =>
+    val tables =
+      tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
+    val rows = tables.map { t =>
       val isTemp = t.database.isEmpty
       Row(t.table, isTemp)
     }
+    rows
+  }
+}
+
+/**
+ * A command for users to list the databases/schemas.
+ * If a databasePattern is supplied then the databases that only matches the
+ * pattern would be listed.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards'];
+ * }}}
+ */
+case class ShowDatabasesCommand(databasePattern: Option[String]) extends RunnableCommand {
+
+  // The result of SHOW TABLES has two columns, tableName and isTemporary.
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("result", StringType, false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    // Since we need to return a Seq of rows, we will call getTables directly
+    // instead of calling tables in sqlContext.
+    val catalog = sqlContext.sessionState.catalog
+    val databases =
+      databasePattern.map(catalog.listDatabases(_)).getOrElse(catalog.listDatabases())
+    val rows = databases.map{d => Row(d)}
     rows
   }
 }

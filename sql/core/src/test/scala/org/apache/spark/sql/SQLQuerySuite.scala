@@ -2376,4 +2376,47 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
+
+  test("show tables") {
+    withTempTable("show1a", "show2b") {
+      sql(
+        """
+          |CREATE TEMPORARY TABLE show1a
+          |USING org.apache.spark.sql.sources.DDLScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10',
+          |  Table 'test1'
+          |)
+        """.stripMargin)
+      sql(
+        """
+          |CREATE TEMPORARY TABLE show2b
+          |USING org.apache.spark.sql.sources.DDLScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10',
+          |  Table 'test1'
+          |)
+        """.stripMargin)
+      checkAnswer(
+        sql("show tables from default 'show1*'"),
+        Row("show1a", true) :: Nil)
+
+      checkAnswer(
+        sql("show tables from default 'show1*|show2*'"),
+        Row("show1a", true) ::
+          Row("show2b", true) :: Nil)
+
+      checkAnswer(
+        sql("show tables 'show1*|show2*'"),
+        Row("show1a", true) ::
+          Row("show2b", true) :: Nil)
+
+      assert(
+        sql("show tables").count() >= 2)
+      assert(
+        sql("show tables from default").count() >= 2)
+    }
+  }
 }
