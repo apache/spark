@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
@@ -86,13 +87,49 @@ case class DescribeDatabase(
     extended: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * The DDL command that creates a function.
+ * alias: the class name that implements the created function.
+ * resources: Jars, files, or archives which need to be added to the environment when the function
+ *            is referenced for the first time by a session.
+ * isTemp: indicates if it is a temporary function.
+ */
 case class CreateFunction(
     databaseName: Option[String],
     functionName: String,
     alias: String,
     resources: Seq[(String, String)],
     isTemp: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+  extends NativeDDLCommand(sql) with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val func = FunctionIdentifier(functionName, databaseName)
+    val catalogFunc = CatalogFunction(func, alias)
+    if (isTemp) {
+      println(s"CreateFunction: $func, $catalogFunc")
+      // Set `ignoreIfExists` to false, so if the temporary function already exists,
+      // an exception will be thrown.
+      sqlContext.sessionState.catalog.createTempFunction(catalogFunc, false)
+    } else {
+      // Check if the function to create is already existing. If so, throw exception.
+      var funcExisting: Boolean = true
+      try {
+        if (sqlContext.sessionState.catalog.getFunction(func) == null) {
+          funcExisting = false
+        }
+      } catch {
+        case _: NoSuchFunctionException => funcExisting = false
+      }
+      if (funcExisting) {
+        val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+        throw new AnalysisException(
+          s"Function '$functionName' already exists in database '$dbName'.")
+      }
+      sqlContext.sessionState.catalog.createFunction(catalogFunc)
+    }
+    Seq.empty[Row]
+  }
+}
 
 /**
  * The DDL command that drops a function.
@@ -104,7 +141,30 @@ case class DropFunction(
     functionName: String,
     ifExists: Boolean,
     isTemp: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+  extends NativeDDLCommand(sql) with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    println("call DropFunction")
+    if (isTemp) {
+      println("isTemp")
+      require(databaseName.isEmpty,
+        "attempted to drop a temporary function while specifying a database")
+      sqlContext.sessionState.catalog.dropTempFunction(functionName, ifExists)
+    } else {
+      val func = FunctionIdentifier(functionName, databaseName)
+      if (!ifExists) {
+        // getFunction can throw NoSuchFunctionException itself, or return null.
+        val existingFunc = sqlContext.sessionState.catalog.getFunction(func)
+        if (existingFunc == null) {
+          val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+          throw new NoSuchFunctionException(dbName, functionName)
+        }
+      }
+      sqlContext.sessionState.catalog.dropFunction(func)
+    }
+    Seq.empty[Row]
+  }
+}
 
 case class AlterTableRename(
     oldName: TableIdentifier,
