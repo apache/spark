@@ -1162,11 +1162,11 @@ object functions {
   }
 
   def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
-    window(timeColumn, windowDuration, slideDuration, "0s")
+    window(timeColumn, windowDuration, slideDuration, "0 second")
   }
 
   def window(timeColumn: Column, windowDuration: String): Column = {
-    window(timeColumn, windowDuration, windowDuration, "0s")
+    window(timeColumn, windowDuration, windowDuration, "0 second")
   }
 
   /**

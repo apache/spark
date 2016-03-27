@@ -29,6 +29,14 @@ import org.apache.spark.sql.types._
 class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  test("time windowing") {
+    val df = Seq((1459103954L, 1), (1459103996L, 2)).toDF("time", "b")
+    // df.select(struct("time", "b")).explain(true)
+    val windowed = df.select(window($"time", "10 second", "3 second", "2 second"), $"time")
+    windowed.select($"window.start", $"window.end", from_unixtime($"time")).collect().foreach(println)
+  }
+
+  /*
   test("array with column name") {
     val df = Seq((0, 1)).toDF("a", "b")
     val row = df.select(array("a", "b")).first()
@@ -394,4 +402,5 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(true), Row(true))
     )
   }
+  */
 }

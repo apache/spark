@@ -77,7 +77,6 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
-      TimeWindowing,
       EliminateUnions),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
@@ -94,6 +93,7 @@ class Analyzer(
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
+      TimeWindowing ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -1492,7 +1492,7 @@ object EliminateUnions extends Rule[LogicalPlan] {
  * Window(window expressions).
  */
 object CleanupAliases extends Rule[LogicalPlan] {
-  private def trimAliases(e: Expression): Expression = {
+  private[catalyst] def trimAliases(e: Expression): Expression = {
     var stop = false
     e.transformDown {
       // CreateStruct is a special case, we need to retain its top level Aliases as they decide the
@@ -1598,43 +1598,54 @@ object TimeWindowing extends Rule[LogicalPlan] {
       expr: Expression,
       windowExpr: TimeWindow,
       window: Int): Expression = {
-    Add(Add(expr, Multiply(Literal(window), Literal(windowExpr.slideDuration))),
-      Literal(windowExpr.startTime))
+    Multiply(Add(Add(expr, Multiply(Literal(window), Literal(windowExpr.slideDuration))),
+      Literal(windowExpr.startTime)), Literal(1000000))
   }
 
-  private def generateWindows(p: LogicalPlan): (LogicalPlan, AttributeReference) = {
-    val windowExpr = p.expressions.collect { case window: TimeWindow => window }.head
-    val expandedWindow = AttributeReference("window", StructType(Seq(
-      StructField("start", TimestampType), StructField("end", TimestampType))))()
-    val projections = Seq.tabulate(windowExpr.maxNumOverlapping + 1) { i =>
-      val division = Divide(windowExpr.timeColumn, Literal(windowExpr.windowDuration))
-      val windowStart = addSlideDurationAndOffset(Multiply(Floor(division),
-        Literal(windowExpr.windowDuration)), windowExpr, i - 1)
-      val windowEnd = addSlideDurationAndOffset(Multiply(Ceil(division),
-        Literal(windowExpr.windowDuration)), windowExpr, i - 1)
-      CreateStruct(windowStart :: windowEnd :: Nil) :: Nil
+  private def generateWindows(p: LogicalPlan): (LogicalPlan, NamedExpression) = {
+    val windowExpr = p.expressions.collect { case Alias(child, _) =>
+      child.find(_.isInstanceOf[TimeWindow])
+    }.flatten.head.asInstanceOf[TimeWindow]
+    val windowStruct = StructType(Seq(
+      StructField("start", TimestampType), StructField("end", TimestampType)))
+    val windowAttributes = windowStruct.toAttributes
+    val expandedWindow = Alias(CreateStruct(windowAttributes), "window")()
+    val projections = Seq.tabulate(windowExpr.maxNumOverlapping) { i =>
+      val division = Divide(Cast(windowExpr.timeColumn, LongType),
+        Literal(windowExpr.slideDuration))
+      val windowStart = addSlideDurationAndOffset(Multiply(Ceil(division),
+        Literal(windowExpr.slideDuration)), windowExpr, i - windowExpr.maxNumOverlapping)
+      val windowEnd =
+        Add(windowStart, Multiply(Literal(windowExpr.windowDuration), Literal(1000000)))
+      windowStart :: windowEnd :: windowExpr._timeColumn :: Nil
     }
-    val windowStartCol = expandedWindow.children.head
-    val windowEndCol = expandedWindow.children.last
+    val timeCol = windowExpr._timeColumn.references.toSeq
+    val windowStartCol = windowAttributes.head
+    val windowEndCol = windowAttributes.last
     val filterExpr = And(GreaterThanOrEqual(windowExpr.timeColumn, windowStartCol),
       LessThan(windowExpr.timeColumn, windowEndCol))
-    (Filter(filterExpr,
-      Expand(projections, expandedWindow :: Nil, p.children.head)), expandedWindow)
+    (Project(windowAttributes ++ Seq(expandedWindow) ++ timeCol,
+      Filter(filterExpr,
+        Expand(projections, windowAttributes ++ timeCol, p.children.head))),
+      expandedWindow)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p: LogicalPlan if p.expressions.exists(_.isInstanceOf[TimeWindow]) &&
-      p.children.length == 1 =>
-      val (windowed, columnRef) = generateWindows(p)
-      val rewritten = p transformExpressions {
-        case windowExpr: TimeWindow =>
-          windowExpr.validate() match {
-            case Some(e) => throw new AnalysisException(e)
-            case _ => // valid expression
-          }
-          columnRef
-      }
-      rewritten.withNewChildren(windowed :: Nil)
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val transformed = plan transform {
+      case p: LogicalPlan if p.expressions.exists(_.find(_.isInstanceOf[TimeWindow]).isDefined) &&
+        p.children.length == 1 =>
+        val (windowed, columnRef) = generateWindows(p)
+        val rewritten = p transformExpressions {
+          case Alias(windowExpr: TimeWindow, _) =>
+            windowExpr.validate() match {
+              case Some(e) => throw new AnalysisException(e)
+              case _ => // valid expression
+            }
+            columnRef
+        }
+        rewritten.withNewChildren(windowed :: Nil)
+    }
+    transformed
   }
 
 }

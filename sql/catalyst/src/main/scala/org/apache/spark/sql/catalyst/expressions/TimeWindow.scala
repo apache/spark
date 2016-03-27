@@ -4,7 +4,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 case class TimeWindow(
-		timeColumn: Expression,
+		_timeColumn: Expression,
 	 	private val _windowDuration: String,
 		private val _slideDuration: String,
 		private val _startTime: String) extends UnaryExpression
@@ -12,33 +12,43 @@ case class TimeWindow(
 	with Unevaluable
 	with NonSQLExpression {
 
-	override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+	lazy val timeColumn = Cast(_timeColumn, TimestampType)
+	override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(TimestampType, LongType))
 	override def child: Expression = timeColumn
 	override def dataType: DataType = StructType(Seq(
 		StructField("start", TimestampType), StructField("end", TimestampType)))
 
-	private def getIntervalInMillis(interval: CalendarInterval): Long = {
-		(interval.months * 4 * CalendarInterval.MICROS_PER_WEEK + interval.microseconds) / 1000
+	private def getIntervalInSeconds(interval: String): Long = {
+		val intervalString = if (interval.startsWith("interval")) {
+			interval
+		} else {
+			"interval " + interval
+		}
+		val cal = CalendarInterval.fromString(intervalString)
+		(cal.months * 4 * CalendarInterval.MICROS_PER_WEEK + cal.microseconds) / 1000000
 	}
 
-	val windowDuration = getIntervalInMillis(CalendarInterval.fromString(_windowDuration))
-	val slideDuration = getIntervalInMillis(CalendarInterval.fromString(_slideDuration))
-	val startTime = getIntervalInMillis(CalendarInterval.fromString(_startTime))
+	lazy val windowDuration = getIntervalInSeconds(_windowDuration)
+	lazy val slideDuration = getIntervalInSeconds(_slideDuration)
+	lazy val startTime = getIntervalInSeconds(_startTime)
 
 	def validate(): Option[String] = {
 		if (windowDuration <= 0) {
-			return Some(s"The window duration ($windowDuration) must be greater than 0.")
+			return Some(s"The window duration (${_windowDuration}) must be greater than 0.")
 		}
 		if (slideDuration <= 0) {
-			return Some(s"The slide duration ($slideDuration) must be greater than 0.")
+			return Some(s"The slide duration (${_slideDuration}) must be greater than 0.")
+		}
+		if (startTime < 0) {
+			return Some(s"The start time (${_startTime}) must be greater than or equal to 0.")
 		}
 		if (slideDuration > windowDuration) {
-			return Some(s"The slide duration ($slideDuration) must be less than or equal to the " +
-				s"windowDuration ($windowDuration).")
+			return Some(s"The slide duration (${_slideDuration}) must be less than or equal to the " +
+				s"windowDuration (${_windowDuration}).")
 		}
 		if (startTime >= slideDuration) {
-			return Some(s"The start time ($startTime) must be less than the " +
-				s"slideDuration ($slideDuration).")
+			return Some(s"The start time (${_startTime}) must be less than the " +
+				s"slideDuration (${_slideDuration}).")
 		}
 		None
 	}
