@@ -90,11 +90,6 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_ALTERINDEX_REBUILD",
     "TOK_ALTERTABLE_ALTERPARTS",
     "TOK_ALTERTABLE_PARTITION",
-    "TOK_ALTERVIEW_ADDPARTS",
-    "TOK_ALTERVIEW_AS",
-    "TOK_ALTERVIEW_DROPPARTS",
-    "TOK_ALTERVIEW_PROPERTIES",
-    "TOK_ALTERVIEW_RENAME",
 
     "TOK_CREATEINDEX",
     "TOK_CREATEMACRO",
@@ -257,21 +252,16 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
           AnalyzeTable(tableName)
         }
 
-      case view @ Token("TOK_ALTERVIEW", children) =>
-        val Some(nameParts) :: maybeQuery :: _ =
-          getClauses(Seq(
-            "TOK_TABNAME",
-            "TOK_QUERY",
-            "TOK_ALTERVIEW_ADDPARTS",
-            "TOK_ALTERVIEW_DROPPARTS",
-            "TOK_ALTERVIEW_PROPERTIES",
-            "TOK_ALTERVIEW_RENAME"), children)
+      // ALTER VIEW [db_name.]view_name AS select_statement
+      case view @ Token("TOK_ALTERVIEW", children)
+          if children.collect { case t @ Token("TOK_QUERY", _) => t }.nonEmpty =>
+        val Seq(Some(viewNameParts), Some(query)) =
+          getClauses(Seq("TOK_TABNAME", "TOK_QUERY"), children)
+        createView(view, viewNameParts, query, Nil, Map(), allowExist = false, replace = true)
 
-        // if ALTER VIEW doesn't have query part, let hive to handle it.
-        maybeQuery.map { query =>
-          createView(view, nameParts, query, Nil, Map(), allowExist = false, replace = true)
-        }.getOrElse(NativePlaceholder)
-
+      // CREATE VIEW [IF NOT EXISTS] [db_name.]view_name
+      // [(column_name [COMMENT column_comment], ...) ] [COMMENT view_comment]
+      // [TBLPROPERTIES (property_name = property_value, ...)] AS select_statement
       case view @ Token("TOK_CREATEVIEW", children)
         if children.collect { case t @ Token("TOK_QUERY", _) => t }.nonEmpty =>
         val Seq(

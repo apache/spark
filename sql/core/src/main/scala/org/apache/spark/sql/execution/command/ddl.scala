@@ -77,17 +77,17 @@ case class CreateFunction(
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
-case class AlterTableRename(
+case class AlterTableAlterViewRename(
     oldName: TableIdentifier,
     newName: TableIdentifier)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
-case class AlterTableSetProperties(
+case class AlterTableAlterViewSetProperties(
     tableName: TableIdentifier,
     properties: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
-case class AlterTableUnsetProperties(
+case class AlterTableAlterViewUnsetProperties(
     tableName: TableIdentifier,
     properties: Map[String, String],
     ifExists: Boolean)(sql: String)
@@ -135,7 +135,7 @@ case class AlterTableSkewedLocation(
     skewedMap: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
-case class AlterTableAddPartition(
+case class AlterTableAlterViewAddPartition(
     tableName: TableIdentifier,
     partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
     ifNotExists: Boolean)(sql: String)
@@ -158,6 +158,12 @@ case class AlterTableDropPartition(
     specs: Seq[TablePartitionSpec],
     ifExists: Boolean,
     purge: Boolean)(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
+case class AlterViewDropPartition(
+    viewName: TableIdentifier,
+    specs: Seq[TablePartitionSpec],
+    ifExists: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
 case class AlterTableArchivePartition(
