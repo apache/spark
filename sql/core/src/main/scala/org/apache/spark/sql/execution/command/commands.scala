@@ -332,7 +332,7 @@ case class CreateDatabase(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        path.getOrElse(catalog.getDefaultPath),
+        path.getOrElse(catalog.getDefaultPath + s"/$databaseName.db"),
         props),
       ifNotExists)
     Seq.empty[Row]
