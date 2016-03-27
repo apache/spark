@@ -44,7 +44,7 @@ object IndexToStringExample {
     val indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex")
-      .fit(df)
+    indexer.fit(df)
     val indexed = indexer.transform(df)
 
     val converter = new IndexToString()

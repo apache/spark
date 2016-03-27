@@ -42,7 +42,7 @@ object RandomForestClassifierExample {
     val labelIndexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("indexedLabel")
-      .fit(data)
+    labelIndexer.fit(data)
     // Automatically identify categorical features, and index them.
     // Set maxCategories so features with > 4 distinct values are treated as continuous.
     val featureIndexer = new VectorIndexer()
@@ -64,7 +64,7 @@ object RandomForestClassifierExample {
     val labelConverter = new IndexToString()
       .setInputCol("prediction")
       .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels)
+      .setLabels(labelIndexer.getLabels)
 
     // Chain indexers and forest in a Pipeline
     val pipeline = new Pipeline()

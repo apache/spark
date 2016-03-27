@@ -42,7 +42,7 @@ object DecisionTreeClassificationExample {
     val labelIndexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("indexedLabel")
-      .fit(data)
+    labelIndexer.fit(data)
     // Automatically identify categorical features, and index them.
     val featureIndexer = new VectorIndexer()
       .setInputCol("features")
@@ -62,7 +62,7 @@ object DecisionTreeClassificationExample {
     val labelConverter = new IndexToString()
       .setInputCol("prediction")
       .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels)
+      .setLabels(labelIndexer.getLabels)
 
     // Chain indexers and tree in a Pipeline
     val pipeline = new Pipeline()

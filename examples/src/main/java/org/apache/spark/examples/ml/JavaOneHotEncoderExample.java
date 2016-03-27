@@ -27,7 +27,6 @@ import java.util.Arrays;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.OneHotEncoder;
 import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.ml.feature.StringIndexerModel;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -60,10 +59,10 @@ public class JavaOneHotEncoderExample {
 
     Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
 
-    StringIndexerModel indexer = new StringIndexer()
+    StringIndexer indexer = new StringIndexer()
       .setInputCol("category")
-      .setOutputCol("categoryIndex")
-      .fit(df);
+      .setOutputCol("categoryIndex");
+    indexer.fit(df);
     Dataset<Row> indexed = indexer.transform(df);
 
     OneHotEncoder encoder = new OneHotEncoder()

@@ -45,10 +45,10 @@ public class JavaGradientBoostedTreeClassifierExample {
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.
-    StringIndexerModel labelIndexer = new StringIndexer()
+    StringIndexer labelIndexer = new StringIndexer()
       .setInputCol("label")
-      .setOutputCol("indexedLabel")
-      .fit(data);
+      .setOutputCol("indexedLabel");
+    labelIndexer.fit(data);
     // Automatically identify categorical features, and index them.
     // Set maxCategories so features with > 4 distinct values are treated as continuous.
     VectorIndexerModel featureIndexer = new VectorIndexer()
@@ -72,7 +72,7 @@ public class JavaGradientBoostedTreeClassifierExample {
     IndexToString labelConverter = new IndexToString()
       .setInputCol("prediction")
       .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels());
+      .setLabels(labelIndexer.getLabels());
 
     // Chain indexers and GBT in a Pipeline
     Pipeline pipeline = new Pipeline()

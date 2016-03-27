@@ -58,7 +58,8 @@ public class JavaStringIndexerExample {
     StringIndexer indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex");
-    Dataset<Row> indexed = indexer.fit(df).transform(df);
+    indexer.fit(df);
+    Dataset<Row> indexed = indexer.transform(df);
     indexed.show();
     // $example off$
     jsc.stop();

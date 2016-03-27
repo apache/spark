@@ -43,7 +43,7 @@ object OneHotEncoderExample {
     val indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex")
-      .fit(df)
+    indexer.fit(df)
     val indexed = indexer.transform(df)
 
     val encoder = new OneHotEncoder()
