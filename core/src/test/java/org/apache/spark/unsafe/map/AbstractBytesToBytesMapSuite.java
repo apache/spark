@@ -182,7 +182,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   public void emptyMap() {
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 64, PAGE_SIZE_BYTES);
     try {
-      Assert.assertEquals(0, map.numElements());
+      Assert.assertEquals(0, map.numKeys());
       final int keyLengthInWords = 10;
       final int keyLengthInBytes = keyLengthInWords * 8;
       final byte[] key = getRandomByteArray(keyLengthInWords);
@@ -597,11 +597,15 @@ public abstract class AbstractBytesToBytesMapSuite {
         map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8)
           .append(arr, Platform.LONG_ARRAY_OFFSET, 8, arr, Platform.LONG_ARRAY_OFFSET, 8);
       }
+      assert map.numKeys() == 1024;
+      assert map.numValues() == 1024;
       for (i = 0; i < 1024; i++) {
         final long[] arr = new long[]{i};
         map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8)
           .append(arr, Platform.LONG_ARRAY_OFFSET, 8, arr, Platform.LONG_ARRAY_OFFSET, 8);
       }
+      assert map.numKeys() == 1024;
+      assert map.numValues() == 2048;
       for (i = 0; i < 1024; i++) {
         final long[] arr = new long[]{i};
         final BytesToBytesMap.Location loc = map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8);
