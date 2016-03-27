@@ -932,6 +932,11 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
     }
   }
 
+  /** A Java compatible for Python and Java */
+  private[ml] def toList: java.util.List[ParamPair[_]] = {
+    this.toSeq.asJava
+  }
+
   /**
    * Number of param pairs in this map.
    */

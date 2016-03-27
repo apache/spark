@@ -18,12 +18,15 @@
 import itertools
 import numpy as np
 
+from pyspark import SparkContext
 from pyspark import since
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasSeed
-from pyspark.ml.util import keyword_only
+from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader, MLReadable, MLWritable
+from pyspark.ml.wrapper import JavaWrapper
 from pyspark.sql.functions import rand
+from pyspark.mllib.common import inherit_doc
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
@@ -91,7 +94,25 @@ class ParamGridBuilder(object):
         return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
-class CrossValidator(Estimator, HasSeed):
+@inherit_doc
+class CrossValidatorMLWriter(JavaMLWriter):
+    """
+    Private Pipeline utility class that can save ML instances through their Scala implementation.
+
+    We can currently use JavaMLWriter, rather than MLWriter, since Pipeline implements _to_java.
+    """
+
+
+@inherit_doc
+class CrossValidatorMLReader(JavaMLReader):
+    """
+    Private utility class that can load Pipeline instances through their Scala implementation.
+
+    We can currently use JavaMLReader, rather than MLReader, since Pipeline implements _from_java.
+    """
+
+
+class CrossValidator(Estimator, HasSeed, MLReadable, MLWritable):
     """
     K-fold cross validation.
 
@@ -112,6 +133,15 @@ class CrossValidator(Estimator, HasSeed):
     >>> cvModel = cv.fit(dataset)
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
+    >>> cvPath = temp_path + "/cv"
+    >>> cv.save(cvPath)
+    >>> loadedCV = CrossValidator.load(cvPath)
+    >>> loadedCV.getEstimator().uid == cv.getEstimator().uid
+    True
+    >>> loadedCV.getEvaluator().uid == cv.getEvaluator().uid
+    True
+    >>> loadedCV.getEstimatorParamMaps() == cv.getEstimatorParamMaps()
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -257,6 +287,60 @@ class CrossValidator(Estimator, HasSeed):
         if self.isSet(self.evaluator):
             newCV.setEvaluator(self.getEvaluator().copy(extra))
         return newCV
+
+    @since("2.0.0")
+    def write(self):
+        """Returns an JavaMLWriter instance for this ML instance."""
+        return CrossValidatorMLWriter(self)
+
+    @since("2.0.0")
+    def save(self, path):
+        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
+        self.write().save(path)
+
+    @classmethod
+    @since("2.0.0")
+    def read(cls):
+        """Returns an MLReader instance for this class."""
+        return CrossValidatorMLReader(cls)
+
+    @classmethod
+    def _from_java(cls, java_stage):
+        """
+        Given a Java CrossValidator, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+
+        # Load information from java_stage to the instance.
+        estimator = JavaWrapper._from_java(java_stage.getEstimator())
+        epms = [estimator._transfer_extra_params_from_java(epm)
+                for epm in java_stage.getEstimatorParamMaps()]
+        evaluator = JavaWrapper._from_java(java_stage.getEvaluator())
+        # Create a new instance of this stage.
+        py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator)
+        py_stage._resetUid(java_stage.uid())
+        return py_stage
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java CrossValidator.  Used for ML persistence.
+
+        :return: Java object equivalent to this instance.
+        """
+
+        gateway = SparkContext._gateway
+        cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
+
+        java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
+        for idx, epm in enumerate(self.getEstimatorParamMaps()):
+            java_epms[idx] = self.getEstimator()._transfer_extra_params_to_java(epm)
+
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.tuning.CrossValidator", self.uid)
+        _java_obj.setEstimatorParamMaps(java_epms)
+        _java_obj.setEvaluator(self.getEvaluator()._to_java())
+        _java_obj.setEstimator(self.getEstimator()._to_java())
+
+        return _java_obj
 
 
 class CrossValidatorModel(Model):
@@ -482,17 +566,31 @@ class TrainValidationSplitModel(Model):
 
 if __name__ == "__main__":
     import doctest
+    import tempfile
+
+    import pyspark.ml.tuning
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
     globs = globals().copy()
+    features = pyspark.ml.tuning.__dict__.copy()
+    globs.update(features)
+
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.tuning tests")
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        sc.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)
