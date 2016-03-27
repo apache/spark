@@ -446,10 +446,8 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
   * }}}
   */
 case class CreateFunction(
-                           functionName: String,
-                           alias: String,
-                           resources: Seq[(String, String)],
-                           isTemp: Boolean)(sql: String) extends RunnableCommand {
+    functionName: String, alias: String, resources: Seq[(String, String)],
+    isTemp: Boolean)(sql: String) extends RunnableCommand {
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
     val functionIdentifier = FunctionIdentifier(functionName, Some(catalog.getCurrentDatabase))
