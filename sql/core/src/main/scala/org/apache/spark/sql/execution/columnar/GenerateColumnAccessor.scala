@@ -145,7 +145,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
     /* 4000 = 64000 bytes / 16 (up to 16 bytes per one call)) */
     val numberOfStatementsThreshold = 4000
     val (initializerAccessorFuncs, initializerAccessorCalls, extractorFuncs, extractorCalls) =
-      if (initializeAccessors.length < numberOfStatementsThreshold) {
+      if (initializeAccessors.length <= numberOfStatementsThreshold) {
         ("", initializeAccessors.mkString("\n"), "", extractors.mkString("\n"))
       } else {
         val groupedAccessorsItr = initializeAccessors.grouped(numberOfStatementsThreshold)
