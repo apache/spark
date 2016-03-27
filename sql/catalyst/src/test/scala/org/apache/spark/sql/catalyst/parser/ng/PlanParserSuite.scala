@@ -112,10 +112,10 @@ class PlanParserSuite extends PlanTest {
   test("transform query spec") {
     val p = ScriptTransformation(Seq('a, 'b), "func", Seq.empty, table("e"), null)
     assertEqual("select transform(a, b) using 'func' from e where f < 10",
-      p.copy(child = p.child.where('f < 10)))
-    assertEqual("map(a, b) using 'func' as c, d from e",
+      p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
+    assertEqual("map a, b using 'func' as c, d from e",
       p.copy(output = Seq('c.string, 'd.string)))
-    assertEqual("reduce(a, b) using 'func' as (c: int, d decimal(10, 0)) from e",
+    assertEqual("reduce a, b using 'func' as (c: int, d decimal(10, 0)) from e",
       p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
   }
 
@@ -268,10 +268,10 @@ class PlanParserSuite extends PlanTest {
     assertEqual(
       """select *
         |from t
-        |lateral view explode(x) expl as x
+        |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
       table("t")
-        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq.empty)
         .generate(JsonTuple(Seq('x, 'y)), join = true, outer = true, Some("jtup"), Seq("q", "z"))
         .select(star()))
 

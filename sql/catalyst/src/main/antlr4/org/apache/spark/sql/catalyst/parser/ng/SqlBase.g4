@@ -46,15 +46,13 @@ statement
         (OPTIONS tablePropertyList)?                                   #createTableUsing
     | createTableHeader tableProvider
         (OPTIONS tablePropertyList)? AS? query                         #createTableUsing
-    | createTableHeader LIKE tableIdentifier
-        rowFormat?  createFileFormat? locationSpec?
-        (TBLPROPERTIES tablePropertyList)?                             #createTableLike
-    | createTableHeader '(' colTypeList ')' (COMMENT STRING)?
+    | createTableHeader ('(' colTypeList ')')? (COMMENT STRING)?
         (PARTITIONED BY identifierList)? bucketSpec? skewSpec?
         rowFormat?  createFileFormat? locationSpec?
-        (TBLPROPERTIES tablePropertyList)?                             #createTable
+        (TBLPROPERTIES tablePropertyList)?
+        (AS? query)?                                                   #createTable
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierList)                      #analyze
+        (identifier | FOR COLUMNS identifierSeq?)                      #analyze
     | ALTER TABLE from=tableIdentifier RENAME TO to=tableIdentifier    #renameTable
     | ALTER TABLE tableIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
@@ -101,41 +99,49 @@ statement
         identifierCommentList? (COMMENT STRING)?
         (PARTITIONED ON identifierList)?
         (TBLPROPERTIES tablePropertyList)? AS query                    #createView
-    | DELETE FROM tableIdentifier (WHERE booleanExpression)?           #delete
-    | TRUNCATE TABLE tableIdentifier partitionSpec?
-        (COLUMNS identifierList)?                                      #truncate
     | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
-    | ALTER VIEW from=tableIdentifier AS? RENAME TO to=tableIdentifier #renameView
-    | ALTER VIEW from=tableIdentifier AS?
-        SET TBLPROPERTIES tablePropertyList                            #setViewProperties
-    | ALTER VIEW from=tableIdentifier AS?
-        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetViewProperties
-    | ALTER VIEW from=tableIdentifier AS?
-        ADD (IF NOT EXISTS)? partitionSpecLocation+                    #addViewPartition
-    | ALTER VIEW from=tableIdentifier AS?
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropViewPartition
-    | DROP VIEW (IF EXISTS)? qualifiedName                             #dropView
     | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
     | EXPLAIN explainOption* statement                                 #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE (qualifiedName | pattern=STRING))?                       #showTables
-    | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)? #showColumns
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
-    | START TRANSACTION (transactionMode (',' transactionMode)*)?      #startTransaction
-    | COMMIT WORK?                                                     #commit
-    | ROLLBACK WORK?                                                   #rollback
-    | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
     | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache
-    | DFS .*?                                                          #dfs
     | ADD identifier .*?                                               #addResource
     | SET .*?                                                          #setConfiguration
+    | hiveNativeCommands                                               #executeNativeCommand
+    ;
+
+hiveNativeCommands
+    : createTableHeader LIKE tableIdentifier
+        rowFormat?  createFileFormat? locationSpec?
+        (TBLPROPERTIES tablePropertyList)?
+    | DELETE FROM tableIdentifier (WHERE booleanExpression)?
+    | TRUNCATE TABLE tableIdentifier partitionSpec?
+        (COLUMNS identifierList)?
+    | ALTER VIEW from=tableIdentifier AS? RENAME TO to=tableIdentifier
+    | ALTER VIEW from=tableIdentifier AS?
+        SET TBLPROPERTIES tablePropertyList
+    | ALTER VIEW from=tableIdentifier AS?
+        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList
+    | ALTER VIEW from=tableIdentifier AS?
+        ADD (IF NOT EXISTS)? partitionSpecLocation+
+    | ALTER VIEW from=tableIdentifier AS?
+        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?
+    | DROP VIEW (IF EXISTS)? qualifiedName
+    | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
+    | START TRANSACTION (transactionMode (',' transactionMode)*)?
+    | COMMIT WORK?
+    | ROLLBACK WORK?
+    | SHOW PARTITIONS tableIdentifier partitionSpec?
+    | DFS .*?
+    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD) .*?
     ;
 
 createTableHeader
@@ -280,16 +286,19 @@ sortItem
     ;
 
 querySpecification
-    : (((SELECT kind=TRANSFORM | kind=MAP | kind=REDUCE)) '(' namedExpression (',' namedExpression)* ')'
+    : (((SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
+        | kind=MAP namedExpressionSeq
+        | kind=REDUCE namedExpressionSeq))
        inRowFormat=rowFormat?
+       (RECORDWRITER recordWriter=STRING)?
        USING script=STRING
        (AS (identifierSeq | colTypeList | ('(' (identifierSeq | colTypeList) ')')))?
        outRowFormat=rowFormat?
-       (RECORDREADER outRecordReader=STRING)?
+       (RECORDREADER recordReader=STRING)?
        fromClause?
        (WHERE where=booleanExpression)?)
-    | (kind=SELECT setQuantifier? namedExpression (',' namedExpression)*
-       fromClause?
+    | ((kind=SELECT setQuantifier? namedExpressionSeq fromClause?
+       | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
        lateralView*
        (WHERE where=booleanExpression)?
        aggregation?
@@ -314,7 +323,7 @@ groupingSet
     ;
 
 lateralView
-    : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=identifier (AS? colName+=identifier (',' colName+=identifier)*)
+    : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=identifier (AS? colName+=identifier (',' colName+=identifier)*)?
     ;
 
 setQuantifier
@@ -324,9 +333,8 @@ setQuantifier
 
 relation
     : left=relation
-      ( CROSS JOIN right=sampledRelation
-      | joinType JOIN rightRelation=relation joinCriteria?
-      | NATURAL joinType JOIN right=sampledRelation
+      ((CROSS | joinType) JOIN right=relation joinCriteria?
+      | NATURAL joinType JOIN right=relation
       )                                           #joinRelation
     | sampledRelation                             #relationDefault
     ;
@@ -390,21 +398,13 @@ inlineTable
     ;
 
 rowFormat
-    : rowFormatSerde
-    | rowFormatDelimited
-    ;
-
-rowFormatSerde
-    : ROW FORMAT SERDE name=STRING (WITH SERDEPROPERTIES props=tablePropertyList)?
-    ;
-
-rowFormatDelimited
-    : ROW FORMAT DELIMITED
-      (FIELDS TERMINATED BY fieldsTerminatedBy=STRING)?
+    : ROW FORMAT SERDE name=STRING (WITH SERDEPROPERTIES props=tablePropertyList)?  #rowFormatSerde
+    | ROW FORMAT DELIMITED
+      (FIELDS TERMINATED BY fieldsTerminatedBy=STRING (ESCAPED BY escapedBy=STRING)?)?
       (COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy=STRING)?
       (MAP KEYS TERMINATED BY keysTerminatedBy=STRING)?
-      (ESCAPED BY escapedBy=STRING)?
-      (LINES SEPARATED BY linesSeparatedBy=STRING)?
+      (LINES TERMINATED BY linesSeparatedBy=STRING)?
+      (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
     ;
 
 tableIdentifier
@@ -413,6 +413,10 @@ tableIdentifier
 
 namedExpression
     : expression (AS? (identifier | identifierList))?
+    ;
+
+namedExpressionSeq
+    : namedExpression (',' namedExpression)*
     ;
 
 expression
@@ -435,8 +439,7 @@ predicated
     ;
 
 predicate[ParserRuleContext value]
-    : comparisonOperator right=valueExpression                            #comparison
-    | NOT? BETWEEN lower=valueExpression AND upper=valueExpression        #between
+    : NOT? BETWEEN lower=valueExpression AND upper=valueExpression        #between
     | NOT? IN '(' expression (',' expression)* ')'                        #inList
     | NOT? IN '(' query ')'                                               #inSubquery
     | NOT? like=(RLIKE | LIKE) pattern=valueExpression                    #like
@@ -451,6 +454,7 @@ valueExpression
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
     | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
+    | left=valueExpression comparisonOperator right=valueExpression                          #comparison
     ;
 
 primaryExpression
@@ -611,7 +615,8 @@ nonReserved
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE | FIRST
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
     | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
-    | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL
+    | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
+    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD | VALUES
     ;
 
 SELECT: 'SELECT';
@@ -760,6 +765,7 @@ USING: 'USING';
 SERDE: 'SERDE';
 SERDEPROPERTIES: 'SERDEPROPERTIES';
 RECORDREADER: 'RECORDREADER';
+RECORDWRITER: 'RECORDWRITER';
 DELIMITED: 'DELIMITED';
 FIELDS: 'FIELDS';
 TERMINATED: 'TERMINATED';
@@ -816,6 +822,15 @@ COMPUTE: 'COMPUTE';
 STATISTICS: 'STATISTICS';
 PARTITIONED: 'PARTITIONED';
 EXTERNAL: 'EXTERNAL';
+DEFINED: 'DEFINED';
+REVOKE: 'REVOKE';
+GRANT: 'GRANT';
+LOCK: 'LOCK';
+UNLOCK: 'UNLOCK';
+MSCK: 'MSCK';
+EXPORT: 'EXPORT';
+IMPORT: 'IMPORT';
+LOAD: 'LOAD';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

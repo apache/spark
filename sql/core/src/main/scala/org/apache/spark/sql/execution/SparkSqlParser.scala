@@ -177,7 +177,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * TODO add bucketing and partitioning.
    */
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
-    val (table, temporary, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     if (external) {
       logWarning("EXTERNAL option is not supported.")
     }
@@ -191,15 +191,15 @@ class SparkSqlAstBuilder extends AstBuilder {
       // Determine the storage mode.
       val mode = if (ifNotExists) {
         SaveMode.Ignore
-      } else if (temporary) {
+      } else if (temp) {
         SaveMode.Overwrite
       } else {
         SaveMode.ErrorIfExists
       }
-      CreateTableUsingAsSelect(table, provider, temporary, Array.empty, None, mode, options, query)
+      CreateTableUsingAsSelect(table, provider, temp, Array.empty, None, mode, options, query)
     } else {
       val struct = Option(ctx.colTypeList).map(createStructType)
-      CreateTableUsing(table, struct, provider, temporary, options, ifNotExists, false)
+      CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = false)
     }
   }
 
@@ -237,7 +237,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       Option(ctx.locationSpec).map(visitLocationSpec),
       Option(ctx.comment).map(string),
       Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -265,7 +265,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       string(ctx.className),
       resources,
       ctx.TEMPORARY != null)(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -280,7 +280,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableRename(
       visitTableIdentifier(ctx.from),
       visitTableIdentifier(ctx.to))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -296,7 +296,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableSetProperties(
       visitTableIdentifier(ctx.tableIdentifier),
       visitTablePropertyList(ctx.tablePropertyList))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -313,7 +313,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       visitTableIdentifier(ctx.tableIdentifier),
       visitTablePropertyList(ctx.tablePropertyList),
       ctx.EXISTS != null)(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -332,7 +332,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       Option(ctx.tablePropertyList).map(visitTablePropertyList),
       // TODO a partition spec is allowed to have optional values. This is currently violated.
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -347,7 +347,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableStorageProperties(
       visitTableIdentifier(ctx.tableIdentifier),
       visitBucketSpec(ctx.bucketSpec))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -359,7 +359,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitUnclusterTable(ctx: UnclusterTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableNotClustered(visitTableIdentifier(ctx.tableIdentifier))(source(ctx))
+    AlterTableNotClustered(visitTableIdentifier(ctx.tableIdentifier))(command(ctx))
   }
 
   /**
@@ -371,7 +371,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitUnsortTable(ctx: UnsortTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableNotSorted(visitTableIdentifier(ctx.tableIdentifier))(source(ctx))
+    AlterTableNotSorted(visitTableIdentifier(ctx.tableIdentifier))(command(ctx))
   }
 
   /**
@@ -387,7 +387,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitSkewTable(ctx: SkewTableContext): LogicalPlan = withOrigin(ctx) {
     val table = visitTableIdentifier(ctx.tableIdentifier)
     val (cols, values, storedAsDirs) = visitSkewSpec(ctx.skewSpec)
-    AlterTableSkewed(table, cols, values, storedAsDirs)(source(ctx))
+    AlterTableSkewed(table, cols, values, storedAsDirs)(command(ctx))
   }
 
   /**
@@ -399,7 +399,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitUnskewTable(ctx: UnskewTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableNotSkewed(visitTableIdentifier(ctx.tableIdentifier))(source(ctx))
+    AlterTableNotSkewed(visitTableIdentifier(ctx.tableIdentifier))(command(ctx))
   }
 
   /**
@@ -411,7 +411,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitUnstoreTable(ctx: UnstoreTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableNotStoredAsDirs(visitTableIdentifier(ctx.tableIdentifier))(source(ctx))
+    AlterTableNotStoredAsDirs(visitTableIdentifier(ctx.tableIdentifier))(command(ctx))
   }
 
   /**
@@ -440,7 +440,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableSkewedLocation(
       visitTableIdentifier(ctx.tableIdentifier),
       skewedMap)(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -464,7 +464,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       visitTableIdentifier(ctx.tableIdentifier),
       specsAndLocs,
       ctx.EXISTS != null)(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -481,7 +481,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       visitTableIdentifier(ctx.from),
       visitTableIdentifier(ctx.to),
       visitNonOptionalPartitionSpec(ctx.partitionSpec))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -498,7 +498,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       visitTableIdentifier(ctx.tableIdentifier),
       visitNonOptionalPartitionSpec(ctx.from),
       visitNonOptionalPartitionSpec(ctx.to))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -516,7 +516,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
       ctx.EXISTS != null,
       ctx.PURGE != null)(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -532,7 +532,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableArchivePartition(
       visitTableIdentifier(ctx.tableIdentifier),
       visitNonOptionalPartitionSpec(ctx.partitionSpec))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -548,7 +548,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableUnarchivePartition(
       visitTableIdentifier(ctx.tableIdentifier),
       visitNonOptionalPartitionSpec(ctx.partitionSpec))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -561,19 +561,25 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitSetTableFileFormat(
       ctx: SetTableFileFormatContext): LogicalPlan = withOrigin(ctx) {
-    // TODO improve this! It can't be both!
+    // AlterTableSetFileFormat currently takes both a GenericFileFormat and a
+    // TableFileFormatContext. This is a bit weird because it should only take one. It also should
+    // use a CatalogFileFormat instead of either a String or a Sequence of Strings. We will address
+    // this in a follow-up PR.
     val (fileFormat, genericFormat) = ctx.fileFormat match {
       case s: GenericFileFormatContext =>
-        (Seq.empty[String], Option(visitGenericFileFormat(s)))
+        (Seq.empty[String], Option(s.identifier.getText))
       case s: TableFileFormatContext =>
-        (visitTableFileFormat(s), None)
+        val elements = Seq(s.inFmt, s.outFmt, s.serdeCls) ++
+          Option(s.inDriver).toSeq ++
+          Option(s.outDriver).toSeq
+        (elements.map(string), None)
     }
     AlterTableSetFileFormat(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       fileFormat,
       genericFormat)(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -589,7 +595,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -604,7 +610,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableTouch(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -620,7 +626,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       string(ctx.STRING))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -635,7 +641,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableMerge(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -668,7 +674,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -688,7 +694,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -708,7 +714,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      source(ctx))
+      command(ctx))
   }
 
   /**
@@ -759,31 +765,5 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
     ctx.constant.asScala.map(visitStringConstant)
-  }
-
-  /**
-   * Create a FileFormat. Currently only a sequence of Strings is returned, this is to maintain
-   * compatibility with the current parser and command classes. This method should return a case
-   * class in the future.
-   *
-   * The returned sequence contains the following items:
-   * 1. inFormat
-   * 2. outFormat
-   * 3. serdeClass
-   * 4. inDriver (optional)
-   * 5. outDriver (optional)
-   */
-  override def visitTableFileFormat(ctx: TableFileFormatContext): Seq[String] = withOrigin(ctx) {
-    import ctx._
-    val elements = Seq(inFmt, outFmt, serdeCls) ++ Option(inDriver).toSeq ++ Option(outDriver).toSeq
-    elements.map(string)
-  }
-
-  /**
-   * Create a string containing a generic file format. This should return a proper class, but we
-   * return a string in order to maintain compatibility with the current command classes.
-   */
-  override def visitGenericFileFormat(ctx: GenericFileFormatContext): String = withOrigin(ctx) {
-    ctx.identifier.getText
   }
 }

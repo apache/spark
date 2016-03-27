@@ -20,9 +20,10 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, OverrideCatalog}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.execution.{python, SparkPlanner}
+import org.apache.spark.sql.execution.{SparkPlanner, python}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.hive.execution.HiveSqlParser
+import org.apache.spark.sql.internal.{SQLConf, SessionState}
 
 
 /**
@@ -68,7 +69,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = new HiveQl(conf)
+  override lazy val sqlParser: ParserInterface = HiveSqlParser
 
   /**
    * Planner that takes into account Hive-specific strategies.

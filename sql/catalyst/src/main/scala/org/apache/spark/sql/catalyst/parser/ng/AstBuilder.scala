@@ -72,6 +72,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   protected def plan(tree: ParserRuleContext): LogicalPlan = typedVisit(tree)
 
   /**
+   * Make sure we do not try to create a plan for a native command.
+   */
+  override def visitExecuteNativeCommand(ctx: ExecuteNativeCommandContext): LogicalPlan = null
+
+  /**
    * Create a plan for a SHOW FUNCTIONS command.
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
@@ -210,7 +215,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     ctx.partitionVal.asScala.map { pVal =>
-      val name = pVal.identifier.getText
+      val name = pVal.identifier.getText.toLowerCase
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
     }.toMap
@@ -315,13 +320,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
 
     // Expressions.
-    val expressions = namedExpression.asScala.map(visit).map {
-      case e: NamedExpression => e
-      case e: Expression => UnresolvedAlias(e)
-    }
+    val expressions = Option(namedExpressionSeq).toSeq
+      .flatMap(_.namedExpression.asScala)
+      .map(typedVisit[Expression])
 
     // Create either a transform or a regular query.
-    kind.getType match {
+    val specType = Option(kind).map(_.getType).getOrElse(SqlBaseParser.SELECT)
+    specType match {
       case SqlBaseParser.MAP | SqlBaseParser.REDUCE | SqlBaseParser.TRANSFORM =>
         // Transform
 
@@ -349,7 +354,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           string(script),
           attributes,
           withFilter,
-          withScriptIOSchema(inRowFormat, outRowFormat, outRecordReader, schemaLess))
+          withScriptIOSchema(inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess))
 
       case SqlBaseParser.SELECT =>
         // Regular select
@@ -361,10 +366,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         val withFilter = withLateralView.optionalMap(where)(filter)
 
         // Add aggregation or a project.
+        val namedExpressions = expressions.map {
+          case e: NamedExpression => e
+          case e: Expression => UnresolvedAlias(e)
+        }
         val withProject = if (aggregation != null) {
-          withAggregation(aggregation, expressions, withFilter)
+          withAggregation(aggregation, namedExpressions, withFilter)
         } else {
-          Project(expressions, withFilter)
+          Project(namedExpressions, withFilter)
         }
 
         // Having
@@ -387,8 +396,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   protected def withScriptIOSchema(
       inRowFormat: RowFormatContext,
+      recordWriter: Token,
       outRowFormat: RowFormatContext,
-      outRecordReader: Token,
+      recordReader: Token,
       schemaLess: Boolean): ScriptInputOutputSchema = null
 
   /**
@@ -543,41 +553,53 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a join between two logical plans.
+   * Create a joins between two or more logical plans.
    */
   override def visitJoinRelation(ctx: JoinRelationContext): LogicalPlan = withOrigin(ctx) {
-    val baseJoinType = ctx.joinType match {
-      case null => Inner
-      case jt if jt.FULL != null => FullOuter
-      case jt if jt.SEMI != null => LeftSemi
-      case jt if jt.LEFT != null => LeftOuter
-      case jt if jt.RIGHT != null => RightOuter
-      case _ => Inner
+    /** Build a join between two plans. */
+    def join(ctx: JoinRelationContext, left: LogicalPlan, right: LogicalPlan): Join = {
+      val baseJoinType = ctx.joinType match {
+        case null => Inner
+        case jt if jt.FULL != null => FullOuter
+        case jt if jt.SEMI != null => LeftSemi
+        case jt if jt.LEFT != null => LeftOuter
+        case jt if jt.RIGHT != null => RightOuter
+        case _ => Inner
+      }
+
+      // Resolve the join type and join condition
+      val (joinType, condition) = Option(ctx.joinCriteria) match {
+        case Some(c) if c.USING != null =>
+          val columns = c.identifier.asScala.map { column =>
+            UnresolvedAttribute.quoted(column.getText)
+          }
+          (UsingJoin(baseJoinType, columns), None)
+        case Some(c) if c.booleanExpression != null =>
+          (baseJoinType, Option(expression(c.booleanExpression)))
+        case None if ctx.NATURAL != null =>
+          (NaturalJoin(baseJoinType), None)
+        case None =>
+          (baseJoinType, None)
+      }
+      Join(left, right, joinType, condition)
     }
 
-    // Resolve the join type and join condition
-    val (joinType, condition) = Option(ctx.joinCriteria) match {
-      case Some(c) if c.USING != null =>
-        val columns = c.identifier.asScala.map { column =>
-          UnresolvedAttribute.quoted(column.getText)
-        }
-        (UsingJoin(baseJoinType, columns), None)
-      case Some(c) if c.booleanExpression != null =>
-        (baseJoinType, Option(expression(c.booleanExpression)))
-      case None if ctx.NATURAL != null =>
-        (NaturalJoin(baseJoinType), None)
-      case None =>
-        (baseJoinType, None)
+    // Handle all consecutive join clauses. ANTLR produces a right nested tree in which the the
+    // first join clause is at the top. However fields of previously referenced tables can be used
+    // in following join clauses. The tree needs to be reversed in order to make this work.
+    var result = plan(ctx.left)
+    var current = ctx
+    while (current != null) {
+      current.right match {
+        case right: JoinRelationContext =>
+          result = join(current, result, plan(right.left))
+          current = right
+        case right =>
+          result = join(current, result, plan(right))
+          current = null
+      }
     }
-
-    // Resolve the query sides.
-    val left = plan(ctx.left)
-    val right = if (ctx.right != null) {
-      plan(ctx.right)
-    } else {
-      plan(ctx.rightRelation)
-    }
-    Join(left, right, joinType, condition)
+    result
   }
 
   /**
@@ -866,7 +888,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * - Greater then or Equal: '>='
    */
   override def visitComparison(ctx: ComparisonContext): Expression = withOrigin(ctx) {
-    val left = expression(ctx.value)
+    val left = expression(ctx.left)
     val right = expression(ctx.right)
     val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
     operator.getSymbol.getType match {
@@ -1455,10 +1477,16 @@ private[sql] object AstBuilder extends Logging {
     }
   }
 
-  /** Get the command which created the token. */
-  def source(ctx: ParserRuleContext): String = ParseSource.cmd(ctx) match {
+  /** Get the code of the entire command that created the given node. */
+  def command(ctx: ParserRuleContext): String = ParseSource.cmd(ctx) match {
     case Some(sql) => sql
     case None => ""
+  }
+
+  /** Get the code that creates the given node. */
+  def source(ctx: ParserRuleContext): String = {
+    val stream = ctx.getStart.getInputStream
+    stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
   }
 
   /** Get all the text which comes after the given node. */
