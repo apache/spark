@@ -135,6 +135,23 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(rf1.toDebugString != rf2.toDebugString)
   }
 
+  test("options for feature subset size in RandomForest - SPARK-3724") {
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+    val rdd = sc.parallelize(arr)
+    val numTrees = 1
+
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
+      numClasses = 2, categoricalFeaturesInfo = Map.empty[Int, Int],
+      useNodeIdCache = true)
+
+    // Both options should be the same as 17 == 50 * 0.34
+    val rf1 = RandomForest.trainClassifier(rdd, strategy, numTrees = numTrees,
+      featureSubsetStrategy = "17", seed = 123)
+    val rf2 = RandomForest.trainClassifier(rdd, strategy, numTrees = numTrees,
+      featureSubsetStrategy = "0.34", seed = 123)
+    assert(rf1.toDebugString == rf2.toDebugString)
+  }
+
   test("model save/load") {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
