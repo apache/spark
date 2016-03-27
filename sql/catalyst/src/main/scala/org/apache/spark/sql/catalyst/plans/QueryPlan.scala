@@ -26,10 +26,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   def output: Seq[Attribute] = {
     val isNotNulls = constraints.collect {
-      case IsNotNull(e) if e.isInstanceOf[Attribute] => e.asInstanceOf[Attribute].exprId
+      case IsNotNull(a: Attribute) if a.resolved => a.exprId
     }
     outputBeforeConstraints.map { o =>
-      if (isNotNulls.contains(o.exprId)) {
+      if (o.resolved && isNotNulls.contains(o.exprId)) {
         o.withNullability(false)
       } else {
         o
@@ -80,7 +80,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
     // Second, we infer additional constraints from non-nullable attributes that are part of the
     // operator's output
-    val nonNullableAttributes = output.filterNot(_.nullable)
+    val nonNullableAttributes = outputBeforeConstraints.filter(_.resolved).filterNot(_.nullable)
     isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull).toSet
 
     isNotNullConstraints -- constraints
