@@ -40,7 +40,11 @@ abstract class Transformer extends PipelineStage {
    * @param firstParamPair the first param pair, overwrite embedded params
    * @param otherParamPairs other param pairs, overwrite embedded params
    * @return transformed dataset
+   * @deprecated Will be removed in 2.1.0. Use transformer.copy().set(params).transform(data)
+   *             instead
    */
+  @deprecated("Will be removed in 2.1.0. Use transformer.copy().set(params).transform(data)" +
+    " instead.", "2.0.0")
   @varargs
   def transform(
       dataset: DataFrame,
@@ -57,7 +61,11 @@ abstract class Transformer extends PipelineStage {
    * @param dataset input dataset
    * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset
+   * @deprecated Will be removed in 2.1.0. Use transformer.copy().set(params).transform(data)
+   *             instead
    */
+  @deprecated("Will be removed in 2.1.0. Use transformer.copy().set(params).transform(data)" +
+    " instead.", "2.0.0")
   def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     this.copy(paramMap).transform(dataset)
   }

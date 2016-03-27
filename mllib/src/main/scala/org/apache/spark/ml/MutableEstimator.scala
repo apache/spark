@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml
 
+import scala.annotation.varargs
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.sql._
-
-import scala.annotation.varargs
 
 
 /**
