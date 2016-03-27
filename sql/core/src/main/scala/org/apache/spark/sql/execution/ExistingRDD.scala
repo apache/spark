@@ -271,7 +271,8 @@ private[sql] case class DataSourceScan(
       |   }
       | }""".stripMargin)
 
-    val exprRows = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
+    val exprRows =
+      output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, x._1.nullable))
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns2 = exprRows.map(_.gen(ctx))

@@ -11,7 +11,7 @@ description: Spark Streaming programming guide and tutorial for Spark SPARK_VERS
 # Overview
 Spark Streaming is an extension of the core Spark API that enables scalable, high-throughput,
 fault-tolerant stream processing of live data streams. Data can be ingested from many sources
-like Kafka, Flume, Twitter, ZeroMQ, Kinesis, or TCP sockets, and can be processed using complex
+like Kafka, Flume, Kinesis, or TCP sockets, and can be processed using complex
 algorithms expressed with high-level functions like `map`, `reduce`, `join` and `window`.
 Finally, processed data can be pushed out to filesystems, databases,
 and live dashboards. In fact, you can apply Spark's
@@ -419,9 +419,6 @@ some of the common ones are as follows.
 <tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Kinesis<br/></td><td>spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}} [Amazon Software License] </td></tr>
-<tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}} </td></tr>
-<tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_BINARY_VERSION}} </td></tr>
-<tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td></td><td></td></tr>
 </table>
 
@@ -595,7 +592,7 @@ Spark Streaming provides two categories of built-in streaming sources.
 
 - *Basic sources*: Sources directly available in the StreamingContext API.
   Examples: file systems, and socket connections.
-- *Advanced sources*: Sources like Kafka, Flume, Kinesis, Twitter, etc. are available through
+- *Advanced sources*: Sources like Kafka, Flume, Kinesis, etc. are available through
   extra utility classes. These require linking against extra dependencies as discussed in the
   [linking](#linking) section.
 
@@ -672,38 +669,12 @@ for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.strea
 {:.no_toc}
 
 <span class="badge" style="background-color: grey">Python API</span> As of Spark {{site.SPARK_VERSION_SHORT}},
-out of these sources, Kafka, Kinesis, Flume and MQTT are available in the Python API.
+out of these sources, Kafka, Kinesis and Flume are available in the Python API.
 
 This category of sources require interfacing with external non-Spark libraries, some of them with
 complex dependencies (e.g., Kafka and Flume). Hence, to minimize issues related to version conflicts
 of dependencies, the functionality to create DStreams from these sources has been moved to separate
-libraries that can be [linked](#linking) to explicitly when necessary. For example, if you want to
-create a DStream using data from Twitter's stream of tweets, you have to do the following:
-
-1. *Linking*: Add the artifact `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` to the
-  SBT/Maven project dependencies.
-1. *Programming*: Import the `TwitterUtils` class and create a DStream with
-  `TwitterUtils.createStream` as shown below.
-1. *Deploying*: Generate an uber JAR with all the dependencies (including the dependency
-  `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` and its transitive dependencies) and
-  then deploy the application. This is further explained in the [Deploying section](#deploying-applications).
-
-<div class="codetabs">
-<div data-lang="scala">
-{% highlight scala %}
-import org.apache.spark.streaming.twitter._
-
-TwitterUtils.createStream(ssc, None)
-{% endhighlight %}
-</div>
-<div data-lang="java">
-{% highlight java %}
-import org.apache.spark.streaming.twitter.*;
-
-TwitterUtils.createStream(jssc);
-{% endhighlight %}
-</div>
-</div>
+libraries that can be [linked](#linking) to explicitly when necessary.
 
 Note that these advanced sources are not available in the Spark shell, hence applications based on
 these advanced sources cannot be tested in the shell. If you really want to use them in the Spark
@@ -717,15 +688,6 @@ Some of these advanced sources are as follows.
 - **Flume:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Flume 1.6.0. See the [Flume Integration Guide](streaming-flume-integration.html) for more details.
 
 - **Kinesis:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kinesis Client Library 1.2.1. See the [Kinesis Integration Guide](streaming-kinesis-integration.html) for more details.
-
-- **Twitter:** Spark Streaming's TwitterUtils uses Twitter4j to get the public stream of tweets using
-  [Twitter's Streaming API](https://dev.twitter.com/docs/streaming-apis). Authentication information
-  can be provided by any of the [methods](http://twitter4j.org/en/configuration.html) supported by
-  Twitter4J library. You can either get the public stream, or get the filtered stream based on a
-  keywords. See the API documentation ([Scala](api/scala/index.html#org.apache.spark.streaming.twitter.TwitterUtils$),
-  [Java](api/java/index.html?org/apache/spark/streaming/twitter/TwitterUtils.html)) and examples
-  ([TwitterPopularTags]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterPopularTags.scala)
-  and [TwitterAlgebirdCMS]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterAlgebirdCMS.scala)).
 
 ### Custom Sources
 {:.no_toc}
@@ -1927,10 +1889,10 @@ To run a Spark Streaming applications, you need to have the following.
 - *Package the application JAR* - You have to compile your streaming application into a JAR.
   If you are using [`spark-submit`](submitting-applications.html) to start the
   application, then you will not need to provide Spark and Spark Streaming in the JAR. However,
-  if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume, Twitter),
+  if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume),
   then you will have to package the extra artifact they link to, along with their dependencies,
-  in the JAR that is used to deploy the application. For example, an application using `TwitterUtils`
-  will have to include `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` and all its
+  in the JAR that is used to deploy the application. For example, an application using `KafkaUtils`
+  will have to include `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` and all its
   transitive dependencies in the application JAR.
 
 - *Configuring sufficient memory for the executors* - Since the received data must be stored in
@@ -2398,8 +2360,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
 Between Spark 0.9.1 and Spark 1.0, there were a few API changes made to ensure future API stability.
 This section elaborates the steps required to migrate your existing code to 1.0.
 
-**Input DStreams**: All operations that create an input stream (e.g., `StreamingContext.socketStream`,
-`FlumeUtils.createStream`, etc.) now returns
+**Input DStreams**: All operations that create an input stream (e.g., `StreamingContext.socketStream`, `FlumeUtils.createStream`, etc.) now returns
 [InputDStream](api/scala/index.html#org.apache.spark.streaming.dstream.InputDStream) /
 [ReceiverInputDStream](api/scala/index.html#org.apache.spark.streaming.dstream.ReceiverInputDStream)
 (instead of DStream) for Scala, and [JavaInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaInputDStream.html) /
@@ -2443,9 +2404,13 @@ Please refer to the project for more details.
 # Where to Go from Here
 * Additional guides
     - [Kafka Integration Guide](streaming-kafka-integration.html)
-    - [Flume Integration Guide](streaming-flume-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
+* External DStream data sources:
+    - [DStream MQTT](https://github.com/spark-packages/dstream-mqtt)
+    - [DStream Twitter](https://github.com/spark-packages/dstream-twitter)
+    - [DStream Akka](https://github.com/spark-packages/dstream-akka)
+    - [DStream ZeroMQ](https://github.com/spark-packages/dstream-zeromq)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and
@@ -2453,9 +2418,6 @@ Please refer to the project for more details.
     * [KafkaUtils](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$),
     [FlumeUtils](api/scala/index.html#org.apache.spark.streaming.flume.FlumeUtils$),
     [KinesisUtils](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisUtils$),
-    [TwitterUtils](api/scala/index.html#org.apache.spark.streaming.twitter.TwitterUtils$),
-    [ZeroMQUtils](api/scala/index.html#org.apache.spark.streaming.zeromq.ZeroMQUtils$), and
-    [MQTTUtils](api/scala/index.html#org.apache.spark.streaming.mqtt.MQTTUtils$)
   - Java docs
     * [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html),
     [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html) and
@@ -2463,9 +2425,6 @@ Please refer to the project for more details.
     * [KafkaUtils](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html),
     [FlumeUtils](api/java/index.html?org/apache/spark/streaming/flume/FlumeUtils.html),
     [KinesisUtils](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
-    [TwitterUtils](api/java/index.html?org/apache/spark/streaming/twitter/TwitterUtils.html),
-    [ZeroMQUtils](api/java/index.html?org/apache/spark/streaming/zeromq/ZeroMQUtils.html), and
-    [MQTTUtils](api/java/index.html?org/apache/spark/streaming/mqtt/MQTTUtils.html)
   - Python docs
     * [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) and [DStream](api/python/pyspark.streaming.html#pyspark.streaming.DStream)
     * [KafkaUtils](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)
