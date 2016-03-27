@@ -92,10 +92,10 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
 
-    val Array(training, validation) =
-      dataset.rdd.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
-    val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
-    val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
+    val Array(trainingDataset, validationDataset) =
+      dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
+    trainingDataset.cache()
+    validationDataset.cache()
 
     // multi-model training
     logDebug(s"Train split with multiple sets of parameters.")
