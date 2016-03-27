@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
@@ -74,6 +74,25 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   /** @group expertGetParam */
   @Since("1.5.0")
   def getInitSteps: Int = $(initSteps)
+
+  /**
+   * Block size for stacking input data in matrices to speed up the computation.
+   * Data is stacked within partitions. If block size is more than remaining data in
+   * a partition then it is adjusted to the size of this data.
+   * Recommended size is between 10 and 1000.
+   * Default: 128
+   * @group expertParam
+   */
+  @Since("2.0.0")
+  final val blockSize: IntParam = new IntParam(this, "blockSize",
+    "Block size for stacking input data in matrices. Data is stacked within partitions." +
+      " If block size is more than remaining data in a partition then " +
+      "it is adjusted to the size of this data. Recommended size is between 10 and 1000",
+    ParamValidators.gt(0))
+
+  /** @group expertGetParam */
+  @Since("2.0.0")
+  final def getBlockSize: Int = $(blockSize)
 
   /**
    * Validates and transforms the input schema.
@@ -214,7 +233,8 @@ class KMeans @Since("1.5.0") (
     maxIter -> 20,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
     initSteps -> 5,
-    tol -> 1e-4)
+    tol -> 1e-4,
+    blockSize -> 128)
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
@@ -242,6 +262,10 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setInitSteps(value: Int): this.type = set(initSteps, value)
 
+  /** @group expertSetParam */
+  @Since("2.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
   /** @group setParam */
   @Since("1.5.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -265,6 +289,7 @@ class KMeans @Since("1.5.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setEpsilon($(tol))
+      .setBlockSize($(blockSize))
     val parentModel = algo.run(rdd)
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(model.transform(dataset), $(predictionCol), $(featuresCol))
