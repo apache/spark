@@ -347,7 +347,7 @@ object AlterTableAlterViewCommandParser {
         AlterTableExchangePartition(tableIdent, newTableIdent, parsedSpec)(node.source)
 
       // ALTER TABLE table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
-      // ALTER VIEW table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+      // ALTER VIEW view_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
       case Token(fieldName, args) :: _
           if fieldName == "TOK_ALTERTABLE_DROPPARTS" || fieldName == "TOK_ALTERVIEW_DROPPARTS" =>
         val parts = args.collect { case p @ Token("TOK_PARTSPEC", _) => parsePartitionSpec(p) }
