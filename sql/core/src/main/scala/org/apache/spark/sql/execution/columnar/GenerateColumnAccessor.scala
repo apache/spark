@@ -71,7 +71,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
     val ctx = newCodeGenContext()
     val numFields = columnTypes.size
     val accessorClasses = new mutable.HashMap[String, String]
-    val accessorStructClasses = new mutable.HashMap[(String, DataType), (String, String)]
+    val accessorStructClasses = new mutable.HashMap[(String, String), (String, String)]
     val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
       val accessorName = ctx.freshName("accessor")
       val accessorCls = dt match {
@@ -102,8 +102,9 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           case NullType | StringType | BinaryType =>
             s"$accessorName = get${accessorClasses.getOrElseUpdate(accessorCls, shortCls)}($index);"
           case other =>
-            val shortDTCls = dt.getClass.getName.substring(dt.getClass.getName.lastIndexOf(".") + 1)
-            accessorStructClasses.getOrElseUpdate((accessorCls, dt), (shortCls, shortDTCls))
+            val dtCls = dt.getClass.getName
+            val shortDTCls = dt.getClass.getName.substring(dtCls.lastIndexOf(".") + 1)
+            accessorStructClasses.getOrElseUpdate((accessorCls, dtCls), (shortCls, shortDTCls))
             s"$accessorName = get${shortCls}_${shortDTCls}($index);"
         }
       }
@@ -131,12 +132,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       """
     }
     val accessorStructCode = accessorStructClasses.map {
-      case ((accessorCls, dt), (shortAccCls, shortDTCls)) =>
+      case ((accessorCls, dtCls), (shortAccCls, shortDTCls)) =>
         s"""
            private $accessorCls get${shortAccCls}_${shortDTCls}(int idx) {
              byte[] buffer = batch.buffers()[columnIndexes[idx]];
              return new $accessorCls(ByteBuffer.wrap(buffer).order(nativeOrder),
-               (${dt.getClass.getName}) columnTypes[idx]);
+               (${dtCls}) columnTypes[idx]);
            }
         """
     }
