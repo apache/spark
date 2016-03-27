@@ -80,6 +80,12 @@ public class JavaRandomForestClassifierSuite implements Serializable {
     for (String featureSubsetStrategy: RandomForestClassifier.supportedFeatureSubsetStrategies()) {
       rf.setFeatureSubsetStrategy(featureSubsetStrategy);
     }
+    for (double featureSubsetFraction = 0.1; featureSubsetFraction <= 1.0; featureSubsetFraction++) {
+      rf.setFeatureSubsetStrategy(Double.toString(featureSubsetFraction));
+    }
+    for (int featureSubsetNumber = 1; featureSubsetNumber <= 100; featureSubsetNumber++) {
+      rf.setFeatureSubsetStrategy(Integer.toString(featureSubsetNumber));
+    }
     RandomForestClassificationModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);

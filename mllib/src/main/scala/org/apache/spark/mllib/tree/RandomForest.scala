@@ -55,10 +55,15 @@ import org.apache.spark.util.Utils
  * @param numTrees If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
  * @param featureSubsetStrategy Number of features to consider for splits at each node.
  *                              Supported values: "auto", "all", "sqrt", "log2", "onethird".
+ *                              Supported numerical values: "(0.0-1.0]", "[1-n]".
  *                              If "auto" is set, this parameter is set based on numTrees:
  *                                if numTrees == 1, set to "all";
  *                                if numTrees > 1 (forest) set to "sqrt" for classification and
  *                                  to "onethird" for regression.
+ *                              If a real value "(0.0-1.0]" is set, this parameter specifies
+ *                              the fraction of features in each subset.
+ *                              If an integer value "[1-n]" is set, this parameter specifies
+ *                              the number of features in each subset.
  * @param seed Random seed for bootstrapping and choosing feature subsets.
  */
 private class RandomForest (
@@ -70,9 +75,11 @@ private class RandomForest (
 
   strategy.assertValid()
   require(numTrees > 0, s"RandomForest requires numTrees > 0, but was given numTrees = $numTrees.")
-  require(RandomForest.supportedFeatureSubsetStrategies.contains(featureSubsetStrategy),
+  require(RandomForest.supportedFeatureSubsetStrategies.contains(featureSubsetStrategy)
+    || (try { featureSubsetStrategy.toInt > 0 } catch { case _ : Throwable => false })
+    || (try { featureSubsetStrategy.toDouble > 0.0 || featureSubsetStrategy.toDouble <= 1.0} catch { case _ : Throwable => false }),
     s"RandomForest given invalid featureSubsetStrategy: $featureSubsetStrategy." +
-    s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}.")
+    s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}, [0.0-1.0], [1-n].")
 
   /**
    * Method to train a decision tree model over an RDD

@@ -183,11 +183,40 @@ private[spark] object DecisionTreeMetadata extends Logging {
         }
       case _ => featureSubsetStrategy
     }
+
+    object featureSubsetNumber {
+      def unapply(strategy: String): Option[Int] = try {
+        val number = strategy.toInt
+        if (0 < number) {
+          Some(number)
+        } else {
+          None
+        }
+      } catch {
+        case _ : java.lang.NumberFormatException => None
+      }
+    }
+
+    object featureSubsetFraction {
+      def unapply(strategy: String): Option[Double] = try {
+        val fraction = strategy.toDouble
+        if (0.0 < fraction && fraction <= 1.0) {
+          Some(fraction)
+        } else {
+          None
+        }
+      } catch {
+        case _ : java.lang.NumberFormatException => None
+      }
+    }
+
     val numFeaturesPerNode: Int = _featureSubsetStrategy match {
       case "all" => numFeatures
       case "sqrt" => math.sqrt(numFeatures).ceil.toInt
       case "log2" => math.max(1, (math.log(numFeatures) / math.log(2)).ceil.toInt)
       case "onethird" => (numFeatures / 3.0).ceil.toInt
+      case featureSubsetNumber(number) => if (number > numFeatures) numFeatures else number
+      case featureSubsetFraction(fraction) => (fraction * numFeatures).ceil.toInt
     }
 
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,

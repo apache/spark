@@ -329,6 +329,8 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    *  - "onethird": use 1/3 of the features
    *  - "sqrt": use sqrt(number of features)
    *  - "log2": use log2(number of features)
+   *  - "(0.0-1.0]": use the specified fraction of features
+   *  - "[1-n]": use the specified number of features
    * (default = "auto")
    *
    * These various settings are based on the following references:
@@ -346,7 +348,9 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
     "The number of features to consider for splits at each tree node." +
       s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}",
     (value: String) =>
-      RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase))
+      RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
+      || (try { value.toInt > 0 } catch { case _ : Throwable => false })
+      || (try { value.toDouble > 0.0 || value.toDouble <= 1.0} catch { case _ : Throwable => false }))
 
   setDefault(featureSubsetStrategy -> "auto")
 
