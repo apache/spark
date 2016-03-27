@@ -80,7 +80,7 @@ public class JavaRandomForestRegressorSuite implements Serializable {
     for (String featureSubsetStrategy: RandomForestRegressor.supportedFeatureSubsetStrategies()) {
       rf.setFeatureSubsetStrategy(featureSubsetStrategy);
     }
-    for (double featureSubsetFraction = 0.1; featureSubsetFraction <= 1.0; featureSubsetFraction++) {
+    for (double featureSubsetFraction = 0.1; featureSubsetFraction <= 1.0; featureSubsetFraction += 0.1) {
       rf.setFeatureSubsetStrategy(Double.toString(featureSubsetFraction));
     }
     for (int featureSubsetNumber = 1; featureSubsetNumber <= 100; featureSubsetNumber++) {

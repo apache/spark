@@ -79,7 +79,7 @@ private class RandomForest (
     || (try { featureSubsetStrategy.toInt > 0 } catch { case _ : Throwable => false })
     || (try { featureSubsetStrategy.toDouble > 0.0 || featureSubsetStrategy.toDouble <= 1.0} catch { case _ : Throwable => false }),
     s"RandomForest given invalid featureSubsetStrategy: $featureSubsetStrategy." +
-    s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}, [0.0-1.0], [1-n].")
+    s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}, (0.0-1.0], [1-n].")
 
   /**
    * Method to train a decision tree model over an RDD
