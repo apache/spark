@@ -249,7 +249,7 @@ class PoissonSampler[T: ClassTag](
         fraction <= RandomSampler.defaultMaxGapSamplingFraction
 
       items.flatMap { item =>
-        val count = if (useGapSamplingIfPossible) gapSamplingReplacement.sample() else rng.sample()
+        val count = if (useGapSampling) gapSamplingReplacement.sample() else rng.sample()
         if (count == 0) Iterator.empty else Iterator.fill(count)(item)
       }
     }
@@ -301,9 +301,13 @@ class GapSampling(
 
 
 private[spark]
-trait PoissonGE {
-  val f: Double
-  val rng: Random
+class GapSamplingReplacement(
+    val f: Double,
+    val rng: Random = RandomSampler.newDefaultRNG,
+    epsilon: Double = RandomSampler.rngEpsilon) extends Serializable {
+
+  require(f > 0.0, s"Sampling fraction ($f) must be > 0")
+  require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
 
   protected val q = math.exp(-f)
 
@@ -326,18 +330,6 @@ trait PoissonGE {
     }
     r
   }
-}
-
-
-private[spark]
-class GapSamplingReplacement(
-    val f: Double,
-    val rng: Random = RandomSampler.newDefaultRNG,
-    epsilon: Double = RandomSampler.rngEpsilon) extends PoissonGE with Serializable {
-
-  require(f > 0.0, s"Sampling fraction ($f) must be > 0")
-  require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
-
   private var countForDropping: Int = 0
 
   def sample(): Int = {
