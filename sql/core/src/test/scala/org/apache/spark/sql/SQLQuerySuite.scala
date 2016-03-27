@@ -2379,30 +2379,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
-
-  test("SPARK-14123") {
-    val sql1 =
-      """
-        |CREATE TEMPORARY FUNCTION helloworld1 AS
-        |'spark.example.SimpleUDFExample1' USING JAR '/path/to/jar1',
-        |JAR '/path/to/jar2'
-      """.stripMargin
-    val sql2 =
-      """
-        |CREATE FUNCTION helloworld2 AS
-        |'spark.example.SimpleUDFExample2' USING ARCHIVE '/path/to/archive',
-        |FILE '/path/to/file'
-      """.stripMargin
-    sql(sql1)
-    sql(sql2)
-
-    val catalog = sqlContext.sessionState.catalog
-    val id1 = FunctionIdentifier("helloworld1", Some(catalog.getCurrentDatabase))
-    val id2 = FunctionIdentifier("helloworld2", Some(catalog.getCurrentDatabase))
-
-    val f1 = catalog.getFunction(id1)
-    val f2 = catalog.getFunction(id2)
-    assert(f1 == CatalogFunction(id1, "spark.example.SimpleUDFExample1"))
-    assert(f2 == CatalogFunction(id2, "spark.example.SimpleUDFExample2"))
-  }
 }

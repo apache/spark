@@ -446,12 +446,44 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
   * }}}
   */
 case class CreateFunction(
-    functionName: String, alias: String, resources: Seq[(String, String)],
+    databaseName: Option[String],
+    functionName: String, alias: String,
+    resources: Seq[(String, String)],
     isTemp: Boolean)(sql: String) extends RunnableCommand {
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val functionIdentifier = FunctionIdentifier(functionName, Some(catalog.getCurrentDatabase))
+    val db = if (databaseName.isDefined) {
+      databaseName
+    } else {
+      Some(catalog.getCurrentDatabase)
+    }
+    val functionIdentifier = FunctionIdentifier(functionName, db)
     catalog.createFunction(CatalogFunction(functionIdentifier, alias))
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
+}
+
+/**
+  * The DDL command that drops a function.
+  * ifExists: returns an error if the function doesn't exist, unless this is true.
+  * isTemp: indicates if it is a temporary function.
+  */
+case class DropFunction(
+    databaseName: Option[String],
+    functionName: String,
+    ifExists: Boolean,
+    isTemp: Boolean)(sql: String) extends RunnableCommand {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val db = if (databaseName.isDefined) {
+      databaseName
+    } else {
+      Some(catalog.getCurrentDatabase)
+    }
+    val functionIdentifier = FunctionIdentifier(functionName, db)
+    catalog.dropFunction(functionIdentifier)
     Seq.empty[Row]
   }
 
