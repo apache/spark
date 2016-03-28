@@ -75,7 +75,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     if (ctx.LIKE != null) {
       logWarning("SHOW TABLES LIKE option is ignored.")
     }
-    ShowTablesCommand(Option(ctx.db).map(_.getText))
+    ShowTablesCommand(Option(ctx.db).map(_.getText), None)
   }
 
   /**
