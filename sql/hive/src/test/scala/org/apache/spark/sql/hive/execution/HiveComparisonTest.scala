@@ -480,6 +480,10 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHive.QueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
+                  // We should take executedPlan instead of sparkPlan, because in following codes we
+                  // will run the collected plans. As we will do extra processing for sparkPlan such
+                  // as adding exchage, collapsing codegen stages, etc., collecing sparkPlan here
+                  // will cause some errors when running these plans later.
                   case (q, e) => e.executedPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
