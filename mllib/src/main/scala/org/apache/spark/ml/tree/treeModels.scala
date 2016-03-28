@@ -18,17 +18,16 @@
 package org.apache.spark.ml.tree
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.util.collection.OpenHashMap
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.param.Param
-import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.DefaultParamsReader
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Abstraction for Decision Tree models.
