@@ -194,7 +194,8 @@ class ExpressionParserSuite extends PlanTest {
   test("function expressions") {
     assertEqual("foo()", 'foo.function())
     assertEqual("foo.bar()", Symbol("foo.bar").function())
-    assertEqual("foo(*)", 'foo.function(1))
+    assertEqual("foo(*)", 'foo.function(star()))
+    assertEqual("count(*)", 'count.function(1))
     assertEqual("foo(a, b)", 'foo.function('a, 'b))
     assertEqual("foo(all a, b)", 'foo.function('a, 'b))
     assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
@@ -203,7 +204,7 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("window function expressions") {
-    val func = 'foo.function(1)
+    val func = 'foo.function(star())
     def windowed(
         partitioning: Seq[Expression] = Seq.empty,
         ordering: Seq[SortOrder] = Seq.empty,

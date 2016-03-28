@@ -1032,14 +1032,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
-    val arguments = if (ctx.ASTERISK != null) {
+    val name = ctx.qualifiedName.getText
+    val arguments = if (ctx.ASTERISK != null && name.toLowerCase == "count") {
       Seq(Literal(1))
+    } else if (ctx.ASTERISK != null) {
+      Seq(UnresolvedStar(None))
     } else {
       ctx.expression().asScala.map(expression)
     }
 
     val function = UnresolvedFunction(
-      ctx.qualifiedName.getText,
+      name,
       arguments,
       Option(ctx.setQuantifier()).exists(_.DISTINCT != null))
 
