@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.File
 import java.nio.file.Files
 
+import scala.tools.nsc.interpreter.Completion
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
@@ -33,7 +34,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
 
@@ -95,6 +96,50 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
     // With a new context, try using the earlier state store data
     withSpark(new SparkContext(sparkConf)) { sc =>
       assert(makeStoreRDD(sc, Seq("a"), 20).collect().toSet === Set("a" -> 21))
+    }
+  }
+
+  test("usage with iterators - only gets and only puts") {
+    withSpark(new SparkContext(sparkConf)) { sc =>
+      implicit val sqlContext = new SQLContext(sc)
+      val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
+      val opId = 0
+
+      // Returns an iterator of the incremented value made into the store
+      def iteratorOfPuts(store: StateStore, iter: Iterator[String]): Iterator[(String, Int)] = {
+        val resIterator = iter.map { s =>
+          val key = stringToRow(s)
+          val oldValue = store.get(key).map(rowToInt).getOrElse(0)
+          val newValue = oldValue + 1
+          store.put(key, intToRow(newValue))
+          (s, newValue)
+        }
+        CompletionIterator[(String, Int), Iterator[(String, Int)]](resIterator, {
+          store.commit()
+        })
+      }
+
+      def iteratorOfGets(
+          store: StateStore,
+          iter: Iterator[String]): Iterator[(String, Option[Int])] = {
+        iter.map { s =>
+          val key = stringToRow(s)
+          val value = store.get(key).map(rowToInt)
+          (s, value)
+        }
+      }
+
+      val rddOfGets1 = makeRDD(sc, Seq("a", "b", "c")).mapPartitionWithStateStore(
+        iteratorOfGets, path, opId, storeVersion = 0, keySchema, valueSchema)
+      assert(rddOfGets1.collect().toSet === Set("a" -> None, "b" -> None, "c" -> None))
+
+      val rddOfPuts = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+        iteratorOfPuts, path, opId, storeVersion = 0, keySchema, valueSchema)
+      assert(rddOfPuts.collect().toSet === Set("a" -> 1, "a" -> 2, "b" -> 1))
+
+      val rddOfGets2 = makeRDD(sc, Seq("a", "b", "c")).mapPartitionWithStateStore(
+        iteratorOfGets, path, opId, storeVersion = 1, keySchema, valueSchema)
+      assert(rddOfGets2.collect().toSet === Set("a" -> Some(2), "b" -> Some(1), "c" -> None))
     }
   }
 
