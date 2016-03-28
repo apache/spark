@@ -21,13 +21,18 @@ import java.io.IOException
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
-import org.json4s.jackson.JsonMethods._
+import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml._
+import org.apache.spark.ml.classification.OneVsRestParams
+import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
+import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
@@ -350,5 +355,40 @@ private[ml] object DefaultParamsReader {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
     val cls = Utils.classForName(metadata.className)
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
+  }
+}
+
+/**
+ * Default Meta-Algorithm read and write implementation.
+ */
+private[ml] object MetaAlgorithmReadWrite {
+  /**
+   * Examine the given estimator (which may be a compound estimator) and extract a mapping
+   * from UIDs to corresponding [[Params]] instances.
+   */
+  def getUidMap(instance: Params): Map[String, Params] = {
+    val uidList = getUidMapImpl(instance)
+    val uidMap = uidList.toMap
+    if (uidList.size != uidMap.size) {
+      throw new RuntimeException(s"${instance.getClass.getName}.load found a compound estimator" +
+        s" with stages with duplicate UIDs. List of UIDs: ${uidList.map(_._1).mkString(", ")}.")
+    }
+    uidMap
+  }
+
+  private def getUidMapImpl(instance: Params): List[(String, Params)] = {
+    val subStages: Array[Params] = instance match {
+      case p: Pipeline => p.getStages.asInstanceOf[Array[Params]]
+      case pm: PipelineModel => pm.stages.asInstanceOf[Array[Params]]
+      case v: ValidatorParams => Array(v.getEstimator, v.getEvaluator)
+      case ovr: OneVsRestParams =>
+        // TODO: SPARK-11892: This case may require special handling.
+        throw new UnsupportedOperationException(s"${instance.getClass.getName} write will fail" +
+          s" because it cannot yet handle an estimator containing type: ${ovr.getClass.getName}.")
+      case rformModel: RFormulaModel => Array(rformModel.pipelineModel)
+      case _: Params => Array()
+    }
+    val subStageMaps = subStages.map(getUidMapImpl).foldLeft(List.empty[(String, Params)])(_ ++ _)
+    List((instance.uid, instance)) ++ subStageMaps
   }
 }
