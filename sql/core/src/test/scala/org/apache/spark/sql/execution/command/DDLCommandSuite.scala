@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.execution.SparkQl
+import org.apache.spark.sql.execution.{SparkQl, SparkSqlParser}
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
 class DDLCommandSuite extends PlanTest {
-  private val parser = new SparkQl
+  private val parser = SparkSqlParser
 
   test("create database") {
     val sql =
