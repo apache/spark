@@ -16,7 +16,7 @@ import inspect
 import traceback
 
 import sqlalchemy as sqla
-from sqlalchemy import or_, desc
+from sqlalchemy import or_, desc, and_
 
 
 from flask import redirect, url_for, request, Markup, Response, current_app, render_template
@@ -548,13 +548,36 @@ class Airflow(BaseView):
             task_ids += dag.task_ids
             if not dag.is_subdag:
                 dag_ids.append(dag.dag_id)
+
         TI = models.TaskInstance
+        DagRun = models.DagRun
         session = Session()
+
+        LastDagRun = (
+            session.query(DagRun.dag_id, sqla.func.max(DagRun.execution_date).label('execution_date'))
+            .group_by(DagRun.dag_id)
+            .subquery('last_dag_run')
+        )
+
+        # Select all task_instances from active dag_runs.
+        # If no dag_run is active, return task instances from most recent dag_run.
         qry = (
             session.query(TI.dag_id, TI.state, sqla.func.count(TI.task_id))
-                .filter(TI.task_id.in_(task_ids))
-                .filter(TI.dag_id.in_(dag_ids))
-                .group_by(TI.dag_id, TI.state)
+            .outerjoin(DagRun, and_(
+                DagRun.dag_id == TI.dag_id,
+                DagRun.execution_date == TI.execution_date,
+                DagRun.state == State.RUNNING))
+            .outerjoin(LastDagRun, and_(
+                LastDagRun.c.dag_id == TI.dag_id,
+                LastDagRun.c.execution_date == TI.execution_date)
+            )
+            .filter(TI.task_id.in_(task_ids))
+            .filter(TI.dag_id.in_(dag_ids))
+            .filter(or_(
+                DagRun.dag_id != None,
+                LastDagRun.c.dag_id != None
+            ))
+            .group_by(TI.dag_id, TI.state)
         )
 
         data = {}
@@ -633,7 +656,6 @@ class Airflow(BaseView):
     @expose('/sandbox')
     @login_required
     def sandbox(self):
-        from airflow import configuration
         title = "Sandbox Suggested Configuration"
         cfg_loc = conf.AIRFLOW_CONFIG + '.sandbox'
         f = open(cfg_loc, 'r')
@@ -756,7 +778,7 @@ class Airflow(BaseView):
                     f.close()
                     log_loaded = True
                 except:
-                    log = "*** Log file isn't where expected.\n".format(loc)
+                    log = "*** Local log file not found.\n".format(loc)
             else:
                 WORKER_LOG_SERVER_PORT = \
                     conf.get('celery', 'WORKER_LOG_SERVER_PORT')
@@ -773,22 +795,23 @@ class Airflow(BaseView):
                     log += "*** Failed to fetch log file from worker.\n".format(
                         **locals())
 
-            # try to load log backup from S3
-            s3_log_folder = conf.get('core', 'S3_LOG_FOLDER')
-            if not log_loaded and s3_log_folder.startswith('s3:'):
-                import boto
-                s3 = boto.connect_s3()
-                s3_log_loc = os.path.join(
-                    conf.get('core', 'S3_LOG_FOLDER'), log_relative)
-                log += '*** Fetching log from S3: {}\n'.format(s3_log_loc)
-                log += ('*** Note: S3 logs are only available once '
-                        'tasks have completed.\n')
-                bucket, key = s3_log_loc.lstrip('s3:/').split('/', 1)
-                s3_key = boto.s3.key.Key(s3.get_bucket(bucket), key)
-                if s3_key.exists():
-                    log += '\n' + s3_key.get_contents_as_string().decode()
-                else:
-                    log += '*** No log found on S3.\n'
+            if not log_loaded:
+                # load remote logs
+                remote_log_base = conf.get('core', 'REMOTE_BASE_LOG_FOLDER')
+                remote_log = os.path.join(remote_log_base, log_relative)
+                log += '\n*** Reading remote logs...\n'
+
+                # S3
+                if remote_log.startswith('s3:/'):
+                    log += utils.S3Log().read(remote_log, return_error=True)
+
+                # GCS
+                elif remote_log.startswith('gs:/'):
+                    log += utils.GCSLog().read(remote_log, return_error=True)
+
+                # unsupported
+                elif remote_log:
+                    log += '*** Unsupported remote log location.'
 
             session.commit()
             session.close()
@@ -2071,6 +2094,10 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
         'extra',
         'extra__jdbc__drv_path',
         'extra__jdbc__drv_clsname',
+        'extra__google_cloud_platform__project',
+        'extra__google_cloud_platform__key_path',
+        'extra__google_cloud_platform__service_account',
+        'extra__google_cloud_platform__scope',
     )
     verbose_name = "Connection"
     verbose_name_plural = "Connections"
@@ -2089,6 +2116,11 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     form_extra_fields = {
         'extra__jdbc__drv_path' : StringField('Driver Path'),
         'extra__jdbc__drv_clsname': StringField('Driver Class'),
+        'extra__google_cloud_platform__project': StringField('Project'),
+        'extra__google_cloud_platform__key_path': StringField('Keyfile Path'),
+        'extra__google_cloud_platform__service_account': StringField('Service Account'),
+        'extra__google_cloud_platform__scope': StringField('Scopes (comma seperated)'),
+
     }
     form_choices = {
         'conn_type': [
@@ -2096,6 +2128,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             ('datastore', 'Google Datastore'),
             ('ftp', 'FTP',),
             ('google_cloud_storage', 'Google Cloud Storage'),
+            ('google_cloud_platform', 'Google Cloud Platform'),
             ('hdfs', 'HDFS',),
             ('http', 'HTTP',),
             ('hive_cli', 'Hive Client Wrapper',),
@@ -2110,6 +2143,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             ('s3', 'S3',),
             ('samba', 'Samba',),
             ('sqlite', 'Sqlite',),
+            ('ssh', 'SSH',),
             ('mssql', 'Microsoft SQL Server'),
             ('mesos_framework-id', 'Mesos Framework ID'),
         ]
@@ -2117,7 +2151,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
 
     def on_model_change(self, form, model, is_created):
         formdata = form.data
-        if formdata['conn_type'] in ['jdbc']:
+        if formdata['conn_type'] in ['jdbc', 'google_cloud_platform']:
             extra = {
                 key:formdata[key]
                 for key in self.form_extra_fields.keys() if key in formdata}
@@ -2164,7 +2198,6 @@ class UserModelView(wwwutils.SuperUserMixin, AirflowModelView):
 class ConfigurationView(wwwutils.SuperUserMixin, BaseView):
     @expose('/')
     def conf(self):
-        from airflow import configuration
         raw = request.args.get('raw') == "true"
         title = "Airflow Configuration"
         subtitle = conf.AIRFLOW_CONFIG

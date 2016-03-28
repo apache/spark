@@ -53,17 +53,26 @@ doc = [
 ]
 docker = ['docker-py>=1.6.0']
 druid = ['pydruid>=0.2.1']
-hdfs = ['snakebite>=2.4.13']
+gcloud = [
+    'gcloud>=1.1.0',
+]
+gcp_api = [
+    'httplib2',
+    'google-api-python-client<=1.4.2',
+    'oauth2client>=1.5.2, <2.0.0',
+]
+hdfs = ['snakebite>=2.7.8']
 webhdfs = ['hdfs[dataframe,avro,kerberos]>=2.0.4']
 hive = [
     'hive-thrift-py>=0.0.1',
     'pyhive>=0.1.3',
-    'pyhs2>=0.6.0',
+    'impyla>=0.13.3',
+    'unicodecsv>=0.14.1'
 ]
 jdbc = ['jaydebeapi>=0.2.0']
-mssql = ['pymssql>=2.1.1', 'unicodecsv>=0.13.0']
+mssql = ['pymssql>=2.1.1', 'unicodecsv>=0.14.1']
 mysql = ['mysqlclient>=1.3.6']
-optional = ['librabbitmq>=1.6.1']
+rabbitmq = ['librabbitmq>=1.6.1']
 oracle = ['cx_Oracle>=5.1.2']
 postgres = ['psycopg2>=2.6']
 s3 = [
@@ -71,11 +80,13 @@ s3 = [
     'filechunkio>=1.6',
 ]
 samba = ['pysmbclient>=0.1.3']
-slack = ['slackclient>=0.15']
+slack = ['slackclient>=1.0.0']
 statsd = ['statsd>=3.0.1, <4.0']
 vertica = ['vertica-python>=0.5.1']
 ldap = ['ldap3>=0.9.9.1']
-kerberos = ['pykerberos>=1.1.8','thrift_sasl>=0.2.0']
+kerberos = ['pykerberos>=1.1.8',
+            'thrift_sasl>=0.2.0',
+            'snakebite[kerberos]>=2.7.8']
 password = [
     'bcrypt>=2.0.0',
     'flask-bcrypt>=0.7.1',
@@ -85,7 +96,10 @@ qds = ['qds-sdk>=1.9.0']
 
 all_dbs = postgres + mysql + hive + mssql + hdfs + vertica
 devel = ['lxml>=3.3.4', 'nose', 'mock']
-devel += all_dbs + doc + samba + s3 + slack + crypto + oracle + docker
+devel_minreq = devel + mysql + doc + password + s3
+devel_hadoop = devel_minreq + hive + hdfs + webhdfs + kerberos
+devel_all = devel + all_dbs + doc + samba + s3 + slack + crypto + oracle + docker
+
 
 setup(
     name='airflow',
@@ -110,7 +124,6 @@ setup(
         'gunicorn>=19.3.0, <19.4.0',  # 19.4.? seemed to have issues
         'jinja2>=2.7.3, <3.0',
         'markdown>=2.5.2, <3.0',
-        'oauth2client>=1.5.2, <2.0.0',
         'pandas>=0.15.2, <1.0.0',
         'pygments>=2.0.1, <3.0',
         'python-dateutil>=2.3, <3',
@@ -121,15 +134,18 @@ setup(
         'Flask-WTF==0.12'
     ],
     extras_require={
-        'all': devel + optional,
+        'all': devel_all,
         'all_dbs': all_dbs,
         'async': async,
         'celery': celery,
         'crypto': crypto,
-        'devel': devel,
+        'devel': devel_minreq,
+        'devel_hadoop': devel_hadoop,
         'doc': doc,
         'docker': docker,
         'druid': druid,
+        'gcloud': gcloud,
+        'gcp_api': gcp_api,
         'hdfs': hdfs,
         'hive': hive,
         'jdbc': jdbc,
@@ -137,6 +153,7 @@ setup(
         'mysql': mysql,
         'oracle': oracle,
         'postgres': postgres,
+        'rabbitmq': rabbitmq,
         's3': s3,
         'samba': samba,
         'slack': slack,

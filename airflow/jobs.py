@@ -1,3 +1,17 @@
+# -*- coding: utf-8 -*-
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -5,7 +19,7 @@ from __future__ import unicode_literals
 
 from builtins import str
 from past.builtins import basestring
-from collections import defaultdict
+from collections import defaultdict, Counter
 from datetime import datetime
 from itertools import product
 import getpass
@@ -417,6 +431,7 @@ class SchedulerJob(BaseJob):
                     dag_id=dag.dag_id,
                     run_id='scheduled__' + next_run_date.isoformat(),
                     execution_date=next_run_date,
+                    start_date=datetime.now(),
                     state=State.RUNNING,
                     external_trigger=False
                 )
@@ -719,6 +734,7 @@ class BackfillJob(BaseJob):
 
         executor = self.executor
         executor.start()
+        executor_fails = Counter()
 
         # Build a list of all instances to run
         tasks_to_run = {}
@@ -770,12 +786,21 @@ class BackfillJob(BaseJob):
                 if (
                         ti.state in (State.FAILED, State.SKIPPED) or
                         state == State.FAILED):
-                    if ti.state == State.FAILED or state == State.FAILED:
+                    # executor reports failure; task reports running
+                    if ti.state == State.RUNNING and state == State.FAILED:
+                        msg = (
+                            'Executor reports that task instance {} failed '
+                            'although the task says it is running.'.format(key))
+                        self.logger.error(msg)
+                        ti.handle_failure(msg)
+                    # executor and task report failure
+                    elif ti.state == State.FAILED or state == State.FAILED:
                         failed.append(key)
-                        self.logger.error("Task instance " + str(key) + " failed")
+                        self.logger.error("Task instance {} failed".format(key))
+                    # task reports skipped
                     elif ti.state == State.SKIPPED:
                         wont_run.append(key)
-                        self.logger.error("Skipping " + str(key) + " failed")
+                        self.logger.error("Skipping {} ".format(key))
                     tasks_to_run.pop(key)
                     # Removing downstream tasks that also shouldn't run
                     for t in self.dag.get_task(task_id).get_flat_relatives(
@@ -784,9 +809,11 @@ class BackfillJob(BaseJob):
                         if key in tasks_to_run:
                             wont_run.append(key)
                             tasks_to_run.pop(key)
+                # executor and task report success
                 elif ti.state == State.SUCCESS and state == State.SUCCESS:
                     succeeded.append(key)
                     tasks_to_run.pop(key)
+                # executor reports success but task does not -- this is weird
                 elif (
                         ti.state not in (State.SUCCESS, State.QUEUED) and
                         state == State.SUCCESS):
@@ -796,6 +823,20 @@ class BackfillJob(BaseJob):
                         "in normal circumstances. Task state is '{}',"
                         "reported state is '{}'. TI is {}"
                         "".format(ti.state, state, ti))
+
+                    # if the executor fails 3 or more times, stop trying to
+                    # run the task
+                    executor_fails[key] += 1
+                    if executor_fails[key] >= 3:
+                        msg = (
+                            'The airflow run command failed to report an '
+                            'error for task {} three or more times. The task '
+                            'is being marked as failed. This is very unusual '
+                            'and probably means that an error is taking place '
+                            'before the task even starts.'.format(key))
+                        self.logger.error(msg)
+                        ti.handle_failure(msg)
+                        tasks_to_run.pop(key)
 
             msg = (
                 "[backfill progress] "

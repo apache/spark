@@ -23,3 +23,4 @@ sftp-config.json
 unittests.cfg
 error.log
 unittests.db
+rat-results.txt

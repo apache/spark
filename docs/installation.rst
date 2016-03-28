@@ -20,53 +20,59 @@ these extra dependencies.
 
 Here's the list of the subpackages and what they enable:
 
-+-------------+------------------------------------+------------------------------------------------+
-| subpackage  |     install command                | enables                                        |
-+=============+====================================+================================================+
-|  mysql      |  ``pip install airflow[mysql]``    | MySQL operators and hook, support as           |
-|             |                                    | an Airflow backend                             |
-+-------------+------------------------------------+------------------------------------------------+
-|  postgres   |  ``pip install airflow[postgres]`` | Postgres operators and hook, support           |
-|             |                                    | as an Airflow backend                          |
-+-------------+------------------------------------+------------------------------------------------+
-|  samba      |  ``pip install airflow[samba]``    | ``Hive2SambaOperator``                         |
-+-------------+------------------------------------+------------------------------------------------+
-|  hive       |  ``pip install airflow[hive]``     | All Hive related operators                     |
-+-------------+------------------------------------+------------------------------------------------+
-|  jdbc       |  ``pip install airflow[jdbc]``     | JDBC hooks and operators                       |
-+-------------+------------------------------------+------------------------------------------------+
-|  hdfs       |  ``pip install airflow[hdfs]``     | HDFS hooks and operators                       |
-+-------------+------------------------------------+------------------------------------------------+
-|  s3         | ``pip install airflow[s3]``        | ``S3KeySensor``, ``S3PrefixSensor``            |
-+-------------+------------------------------------+------------------------------------------------+
-|  druid      | ``pip install airflow[druid]``     | Druid.io related operators & hooks             |
-+-------------+------------------------------------+------------------------------------------------+
-|  mssql      |  ``pip install airflow[mssql]``    | Microsoft SQL operators and hook,              |
-|             |                                    | support as an Airflow backend                  |
-+-------------+------------------------------------+------------------------------------------------+
-|  vertica    |  ``pip install airflow[vertica]``  | Vertica hook                                   |
-|             |                                    | support as an Airflow backend                  |
-+-------------+------------------------------------+------------------------------------------------+
-|  slack      | ``pip install airflow[slack]``     | ``SlackAPIPostOperator``                       |
-+-------------+------------------------------------+------------------------------------------------+
-|  all        | ``pip install airflow[all]``       | All Airflow features known to man              |
-+-------------+------------------------------------+------------------------------------------------+
-|  devel      | ``pip install airflow[devel]``     | All Airflow features + useful dev tools        |
-+-------------+------------------------------------+------------------------------------------------+
-|  crypto     | ``pip install airflow[crypto]``    | Encrypt connection passwords in metadata db    |
-+-------------+------------------------------------+------------------------------------------------+
-|  celery     | ``pip install airflow[celery]``    | CeleryExecutor                                 |
-+-------------+------------------------------------+------------------------------------------------+
-|  async      | ``pip install airflow[async]``     | Async worker classes for gunicorn              |
-+-------------+------------------------------------+------------------------------------------------+
-|  ldap       | ``pip install airflow[ldap]``      | ldap authentication for users                  |
-+-------------+------------------------------------+------------------------------------------------+
-|  kerberos   | ``pip install airflow[kerberos]``  | kerberos integration for kerberized hadoop     |
-+-------------+------------------------------------+------------------------------------------------+
-|  password   | ``pip install airflow[password]``  | Password Authentication for users              |
-+-------------+------------------------------------+------------------------------------------------+
-|  qds        | ``pip install airflow[qds]``       | Enable QDS (qubole data services) support      |
-+-------------+------------------------------------+------------------------------------------------+
++---------------+-------------------------------------+-------------------------------------------------+
+| subpackage    |     install command                 | enables                                         |
++===============+=====================================+=================================================+
+|  mysql        |  ``pip install airflow[mysql]``     | MySQL operators and hook, support as            |
+|               |                                     | an Airflow backend                              |
++---------------+-------------------------------------+-------------------------------------------------+
+|  postgres     |  ``pip install airflow[postgres]``  | Postgres operators and hook, support            |
+|               |                                     | as an Airflow backend                           |
++---------------+-------------------------------------+-------------------------------------------------+
+|  samba        |  ``pip install airflow[samba]``     | ``Hive2SambaOperator``                          |
++---------------+-------------------------------------+-------------------------------------------------+
+|  hive         |  ``pip install airflow[hive]``      | All Hive related operators                      |
++---------------+-------------------------------------+-------------------------------------------------+
+|  jdbc         |  ``pip install airflow[jdbc]``      | JDBC hooks and operators                        |
++---------------+-------------------------------------+-------------------------------------------------+
+|  hdfs         |  ``pip install airflow[hdfs]``      | HDFS hooks and operators                        |
++---------------+-------------------------------------+-------------------------------------------------+
+|  s3           | ``pip install airflow[s3]``         | ``S3KeySensor``, ``S3PrefixSensor``             |
++---------------+-------------------------------------+-------------------------------------------------+
+|  druid        | ``pip install airflow[druid]``      | Druid.io related operators & hooks              |
++---------------+-------------------------------------+-------------------------------------------------+
+|  mssql        |  ``pip install airflow[mssql]``     | Microsoft SQL operators and hook,               |
+|               |                                     | support as an Airflow backend                   |
++---------------+-------------------------------------+-------------------------------------------------+
+|  vertica      |  ``pip install airflow[vertica]``   | Vertica hook                                    |
+|               |                                     | support as an Airflow backend                   |
++---------------+-------------------------------------+-------------------------------------------------+
+|  slack        | ``pip install airflow[slack]``      | ``SlackAPIPostOperator``                        |
++---------------+-------------------------------------+-------------------------------------------------+
+|  all          | ``pip install airflow[all]``        | All Airflow features known to man               |
++---------------+-------------------------------------+-------------------------------------------------+
+|  all_dbs      | ``pip install airflow[all_dbs]``    | All databases integrations                      |
++---------------+-------------------------------------+-------------------------------------------------+
+|  devel        | ``pip install airflow[devel]``      | Minimum dev tools requirements                  |
++---------------+-------------------------------------+-------------------------------------------------+
+|  devel_hadoop |``pip install airflow[devel_hadoop]``| Airflow + dependencies on the Hadoop stack      |
++---------------+-------------------------------------+-------------------------------------------------+
+|  crypto       | ``pip install airflow[crypto]``     | Encrypt connection passwords in metadata db     |
++---------------+-------------------------------------+-------------------------------------------------+
+|  celery       | ``pip install airflow[celery]``     | CeleryExecutor                                  |
++---------------+-------------------------------------+-------------------------------------------------+
+|  async        | ``pip install airflow[async]``      | Async worker classes for gunicorn               |
++---------------+-------------------------------------+-------------------------------------------------+
+|  ldap         | ``pip install airflow[ldap]``       | ldap authentication for users                   |
++---------------+-------------------------------------+-------------------------------------------------+
+|  kerberos     | ``pip install airflow[kerberos]``   | kerberos integration for kerberized hadoop      |
++---------------+-------------------------------------+-------------------------------------------------+
+|  password     | ``pip install airflow[password]``   | Password Authentication for users               |
++---------------+-------------------------------------+-------------------------------------------------+
+|  rabbitmq     | ``pip install airflow[rabbitmq]``   | Rabbitmq support as a Celery backend            |
++---------------+-------------------------------------+-------------------------------------------------+
+|  qds          | ``pip install airflow[qds]``        | Enable QDS (qubole data services) support       |
++---------------+-------------------------------------+-------------------------------------------------+
 
 Configuration
 '''''''''''''
@@ -199,16 +205,30 @@ Logs
 Users can specify a logs folder in ``airflow.cfg``. By default, it is in
 the ``AIRFLOW_HOME`` directory.
 
-In addition, users can supply an S3 location for storing log backups. If
-logs are not found in the local filesystem (for example, if a worker is
-lost or reset), the S3 logs will be displayed in the Airflow UI. Note that
-logs are only sent to S3 once a task completes (including failure).
+In addition, users can supply a remote location for storing logs and log backups
+in cloud storage. At this time, Amazon S3 and Google Cloud Storage are supported. 
+To enable this feature, ``airflow.cfg`` must be configured as in this example:
 
 .. code-block:: bash
 
     [core]
-    base_log_folder = {AIRFLOW_HOME}/logs
-    s3_log_folder = s3://{YOUR S3 LOG PATH}
+    # Airflow can store logs remotely in AWS S3 or Google Cloud Storage. Users
+    # must supply a remote location URL (starting with either 's3://...' or
+    # 'gs://...') and an Airflow connection id that provides access to the storage
+    # location.
+    remote_base_log_folder = s3://my-bucket/path/to/logs
+    remote_log_conn_id = MyS3Conn
+    # Use server-side encryption for logs stored in S3
+    encrypt_s3_logs = False
+
+Remote logging uses an existing Airflow connection to read/write logs. If you don't
+have a connection properly setup, this will fail. In the above example, Airflow will
+try to use ``S3Hook('MyS3Conn')``.
+
+In the Airflow Web UI, local logs take precedance over remote logs. If local logs
+can not be found or accessed, the remote logs will be displayed. Note that logs
+are only sent to remote storage once a task completes (including failure). In other
+words, remote logs for running tasks are unavailable.
 
 Scaling Out on Mesos (community contributed)
 ''''''''''''''''''''''''''''''''''''''''''''
@@ -259,3 +279,23 @@ Environment configuration is picked up from ``/etc/sysconfig/airflow``.
 An example file is supplied. Make sure to specify the ``SCHEDULER_RUNS``
 variable in this file when you run the scheduler. You
 can also define here, for example, ``AIRFLOW_HOME`` or ``AIRFLOW_CONFIG``.
+
+Integration with upstart
+''''''''''''''''''''''''
+Airflow can integrate with upstart based systems. Upstart automatically starts all airflow services for which you
+have a corresponding ``*.conf`` file in ``/etc/init`` upon system boot. On failure, upstart automatically restarts
+the process (until it reaches re-spawn limit set in a ``*.conf`` file).
+
+You can find sample upstart job files in the ``scripts/upstart`` directory. These files have been tested on
+Ubuntu 14.04 LTS. You may have to adjust ``start on`` and ``stop on`` stanzas to make it work on other upstart
+systems. Some of the possible options are listed in ``scripts/upstart/README``.
+
+Modify ``*.conf`` files as needed and copy to ``/etc/init`` directory. It is assumed that airflow will run
+under ``airflow:airflow``. Change ``setuid`` and ``setgid`` in ``*.conf`` files if you use other user/group
+
+You can use ``initctl`` to manually start, stop, view status of the airflow process that has been
+integrated with upstart
+
+.. code-block:: bash
+
+    initctl airflow-webserver status

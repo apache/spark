@@ -6,7 +6,7 @@ from airflow.hooks.base_hook import BaseHook
 from past.builtins import basestring
 
 
-def mlsd(conn, path="", facts=[]):
+def mlsd(conn, path="", facts=None):
     '''
     BACKPORT FROM PYTHON3 FTPLIB
 
@@ -21,6 +21,7 @@ def mlsd(conn, path="", facts=[]):
     including a variable number of "facts" depending on the server
     and whether "facts" argument has been provided.
     '''
+    facts = facts or []
     if facts:
         conn.sendcmd("OPTS MLST " + ";".join(facts) + ";")
     if path:

@@ -1,3 +1,16 @@
+# -*- coding: utf-8 -*-
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -204,7 +217,8 @@ class DagBag(LoggingMixin):
                 self.logger.info("Importing " + filepath)
                 if mod_name in sys.modules:
                     del sys.modules[mod_name]
-                with utils.timeout(30):
+                with utils.timeout(
+                        configuration.getint('core', "DAGBAG_IMPORT_TIMEOUT")):
                     m = imp.load_source(mod_name, filepath)
             except Exception as e:
                 self.logger.exception("Failed to import: " + filepath)
@@ -495,7 +509,7 @@ class Connection(Base):
             elif self.conn_type == 'oracle':
                 return hooks.OracleHook(oracle_conn_id=self.conn_id)
             elif self.conn_type == 'vertica':
-                return hooks.VerticaHook(vertica_conn_id=self.conn_id)
+                return contrib_hooks.VerticaHook(vertica_conn_id=self.conn_id)
         except:
             return None
 
@@ -662,13 +676,13 @@ class TaskInstance(Base):
             "&downstream=false"
         ).format(**locals())
 
-    def current_state(self, main_session=None):
+    @provide_session
+    def current_state(self, session=None):
         """
         Get the very latest state from the database, if a session is passed,
         we use and looking up the state becomes part of the session, otherwise
         a new session is used.
         """
-        session = main_session or settings.Session()
         TI = TaskInstance
         ti = session.query(TI).filter(
             TI.dag_id == self.dag_id,
@@ -679,27 +693,23 @@ class TaskInstance(Base):
             state = ti[0].state
         else:
             state = None
-        if not main_session:
-            session.commit()
-            session.close()
         return state
 
-    def error(self, main_session=None):
+    @provide_session
+    def error(self, session=None):
         """
         Forces the task instance's state to FAILED in the database.
         """
-        session = settings.Session()
         logging.error("Recording the task instance as FAILED")
         self.state = State.FAILED
         session.merge(self)
         session.commit()
-        session.close()
 
-    def refresh_from_db(self, main_session=None):
+    @provide_session
+    def refresh_from_db(self, session=None):
         """
         Refreshes the task instance from the database based on the primary key
         """
-        session = main_session or settings.Session()
         TI = TaskInstance
         ti = session.query(TI).filter(
             TI.dag_id == self.dag_id,
@@ -714,9 +724,17 @@ class TaskInstance(Base):
         else:
             self.state = None
 
-        if not main_session:
-            session.commit()
-            session.close()
+    @provide_session
+    def clear_xcom_data(self, session=None):
+        """
+        Clears all XCom data from the database for the task instance
+        """
+        session.query(XCom).filter(
+            XCom.dag_id == self.dag_id,
+            XCom.task_id == self.task_id,
+            XCom.execution_date == self.execution_date
+        ).delete()
+        session.commit()
 
     @property
     def key(self):
@@ -768,7 +786,8 @@ class TaskInstance(Base):
         """
         return self.is_queueable(flag_upstream_failed) and not self.pool_full()
 
-    def are_dependents_done(self, main_session=None):
+    @provide_session
+    def are_dependents_done(self, session=None):
         """
         Checks whether the dependents of this task instance have all succeeded.
         This is meant to be used by wait_for_downstream.
@@ -777,27 +796,23 @@ class TaskInstance(Base):
         schedule of a task until the dependents are done. For instance,
         if the task DROPs and recreates a table.
         """
-        session = main_session or settings.Session()
         task = self.task
 
-        if not task._downstream_list:
+        if not task.downstream_task_ids:
             return True
 
-        downstream_task_ids = [t.task_id for t in task._downstream_list]
         ti = session.query(func.count(TaskInstance.task_id)).filter(
             TaskInstance.dag_id == self.dag_id,
-            TaskInstance.task_id.in_(downstream_task_ids),
+            TaskInstance.task_id.in_(task.downstream_task_ids),
             TaskInstance.execution_date == self.execution_date,
             TaskInstance.state == State.SUCCESS,
         )
         count = ti[0][0]
-        if not main_session:
-            session.commit()
-            session.close()
-        return count == len(task._downstream_list)
+        return count == len(task.downstream_task_ids)
 
+    @provide_session
     def are_dependencies_met(
-            self, main_session=None, flag_upstream_failed=False,
+            self, session=None, flag_upstream_failed=False,
             verbose=False):
         """
         Returns a boolean on whether the upstream tasks are in a SUCCESS state
@@ -817,8 +832,6 @@ class TaskInstance(Base):
         TI = TaskInstance
         TR = TriggerRule
 
-        # Using the session if passed as param
-        session = main_session or settings.Session()
         task = self.task
 
         # Checking that the depends_on_past is fulfilled
@@ -829,7 +842,7 @@ class TaskInstance(Base):
                 TI.task_id == task.task_id,
                 TI.execution_date ==
                     self.task.dag.previous_schedule(self.execution_date),
-                TI.state == State.SUCCESS,
+                TI.state.in_({State.SUCCESS, State.SKIPPED}),
             ).first()
             if not previous_ti:
                 if verbose:
@@ -839,16 +852,15 @@ class TaskInstance(Base):
             # Applying wait_for_downstream
             previous_ti.task = self.task
             if task.wait_for_downstream and not \
-                    previous_ti.are_dependents_done(session):
+                    previous_ti.are_dependents_done(session=session):
                 if verbose:
                     logging.warning("wait_for_downstream not satisfied")
                 return False
 
         # Checking that all upstream dependencies have succeeded
-        if not task._upstream_list or task.trigger_rule == TR.DUMMY:
+        if not task.upstream_list or task.trigger_rule == TR.DUMMY:
             return True
 
-        upstream_task_ids = [t.task_id for t in task._upstream_list]
         qry = (
             session
             .query(
@@ -864,7 +876,7 @@ class TaskInstance(Base):
             )
             .filter(
                 TI.dag_id == self.dag_id,
-                TI.task_id.in_(upstream_task_ids),
+                TI.task_id.in_(task.upstream_task_ids),
                 TI.execution_date == self.execution_date,
                 TI.state.in_([
                     State.SUCCESS, State.FAILED,
@@ -872,7 +884,7 @@ class TaskInstance(Base):
             )
         )
         successes, skipped, failed, upstream_failed, done = qry.first()
-        upstream = len(task._upstream_list)
+        upstream = len(task.upstream_task_ids)
         tr = task.trigger_rule
         upstream_done = done >= upstream
 
@@ -902,9 +914,7 @@ class TaskInstance(Base):
         ):
             return True
 
-        if not main_session:
-            session.commit()
-            session.close()
+        session.commit()
         if verbose:
             logging.warning("Trigger rule `{}` not satisfied".format(tr))
         return False
@@ -946,6 +956,7 @@ class TaskInstance(Base):
 
         return open_slots <= 0
 
+    @provide_session
     def run(
             self,
             verbose=True,
@@ -954,7 +965,8 @@ class TaskInstance(Base):
             mark_success=False,  # Don't run the task, act as if it succeeded
             test_mode=False,  # Doesn't record success or failure in the DB
             job_id=None,
-            pool=None,):
+            pool=None,
+            session=None):
         """
         Runs the task instance.
         """
@@ -962,9 +974,8 @@ class TaskInstance(Base):
         self.pool = pool or task.pool
         self.test_mode = test_mode
         self.force = force
-        session = settings.Session()
-        self.refresh_from_db(session)
-        session.commit()
+        self.refresh_from_db()
+        self.clear_xcom_data()
         self.job_id = job_id
         iso = datetime.now().isoformat()
         self.hostname = socket.gethostname()
@@ -978,7 +989,7 @@ class TaskInstance(Base):
                 " on {self.end_date}".format(**locals())
             )
         elif not ignore_dependencies and \
-                not self.are_dependencies_met(session, verbose=True):
+                not self.are_dependencies_met(session=session, verbose=True):
             logging.warning("Dependencies not met yet")
         elif self.state == State.UP_FOR_RETRY and \
                 not self.ready_for_retry():
@@ -1013,7 +1024,6 @@ class TaskInstance(Base):
                 self.queued_dttm = datetime.now()
                 session.merge(self)
                 session.commit()
-                session.close()
                 logging.info("Queuing into pool {}".format(self.pool))
                 return
             if not test_mode:
@@ -1023,7 +1033,6 @@ class TaskInstance(Base):
             if not test_mode:
                 session.merge(self)
             session.commit()
-            session.close()
 
             # Closing all pooled connections to prevent
             # "max number of connections reached"
@@ -1075,7 +1084,6 @@ class TaskInstance(Base):
                 raise
 
             # Recording SUCCESS
-            session = settings.Session()
             self.end_date = datetime.now()
             self.set_duration()
             self.state = State.SUCCESS
@@ -1093,7 +1101,6 @@ class TaskInstance(Base):
                 logging.exception(e3)
 
         session.commit()
-        session.close()
 
     def dry_run(self):
         task = self.task
@@ -1391,7 +1398,7 @@ class BaseOperator(object):
     which ultimately becomes a node in DAG objects. Task dependencies should
     be set by using the set_upstream and/or set_downstream methods.
 
-    Note that this class is derived from SQLAlquemy's Base class, which
+    Note that this class is derived from SQLAlchemy's Base class, which
     allows us to push metadata regarding tasks to the database. Deriving this
     classes needs to implement the polymorphic specificities documented in
     SQLAlchemy. This should become clear while reading the code for other
@@ -1407,7 +1414,7 @@ class BaseOperator(object):
     :param retry_delay: delay between retries
     :type retry_delay: timedelta
     :param start_date: The ``start_date`` for the task, determines
-        the ``execution_date`` for the first task instanec. The best practice
+        the ``execution_date`` for the first task instance. The best practice
         is to have the start_date rounded
         to your DAG's ``schedule_interval``. Daily jobs have their start_date
         some day at 00:00:00, hourly jobs have their start_date at 00:00
@@ -1419,7 +1426,9 @@ class BaseOperator(object):
         start_date are offset in a way that their execution_date don't line
         up, A's dependencies will never be met. If you are looking to delay
         a task, for example running a daily task at 2AM, look into the
-        ``TimeSensor`` and ``TimeDeltaSensor``.
+        ``TimeSensor`` and ``TimeDeltaSensor``. We advise against using
+        dynamic ``start_date`` and recommend using fixed ones. Read the
+        FAQ entry about start_date for more information.
     :type start_date: datetime
     :param end_date: if specified, the scheduler won't go beyond this date
     :type end_date: datetime
@@ -1574,8 +1583,8 @@ class BaseOperator(object):
             self.dag = dag
 
         # Private attributes
-        self._upstream_list = []
-        self._downstream_list = []
+        self._upstream_task_ids = []
+        self._downstream_task_ids = []
 
         self._comps = {
             'task_id',
@@ -1681,8 +1690,6 @@ class BaseOperator(object):
         result = cls.__new__(cls)
         memo[id(self)] = result
 
-        self._upstream_list = sorted(self._upstream_list, key=lambda x: x.task_id)
-        self._downstream_list = sorted(self._downstream_list, key=lambda x: x.task_id)
         for k, v in list(self.__dict__.items()):
             if k not in ('user_defined_macros', 'params'):
                 setattr(result, k, copy.deepcopy(v, memo))
@@ -1757,12 +1764,20 @@ class BaseOperator(object):
     @property
     def upstream_list(self):
         """@property: list of tasks directly upstream"""
-        return self._upstream_list
+        return [self.dag.get_task(tid) for tid in self._upstream_task_ids]
+
+    @property
+    def upstream_task_ids(self):
+        return self._upstream_task_ids
 
     @property
     def downstream_list(self):
         """@property: list of tasks directly downstream"""
-        return self._downstream_list
+        return [self.dag.get_task(tid) for tid in self._downstream_task_ids]
+
+    @property
+    def downstream_task_ids(self):
+        return self._downstream_task_ids
 
     def clear(
             self, start_date=None, end_date=None,
@@ -1784,12 +1799,12 @@ class BaseOperator(object):
         tasks = [self.task_id]
 
         if upstream:
-            tasks += \
-                [t.task_id for t in self.get_flat_relatives(upstream=True)]
+            tasks += [
+                t.task_id for t in self.get_flat_relatives(upstream=True)]
 
         if downstream:
-            tasks += \
-                [t.task_id for t in self.get_flat_relatives(upstream=False)]
+            tasks += [
+                t.task_id for t in self.get_flat_relatives(upstream=False)]
 
         qry = qry.filter(TI.task_id.in_(tasks))
 
@@ -1900,11 +1915,11 @@ class BaseOperator(object):
             if not isinstance(task, BaseOperator):
                 raise AirflowException('Expecting a task')
             if upstream:
-                task.append_only_new(task._downstream_list, self)
-                self.append_only_new(self._upstream_list, task)
+                task.append_only_new(task._downstream_task_ids, self.task_id)
+                self.append_only_new(self._upstream_task_ids, task.task_id)
             else:
-                self.append_only_new(self._downstream_list, task)
-                task.append_only_new(task._upstream_list, self)
+                self.append_only_new(self._downstream_task_ids, task.task_id)
+                task.append_only_new(task._upstream_task_ids, self.task_id)
 
         self.detect_downstream_cycle()
 
@@ -2467,17 +2482,16 @@ class DAG(LoggingMixin):
                 also_include += t.get_flat_relatives(upstream=False)
             if include_upstream:
                 also_include += t.get_flat_relatives(upstream=True)
+
         # Compiling the unique list of tasks that made the cut
-        tasks = list(set(regex_match + also_include))
-        dag.tasks = tasks
+        dag.tasks = list(set(regex_match + also_include))
         for t in dag.tasks:
             # Removing upstream/downstream references to tasks that did not
             # made the cut
-            t._upstream_list = [
-                ut for ut in t._upstream_list if utils.is_in(ut, tasks)]
-            t._downstream_list = [
-                ut for ut in t._downstream_list if utils.is_in(ut, tasks)]
-
+            t._upstream_task_ids = [
+                tid for tid in t._upstream_task_ids if tid in dag.task_ids]
+            t._downstream_task_ids = [
+                tid for tid in t._downstream_task_ids if tid in dag.task_ids]
         return dag
 
     def has_task(self, task_id):
@@ -2598,6 +2612,15 @@ class DAG(LoggingMixin):
             ignore_dependencies=ignore_dependencies,
             pool=pool)
         job.run()
+
+    def cli(self):
+        """
+        Exposes a CLI specific to this DAG
+        """
+        from airflow.bin import cli
+        parser = cli.CLIFactory.get_parser(dag_parser=True)
+        args = parser.parse_args()
+        args.func(args, self)
 
 
 class Chart(Base):
