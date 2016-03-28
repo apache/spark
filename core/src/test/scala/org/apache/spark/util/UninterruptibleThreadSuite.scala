@@ -66,8 +66,12 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
     val t = new UninterruptibleThread("test") {
       override def run(): Unit = {
         Uninterruptibles.awaitUninterruptibly(interruptLatch, 10, TimeUnit.SECONDS)
-        runUninterruptibly {
-          hasInterruptedException = sleep(1)
+        try {
+          runUninterruptibly {
+            assert(false, "Should not reach here")
+          }
+        } catch {
+          case _: InterruptedException => hasInterruptedException = true
         }
         interruptStatusBeforeExit = Thread.interrupted()
       }
@@ -76,18 +80,20 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
     t.interrupt()
     interruptLatch.countDown()
     t.join()
-    assert(hasInterruptedException === false)
-    assert(interruptStatusBeforeExit === true)
+    assert(hasInterruptedException === true)
+    assert(interruptStatusBeforeExit === false)
   }
 
   test("nested runUninterruptibly") {
+    val enterRunUninterruptibly = new CountDownLatch(1)
     val interruptLatch = new CountDownLatch(1)
     @volatile var hasInterruptedException = false
     @volatile var interruptStatusBeforeExit = false
     val t = new UninterruptibleThread("test") {
       override def run(): Unit = {
-        Uninterruptibles.awaitUninterruptibly(interruptLatch, 10, TimeUnit.SECONDS)
         runUninterruptibly {
+          enterRunUninterruptibly.countDown()
+          Uninterruptibles.awaitUninterruptibly(interruptLatch, 10, TimeUnit.SECONDS)
           hasInterruptedException = sleep(1)
           runUninterruptibly {
             if (sleep(1)) {
@@ -102,6 +108,7 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
       }
     }
     t.start()
+    assert(enterRunUninterruptibly.await(10, TimeUnit.SECONDS), "await timeout")
     t.interrupt()
     interruptLatch.countDown()
     t.join()
@@ -114,23 +121,29 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
     val t = new UninterruptibleThread("test") {
       override def run(): Unit = {
         for (i <- 0 until 100) {
-          runUninterruptibly {
-            if (sleep(Random.nextInt(10))) {
-              hasInterruptedException = true
-            }
+          try {
             runUninterruptibly {
               if (sleep(Random.nextInt(10))) {
                 hasInterruptedException = true
               }
+              runUninterruptibly {
+                if (sleep(Random.nextInt(10))) {
+                  hasInterruptedException = true
+                }
+              }
+              if (sleep(Random.nextInt(10))) {
+                hasInterruptedException = true
+              }
             }
-            if (sleep(Random.nextInt(10))) {
-              hasInterruptedException = true
+            Uninterruptibles.sleepUninterruptibly(Random.nextInt(10), TimeUnit.MILLISECONDS)
+            // 50% chance to clear the interrupted status
+            if (Random.nextBoolean()) {
+              Thread.interrupted()
             }
-          }
-          Uninterruptibles.sleepUninterruptibly(Random.nextInt(10), TimeUnit.MILLISECONDS)
-          // 50% chance to clear the interrupted status
-          if (Random.nextBoolean()) {
-            Thread.interrupted()
+          } catch {
+            case _: InterruptedException =>
+              // The first runUninterruptibly may throw InterruptedException if the interrupt status
+              // is set before running `f`.
           }
         }
       }
