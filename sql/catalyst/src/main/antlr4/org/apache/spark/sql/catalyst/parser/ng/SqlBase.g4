@@ -42,6 +42,8 @@ statement
     | CREATE DATABASE (IF NOT EXISTS)? identifier
         (COMMENT comment=STRING)? locationSpec?
         (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
+    | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
+    | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTableUsing
     | createTableHeader tableProvider
@@ -102,6 +104,7 @@ statement
     | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
     | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
+    | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN explainOption* statement                                 #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE (qualifiedName | pattern=STRING))?                       #showTables
@@ -109,6 +112,7 @@ statement
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
+    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
     | UNCACHE TABLE identifier                                         #uncacheTable
@@ -812,7 +816,7 @@ INPUTFORMAT: 'INPUTFORMAT';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
 INPUTDRIVER: 'INPUTDRIVER';
 OUTPUTDRIVER: 'OUTPUTDRIVER';
-DATABASE: 'DATABASE';
+DATABASE: 'DATABASE' | 'SCHEMA';
 DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';
 METADATA: 'METADATA';

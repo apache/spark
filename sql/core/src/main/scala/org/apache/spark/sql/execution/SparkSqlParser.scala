@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ng.{AbstractSqlParser, AstBuilder, ParseException}
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.execution.command.{CreateDatabase, CreateFunction, DescribeCommand => _, _}
+import org.apache.spark.sql.execution.command.{DescribeCommand => _, _}
 import org.apache.spark.sql.execution.datasources._
 
 /**
@@ -237,6 +237,46 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create an [[AlterDatabaseProperties]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA) database SET DBPROPERTIES (property_name=property_value, ...);
+   * }}}
+   */
+  override def visitSetDatabaseProperties(
+      ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
+    AlterDatabaseProperties(
+      ctx.identifier.getText,
+      visitTablePropertyList(ctx.tablePropertyList))(
+      command(ctx))
+  }
+
+  /**
+   * Create a [[DropDatabase]] command.
+   *
+   * For example:
+   * {{{
+   *   DROP (DATABASE|SCHEMA) [IF EXISTS] database [RESTRICT|CASCADE];
+   * }}}
+   */
+  override def visitDropDatabase(ctx: DropDatabaseContext): LogicalPlan = withOrigin(ctx) {
+    DropDatabase(ctx.identifier.getText, ctx.EXISTS != null, ctx.RESTRICT != null)(command(ctx))
+  }
+
+  /**
+   * Create a [[DescribeDatabase]] command.
+   *
+   * For example:
+   * {{{
+   *   DESCRIBE DATABASE [EXTENDED] database;
+   * }}}
+   */
+  override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
+    DescribeDatabase(ctx.identifier.getText, ctx.EXTENDED != null)(command(ctx))
+  }
+
+  /**
    * Create a [[CreateFunction]] command.
    *
    * For example:
@@ -256,12 +296,39 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
     }
 
+    // Extract database, name & alias.
+    val (database, function) = visitFunctionName(ctx.qualifiedName)
     CreateFunction(
-      ctx.qualifiedName.getText,
-      string(ctx.className),
+      database,
+      function,
+      string(ctx.className), // TODO this is not an alias.
       resources,
       ctx.TEMPORARY != null)(
       command(ctx))
+  }
+
+  /**
+   * Create a [[DropFunction]] command.
+   *
+   * For example:
+   * {{{
+   *   DROP [TEMPORARY] FUNCTION [IF EXISTS] function;
+   * }}}
+   */
+  override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val (database, function) = visitFunctionName(ctx.qualifiedName)
+    DropFunction(database, function, ctx.EXISTS != null, ctx.TEMPORARY != null)(command(ctx))
+  }
+
+  /**
+   * Create a function database (optional) and name pair.
+   */
+  private def visitFunctionName(ctx: QualifiedNameContext): (Option[String], String) = {
+    ctx.identifier().asScala.map(_.getText) match {
+      case Seq(db, fn) => (Option(db), fn)
+      case Seq(fn) => (None, fn)
+      case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
+    }
   }
 
   /**
