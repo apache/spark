@@ -322,12 +322,18 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(sparkListener.stageByOrderOfExecution(0) < sparkListener.stageByOrderOfExecution(1))
   }
 
-  /*
+  /**
+   * This test ensures that DAGScheduler build stage graph correctly.
+   * Here, we submit an RDD[F] having a linage of RDDs as follows:
+   *
    *                               <--------------------
    *                             /                       \
    * [A] <--(1)-- [B] <--(2)-- [C] <--(3)-- [D] <--(4)-- [E] <--(5)-- [F]
    *                \                       /
    *                  <--------------------
+   *
+   * then check if all stages have correct parent stages.
+   * Note: [] means an RDD, () means a shuffle dependency.
    */
   test("parent stages") {
     val rddA = new MyRDD(sc, 1, Nil)
