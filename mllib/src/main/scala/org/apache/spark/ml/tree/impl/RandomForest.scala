@@ -39,7 +39,48 @@ import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
 
 
-private[ml] object RandomForest extends Logging {
+/**
+ * ALGORITHM
+ *
+ * This is a sketch of the algorithm to help new developers.
+ *
+ * The algorithm partitions data by instances (rows).
+ * On each iteration, the algorithm splits a set of nodes.  In order to choose the best split
+ * for a given node, sufficient statistics are collected from the distributed data.
+ * For each node, the statistics are collected to some worker node, and that worker selects
+ * the best split.
+ *
+ * This setup requires discretization of continuous features.  This binning is done in the
+ * findSplits() method during initialization, after which each continuous feature becomes
+ * an ordered discretized feature with at most maxBins possible values.
+ *
+ * The main loop in the algorithm operates on a queue of nodes (nodeQueue).  These nodes
+ * lie at the periphery of the tree being trained.  If multiple trees are being trained at once,
+ * then this queue contains nodes from all of them.  Each iteration works roughly as follows:
+ *   On the master node:
+ *     - Some number of nodes are pulled off of the queue (based on the amount of memory
+ *       required for their sufficient statistics).
+ *     - For random forests, if featureSubsetStrategy is not "all," then a subset of candidate
+ *       features are chosen for each node.  See method selectNodesToSplit().
+ *   On worker nodes, via method findBestSplits():
+ *     - The worker makes one pass over its subset of instances.
+ *     - For each (tree, node, feature, split) tuple, the worker collects statistics about
+ *       splitting.  Note that the set of (tree, node) pairs is limited to the nodes selected
+ *       from the queue for this iteration.  The set of features considered can also be limited
+ *       based on featureSubsetStrategy.
+ *     - For each node, the statistics for that node are aggregated to a particular worker
+ *       via reduceByKey().  The designated worker chooses the best (feature, split) pair,
+ *       or chooses to stop splitting if the stopping criteria are met.
+ *   On the master node:
+ *     - The master collects all decisions about splitting nodes and updates the model.
+ *     - The updated model is passed to the workers on the next iteration.
+ * This process continues until the node queue is empty.
+ *
+ * Most of the methods in this implementation support the statistics aggregation, which is
+ * the heaviest part of the computation.  In general, this implementation is bound by either
+ * the cost of statistics computation on workers or by communicating the sufficient statistics.
+ */
+private[spark] object RandomForest extends Logging {
 
   /**
    * Train a random forest.
@@ -73,9 +114,9 @@ private[ml] object RandomForest extends Logging {
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
-    timer.start("findSplitsBins")
+    timer.start("findSplits")
     val splits = findSplits(retaggedInput, metadata, seed)
-    timer.stop("findSplitsBins")
+    timer.stop("findSplits")
     logDebug("numBins: feature: number of bins")
     logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
       s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
@@ -100,22 +141,6 @@ private[ml] object RandomForest extends Logging {
     // TODO: Calculate memory usage more precisely.
     val maxMemoryUsage: Long = strategy.maxMemoryInMB * 1024L * 1024L
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
-    val maxMemoryPerNode = {
-      val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
-        // Find numFeaturesPerNode largest bins to get an upper bound on memory usage.
-        Some(metadata.numBins.zipWithIndex.sortBy(- _._1)
-          .take(metadata.numFeaturesPerNode).map(_._2))
-      } else {
-        None
-      }
-      RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
-    }
-    require(maxMemoryPerNode <= maxMemoryUsage,
-      s"RandomForest/DecisionTree given maxMemoryInMB = ${strategy.maxMemoryInMB}," +
-        " which is too small for the given features." +
-        s"  Minimum value = ${maxMemoryPerNode / (1024L * 1024L)}")
-
-    timer.stop("init")
 
     /*
      * The main idea here is to perform group-wise training of the decision tree nodes thus
@@ -145,6 +170,8 @@ private[ml] object RandomForest extends Logging {
     // Allocate and queue root nodes.
     val topNodes = Array.fill[LearningNode](numTrees)(LearningNode.emptyNode(nodeIndex = 1))
     Range(0, numTrees).foreach(treeIndex => nodeQueue.enqueue((treeIndex, topNodes(treeIndex))))
+
+    timer.stop("init")
 
     while (nodeQueue.nonEmpty) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
@@ -788,7 +815,7 @@ private[ml] object RandomForest extends Logging {
   }
 
   /**
-   * Returns splits and bins for decision tree calculation.
+   * Returns splits for decision tree calculation.
    * Continuous and categorical features are handled differently.
    *
    * Continuous features:
@@ -811,11 +838,8 @@ private[ml] object RandomForest extends Logging {
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @param metadata Learning and dataset metadata
    * @param seed random seed
-   * @return A tuple of (splits, bins).
-   *         Splits is an Array of [[org.apache.spark.mllib.tree.model.Split]]
-   *          of size (numFeatures, numSplits).
-   *         Bins is an Array of [[org.apache.spark.mllib.tree.model.Bin]]
-   *          of size (numFeatures, numBins).
+   * @return Splits, an Array of [[org.apache.spark.mllib.tree.model.Split]]
+   *          of size (numFeatures, numSplits)
    */
   protected[tree] def findSplits(
       input: RDD[LabeledPoint],
@@ -842,10 +866,10 @@ private[ml] object RandomForest extends Logging {
       input.sparkContext.emptyRDD[LabeledPoint]
     }
 
-    findSplitsBinsBySorting(sampledInput, metadata, continuousFeatures)
+    findSplitsBySorting(sampledInput, metadata, continuousFeatures)
   }
 
-  private def findSplitsBinsBySorting(
+  private def findSplitsBySorting(
       input: RDD[LabeledPoint],
       metadata: DecisionTreeMetadata,
       continuousFeatures: IndexedSeq[Int]): Array[Array[Split]] = {
@@ -885,8 +909,7 @@ private[ml] object RandomForest extends Logging {
 
       case i if metadata.isCategorical(i) =>
         // Ordered features
-        //   Bins correspond to feature values, so we do not need to compute splits or bins
-        //   beforehand.  Splits are constructed as needed during training.
+        //   Splits are constructed as needed during training.
         Array.empty[Split]
     }
     splits
@@ -1025,7 +1048,9 @@ private[ml] object RandomForest extends Logging {
       new mutable.HashMap[Int, mutable.HashMap[Int, NodeIndexInfo]]()
     var memUsage: Long = 0L
     var numNodesInGroup = 0
-    while (nodeQueue.nonEmpty && memUsage < maxMemoryUsage) {
+    // If maxMemoryInMB is set very small, we want to still try to split 1 node,
+    // so we allow one iteration if memUsage == 0.
+    while (nodeQueue.nonEmpty && (memUsage < maxMemoryUsage || memUsage == 0)) {
       val (treeIndex, node) = nodeQueue.head
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
@@ -1036,7 +1061,7 @@ private[ml] object RandomForest extends Logging {
       }
       // Check if enough memory remains to add this node to the group.
       val nodeMemUsage = RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
-      if (memUsage + nodeMemUsage <= maxMemoryUsage) {
+      if (memUsage + nodeMemUsage <= maxMemoryUsage || memUsage == 0) {
         nodeQueue.dequeue()
         mutableNodesForGroup.getOrElseUpdate(treeIndex, new mutable.ArrayBuffer[LearningNode]()) +=
           node
@@ -1046,6 +1071,12 @@ private[ml] object RandomForest extends Logging {
       }
       numNodesInGroup += 1
       memUsage += nodeMemUsage
+    }
+    if (memUsage > maxMemoryUsage) {
+      // If maxMemoryUsage is 0, we should still allow splitting 1 node.
+      logWarning(s"Tree learning is using approximately $memUsage bytes per iteration, which" +
+        s" exceeds requested limit maxMemoryUsage=$maxMemoryUsage. This allows splitting" +
+        s" $numNodesInGroup nodes in this iteration.")
     }
     // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[LearningNode]] =

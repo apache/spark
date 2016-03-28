@@ -51,6 +51,7 @@ private[sql] class JSONOptions(
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
 
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {

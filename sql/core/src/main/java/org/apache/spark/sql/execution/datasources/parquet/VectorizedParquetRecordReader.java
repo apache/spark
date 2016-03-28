@@ -24,8 +24,6 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
-import org.apache.parquet.schema.OriginalType;
-import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
@@ -104,11 +102,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * Tries to initialize the reader for this split. Returns true if this reader supports reading
    * this split and false otherwise.
    */
-  public boolean tryInitialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext) {
+  public boolean tryInitialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
+      throws IOException, InterruptedException {
     try {
       initialize(inputSplit, taskAttemptContext);
       return true;
-    } catch (Exception e) {
+    } catch (UnsupportedOperationException e) {
       return false;
     }
   }
@@ -118,7 +117,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
-      throws IOException, InterruptedException {
+      throws IOException, InterruptedException, UnsupportedOperationException {
     super.initialize(inputSplit, taskAttemptContext);
     initializeInternal();
   }
@@ -128,7 +127,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * objects to use this class. `columns` can contain the list of columns to project.
    */
   @Override
-  public void initialize(String path, List<String> columns) throws IOException {
+  public void initialize(String path, List<String> columns) throws IOException,
+      UnsupportedOperationException {
     super.initialize(path, columns);
     initializeInternal();
   }
@@ -248,35 +248,22 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     return true;
   }
 
-  private void initializeInternal() throws IOException {
+  private void initializeInternal() throws IOException, UnsupportedOperationException {
     /**
      * Check that the requested schema is supported.
      */
-    OriginalType[] originalTypes = new OriginalType[requestedSchema.getFieldCount()];
     missingColumns = new boolean[requestedSchema.getFieldCount()];
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
       Type t = requestedSchema.getFields().get(i);
       if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
-        throw new IOException("Complex types not supported.");
+        throw new UnsupportedOperationException("Complex types not supported.");
       }
-      PrimitiveType primitiveType = t.asPrimitiveType();
 
-      originalTypes[i] = t.getOriginalType();
-
-      // TODO: Be extremely cautious in what is supported. Expand this.
-      if (originalTypes[i] != null && originalTypes[i] != OriginalType.DECIMAL &&
-          originalTypes[i] != OriginalType.UTF8 && originalTypes[i] != OriginalType.DATE &&
-          originalTypes[i] != OriginalType.INT_8 && originalTypes[i] != OriginalType.INT_16) {
-        throw new IOException("Unsupported type: " + t);
-      }
-      if (primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT96) {
-        throw new IOException("Int96 not supported.");
-      }
       String[] colPath = requestedSchema.getPaths().get(i);
       if (fileSchema.containsPath(colPath)) {
         ColumnDescriptor fd = fileSchema.getColumnDescription(colPath);
         if (!fd.equals(requestedSchema.getColumns().get(i))) {
-          throw new IOException("Schema evolution not supported.");
+          throw new UnsupportedOperationException("Schema evolution not supported.");
         }
         missingColumns[i] = false;
       } else {

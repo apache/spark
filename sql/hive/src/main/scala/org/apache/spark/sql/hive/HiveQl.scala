@@ -85,7 +85,6 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
   protected val nativeCommands = Seq(
     "TOK_ALTERDATABASE_OWNER",
-    "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
     "TOK_ALTERTABLE_ALTERPARTS",
@@ -100,10 +99,6 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_CREATEMACRO",
     "TOK_CREATEROLE",
 
-    "TOK_DESCDATABASE",
-
-    "TOK_DROPDATABASE",
-    "TOK_DROPFUNCTION",
     "TOK_DROPINDEX",
     "TOK_DROPMACRO",
     "TOK_DROPROLE",

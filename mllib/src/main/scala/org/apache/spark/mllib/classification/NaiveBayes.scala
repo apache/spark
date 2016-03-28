@@ -326,6 +326,8 @@ class NaiveBayes private (
   /** Set the smoothing parameter. Default: 1.0. */
   @Since("0.9.0")
   def setLambda(lambda: Double): NaiveBayes = {
+    require(lambda >= 0,
+      s"Smoothing parameter must be nonnegative but got ${lambda}")
     this.lambda = lambda
     this
   }

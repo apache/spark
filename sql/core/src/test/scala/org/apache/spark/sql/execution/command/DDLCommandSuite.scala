@@ -44,6 +44,101 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed, expected)
   }
 
+  test("drop database") {
+    val sql1 = "DROP DATABASE IF EXISTS database_name RESTRICT"
+    val sql2 = "DROP DATABASE IF EXISTS database_name CASCADE"
+    val sql3 = "DROP SCHEMA IF EXISTS database_name RESTRICT"
+    val sql4 = "DROP SCHEMA IF EXISTS database_name CASCADE"
+    // The default is restrict=true
+    val sql5 = "DROP DATABASE IF EXISTS database_name"
+    // The default is ifExists=false
+    val sql6 = "DROP DATABASE database_name"
+    val sql7 = "DROP DATABASE database_name CASCADE"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+    val parsed3 = parser.parsePlan(sql3)
+    val parsed4 = parser.parsePlan(sql4)
+    val parsed5 = parser.parsePlan(sql5)
+    val parsed6 = parser.parsePlan(sql6)
+    val parsed7 = parser.parsePlan(sql7)
+
+    val expected1 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = true)(sql1)
+    val expected2 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = false)(sql2)
+    val expected3 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = true)(sql3)
+    val expected4 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = false)(sql4)
+    val expected5 = DropDatabase(
+      "database_name",
+      ifExists = true,
+      restrict = true)(sql5)
+    val expected6 = DropDatabase(
+      "database_name",
+      ifExists = false,
+      restrict = true)(sql6)
+    val expected7 = DropDatabase(
+      "database_name",
+      ifExists = false,
+      restrict = false)(sql7)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+    comparePlans(parsed5, expected5)
+    comparePlans(parsed6, expected6)
+    comparePlans(parsed7, expected7)
+  }
+
+  test("alter database set dbproperties") {
+    // ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
+    val sql1 = "ALTER DATABASE database_name SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"
+    val sql2 = "ALTER SCHEMA database_name SET DBPROPERTIES ('a'='a')"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+
+    val expected1 = AlterDatabaseProperties(
+      "database_name",
+      Map("a" -> "a", "b" -> "b", "c" -> "c"))(sql1)
+    val expected2 = AlterDatabaseProperties(
+      "database_name",
+      Map("a" -> "a"))(sql2)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("describe database") {
+    // DESCRIBE DATABASE [EXTENDED] db_name;
+    val sql1 = "DESCRIBE DATABASE EXTENDED db_name"
+    val sql2 = "DESCRIBE DATABASE db_name"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+
+    val expected1 = DescribeDatabase(
+      "db_name",
+      extended = true)(sql1)
+    val expected2 = DescribeDatabase(
+      "db_name",
+      extended = false)(sql2)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
   test("create function") {
     val sql1 =
       """
@@ -60,17 +155,57 @@ class DDLCommandSuite extends PlanTest {
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
     val expected1 = CreateFunction(
+      None,
       "helloworld",
       "com.matthewrathbone.example.SimpleUDFExample",
       Seq(("jar", "/path/to/jar1"), ("jar", "/path/to/jar2")),
       isTemp = true)(sql1)
     val expected2 = CreateFunction(
-      "hello.world",
+      Some("hello"),
+      "world",
       "com.matthewrathbone.example.SimpleUDFExample",
       Seq(("archive", "/path/to/archive"), ("file", "/path/to/file")),
       isTemp = false)(sql2)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
+  }
+
+  test("drop function") {
+    val sql1 = "DROP TEMPORARY FUNCTION helloworld"
+    val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS helloworld"
+    val sql3 = "DROP FUNCTION hello.world"
+    val sql4 = "DROP FUNCTION IF EXISTS hello.world"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+    val parsed3 = parser.parsePlan(sql3)
+    val parsed4 = parser.parsePlan(sql4)
+
+    val expected1 = DropFunction(
+      None,
+      "helloworld",
+      ifExists = false,
+      isTemp = true)(sql1)
+    val expected2 = DropFunction(
+      None,
+      "helloworld",
+      ifExists = true,
+      isTemp = true)(sql2)
+    val expected3 = DropFunction(
+      Some("hello"),
+      "world",
+      ifExists = false,
+      isTemp = false)(sql3)
+    val expected4 = DropFunction(
+      Some("hello"),
+      "world",
+      ifExists = true,
+      isTemp = false)(sql4)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
   }
 
   test("alter table: rename table") {

@@ -169,7 +169,7 @@ case class HyperLogLogPlusPlus(
     val v = child.eval(input)
     if (v != null) {
       // Create the hashed value 'x'.
-      val x = MurmurHash.hash64(v)
+      val x = XxHash64Function.hash(v, child.dataType, 42L)
 
       // Determine the index of the register we are going to use.
       val idx = (x >>> idxShift).toInt
