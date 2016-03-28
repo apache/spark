@@ -329,19 +329,97 @@ case class CreateDatabase(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val defaultDataBasePath =
-      catalog.getDefaultPath + File.pathSeparator + databaseName + catalog.getDefaultDBExtension
     catalog.createDatabase(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        path.getOrElse(defaultDataBasePath),
+        path.getOrElse(catalog.getDefaultDBPath(databaseName)),
         props),
       ifNotExists)
     Seq.empty[Row]
   }
 
   override val output: Seq[Attribute] = Seq.empty
+}
+
+/**
+ * DROP DATABASE: Removes a database from the system.
+ *
+ * 'ignoreIfNotExists':
+ * - true, if database_name does't exist, no action
+ * - false (default), if database_name does't exist, a warning message will be issued
+ * 'cascade':
+ * - true, the dependent objects are automatically dropped before dropping database.
+ * - false (default), it is in the Restrict mode. The database cannot be dropped if
+ * it is not empty. The inclusive tables must be dropped at first.
+ */
+case class DropDatabase(
+    databaseName: String,
+    ignoreIfNotExists: Boolean,
+    cascade: Boolean)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.sessionState.catalog.dropDatabase(databaseName, ignoreIfNotExists, cascade)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
+}
+
+/** ALTER DATABASE: add new (key, value) pairs into DBPROPERTIES */
+case class AlterDatabaseProperties(
+    databaseName: String,
+    props: Map[String, String])
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val db: CatalogDatabase = catalog.getDatabase(databaseName)
+    catalog.alterDatabase(db.copy(properties = db.properties ++ props))
+
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
+}
+
+/**
+ * DESCRIBE DATABASE: shows the name of the database, its comment (if one has been set), and its
+ * root location on the filesystem. When extended is true, it also shows the database's properties
+ */
+case class DescribeDatabase(
+    databaseName: String,
+    extended: Boolean)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val dbMetadata: CatalogDatabase = sqlContext.sessionState.catalog.getDatabase(databaseName)
+    val result =
+      Row("Database", dbMetadata.name) ::
+      Row("Comment", dbMetadata.description) ::
+      Row("Location", dbMetadata.locationUri) :: Nil
+
+    if (extended) {
+      val properties =
+        if (dbMetadata.properties.isEmpty) {
+          ""
+        } else {
+          dbMetadata.properties.toSeq.mkString("(", ", ", ")")
+        }
+      result :+ Row("Properties", properties)
+    } else {
+      result
+    }
+  }
+
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("database_description_item", StringType, nullable = false) ::
+        StructField("database_description_value", StringType, nullable = false) :: Nil)
+
+    schema.toAttributes
+  }
 }
 
 /**

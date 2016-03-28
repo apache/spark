@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
+
 import org.apache.hadoop.hive.conf.HiveConf
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -61,6 +63,10 @@ class HiveSessionCatalog(
 
   override def getDefaultPath: String = client.getConf(HiveConf.ConfVars.METASTOREWAREHOUSE.varname,
     HiveConf.ConfVars.METASTOREWAREHOUSE.defaultStrVal)
+
+  override def getDefaultDBPath(db: String): String = {
+    getDefaultPath + File.pathSeparator + db + getDefaultDBExtension
+  }
 
   // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
   // essentially a cache for metastore tables. However, it relies on a lot of session-specific

@@ -65,40 +65,28 @@ class DDLCommandSuite extends PlanTest {
 
     val expected1 = DropDatabase(
       "database_name",
-      ifExists = true,
-      restrict = true)(sql1)
+      ignoreIfNotExists = true,
+      cascade = false)
     val expected2 = DropDatabase(
       "database_name",
-      ifExists = true,
-      restrict = false)(sql2)
+      ignoreIfNotExists = true,
+      cascade = true)
     val expected3 = DropDatabase(
       "database_name",
-      ifExists = true,
-      restrict = true)(sql3)
+      ignoreIfNotExists = false,
+      cascade = false)
     val expected4 = DropDatabase(
       "database_name",
-      ifExists = true,
-      restrict = false)(sql4)
-    val expected5 = DropDatabase(
-      "database_name",
-      ifExists = true,
-      restrict = true)(sql5)
-    val expected6 = DropDatabase(
-      "database_name",
-      ifExists = false,
-      restrict = true)(sql6)
-    val expected7 = DropDatabase(
-      "database_name",
-      ifExists = false,
-      restrict = false)(sql7)
+      ignoreIfNotExists = false,
+      cascade = true)
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-    comparePlans(parsed5, expected5)
-    comparePlans(parsed6, expected6)
-    comparePlans(parsed7, expected7)
+    comparePlans(parsed3, expected1)
+    comparePlans(parsed4, expected2)
+    comparePlans(parsed5, expected1)
+    comparePlans(parsed6, expected3)
+    comparePlans(parsed7, expected4)
   }
 
   test("alter database set dbproperties") {
@@ -111,10 +99,10 @@ class DDLCommandSuite extends PlanTest {
 
     val expected1 = AlterDatabaseProperties(
       "database_name",
-      Map("a" -> "a", "b" -> "b", "c" -> "c"))(sql1)
+      Map("a" -> "a", "b" -> "b", "c" -> "c"))
     val expected2 = AlterDatabaseProperties(
       "database_name",
-      Map("a" -> "a"))(sql2)
+      Map("a" -> "a"))
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
@@ -130,10 +118,10 @@ class DDLCommandSuite extends PlanTest {
 
     val expected1 = DescribeDatabase(
       "db_name",
-      extended = true)(sql1)
+      extended = true)
     val expected2 = DescribeDatabase(
       "db_name",
-      extended = false)(sql2)
+      extended = false)
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)

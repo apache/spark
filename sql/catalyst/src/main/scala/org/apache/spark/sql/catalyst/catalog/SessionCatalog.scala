@@ -104,9 +104,12 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
     currentDb = db
   }
 
+  // todo: what is the default path in SessionCatalog?
   def getDefaultPath: String = ""
 
   def getDefaultDBExtension: String = ".db"
+
+  def getDefaultDBPath(db: String): String = db + getDefaultDBExtension
 
   // ----------------------------------------------------------------------------
   // Tables
