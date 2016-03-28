@@ -697,14 +697,21 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
-
+      case sa @ Sort(_, _, _)
+        if sa.order.exists(so => ResolveAggregateFunctions.containsAggregate(so.child)) => sa
       case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
           val missingAttrs = requiredAttrs -- child.outputSet
-          if (missingAttrs.nonEmpty) {
-            // Add missing attributes and then project them away after the sort.
+          // resolve the unresolved functions for knowing if they are aggregate functions
+          val evaluatedSort =
+            ResolveFunctions.resolveFunctions(Sort(newOrder, s.global, child)).asInstanceOf[Sort]
+          if (evaluatedSort.order.exists(so =>
+              ResolveAggregateFunctions.containsAggregate(so.child))) {
+            // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
+            s.copy(order = evaluatedSort.order)
+          } else if (missingAttrs.nonEmpty) {
             Project(child.output,
               Sort(newOrder, s.global, addMissingAttr(child, missingAttrs)))
           } else if (newOrder != order) {
@@ -724,7 +731,7 @@ class Analyzer(
       * Add the missing attributes into projectList of Project/Window or aggregateExpressions of
       * Aggregate.
       */
-    private def addMissingAttr(plan: LogicalPlan, missingAttrs: AttributeSet): LogicalPlan = {
+    def addMissingAttr(plan: LogicalPlan, missingAttrs: AttributeSet): LogicalPlan = {
       if (missingAttrs.isEmpty) {
         return plan
       }
@@ -733,10 +740,12 @@ class Analyzer(
           val missing = missingAttrs -- p.child.outputSet
           Project(p.projectList ++ missingAttrs, addMissingAttr(p.child, missing))
         case a: Aggregate =>
-          // all the missing attributes should be grouping expressions
-          // TODO: push down AggregateExpression
+          // Case 1: the added missing attribute could be an alias of the existing
+          // expression in a.aggregateExpressions
+          // Case 2: the missing attribute must be from grouping expressions
           missingAttrs.foreach { attr =>
-            if (!a.groupingExpressions.exists(_.semanticEquals(attr))) {
+            if (!a.aggregateExpressions.exists(_.toAttribute.semanticEquals(attr)) &&
+              (!a.groupingExpressions.exists(_.semanticEquals(attr)))) {
               throw new AnalysisException(s"Can't add $attr to ${a.simpleString}")
             }
           }
@@ -778,28 +787,31 @@ class Analyzer(
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: LogicalPlan =>
-        q transformExpressions {
-          case u if !u.childrenResolved => u // Skip until children are resolved.
-          case u @ UnresolvedFunction(name, children, isDistinct) =>
-            withPosition(u) {
-              registry.lookupFunction(name, children) match {
-                // DISTINCT is not meaningful for a Max or a Min.
-                case max: Max if isDistinct =>
-                  AggregateExpression(max, Complete, isDistinct = false)
-                case min: Min if isDistinct =>
-                  AggregateExpression(min, Complete, isDistinct = false)
-                // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
-                // the context of a Window clause. They do not need to be wrapped in an
-                // AggregateExpression.
-                case wf: AggregateWindowFunction => wf
-                // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
-                // This function is not an aggregate function, just return the resolved one.
-                case other => other
-              }
+      case q: LogicalPlan => resolveFunctions(q)
+    }
+
+    def resolveFunctions(plan: LogicalPlan): LogicalPlan = {
+      plan transformExpressions {
+        case u if !u.childrenResolved => u // Skip until children are resolved.
+        case u@UnresolvedFunction(name, children, isDistinct) =>
+          withPosition(u) {
+            registry.lookupFunction(name, children) match {
+              // DISTINCT is not meaningful for a Max or a Min.
+              case max: Max if isDistinct =>
+                AggregateExpression(max, Complete, isDistinct = false)
+              case min: Min if isDistinct =>
+                AggregateExpression(min, Complete, isDistinct = false)
+              // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
+              // the context of a Window clause. They do not need to be wrapped in an
+              // AggregateExpression.
+              case wf: AggregateWindowFunction => wf
+              // We get an aggregate function, we need to wrap it in an AggregateExpression.
+              case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
+              // This function is not an aggregate function, just return the resolved one.
+              case other => other
             }
-        }
+          }
+      }
     }
   }
 
@@ -886,10 +898,19 @@ class Analyzer(
           filter
         }
 
-      case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
+      case sort @ Sort(sortOrder, global, _)
+          if sort.child.resolved &&
+            (sort.order.exists(containsAggregate) || sort.child.isInstanceOf[Aggregate]) =>
+        val firstAggregate = sort.child.find(_.isInstanceOf[Aggregate])
 
+        if (firstAggregate.isEmpty) {
+          // If no Aggregate exists, we are unable to push down aggregate expressions.
+          // And thus, return the unresolved sort
+          return sort
+        }
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
+          val aggregate = firstAggregate.asInstanceOf[Option[Aggregate]].get
           val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
           val aliasedOrdering =
             unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")(isGenerated = true))
@@ -936,9 +957,21 @@ class Analyzer(
           if (sortOrder == finalSortOrders) {
             sort
           } else {
-            Project(aggregate.output,
-              Sort(finalSortOrders, global,
-                aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+            // Add the aggregation functions into the Aggregate operator
+            val newChild = sort.child transform {
+              case a: Aggregate if a == aggregate =>
+                aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)
+            }
+            if ((AttributeSet(finalSortOrders) -- newChild.outputSet).isEmpty) {
+              Project(sort.child.output,
+                Sort(finalSortOrders, global, newChild))
+            } else {
+              // Add the needsPushDown to the operators between Sort and Aggregator
+              val finalChild = ResolveSortReferences.addMissingAttr(newChild,
+                AttributeSet(needsPushDown.map(_.toAttribute)))
+              Project(sort.child.output,
+                Sort(finalSortOrders, global, finalChild))
+            }
           }
         } catch {
           // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,

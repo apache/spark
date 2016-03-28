@@ -367,6 +367,8 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
+  override lazy val resolved: Boolean =
+    expressions.forall(_.resolved) && childrenResolved && missingInput.isEmpty
 }
 
 /** Factory for constructing new `Range` nodes. */
