@@ -156,7 +156,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
         feature: Int,
         threshold: Double,
         featureType: Int,
-        categories: Seq[Double]) { // TODO: Change to List once SPARK-3365 is fixed
+        categories: Seq[Double]) {
       def toSplit: Split = {
         new Split(feature, threshold, FeatureType(featureType), categories.toList)
       }
