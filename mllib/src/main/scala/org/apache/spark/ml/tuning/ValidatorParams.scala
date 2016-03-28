@@ -105,6 +105,11 @@ private[ml] object ValidatorParams {
     }
   }
 
+  /**
+   * Generic implementation of save for [[ValidatorParams]] types.
+   * This handles all [[ValidatorParams]] fields and saves [[Param]] values, but the implementing
+   * class needs to handle model data.
+   */
   def saveImpl(
       path: String,
       instance: ValidatorParams,
@@ -142,6 +147,11 @@ private[ml] object ValidatorParams {
     instance.getEstimator.asInstanceOf[MLWritable].save(estimatorPath)
   }
 
+  /**
+   * Generic implementation of load for [[ValidatorParams]] types.
+   * This handles all [[ValidatorParams]] fields, but the implementing
+   * class needs to handle model data and special [[Param]] values.
+   */
   def loadImpl[M <: Model[M]](
       path: String,
       sc: SparkContext,
