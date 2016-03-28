@@ -620,6 +620,14 @@ private[spark] class TaskSetManager(
     // Note: "result.value()" only deserializes the value when it's called at the first time, so
     // here "result.value()" just returns the value and won't block other threads.
     sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates, info)
+    // Kill other task attempts if any as the one attempt succeeded
+    for (attemptInfo <- taskAttempts(index) if attemptInfo.attemptNumber != info.attemptNumber
+        && attemptInfo.running) {
+      logInfo("Killing attempt " + attemptInfo.attemptNumber + " for task " + attemptInfo.id +
+        " in stage " + taskSet.id + " (TID " + attemptInfo.taskId + ") on " + attemptInfo.host +
+        " as the attempt " + info.attemptNumber + " succeeded on " + info.host)
+      sched.backend.killTask(attemptInfo.taskId, attemptInfo.executorId, true)
+    }
     if (!successful(index)) {
       tasksSuccessful += 1
       logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(
@@ -643,11 +651,15 @@ private[spark] class TaskSetManager(
    */
   def handleFailedTask(tid: Long, state: TaskState, reason: TaskEndReason) {
     val info = taskInfos(tid)
-    if (info.failed) {
+    if (info.failed || info.killed) {
       return
     }
     removeRunningTask(tid)
-    info.markFailed()
+    if (state == TaskState.KILLED) {
+      info.markKilled()
+    } else {
+      info.markFailed()
+    }
     val index = info.index
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo]

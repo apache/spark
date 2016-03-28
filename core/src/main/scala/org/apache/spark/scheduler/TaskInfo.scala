@@ -58,6 +58,8 @@ class TaskInfo(
 
   var failed = false
 
+  var killed = false
+
   private[spark] def markGettingResult(time: Long = System.currentTimeMillis) {
     gettingResultTime = time
   }
@@ -71,11 +73,16 @@ class TaskInfo(
     failed = true
   }
 
+  private[spark] def markKilled(time: Long = System.currentTimeMillis) {
+    finishTime = time
+    killed = true
+  }
+
   def gettingResult: Boolean = gettingResultTime != 0
 
   def finished: Boolean = finishTime != 0
 
-  def successful: Boolean = finished && !failed
+  def successful: Boolean = finished && !failed && !killed
 
   def running: Boolean = !finished
 
@@ -88,6 +95,8 @@ class TaskInfo(
       }
     } else if (failed) {
       "FAILED"
+    } else if (killed) {
+      "KILLED"
     } else if (successful) {
       "SUCCESS"
     } else {
