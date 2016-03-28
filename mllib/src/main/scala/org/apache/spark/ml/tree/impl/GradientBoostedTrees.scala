@@ -30,7 +30,7 @@ import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-private[ml] object GradientBoostedTrees extends Logging {
+private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to train a gradient boosting model
