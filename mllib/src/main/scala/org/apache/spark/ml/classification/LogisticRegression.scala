@@ -539,13 +539,15 @@ class LogisticRegressionModel private[spark] (
   def hasSummary: Boolean = trainingSummary.isDefined
 
   /**
-   * Evaluates the model on a testset.
+   * Evaluates the model on a test dataset.
    * @param dataset Test dataset to evaluate model on.
    */
-  // TODO: decide on a good name before exposing to public API
-  private[classification] def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
-    new BinaryLogisticRegressionSummary(
-      this.transform(dataset), $(probabilityCol), $(labelCol), $(featuresCol))
+  @Since("2.0.0")
+  def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
+    // Handle possible missing or invalid prediction columns
+    val (summaryModel, probabilityColName) = findSummaryModelAndProbabilityCol()
+    new BinaryLogisticRegressionSummary(summaryModel.transform(dataset),
+      probabilityColName, $(labelCol), $(featuresCol))
   }
 
   /**
