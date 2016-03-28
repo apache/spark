@@ -319,6 +319,16 @@ case class DescribeCommand(
   }
 }
 
+/**
+ * CREATE DATABASE: Create a new database.
+ *
+ * It will issue an error message when the database with the same name already exists,
+ * unless 'ifNotExists' is true.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    CREATE DATABASE|SCHEMA [IF NOT EXISTS] database_name
+ * }}}
+ */
 case class CreateDatabase(
     databaseName: String,
     ifNotExists: Boolean,
@@ -352,6 +362,11 @@ case class CreateDatabase(
  * - true, the dependent objects are automatically dropped before dropping database.
  * - false (default), it is in the Restrict mode. The database cannot be dropped if
  * it is not empty. The inclusive tables must be dropped at first.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
+ * }}}
  */
 case class DropDatabase(
     databaseName: String,
@@ -367,7 +382,15 @@ case class DropDatabase(
   override val output: Seq[Attribute] = Seq.empty
 }
 
-/** ALTER DATABASE: add new (key, value) pairs into DBPROPERTIES */
+/**
+ * ALTER DATABASE: add new (key, value) pairs into DBPROPERTIES
+ * If the database does not exist, an error message will be issued to indicate the database
+ * does not exist.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    DROP DATABASE [IF EXISTS] database_name [RESTRICT|CASCADE];
+ * }}}
+ */
 case class AlterDatabaseProperties(
     databaseName: String,
     props: Map[String, String])
@@ -387,6 +410,8 @@ case class AlterDatabaseProperties(
 /**
  * DESCRIBE DATABASE: shows the name of the database, its comment (if one has been set), and its
  * root location on the filesystem. When extended is true, it also shows the database's properties
+ * If the database does not exist, an error message will be issued to indicate the database
+ * does not exist.
  */
 case class DescribeDatabase(
     databaseName: String,
