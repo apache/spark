@@ -25,7 +25,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 case class TimeWindow(
 		originalTimeColumn: Expression,
-	 	private val _windowDuration: String,
+		private val _windowDuration: String,
 		private val _slideDuration: String,
 		private val _startTime: String) extends UnaryExpression
 	with ExpectsInputTypes

@@ -1492,7 +1492,7 @@ object EliminateUnions extends Rule[LogicalPlan] {
  * Window(window expressions).
  */
 object CleanupAliases extends Rule[LogicalPlan] {
-  private[catalyst] def trimAliases(e: Expression): Expression = {
+  private def trimAliases(e: Expression): Expression = {
     var stop = false
     e.transformDown {
       // CreateStruct is a special case, we need to retain its top level Aliases as they decide the
@@ -1678,21 +1678,18 @@ object TimeWindowing extends Rule[LogicalPlan] {
           p.children.head)))
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val transformed = plan transform {
-      case p: LogicalPlan if p.expressions.collect(getWindowExpr[TimeWindow](e => e)).nonEmpty &&
-        p.children.length == 1 =>
-        val windowed = generateWindows(p)
-        val rewritten = p transformExpressions getWindowExpr { windowExpr =>
-          windowExpr.validate() match {
-            case Some(e) => throw new AnalysisException(e)
-            case _ => // valid expression
-          }
-          windowExpr.outputColumn
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p: LogicalPlan if p.expressions.collect(getWindowExpr[TimeWindow](e => e)).nonEmpty &&
+      p.children.length == 1 =>
+      val windowed = generateWindows(p)
+      val rewritten = p transformExpressions getWindowExpr { windowExpr =>
+        windowExpr.validate() match {
+          case Some(e) => throw new AnalysisException(e)
+          case _ => // valid expression
         }
-        rewritten.withNewChildren(windowed :: Nil)
-    }
-    transformed
+        windowExpr.outputColumn
+      }
+      rewritten.withNewChildren(windowed :: Nil)
   }
 
 }
