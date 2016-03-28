@@ -235,7 +235,7 @@ class Dataset[T] private[sql](
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
-    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map {
+    val rows: Seq[Seq[String]] = resolvedTEncoder.schema.fieldNames.toSeq +: data.map {
       case r: Row => r
       case tuple: Product => Row.fromTuple(tuple)
       case o => Row(o)

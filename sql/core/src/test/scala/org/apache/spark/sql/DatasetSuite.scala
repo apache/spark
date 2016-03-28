@@ -626,6 +626,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // Make sure the generated code for this plan can compile and execute.
     wideDF.map(_.getLong(0)).collect()
   }
+
+  test("SPARK-14218: showString schema order in the output") {
+    val ds = Seq((1, "one"), (2, "two"), (3, "three")).toDF("b", "a").as[ClassData]
+    val expectedAnswer = """+-----+---+
+                           ||    a|  b|
+                           |+-----+---+
+                           ||  one|  1|
+                           ||  two|  2|
+                           ||three|  3|
+                           |+-----+---+
+                           |""".stripMargin
+    assert(ds.showString(10) === expectedAnswer)
+  }
 }
 
 case class OtherTuple(_1: String, _2: Int)
