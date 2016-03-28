@@ -2593,6 +2593,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.0.0
    */
+  @Experimental
   def window(
       timeColumn: Column,
       windowDuration: String,
@@ -2638,6 +2639,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.0.0
    */
+  @Experimental
   def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
     window(timeColumn, windowDuration, slideDuration, "0 second")
   }
@@ -2675,6 +2677,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.0.0
    */
+  @Experimental
   def window(timeColumn: Column, windowDuration: String): Column = {
     window(timeColumn, windowDuration, windowDuration, "0 second")
   }
