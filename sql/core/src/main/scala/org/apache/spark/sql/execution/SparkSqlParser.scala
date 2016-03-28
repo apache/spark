@@ -48,7 +48,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
     // Construct the command.
-    val raw = remainder(ctx)
+    val raw = remainder(ctx.SET.getSymbol)
     val keyValueSeparatorIndex = raw.indexOf('=')
     if (keyValueSeparatorIndex >= 0) {
       val key = raw.substring(0, keyValueSeparatorIndex).trim
@@ -142,13 +142,9 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
     // FORMATTED and columns are not supported. Return null and let the parser decide what to do
     // with this (create an exception or pass it on to a different system).
-    if (ctx.describeColName != null || ctx.FORMATTED != null) {
+    if (ctx.describeColName != null || ctx.FORMATTED != null || ctx.partitionSpec != null) {
       null
     } else {
-      // Partitioning clause is ignored.
-      if (ctx.partitionSpec != null) {
-        logWarning("DESCRIBE PARTITIONING option is ignored.")
-      }
       datasources.DescribeCommand(
         visitTableIdentifier(ctx.tableIdentifier),
         ctx.EXTENDED != null)

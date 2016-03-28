@@ -372,12 +372,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         }
         val withProject = if (aggregation != null) {
           withAggregation(aggregation, namedExpressions, withFilter)
-        } else {
+        } else if (namedExpressions.nonEmpty) {
           Project(namedExpressions, withFilter)
+        } else {
+          withFilter
         }
 
         // Having
-        val withHaving = withProject.optionalMap(having)(filter)
+        val withHaving = withProject.optional(having) {
+          // Note that we added a cast to boolean. If the expression itself is already boolean,
+          // the optimizer will get rid of the unnecessary cast.
+          Filter(Cast(expression(having), BooleanType), withProject)
+        }
 
         // Distinct
         val withDistinct = if (setQuantifier() != null && setQuantifier().DISTINCT() != null) {
@@ -603,7 +609,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a sampled relation. This returns a [[Sample]] operator when sampling is requested.
+   * Add a [[Sample]] to a logical plan.
    *
    * This currently supports the following sampling methods:
    * - TABLESAMPLE(x ROWS): Sample the table down to the given number of rows.
@@ -611,9 +617,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * are defined as a number between 0 and 100.
    * - TABLESAMPLE(BUCKET x OUT OF y): Sample the table down to a 'x' divided by 'y' fraction.
    */
-  override def visitSampledRelation(ctx: SampledRelationContext): LogicalPlan = withOrigin(ctx) {
-    val relation = plan(ctx.relationPrimary)
-
+  private def withSample(ctx: SampleContext, query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Create a sampled plan if we need one.
     def sample(fraction: Double): Sample = {
       // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
@@ -623,25 +627,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       assert(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
-      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)(true)
+      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)(true)
     }
 
-    // Sample the relation if we have to.
-    relation.optional(ctx.sampleType) {
-      ctx.sampleType.getType match {
-        case SqlBaseParser.ROWS =>
-          Limit(expression(ctx.expression), relation)
+    ctx.sampleType.getType match {
+      case SqlBaseParser.ROWS =>
+        Limit(expression(ctx.expression), query)
 
-        case SqlBaseParser.PERCENTLIT =>
-          val fraction = ctx.percentage.getText.toDouble
-          sample(fraction / 100.0d)
+      case SqlBaseParser.PERCENTLIT =>
+        val fraction = ctx.percentage.getText.toDouble
+        sample(fraction / 100.0d)
 
-        case SqlBaseParser.BUCKET if ctx.ON != null =>
-          throw new ParseException("TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported", ctx)
+      case SqlBaseParser.BUCKET if ctx.ON != null =>
+        throw new ParseException("TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported", ctx)
 
-        case SqlBaseParser.BUCKET =>
-          sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)
-      }
+      case SqlBaseParser.BUCKET =>
+        sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)
     }
   }
 
@@ -668,9 +669,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an aliased table reference. This is typically used in FROM clauses.
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-    UnresolvedRelation(
+    val table = UnresolvedRelation(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.identifier).map(_.getText))
+    table.optionalMap(ctx.sample)(withSample)
   }
 
   /**
@@ -719,7 +721,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedRelation(ctx: AliasedRelationContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.relation).optionalMap(ctx.identifier)(aliasPlan)
+    plan(ctx.relation).optionalMap(ctx.sample)(withSample).optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**
@@ -728,7 +730,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryNoWith).optionalMap(ctx.identifier)(aliasPlan)
+    plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample).optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**
@@ -1062,7 +1064,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a window definition, i.e. [[WindowSpecDefinition]].
    */
   override def visitWindowDef(ctx: WindowDefContext): WindowSpecDefinition = withOrigin(ctx) {
-    // PARTITION BY ... ORDER BY ...
+    // CLUSTER BY ... | PARTITION BY ... ORDER BY ...
     val partition = ctx.partition.asScala.map(expression)
     val order = ctx.sortItem.asScala.map(visitSortItem)
 
@@ -1489,10 +1491,13 @@ private[sql] object AstBuilder extends Logging {
     stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
   }
 
-  /** Get all the text which comes after the given node. */
-  def remainder(ctx: ParserRuleContext): String = {
-    val stream = ctx.getStop.getInputStream
-    val interval = Interval.of(ctx.getStart.getStopIndex + 1, stream.size())
+  /** Get all the text which comes after the given rule. */
+  def remainder(ctx: ParserRuleContext): String = remainder(ctx.getStop)
+
+  /** Get all the text which comes after the given token. */
+  def remainder(token: Token): String = {
+    val stream = token.getInputStream
+    val interval = Interval.of(token.getStopIndex + 1, stream.size())
     stream.getText(interval)
   }
 

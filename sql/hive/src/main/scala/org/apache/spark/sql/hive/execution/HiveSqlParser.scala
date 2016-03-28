@@ -83,8 +83,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
    */
   override def visitAddResource(ctx: AddResourceContext): LogicalPlan = withOrigin(ctx) {
     ctx.identifier.getText.toLowerCase match {
-      case "file" => AddFile(remainder(ctx).trim)
-      case "jar" => AddJar(remainder(ctx).trim)
+      case "file" => AddFile(remainder(ctx.identifier).trim)
+      case "jar" => AddJar(remainder(ctx.identifier).trim)
       case other => throw new ParseException(s"Unsupported resource type '$other'.", ctx)
     }
   }
@@ -147,14 +147,12 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       }
 
       // Create the schema.
-      // TODO find out if this is viable in a CTAS?
-      val schema = Option(ctx.colTypeList).toSeq.flatMap(visitColTypeList).map { col =>
-        val comment = if (col.metadata.contains("comment")) {
-          Option(col.metadata.getString("comment"))
-        } else {
-          None
-        }
-        CatalogColumn(col.name, col.dataType.typeName, col.nullable, comment)
+      val schema = Option(ctx.colTypeList).toSeq.flatMap(_.colType.asScala).map { col =>
+        CatalogColumn(
+          col.identifier.getText,
+          col.dataType.getText.toLowerCase, // TODO validate this?
+          nullable = true,
+          Option(col.STRING).map(string))
       }
 
       // Get the column by which the table is partitioned.
@@ -291,19 +289,20 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     type Format = (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
     def format(fmt: RowFormatContext, confVar: ConfVars): Format = fmt match {
       case c: RowFormatDelimitedContext =>
-        // Use a delimited format.
-        val CatalogStorageFormat(None, None, None, None, props) = visitRowFormatDelimited(c)
-
-        // Translate property keys back to 'old' parser ones.
-        // TODO remove this as soon as the 'old' parser is removed!
-        val translated = props.toSeq.collect {
-          case (serdeConstants.FIELD_DELIM, value) => "TOK_TABLEROWFORMATFIELD" -> value
-          case (serdeConstants.COLLECTION_DELIM, value) => "TOK_TABLEROWFORMATCOLLITEMS" -> value
-          case (serdeConstants.MAPKEY_DELIM, value) => "TOK_TABLEROWFORMATMAPKEYS" -> value
-          case (serdeConstants.LINE_DELIM, value) => "TOK_TABLEROWFORMATLINES" -> value
-          case pair @ ("TOK_TABLEROWFORMATNULL", value) => pair
+        // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
+        // expects a seq of pairs in which the old parsers' token names are used as keys.
+        // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
+        // retrieving the key value pairs ourselves.
+        def entry(key: String, value: Token): Seq[(String, String)] = {
+          Option(value).map(t => key -> t.getText).toSeq
         }
-        (translated, None, Seq.empty, None)
+        val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
+          entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
+          entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
+          entry("TOK_TABLEROWFORMATLINES", c.linesSeparatedBy) ++
+          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs)
+
+        (entries, None, Seq.empty, None)
 
       case c: RowFormatSerdeContext =>
         // Use a serde format.
@@ -367,7 +366,11 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     if (inDriver != null || outDriver != null) {
       logWarning("INPUTDRIVER ... OUTPUTDRIVER ... clauses are ignored.")
     }
-    createFileFormat(string(inFmt), string(outFmt), string(serdeCls))
+    EmptyStorageFormat.copy(
+      inputFormat = Option(string(inFmt)),
+      outputFormat = Option(string(outFmt)),
+      serde = Option(serdeCls).map(string)
+    )
   }
 
   /**
@@ -444,23 +447,20 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     def entry(key: String, value: Token): Seq[(String, String)] = {
       Option(value).toSeq.map(x => key -> string(x))
     }
+    // TODO we need proper support for the NULL format.
     val entries = entry(serdeConstants.FIELD_DELIM, ctx.fieldsTerminatedBy) ++
       entry(serdeConstants.SERIALIZATION_FORMAT, ctx.fieldsTerminatedBy) ++
       entry(serdeConstants.ESCAPE_CHAR, ctx.escapedBy) ++
       entry(serdeConstants.COLLECTION_DELIM, ctx.collectionItemsTerminatedBy) ++
       entry(serdeConstants.MAPKEY_DELIM, ctx.keysTerminatedBy) ++
-      Option(ctx.keysTerminatedBy).toSeq.map { token =>
+      Option(ctx.linesSeparatedBy).toSeq.map { token =>
         val value = string(token)
         assert(
           value == "\n",
           s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
           ctx)
         serdeConstants.LINE_DELIM -> value
-      } ++
-      // We need this key in the withScriptIOSchema function. We temporarily map it to the key it
-      // would use in HiveScriptIOSchema class.
-      // TODO we need proper support for the NULL format.
-      entry("TOK_TABLEROWFORMATNULL", ctx.nullDefinedAs)
+      }
     EmptyStorageFormat.copy(serdeProperties = entries.toMap)
   }
 }

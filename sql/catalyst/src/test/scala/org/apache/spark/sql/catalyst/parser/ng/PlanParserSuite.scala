@@ -20,7 +20,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
@@ -104,9 +104,22 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select a, b", OneRowRelation.select('a, 'b))
     assertEqual("select a, b from db.c", table("db", "c").select('a, 'b))
     assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select('a, 'b))
-    assertEqual("select a, b from db.c having x < 1", table("db", "c").select('a, 'b).where('x < 1))
+    assertEqual(
+      "select a, b from db.c having x < 1",
+      table("db", "c").select('a, 'b).where(('x < 1).cast(BooleanType)))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
+  }
+
+  test("reverse select query") {
+    assertEqual("from a", table("a"))
+    assertEqual("from a select b, c", table("a").select('b, 'c))
+    assertEqual(
+      "from db.a select b, c where d < 1", table("db", "a").where('d < 1).select('b, 'c))
+    assertEqual("from a select distinct b, c", Distinct(table("a").select('b, 'c)))
+    assertEqual(
+      "from (from a union all from b) c select *",
+      table("a").unionAll(table("b")).as("c").select(star()))
   }
 
   test("transform query spec") {
@@ -300,6 +313,7 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("joins") {
+    // Test single joins.
     val testUnconditionalJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t as tt $sql u",
@@ -335,19 +349,24 @@ class PlanParserSuite extends PlanTest {
     test("right outer join", RightOuter, testAll)
     test("full join", FullOuter, testAll)
     test("full outer join", FullOuter, testAll)
+
+    // Test multiple consecutive joins
+    assertEqual(
+      "select * from a join b join c right join d",
+      table("a").join(table("b")).join(table("c")).join(table("d"), RightOuter).select(star()))
   }
 
   test("sampled relations") {
     val sql = "select * from t"
     assertEqual(s"$sql tablesample(100 rows)",
       table("t").limit(100).select(star()))
-    assertEqual(s"$sql as x tablesample(43 percent)",
+    assertEqual(s"$sql tablesample(43 percent) as x",
       Sample(0, .43d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
-    assertEqual(s"$sql as x tablesample(bucket 4 out of 10)",
+    assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
       Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
-    intercept(s"$sql as x tablesample(bucket 4 out of 10 on x)",
+    intercept(s"$sql tablesample(bucket 4 out of 10 on x) as x",
       "TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported")
-    intercept(s"$sql as x tablesample(bucket 11 out of 10)",
+    intercept(s"$sql tablesample(bucket 11 out of 10) as x",
       s"Sampling fraction (${11.0/10.0}) must be on interval [0, 1]")
   }
 
@@ -382,7 +401,9 @@ class PlanParserSuite extends PlanTest {
       table("t").where('a === ScalarSubquery(table("s").select('b))).select(star()))
     assertEqual(
       "select g from t group by g having a > (select b from s)",
-      table("t").groupBy('g)('g).where('a > ScalarSubquery(table("s").select('b))))
+      table("t")
+        .groupBy('g)('g)
+        .where(('a > ScalarSubquery(table("s").select('b))).cast(BooleanType)))
   }
 
   test("table reference") {

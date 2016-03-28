@@ -18,7 +18,6 @@ package org.apache.spark.sql.catalyst.parser.ng
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -155,6 +154,8 @@ class ExpressionParserSuite extends PlanTest {
   test("is null expressions") {
     assertEqual("a is null", 'a.isNull)
     assertEqual("a is not null", 'a.isNotNull)
+    assertEqual("a = b is null", ('a === 'b).isNull)
+    assertEqual("a = b is not null", ('a === 'b).isNotNull)
   }
 
   test("binary arithmetic expressions") {
@@ -214,8 +215,12 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(*) over w1", UnresolvedWindowExpression(func, WindowSpecReference("w1")))
     assertEqual("foo(*) over ()", windowed())
     assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b)))
+    assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b)))
     assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc )))
+    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc )))
     assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
+    assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('c.asc)))
+    assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b), Seq('a.asc, 'b.asc)))
 
     // Test use of expressions in window functions.
     assertEqual(
@@ -258,9 +263,6 @@ class ExpressionParserSuite extends PlanTest {
     // We cannot use an arbitrary expression.
     intercept("foo(*) over (partition by a order by b rows exp(b) preceding)",
       "Frame bound value must be a constant integer.")
-
-    // We cannot have a frame without an order by clause.
-    intercept("foo(*) over (partition by a rows 10 preceding)", "mismatched input 'rows'")
   }
 
   test("row constructor") {

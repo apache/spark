@@ -236,7 +236,7 @@ createFileFormat
     ;
 
 fileFormat
-    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING SERDE serdeCls=STRING
+    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING (SERDE serdeCls=STRING)?
       (INPUTDRIVER inDriver=STRING OUTPUTDRIVER outDriver=STRING)?                         #tableFileFormat
     | identifier                                                                           #genericFileFormat
     ;
@@ -336,7 +336,7 @@ relation
       ((CROSS | joinType) JOIN right=relation joinCriteria?
       | NATURAL joinType JOIN right=relation
       )                                           #joinRelation
-    | sampledRelation                             #relationDefault
+    | relationPrimary                             #relationDefault
     ;
 
 joinType
@@ -352,14 +352,12 @@ joinCriteria
     | USING '(' identifier (',' identifier)* ')'
     ;
 
-sampledRelation
-    : relationPrimary (
-        TABLESAMPLE '('
-         ( (percentage=(INTEGER_VALUE | DECIMAL_VALUE) sampleType=PERCENTLIT)
-         | (expression sampleType=ROWS)
-         | (sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE (ON identifier)?))
-         ')'
-      )?
+sample
+    : TABLESAMPLE '('
+      ( (percentage=(INTEGER_VALUE | DECIMAL_VALUE) sampleType=PERCENTLIT)
+      | (expression sampleType=ROWS)
+      | (sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE (ON identifier)?))
+      ')'
     ;
 
 identifierList
@@ -387,9 +385,9 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier (AS? identifier)?                             #tableName
-    | '(' queryNoWith ')' (AS? identifier)?                         #aliasedQuery
-    | '(' relation ')'  (AS? identifier)?                           #aliasedRelation
+    : tableIdentifier sample? (AS? identifier)?                     #tableName
+    | '(' queryNoWith ')' sample? (AS? identifier)?                 #aliasedQuery
+    | '(' relation ')' sample? (AS? identifier)?                    #aliasedRelation
     | inlineTable                                                   #inlineTableDefault2
     ;
 
@@ -534,8 +532,10 @@ namedWindow
 windowSpec
     : name=identifier  #windowRef
     | '('
-      (PARTITION BY partition+=expression (',' partition+=expression)*)?
-      (ORDER BY sortItem (',' sortItem)* windowFrame?)?
+      ( CLUSTER BY partition+=expression (',' partition+=expression)*
+      | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?
+        ((ORDER | SORT) BY sortItem (',' sortItem)*)?)
+      windowFrame?
       ')'              #windowDef
     ;
 
@@ -616,7 +616,7 @@ nonReserved
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
     | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
-    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD | VALUES
+    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD | VALUES | COMMENT
     ;
 
 SELECT: 'SELECT';
