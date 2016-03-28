@@ -364,7 +364,7 @@ case class ShowTablesCommand(
  */
 case class ShowDatabasesCommand(databasePattern: Option[String]) extends RunnableCommand {
 
-  // The result of SHOW TABLES has two columns, tableName and isTemporary.
+  // The result of SHOW DATABASES has one column called 'result'
   override val output: Seq[Attribute] = {
     val schema = StructType(
       StructField("result", StringType, false) :: Nil)
@@ -373,8 +373,6 @@ case class ShowDatabasesCommand(databasePattern: Option[String]) extends Runnabl
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    // Since we need to return a Seq of rows, we will call getTables directly
-    // instead of calling tables in sqlContext.
     val catalog = sqlContext.sessionState.catalog
     val databases =
       databasePattern.map(catalog.listDatabases(_)).getOrElse(catalog.listDatabases())
