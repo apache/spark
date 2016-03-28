@@ -255,11 +255,12 @@ private[sql] case class DataSourceScan(
       |       $numOutputRows.add(numRows);
       |     }
       |
-      |     while (!shouldStop() && $idx < numRows) {
+      |     // this loop is very perf sensitive and changes to it should be measured carefully
+      |     while ($idx < numRows) {
       |       int $rowidx = $idx++;
       |       ${consume(ctx, columns1).trim}
+      |       if (shouldStop()) return;
       |     }
-      |     if (shouldStop()) return;
       |
       |     if (!$input.hasNext()) {
       |       $batch = null;
@@ -270,7 +271,8 @@ private[sql] case class DataSourceScan(
       |   }
       | }""".stripMargin)
 
-    val exprRows = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
+    val exprRows =
+      output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, x._1.nullable))
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns2 = exprRows.map(_.gen(ctx))
@@ -280,7 +282,7 @@ private[sql] case class DataSourceScan(
       s"""
        | private void $scanRows(InternalRow $row) throws java.io.IOException {
        |   boolean firstRow = true;
-       |   while (!shouldStop() && (firstRow || $input.hasNext())) {
+       |   while (firstRow || $input.hasNext()) {
        |     if (firstRow) {
        |       firstRow = false;
        |     } else {
@@ -288,6 +290,7 @@ private[sql] case class DataSourceScan(
        |     }
        |     $numOutputRows.add(1);
        |     ${consume(ctx, columns2, inputRow).trim}
+       |     if (shouldStop()) return;
        |   }
        | }""".stripMargin)
 

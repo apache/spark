@@ -1067,6 +1067,27 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+  test("SPARK-13953 Rename the corrupt record field via option") {
+    val jsonDF = sqlContext.read
+      .option("columnNameOfCorruptRecord", "_malformed")
+      .json(corruptRecords)
+    val schema = StructType(
+      StructField("_malformed", StringType, true) ::
+        StructField("a", StringType, true) ::
+        StructField("b", StringType, true) ::
+        StructField("c", StringType, true) :: Nil)
+
+    assert(schema === jsonDF.schema)
+    checkAnswer(
+      jsonDF.selectExpr("a", "b", "c", "_malformed"),
+      Row(null, null, null, "{") ::
+        Row(null, null, null, """{"a":1, b:2}""") ::
+        Row(null, null, null, """{"a":{, b:3}""") ::
+        Row("str_a_4", "str_b_4", "str_c_4", null) ::
+        Row(null, null, null, "]") :: Nil
+    )
+  }
+
   test("SPARK-4068: nulls in arrays") {
     val jsonDF = sqlContext.read.json(nullsInArrays)
     jsonDF.registerTempTable("jsonTable")

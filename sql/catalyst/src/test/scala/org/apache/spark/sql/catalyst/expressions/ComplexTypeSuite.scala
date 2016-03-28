@@ -134,6 +134,46 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
   }
 
+  test("CreateMap") {
+    def interlace(keys: Seq[Literal], values: Seq[Literal]): Seq[Literal] = {
+      keys.zip(values).flatMap { case (k, v) => Seq(k, v) }
+    }
+
+    def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
+      // catalyst map is order-sensitive, so we create ListMap here to preserve the elements order.
+      scala.collection.immutable.ListMap(keys.zip(values): _*)
+    }
+
+    val intSeq = Seq(5, 10, 15, 20, 25)
+    val longSeq = intSeq.map(_.toLong)
+    val strSeq = intSeq.map(_.toString)
+    checkEvaluation(CreateMap(Nil), Map.empty)
+    checkEvaluation(
+      CreateMap(interlace(intSeq.map(Literal(_)), longSeq.map(Literal(_)))),
+      createMap(intSeq, longSeq))
+    checkEvaluation(
+      CreateMap(interlace(strSeq.map(Literal(_)), longSeq.map(Literal(_)))),
+      createMap(strSeq, longSeq))
+    checkEvaluation(
+      CreateMap(interlace(longSeq.map(Literal(_)), strSeq.map(Literal(_)))),
+      createMap(longSeq, strSeq))
+
+    val strWithNull = strSeq.drop(1).map(Literal(_)) :+ Literal.create(null, StringType)
+    checkEvaluation(
+      CreateMap(interlace(intSeq.map(Literal(_)), strWithNull)),
+      createMap(intSeq, strWithNull.map(_.value)))
+    intercept[RuntimeException] {
+      checkEvaluationWithoutCodegen(
+        CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
+        null, null)
+    }
+    intercept[RuntimeException] {
+      checkEvalutionWithUnsafeProjection(
+        CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
+        null, null)
+    }
+  }
+
   test("CreateStruct") {
     val row = create_row(1, 2, 3)
     val c1 = 'a.int.at(0)

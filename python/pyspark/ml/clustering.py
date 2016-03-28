@@ -25,7 +25,7 @@ __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
            'KMeans', 'KMeansModel']
 
 
-class KMeansModel(JavaModel, MLWritable, MLReadable):
+class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by KMeans.
 
@@ -48,7 +48,7 @@ class KMeansModel(JavaModel, MLWritable, MLReadable):
 
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
-             MLWritable, MLReadable):
+             JavaMLWritable, JavaMLReadable):
     """
     K-means clustering with support for multiple parallel runs and a k-means++ like initialization
     mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
@@ -87,12 +87,14 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     .. versionadded:: 1.5.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create")
+    k = Param(Params._dummy(), "k", "number of clusters to create",
+              typeConverter=TypeConverters.toInt)
     initMode = Param(Params._dummy(), "initMode",
                      "the initialization algorithm. This can be either \"random\" to " +
                      "choose random points as initial cluster centers, or \"k-means||\" " +
-                     "to use a parallel variant of k-means++")
-    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode")
+                     "to use a parallel variant of k-means++", TypeConverters.toString)
+    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode",
+                      typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -227,10 +229,12 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create")
+    k = Param(Params._dummy(), "k", "number of clusters to create",
+              typeConverter=TypeConverters.toInt)
     minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
                                     "the minimum number of points (if >= 1.0) " +
-                                    "or the minimum proportion")
+                                    "or the minimum proportion",
+                                    typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,
