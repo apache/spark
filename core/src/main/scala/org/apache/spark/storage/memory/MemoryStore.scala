@@ -29,7 +29,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.MemoryManager
+import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
@@ -93,7 +93,7 @@ private[spark] class MemoryStore(
     conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
 
   /** Total amount of memory available for storage, in bytes. */
-  private def maxMemory: Long = memoryManager.maxStorageMemory
+  private def maxMemory: Long = memoryManager.maxOnHeapStorageMemory
 
   if (maxMemory < unrollMemoryThreshold) {
     logWarning(s"Max memory ${Utils.bytesToString(maxMemory)} is less than the initial memory " +
@@ -133,7 +133,7 @@ private[spark] class MemoryStore(
       size: Long,
       _bytes: () => ChunkedByteBuffer): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    if (memoryManager.acquireStorageMemory(blockId, size)) {
+    if (memoryManager.acquireStorageMemory(blockId, size, MemoryMode.ON_HEAP)) {
       // We acquired enough memory for the block, so go ahead and put it
       val bytes = _bytes()
       assert(bytes.size == size)
@@ -229,7 +229,7 @@ private[spark] class MemoryStore(
         // Synchronize so that transfer is atomic
         memoryManager.synchronized {
           releaseUnrollMemoryForThisTask(amount)
-          val success = memoryManager.acquireStorageMemory(blockId, amount)
+          val success = memoryManager.acquireStorageMemory(blockId, amount, MemoryMode.ON_HEAP)
           assert(success, "transferring unroll memory to storage memory failed")
         }
       }
@@ -237,7 +237,8 @@ private[spark] class MemoryStore(
       val enoughStorageMemory = {
         if (unrollMemoryUsedByThisBlock <= size) {
           val acquiredExtra =
-            memoryManager.acquireStorageMemory(blockId, size - unrollMemoryUsedByThisBlock)
+            memoryManager.acquireStorageMemory(
+              blockId, size - unrollMemoryUsedByThisBlock, MemoryMode.ON_HEAP)
           if (acquiredExtra) {
             transferUnrollToStorage(unrollMemoryUsedByThisBlock)
           }
@@ -353,7 +354,7 @@ private[spark] class MemoryStore(
       // Synchronize so that transfer is atomic
       memoryManager.synchronized {
         releaseUnrollMemoryForThisTask(unrollMemoryUsedByThisBlock)
-        val success = memoryManager.acquireStorageMemory(blockId, entry.size)
+        val success = memoryManager.acquireStorageMemory(blockId, entry.size, MemoryMode.ON_HEAP)
         assert(success, "transferring unroll memory to storage memory failed")
       }
       entries.synchronized {
@@ -406,7 +407,7 @@ private[spark] class MemoryStore(
       entries.remove(blockId)
     }
     if (entry != null) {
-      memoryManager.releaseStorageMemory(entry.size)
+      memoryManager.releaseStorageMemory(entry.size, MemoryMode.ON_HEAP)
       logInfo(s"Block $blockId of size ${entry.size} dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")
       true
@@ -531,7 +532,7 @@ private[spark] class MemoryStore(
    */
   def reserveUnrollMemoryForThisTask(blockId: BlockId, memory: Long): Boolean = {
     memoryManager.synchronized {
-      val success = memoryManager.acquireUnrollMemory(blockId, memory)
+      val success = memoryManager.acquireUnrollMemory(blockId, memory, MemoryMode.ON_HEAP)
       if (success) {
         val taskAttemptId = currentTaskAttemptId()
         unrollMemoryMap(taskAttemptId) = unrollMemoryMap.getOrElse(taskAttemptId, 0L) + memory
@@ -554,7 +555,7 @@ private[spark] class MemoryStore(
           if (unrollMemoryMap(taskAttemptId) == 0) {
             unrollMemoryMap.remove(taskAttemptId)
           }
-          memoryManager.releaseUnrollMemory(memoryToRelease)
+          memoryManager.releaseUnrollMemory(memoryToRelease, MemoryMode.ON_HEAP)
         }
       }
     }
