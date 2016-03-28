@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
 import java.util.NoSuchElementException
 
 import org.apache.spark.internal.Logging
@@ -328,11 +329,13 @@ case class CreateDatabase(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
+    val defaultDataBasePath =
+      catalog.getDefaultPath + File.pathSeparator + databaseName + catalog.getDefaultDBExtension
     catalog.createDatabase(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        path.getOrElse(catalog.getDefaultPath + s"/$databaseName.db"),
+        path.getOrElse(defaultDataBasePath),
         props),
       ifNotExists)
     Seq.empty[Row]

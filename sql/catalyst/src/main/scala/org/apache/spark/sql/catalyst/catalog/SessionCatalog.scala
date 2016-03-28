@@ -106,6 +106,8 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
 
   def getDefaultPath: String = ""
 
+  def getDefaultDBExtension: String = ".db"
+
   // ----------------------------------------------------------------------------
   // Tables
   // ----------------------------------------------------------------------------
