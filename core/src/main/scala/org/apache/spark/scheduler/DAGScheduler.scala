@@ -405,8 +405,9 @@ class DAGScheduler(
   }
 
   /**
-   * Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet,
-   * in topological order to ensure building ancestor stages first.
+   * Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet.
+   * This is done in topological order to create ancestor stages first to ensure that the result
+   * stage graph is correctly built.
    */
   private def getAncestorShuffleDependencies(rdd: RDD[_]): Seq[ShuffleDependency[_, _, _]] = {
     val parents = new ArrayBuffer[ShuffleDependency[_, _, _]]
