@@ -32,7 +32,7 @@ private[json] trait TestJsonData {
           "double":1.7976931348623157E308,
           "boolean":true,
           "null":null
-      }"""  :: Nil)
+      }"""  :: Nil, 1)
 
   def primitiveFieldValueTypeConflict: RDD[String] =
     sqlContext.sparkContext.parallelize(
