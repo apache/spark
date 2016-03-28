@@ -146,7 +146,7 @@ private[hive] class HiveFunctionRegistry(
     underlying.lookupFunctionBuilder(name)
   }
 
-  // Note: This only does not drop functions stored in the metastore
+  // Note: This does not drop functions stored in the metastore
   override def dropFunction(name: String): Boolean = {
     underlying.dropFunction(name)
   }

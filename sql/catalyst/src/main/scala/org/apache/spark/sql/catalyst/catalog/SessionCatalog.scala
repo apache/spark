@@ -497,7 +497,7 @@ class SessionCatalog(
       throw new AnalysisException("rename does not support moving functions across databases")
     }
     val db = oldName.database.getOrElse(currentDb)
-    lazy val oldBuilder = functionRegistry.lookupFunctionBuilder(oldName.funcName)
+    val oldBuilder = functionRegistry.lookupFunctionBuilder(oldName.funcName)
     if (oldName.database.isDefined || oldBuilder.isEmpty) {
       externalCatalog.renameFunction(db, oldName.funcName, newName.funcName)
     } else {
