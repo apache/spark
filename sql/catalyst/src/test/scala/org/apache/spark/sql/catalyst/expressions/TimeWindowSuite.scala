@@ -28,41 +28,29 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("validation checks") {
-    assert(TimeWindow(Literal(10L), "1 second", "1 second", "0 second").validate().isEmpty,
-      "Is a valid expression. Should not have returned a validation error.")
-    assert(TimeWindow(Literal(10L), "1 second", "2 second", "0 second").validate().isDefined,
-      "Should have thrown validation error, because slide duration is greater than window.")
-    assert(TimeWindow(Literal(10L), "1 second", "1 second", "1 minute").validate().isDefined,
-      "Should have thrown validation error, because start time is greater than slide duration.")
-    assert(TimeWindow(Literal(10L), "1 second", "1 second", "1 second").validate().isDefined,
-      "Should have thrown validation error, because start time is equal to slide duration.")
-    assert(TimeWindow(Literal(10L), "-1 second", "1 second", "0 second").validate().isDefined,
-      "Should have thrown validation error, because window duration is negative.")
-    assert(TimeWindow(Literal(10L), "0 second", "0 second", "0 second").validate().isDefined,
-      "Should have thrown validation error, because window duration is zero.")
-    assert(TimeWindow(Literal(10L), "1 second", "-1 second", "0 second").validate().isDefined,
-      "Should have thrown validation error, because slide duration is negative.")
-    assert(TimeWindow(Literal(10L), "1 second", "0 second", "0 second").validate().isDefined,
-      "Should have thrown validation error, because slide duration is zero.")
-    assert(TimeWindow(Literal(10L), "1 second", "1 second", "-2 second").validate().isDefined,
-      "Should have thrown validation error, because start time is negative.")
-  }
-
   test("invalid intervals throw exception") {
     val validDuration = "10 second"
     val validTime = "5 second"
-    for (invalid <- Seq(null, " ", "\n", "\t", "2 apples")) {
-      intercept[AnalysisException] {
-        TimeWindow(Literal(10L), invalid, validDuration, validTime).windowDuration
+    def checkErrorMessage(msg: String, value: String): Unit = {
+      val e1 = intercept[IllegalArgumentException] {
+        TimeWindow(Literal(10L), value, validDuration, validTime).windowDuration
       }
-      intercept[AnalysisException] {
-        TimeWindow(Literal(10L), validDuration, invalid, validTime).slideDuration
+      val e2 = intercept[IllegalArgumentException] {
+        TimeWindow(Literal(10L), validDuration, value, validTime).slideDuration
       }
-      intercept[AnalysisException] {
-        TimeWindow(Literal(10L), validDuration, validDuration, invalid).startTime
+      val e3 = intercept[IllegalArgumentException] {
+        TimeWindow(Literal(10L), validDuration, validDuration, value).startTime
+      }
+      Seq(e1, e2, e3).foreach { e =>
+        e.getMessage.contains(msg)
       }
     }
+    for (blank <- Seq(null, " ", "\n", "\t")) {
+      checkErrorMessage(
+        "The window duration, slide duration and start time cannot be null or blank.", blank)
+    }
+    checkErrorMessage(
+      "did not correspond to a valid interval string.", "2 apples")
   }
 
   test("interval strings work with and without 'interval' prefix and returns seconds") {

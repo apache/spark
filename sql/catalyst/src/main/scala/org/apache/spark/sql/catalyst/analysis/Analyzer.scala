@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -1601,7 +1602,12 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * @return The user defined function applied on the TimeWindow expression
    */
   private def getWindowExpr[E](f: TimeWindow => E): PartialFunction[Expression, E] = {
-    case Alias(windowExpr: TimeWindow, _) => f(windowExpr)
+    case Alias(windowExpr: TimeWindow, name) =>
+      if (name == windowExpr.toString.toLowerCase) {
+        f(windowExpr)
+      } else {
+        f(windowExpr.withOutputColumnName(name))
+      }
     case windowExpr: TimeWindow => f(windowExpr)
   }
 
@@ -1644,34 +1650,25 @@ object TimeWindowing extends Rule[LogicalPlan] {
    *         the Filter operator for correctness and Project for usability.
    */
   private def generateWindows(p: LogicalPlan): LogicalPlan = {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
     val windowExpr = p.expressions.collect(getWindowExpr[TimeWindow](e => e)).head
     // get all expressions we need to pass on for projections
     val otherExpressions =
       getMissingAttributes(p).filterNot(_.children.exists(_.isInstanceOf[TimeWindow]))
 
     val projections = Seq.tabulate(windowExpr.maxNumOverlapping + 1) { i =>
-      // windowId <- ceil((timestamp - startTime) / slideDuration)
-      val division = Ceil(Divide(Subtract(Cast(windowExpr.timeColumn, LongType),
-        Literal(windowExpr.startTime)), Literal(windowExpr.slideDuration)))
-      // start <- (windowId + i - maxNumOverlapping) * slideDuration + startTime
+      val windowId = Ceil((Cast(windowExpr.timeColumn, LongType) - windowExpr.startTime) /
+        windowExpr.slideDuration)
+      val windowStart = (windowId + i - windowExpr.maxNumOverlapping) *
+        windowExpr.slideDuration + windowExpr.startTime
+      val windowEnd = windowStart + windowExpr.windowDuration
       // the 1000000 is necessary for properly casting a LongType to a TimestampType
-      val windowStart =
-        Multiply(
-          Add(
-            Multiply(
-              Add(division, Literal(i - windowExpr.maxNumOverlapping)),
-              Literal(windowExpr.slideDuration)),
-            Literal(windowExpr.startTime)),
-          Literal(1000000))
-      // windowEnd <- windowStart + windowDuration
-      val windowEnd =
-        Add(windowStart, Multiply(Literal(windowExpr.windowDuration), Literal(1000000)))
-      windowStart :: windowEnd :: windowExpr.originalTimeColumn :: Nil ++ otherExpressions
+      windowStart * 1000000 :: windowEnd * 1000000 :: windowExpr.originalTimeColumn :: Nil ++
+        otherExpressions
     }
     val timeCol = windowExpr.originalTimeColumn.references.toSeq
-    // timestamp >= window.start && timestamp < window.end
-    val filterExpr = And(GreaterThanOrEqual(windowExpr.timeColumn, windowExpr.windowStartCol),
-      LessThan(windowExpr.timeColumn, windowExpr.windowEndCol))
+    val filterExpr = windowExpr.timeColumn >= windowExpr.windowStartCol &&
+      windowExpr.timeColumn < windowExpr.windowEndCol
     Project(windowExpr.output ++ Seq(windowExpr.outputColumn) ++ timeCol ++ otherExpressions,
       Filter(filterExpr,
         Expand(projections, windowExpr.output ++ timeCol ++ otherExpressions.map(_.toAttribute),
