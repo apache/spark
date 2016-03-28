@@ -484,12 +484,15 @@ private[sql] object Expand {
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
     child: LogicalPlan): Expand = {
+    var allNonSelectAttrSet = AttributeSet.empty
     // Create an array of Projections for the child projection, and replace the projections'
     // expressions which equal GroupBy expressions with Literal(null), if those expressions
     // are not set for this grouping set (according to the bit mask).
     val projections = bitmasks.map { bitmask =>
       // get the non selected grouping attributes according to the bit mask
       val nonSelectedGroupAttrSet = buildNonSelectAttrSet(bitmask, groupByAttrs)
+
+      allNonSelectAttrSet = allNonSelectAttrSet ++ nonSelectedGroupAttrSet
 
       child.output ++ groupByAttrs.map { attr =>
         if (nonSelectedGroupAttrSet.contains(attr)) {
@@ -502,8 +505,30 @@ private[sql] object Expand {
       // groupingId is the last output, here we use the bit mask as the concrete value for it.
       } :+ Literal.create(bitmask, IntegerType)
     }
-    val output = child.output ++ groupByAttrs :+ gid
-    Expand(projections, output, Project(child.output ++ groupByAliases, child))
+    val output = (child.output ++ groupByAttrs :+ gid).map { a =>
+      if (a.resolved && allNonSelectAttrSet.contains(a)) {
+        a.withNullability(true)
+      } else {
+        a
+      }
+    }
+    val expandChild = Project(child.output ++ groupByAliases, child)
+    val validConstraints = constructValidConstraints(expandChild.constraints, allNonSelectAttrSet)
+    Expand(projections, output, expandChild, validConstraints)
+  }
+
+  /**
+   * Filter out the `IsNotNull` constraints which cover the group by attributes in Expand operator.
+   * These constraints come from Expand's child plan. Because Expand will set group by attribute to
+   * null values in its projections, we need to filter out these `IsNotNull` constraints.
+   *
+   * @param constraints The constraints from Expand operator's child
+   * @param groupByAttrs The attributes of aliased group by expressions in Expand
+   */
+  def constructValidConstraints(
+      constraints: ExpressionSet,
+      groupByAttrs: AttributeSet): Seq[Expression] = {
+    constraints.filter(_.references.intersect(groupByAttrs).isEmpty).toSeq
   }
 }
 
@@ -518,8 +543,8 @@ private[sql] object Expand {
 case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
-
+    child: LogicalPlan,
+    constraintsBase: Seq[Expression]) extends UnaryNode {
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
@@ -527,6 +552,8 @@ case class Expand(
     val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
+
+  override protected def validConstraints: Set[Expression] = constraintsBase.toSet
 }
 
 /**

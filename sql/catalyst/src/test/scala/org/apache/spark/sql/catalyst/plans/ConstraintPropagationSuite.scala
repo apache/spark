@@ -88,6 +88,39 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         IsNotNull(resolveColumn(aliasedRelation.analyze, "a")))))
   }
 
+  test("propagating constraints in expand") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+
+    assert(tr.analyze.constraints.isEmpty)
+
+    // We add IsNotNull constraints for 'a, 'b and 'c into LocalRelation
+    // by creating notNullRelation.
+    val notNullRelation = tr.where('c.attr > 10 && 'a.attr < 5 && 'b.attr > 2)
+    verifyConstraints(notNullRelation.analyze.constraints,
+      ExpressionSet(Seq(resolveColumn(notNullRelation.analyze, "c") > 10,
+        IsNotNull(resolveColumn(notNullRelation.analyze, "c")),
+        resolveColumn(notNullRelation.analyze, "a") < 5,
+        IsNotNull(resolveColumn(notNullRelation.analyze, "a")),
+        resolveColumn(notNullRelation.analyze, "b") > 2,
+        IsNotNull(resolveColumn(notNullRelation.analyze, "b")))))
+
+    val constraints =
+      Expand.constructValidConstraints(
+        notNullRelation.analyze.constraints,
+        AttributeSet(resolveColumn(notNullRelation.analyze, "a").asInstanceOf[Attribute]))
+
+    val expand = Expand(
+          Seq(
+            Seq('c, Literal.create(null, StringType), 1),
+            Seq('c, 'a, 2)),
+          Seq('c, 'a, 'gid.int),
+          Project(Seq('a, 'c),
+            notNullRelation), constraints)
+    verifyConstraints(expand.analyze.constraints,
+      ExpressionSet(Seq(resolveColumn(expand.analyze, "c") > 10,
+        IsNotNull(resolveColumn(expand.analyze, "c")))))
+  }
+
   test("propagating constraints in aliases") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
 

@@ -222,10 +222,13 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
       }
 
       // Construct the expand operator.
+      val constraints =
+        Expand.constructValidConstraints(a.child.constraints, AttributeSet(groupByAttrs))
       val expand = Expand(
         regularAggProjection ++ distinctAggProjections,
         groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.map(_._2),
-        a.child)
+        a.child,
+        constraints)
 
       // Construct the first aggregate operator. This de-duplicates the all the children of
       // distinct operators, and applies the regular aggregate operators.
