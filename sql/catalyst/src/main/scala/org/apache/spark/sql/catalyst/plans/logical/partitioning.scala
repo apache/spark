@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SortOrd
  * result have expectations about the distribution and ordering of partitioned input data.
  */
 abstract class RedistributeData extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def outputBeforeConstraints: Seq[Attribute] = child.output
 }
 
 case class SortPartitions(sortExpressions: Seq[SortOrder], child: LogicalPlan)

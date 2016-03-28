@@ -39,7 +39,7 @@ case class DescribeCommand(
 
   override def children: Seq[LogicalPlan] = Seq.empty
 
-  override val output: Seq[Attribute] = Seq(
+  override val outputBeforeConstraints: Seq[Attribute] = Seq(
     // Column names are based on Hive.
     AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
@@ -65,7 +65,7 @@ case class CreateTableUsing(
     allowExisting: Boolean,
     managedIfNoPath: Boolean) extends LogicalPlan with logical.Command {
 
-  override def output: Seq[Attribute] = Seq.empty
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
 }
 
@@ -84,7 +84,7 @@ case class CreateTableUsingAsSelect(
     mode: SaveMode,
     options: Map[String, String],
     child: LogicalPlan) extends logical.UnaryNode {
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty[Attribute]
 }
 
 case class CreateTempTableUsing(

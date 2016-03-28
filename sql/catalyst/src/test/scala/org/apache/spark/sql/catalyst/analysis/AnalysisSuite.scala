@@ -80,6 +80,8 @@ class AnalysisSuite extends AnalysisTest {
   test("resolve sort references - filter/limit") {
     val a = testRelation2.output(0)
     val b = testRelation2.output(1)
+    val aNotNullable = testRelation2.output(0).withNullability(false)
+    val bNotNullable = testRelation2.output(1).withNullability(false)
     val c = testRelation2.output(2)
 
     // Case 1: one missing attribute is in the leaf node and another is in the unary node
@@ -88,10 +90,10 @@ class AnalysisSuite extends AnalysisTest {
       .where('b > "str").select('a)
       .sortBy('b.asc, 'c.desc)
     val expected1 = testRelation2
-      .where(a > "str").select(a, b, c)
-      .where(b > "str").select(a, b, c)
-      .sortBy(b.asc, c.desc)
-      .select(a)
+      .where(a > "str").select(aNotNullable, b, c)
+      .where(b > "str").select(aNotNullable, bNotNullable, c)
+      .sortBy(bNotNullable.asc, c.desc)
+      .select(aNotNullable)
     checkAnalysis(plan1, expected1)
 
     // Case 2: all the missing attributes are in the leaf node
@@ -100,15 +102,16 @@ class AnalysisSuite extends AnalysisTest {
       .where('a > "str").select('a)
       .sortBy('b.asc, 'c.desc)
     val expected2 = testRelation2
-      .where(a > "str").select(a, b, c)
-      .where(a > "str").select(a, b, c)
+      .where(a > "str").select(aNotNullable, b, c)
+      .where(aNotNullable > "str").select(aNotNullable, b, c)
       .sortBy(b.asc, c.desc)
-      .select(a)
+      .select(aNotNullable)
     checkAnalysis(plan2, expected2)
   }
 
   test("resolve sort references - join") {
     val a = testRelation2.output(0)
+    val aNotNullable = testRelation2.output(0).withNullability(false)
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
     val h = testRelation3.output(3)
@@ -118,9 +121,9 @@ class AnalysisSuite extends AnalysisTest {
       .where('a > "str").select('a, 'b)
       .sortBy('c.desc, 'h.asc)
     val expected = testRelation2.join(testRelation3)
-      .where(a > "str").select(a, b, c, h)
+      .where(a > "str").select(aNotNullable, b, c, h)
       .sortBy(c.desc, h.asc)
-      .select(a, b)
+      .select(aNotNullable, b)
     checkAnalysis(plan, expected)
   }
 

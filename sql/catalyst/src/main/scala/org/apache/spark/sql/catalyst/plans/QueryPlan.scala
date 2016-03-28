@@ -24,18 +24,32 @@ import org.apache.spark.sql.types.{DataType, StructType}
 abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
-  def output: Seq[Attribute]
+  def output: Seq[Attribute] = {
+    val isNotNulls = constraints.collect {
+      case IsNotNull(a: Attribute) if a.resolved => a.exprId
+    }
+    outputBeforeConstraints.map { o =>
+      if (o.resolved && isNotNulls.contains(o.exprId)) {
+        o.withNullability(false)
+      } else {
+        o
+      }
+    }
+  }
+
+  protected def outputBeforeConstraints: Seq[Attribute]
 
   /**
    * Extracts the relevant constraints from a given set of constraints based on the attributes that
-   * appear in the [[outputSet]].
+   * appear in the [[outputSetBeforeConstraints]].
    */
   protected def getRelevantConstraints(constraints: Set[Expression]): Set[Expression] = {
     constraints
       .union(inferAdditionalConstraints(constraints))
       .union(constructIsNotNullConstraints(constraints))
       .filter(constraint =>
-        constraint.references.nonEmpty && constraint.references.subsetOf(outputSet))
+        constraint.references.nonEmpty &&
+          constraint.references.subsetOf(outputSetBeforeConstraints))
   }
 
   /**
@@ -66,7 +80,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
     // Second, we infer additional constraints from non-nullable attributes that are part of the
     // operator's output
-    val nonNullableAttributes = output.filterNot(_.nullable)
+    val nonNullableAttributes = outputBeforeConstraints.filter(_.resolved).filterNot(_.nullable)
     isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull).toSet
 
     isNotNullConstraints -- constraints
@@ -113,6 +127,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * Returns the set of attributes that are output by this node.
    */
   def outputSet: AttributeSet = AttributeSet(output)
+
+  /**
+   * Returns the set of attributes before affected by constraints that are output by this node.
+   */
+  def outputSetBeforeConstraints: AttributeSet = AttributeSet(outputBeforeConstraints)
 
   /**
    * All Attributes that appear in expressions from this operator.  Note that this set does not

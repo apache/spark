@@ -50,7 +50,7 @@ import org.apache.spark.sql.AnalysisException
  */
 private[hive] case object NativePlaceholder extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq.empty
-  override def output: Seq[Attribute] = Seq.empty
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty
 }
 
 private[hive] case class CreateTableAsSelect(
@@ -58,7 +58,7 @@ private[hive] case class CreateTableAsSelect(
     child: LogicalPlan,
     allowExisting: Boolean) extends UnaryNode with Command {
 
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean =
     tableDesc.name.database.isDefined &&
     tableDesc.schema.nonEmpty &&
@@ -74,7 +74,7 @@ private[hive] case class CreateViewAsSelect(
     allowExisting: Boolean,
     replace: Boolean,
     sql: String) extends UnaryNode with Command {
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean = false
 }
 

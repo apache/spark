@@ -30,7 +30,7 @@ trait ObjectOperator extends LogicalPlan {
   /** The serializer that is used to produce the output of this operator. */
   def serializer: Seq[NamedExpression]
 
-  override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+  override def outputBeforeConstraints: Seq[Attribute] = serializer.map(_.toAttribute)
 
   /**
    * An [[ObjectOperator]] may have one or more deserializers to convert internal rows to objects.
@@ -117,7 +117,7 @@ case class AppendColumns(
     serializer: Seq[NamedExpression],
     child: LogicalPlan) extends UnaryNode with ObjectOperator {
 
-  override def output: Seq[Attribute] = child.output ++ newColumns
+  override def outputBeforeConstraints: Seq[Attribute] = child.output ++ newColumns
 
   def newColumns: Seq[Attribute] = serializer.map(_.toAttribute)
 

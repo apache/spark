@@ -35,7 +35,7 @@ case class LogicalRelation(
     metastoreTableIdentifier: Option[TableIdentifier] = None)
   extends LeafNode with MultiInstanceRelation {
 
-  override val output: Seq[AttributeReference] = {
+  override val outputBeforeConstraints: Seq[AttributeReference] = {
     val attrs = relation.schema.toAttributes
     expectedOutputAttributes.map { expectedAttrs =>
       assert(expectedAttrs.length == attrs.length)
@@ -48,6 +48,8 @@ case class LogicalRelation(
       }
     }.getOrElse(attrs)
   }
+
+  override def output: Seq[AttributeReference] = outputBeforeConstraints
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
   override def equals(other: Any): Boolean = other match {

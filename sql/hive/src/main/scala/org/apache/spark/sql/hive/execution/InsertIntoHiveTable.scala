@@ -47,7 +47,7 @@ case class InsertIntoHiveTable(
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
   @transient private lazy val client = sc.metadataHive
 
-  def output: Seq[Attribute] = Seq.empty
+  override def output: Seq[Attribute] = Seq.empty
 
   private def saveAsHiveFile(
       rdd: RDD[InternalRow],

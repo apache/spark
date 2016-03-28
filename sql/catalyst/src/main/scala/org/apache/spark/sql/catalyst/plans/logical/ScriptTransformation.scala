@@ -24,13 +24,13 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expre
  *
  * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
- * @param output the attributes that are produced by the script.
+ * @param outputBeforeConstraints the attributes that are produced by the script.
  * @param ioschema the input and output schema applied in the execution of the script.
  */
 case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
-    output: Seq[Attribute],
+    outputBeforeConstraints: Seq[Attribute],
     child: LogicalPlan,
     ioschema: ScriptInputOutputSchema) extends UnaryNode {
   override def references: AttributeSet = AttributeSet(input.flatMap(_.references))

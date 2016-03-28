@@ -746,7 +746,7 @@ private[hive] case class InsertIntoHiveTable(
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = Seq.empty
+  override def outputBeforeConstraints: Seq[Attribute] = Seq.empty
 
   val numDynamicPartitions = partition.values.count(_.isEmpty)
 
@@ -918,7 +918,7 @@ private[hive] case class MetastoreRelation(
   /** Non-partitionKey attributes */
   val attributes = table.schema.map(_.toAttribute)
 
-  val output = attributes ++ partitionKeys
+  override val outputBeforeConstraints = attributes ++ partitionKeys
 
   /** An attribute map that can be used to lookup original attributes based on expression id. */
   val attributeMap = AttributeMap(output.map(o => (o, o)))

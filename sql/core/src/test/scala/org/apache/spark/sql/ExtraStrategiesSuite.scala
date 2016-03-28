@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.test.SharedSQLContext
 
-case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
+case class FastOperator(override val output: Seq[Attribute]) extends SparkPlan {
 
   override protected def doExecute(): RDD[InternalRow] = {
     val str = Literal("so fast").value

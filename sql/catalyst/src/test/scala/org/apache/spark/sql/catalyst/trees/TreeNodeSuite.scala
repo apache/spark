@@ -35,7 +35,7 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
 
 case class ComplexPlan(exprs: Seq[Seq[Expression]])
   extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
-  override def output: Seq[Attribute] = Nil
+  override def outputBeforeConstraints: Seq[Attribute] = Nil
 }
 
 case class ExpressionInMap(map: Map[String, Expression]) extends Expression with Unevaluable {
