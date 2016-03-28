@@ -39,6 +39,7 @@ private[ml] trait CrossValidatorParams extends ValidatorParams with HasSeed {
   /**
    * Param for number of folds for cross validation.  Must be >= 2.
    * Default: 3
+   *
    * @group param
    */
   val numFolds: IntParam = new IntParam(this, "numFolds",
@@ -160,7 +161,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit =
-      MetaPipelineReadWrite.saveImpl(path, instance, sc)
+      ValidatorParams.saveImpl(path, instance, sc)
   }
 
   private class CrossValidatorReader extends MLReader[CrossValidator] {
@@ -172,7 +173,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        MetaPipelineReadWrite.load(path, sc, className)
+        ValidatorParams.loadImpl(path, sc, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
       new CrossValidator(metadata.uid)
         .setEstimator(estimator)
@@ -240,7 +241,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     override protected def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
       val extraMetadata = "avgMetrics" -> instance.avgMetrics.toSeq
-      MetaPipelineReadWrite.saveImpl(path, instance, sc, Some(extraMetadata))
+      ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
     }
@@ -255,7 +256,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        MetaPipelineReadWrite.load(path, sc, className)
+        ValidatorParams.loadImpl(path, sc, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)

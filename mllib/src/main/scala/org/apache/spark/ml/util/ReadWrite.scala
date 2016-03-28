@@ -30,11 +30,9 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.OneVsRestParams
-import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.RFormulaModel
-import org.apache.spark.ml.param.{ParamPair, Params, _}
-import org.apache.spark.ml.tuning.{CrossValidatorParams, TrainValidationSplitParams, ValidatorParams}
-import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+import org.apache.spark.ml.param.{ParamPair, Params}
+import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
@@ -363,7 +361,7 @@ private[ml] object DefaultParamsReader {
 /**
  * Default Meta-Algorithm read and write implementation.
  */
-private[ml] object MetaPipelineReadWrite {
+private[ml] object MetaAlgorithmReadWrite {
   /**
    * Examine the given estimator (which may be a compound estimator) and extract a mapping
    * from UIDs to corresponding [[Params]] instances.
@@ -392,69 +390,5 @@ private[ml] object MetaPipelineReadWrite {
     }
     val subStageMaps = subStages.map(getUidMapImpl).foldLeft(List.empty[(String, Params)])(_ ++ _)
     List((instance.uid, instance)) ++ subStageMaps
-  }
-
-  def saveImpl(
-      path: String,
-      instance: ValidatorParams,
-      sc: SparkContext,
-      extraMetadata: Option[JObject] = None): Unit = {
-    import org.json4s.JsonDSL._
-
-    val estimatorParamMapsJson = compact(render(
-      instance.getEstimatorParamMaps.map { case paramMap =>
-        paramMap.toSeq.map { case ParamPair(p, v) =>
-          Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v))
-        }
-      }.toSeq
-    ))
-
-    val validatorSpecificParams = instance match {
-      case cv: CrossValidatorParams =>
-        List("numFolds" -> parse(cv.numFolds.jsonEncode(cv.getNumFolds)))
-      case tvs: TrainValidationSplitParams =>
-        List("trainRatio" -> parse(tvs.trainRatio.jsonEncode(tvs.getTrainRatio)))
-      case _ => List()
-    }
-
-    val jsonParams = validatorSpecificParams ++ List(
-      "estimatorParamMaps" -> parse(estimatorParamMapsJson))
-
-    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
-
-    val evaluatorPath = new Path(path, "evaluator").toString
-    instance.getEvaluator.asInstanceOf[MLWritable].save(evaluatorPath)
-    val estimatorPath = new Path(path, "estimator").toString
-    instance.getEstimator.asInstanceOf[MLWritable].save(estimatorPath)
-  }
-
-  def load[M <: Model[M]](
-      path: String,
-      sc: SparkContext,
-      expectedClassName: String): (Metadata, Estimator[M], Evaluator, Array[ParamMap]) = {
-
-    val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-
-    implicit val format = DefaultFormats
-    val evaluatorPath = new Path(path, "evaluator").toString
-    val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, sc)
-    val estimatorPath = new Path(path, "estimator").toString
-    val estimator = DefaultParamsReader.loadParamsInstance[Estimator[M]](estimatorPath, sc)
-
-    val uidToParams = Map(evaluator.uid -> evaluator) ++ getUidMap(estimator)
-
-    val estimatorParamMaps: Array[ParamMap] =
-      (metadata.params \ "estimatorParamMaps").extract[Seq[Seq[Map[String, String]]]].map {
-        pMap =>
-          val paramPairs = pMap.map { case pInfo: Map[String, String] =>
-            val est = uidToParams(pInfo("parent"))
-            val param = est.getParam(pInfo("name"))
-            val value = param.jsonDecode(pInfo("value"))
-            param -> value
-          }
-          ParamMap(paramPairs: _*)
-      }.toArray
-
-    (metadata, estimator, evaluator, estimatorParamMaps)
   }
 }
