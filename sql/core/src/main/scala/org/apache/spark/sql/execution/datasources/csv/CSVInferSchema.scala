@@ -86,8 +86,8 @@ private[csv] object CSVInferSchema {
         case NullType => tryParseInteger(field)
         case IntegerType => tryParseInteger(field)
         case LongType => tryParseLong(field)
-        case DoubleType => tryParseDouble(field)
         case _: DecimalType => tryParseDecimal(field)
+        case DoubleType => tryParseDouble(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
@@ -106,37 +106,28 @@ private[csv] object CSVInferSchema {
   private def tryParseLong(field: String): DataType = if ((allCatch opt field.toLong).isDefined) {
     LongType
   } else {
-    tryParseDouble(field)
-  }
-
-  private def tryParseDouble(field: String): DataType = {
-    val doubleTry = allCatch opt field.toDouble
-    // If `doubleTry` is successful, then it should be successful
-    // to cast it to `BigDecimal`. So, it does not handle the case that it fails
-    // to cast this to `BigDecimal` below. Also, this should use `BigDecimal.valueOf()`
-    // so that this does not lose precision (by the real double value). This identically
-    // works with `new BigDecimal(double.toString)`.
-    // For example,
-    //   new BigDecimal("1.23112331231231231231E13") becomes 12311233123123.1231231
-    //   but new BigDecimal(1.23112331231231231231E13) becomes
-    //   12311233123123.123046875.
-    val roundtripTry = doubleTry.map(BigDecimal.valueOf)
-    val decimalTryOther = allCatch opt new BigDecimal(field)
-    // This compares two `BigDecimal`s but one of them is casted back from double.
-    // So, if the roundtrip leads to precision loss, then this means casting to double
-    // loses some values.
-    if (roundtripTry == decimalTryOther && doubleTry.isDefined) {
-      DoubleType
-    } else {
-      tryParseDecimal(field)
-    }
+    tryParseDecimal(field)
   }
 
   private def tryParseDecimal(field: String): DataType = {
-    val decimalTry = allCatch opt new BigDecimal(field)
+    val decimalTry = allCatch opt {
+      // `BigDecimal` conversion can fail when the `field` is not a form of number.
+      val bigDecimal = new BigDecimal(field)
+      // `DecimalType` conversion can fail when
+      //   1. The precision is bigger than 38.
+      //   2. scale is bigger than precision.
+      DecimalType(bigDecimal.precision, bigDecimal.scale)
+    }
     if (decimalTry.isDefined) {
-      val decimalValue = decimalTry.get
-      DecimalType(decimalValue.precision, decimalValue.scale)
+      decimalTry.get
+    } else {
+      tryParseDouble(field)
+    }
+  }
+
+  private def tryParseDouble(field: String): DataType = {
+    if ((allCatch opt field.toDouble).isDefined) {
+      DoubleType
     } else {
       tryParseTimestamp(field)
     }
@@ -178,15 +169,35 @@ private[csv] object CSVInferSchema {
     case (StringType, t2) => Some(StringType)
     case (t1, StringType) => Some(StringType)
 
-    case (t1: NumericType, t2: DecimalType) if t2.isWiderThan(t1) =>
-      Some(t2)
-    case (t1: DecimalType, t2: NumericType) if t1.isWiderThan(t2) =>
-      Some(t1)
-
     // Promote numeric types to the highest of the two and all numeric types to unlimited decimal
     case (t1, t2) if Seq(t1, t2).forall(numericPrecedence.contains) =>
       val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
       Some(numericPrecedence(index))
+
+    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+      Some(t2)
+    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+      Some(t1)
+
+    case (t1: IntegralType, t2: DecimalType) =>
+      findTightestCommonType(DecimalType.forType(t1), t2)
+    case (t1: DecimalType, t2: IntegralType) =>
+      findTightestCommonType(t1, DecimalType.forType(t2))
+
+    // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
+    // in most case, also have better precision.
+    case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) =>
+      Some(DoubleType)
+
+    case (t1: DecimalType, t2: DecimalType) =>
+      val scale = math.max(t1.scale, t2.scale)
+      val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
+      if (range + scale > 38) {
+        // DecimalType can't support precision > 38
+        Some(DoubleType)
+      } else {
+        Some(DecimalType(range + scale, scale))
+      }
 
     case _ => None
   }

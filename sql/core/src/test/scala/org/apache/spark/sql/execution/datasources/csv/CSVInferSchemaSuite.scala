@@ -27,21 +27,26 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(NullType, null) == NullType)
     assert(CSVInferSchema.inferField(NullType, "100000000000") == LongType)
     assert(CSVInferSchema.inferField(NullType, "60") == IntegerType)
-    assert(CSVInferSchema.inferField(NullType, "3.5") == DoubleType)
+    assert(CSVInferSchema.inferField(NullType, "3.5") == DecimalType(2, 1))
     assert(CSVInferSchema.inferField(NullType, "test") == StringType)
     assert(CSVInferSchema.inferField(NullType, "2015-08-20 15:57:00") == TimestampType)
     assert(CSVInferSchema.inferField(NullType, "True") == BooleanType)
     assert(CSVInferSchema.inferField(NullType, "FAlSE") == BooleanType)
-    val textValue = "10000000000000000001"
-    val decimalValue = new java.math.BigDecimal(textValue)
-    val expectedType = DecimalType(decimalValue.precision, decimalValue.scale)
-    assert(CSVInferSchema.inferField(NullType, textValue) == expectedType)
+    val textValueOne = "10000000000000000001"
+    val decimalValueOne = new java.math.BigDecimal(textValueOne)
+    val expectedTypeOne = DecimalType(decimalValueOne.precision, decimalValueOne.scale)
+    assert(CSVInferSchema.inferField(NullType, textValueOne) == expectedTypeOne)
+    val textValueTwo = "1" * 39
+    val expectedTypeTwo = DoubleType
+    assert(CSVInferSchema.inferField(NullType, textValueTwo) == expectedTypeTwo)
   }
 
   test("String fields types are inferred correctly from other types") {
-    assert(CSVInferSchema.inferField(LongType, "1.0") == DoubleType)
+    assert(CSVInferSchema.inferField(LongType, "1.0") == DecimalType(2, 1))
+    assert(CSVInferSchema.inferField(LongType, "0.01") == DoubleType)
     assert(CSVInferSchema.inferField(LongType, "test") == StringType)
-    assert(CSVInferSchema.inferField(IntegerType, "1.0") == DoubleType)
+    assert(CSVInferSchema.inferField(IntegerType, "1.0") == DecimalType(2, 1))
+    assert(CSVInferSchema.inferField(IntegerType, "0.01") == DoubleType)
     assert(CSVInferSchema.inferField(DoubleType, null) == DoubleType)
     assert(CSVInferSchema.inferField(DoubleType, "test") == StringType)
     assert(CSVInferSchema.inferField(LongType, "2015-08-20 14:57:00") == TimestampType)
@@ -49,10 +54,13 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(LongType, "True") == BooleanType)
     assert(CSVInferSchema.inferField(IntegerType, "FALSE") == BooleanType)
     assert(CSVInferSchema.inferField(TimestampType, "FALSE") == BooleanType)
-    val textValue = "1.00000000000000001"
-    val decimalValue = new java.math.BigDecimal(textValue)
-    val expectedType = DecimalType(decimalValue.precision, decimalValue.scale)
-    assert(CSVInferSchema.inferField(DoubleType, textValue) == expectedType)
+    val textValueOne = "1.0000000000000001"
+    val decimalValueOne = new java.math.BigDecimal(textValueOne)
+    val expectedTypeOne = DecimalType(decimalValueOne.precision, decimalValueOne.scale)
+    assert(CSVInferSchema.inferField(LongType, textValueOne) == expectedTypeOne)
+    val textValueTwo = "0.01"
+    val expectedTypeTwo = DoubleType
+    assert(CSVInferSchema.inferField(NullType, textValueTwo) == expectedTypeTwo)
   }
 
   test("Timestamp field types are inferred correctly from other types") {

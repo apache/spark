@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
+import java.math.BigDecimal
 import java.nio.charset.UnsupportedCharsetException
 import java.sql.Timestamp
 
@@ -141,7 +142,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(decimalFile))
     val expectedSchema = StructType(List(
       StructField("decimal-precision", DecimalType(20, 0), nullable = true),
-      StructField("decimal-scale", DecimalType(18, 17), nullable = true)))
+      StructField("decimal-scale", DoubleType, nullable = true)))
     assert(result.schema === expectedSchema)
   }
 
@@ -361,11 +362,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(commentsFile))
       .collect()
 
+    val decimalOne = new BigDecimal(5.01D.toString)
+    val decimalTwo = new BigDecimal(0.toString).setScale(2)
+    val decimalThree = new BigDecimal(5.toString).setScale(2)
     val expected =
-      Seq(Seq(1, 2, 3, 4, 5.01D, Timestamp.valueOf("2015-08-20 15:57:00")),
-          Seq(6, 7, 8, 9, 0, Timestamp.valueOf("2015-08-21 16:58:01")),
-          Seq(1, 2, 3, 4, 5, Timestamp.valueOf("2015-08-23 18:00:42")))
-
+      Seq(Seq(1, 2, 3, 4, decimalOne, Timestamp.valueOf("2015-08-20 15:57:00")),
+          Seq(6, 7, 8, 9, decimalTwo, Timestamp.valueOf("2015-08-21 16:58:01")),
+          Seq(1, 2, 3, 4, decimalThree, Timestamp.valueOf("2015-08-23 18:00:42")))
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 
