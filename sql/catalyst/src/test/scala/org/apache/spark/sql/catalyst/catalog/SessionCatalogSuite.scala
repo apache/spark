@@ -197,17 +197,17 @@ class SessionCatalogSuite extends SparkFunSuite {
     val catalog = new SessionCatalog(newBasicCatalog())
     val tempTable1 = Range(1, 10, 1, 10, Seq())
     val tempTable2 = Range(1, 20, 2, 10, Seq())
-    catalog.createTempTable("tbl1", tempTable1, ignoreIfExists = false)
-    catalog.createTempTable("tbl2", tempTable2, ignoreIfExists = false)
+    catalog.createTempTable("tbl1", tempTable1, overrideIfExists = false)
+    catalog.createTempTable("tbl2", tempTable2, overrideIfExists = false)
     assert(catalog.getTempTable("tbl1") == Some(tempTable1))
     assert(catalog.getTempTable("tbl2") == Some(tempTable2))
     assert(catalog.getTempTable("tbl3") == None)
     // Temporary table already exists
     intercept[AnalysisException] {
-      catalog.createTempTable("tbl1", tempTable1, ignoreIfExists = false)
+      catalog.createTempTable("tbl1", tempTable1, overrideIfExists = false)
     }
     // Temporary table already exists but we override it
-    catalog.createTempTable("tbl1", tempTable2, ignoreIfExists = true)
+    catalog.createTempTable("tbl1", tempTable2, overrideIfExists = true)
     assert(catalog.getTempTable("tbl1") == Some(tempTable2))
   }
 
@@ -243,7 +243,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
     val tempTable = Range(1, 10, 2, 10, Seq())
-    sessionCatalog.createTempTable("tbl1", tempTable, ignoreIfExists = false)
+    sessionCatalog.createTempTable("tbl1", tempTable, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
     assert(sessionCatalog.getTempTable("tbl1") == Some(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
@@ -255,7 +255,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl2"))
     // If database is specified, temp tables are never dropped
-    sessionCatalog.createTempTable("tbl1", tempTable, ignoreIfExists = false)
+    sessionCatalog.createTempTable("tbl1", tempTable, overrideIfExists = false)
     sessionCatalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
     sessionCatalog.dropTable(TableIdentifier("tbl1", Some("db2")), ignoreIfNotExists = false)
     assert(sessionCatalog.getTempTable("tbl1") == Some(tempTable))
@@ -299,7 +299,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
     val tempTable = Range(1, 10, 2, 10, Seq())
-    sessionCatalog.createTempTable("tbl1", tempTable, ignoreIfExists = false)
+    sessionCatalog.createTempTable("tbl1", tempTable, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
     assert(sessionCatalog.getTempTable("tbl1") == Some(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
@@ -327,7 +327,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(newTbl1.properties.get("toh") == Some("frem"))
     // Alter table without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
-    sessionCatalog.alterTable(tbl1.copy(name = TableIdentifier("tbl1")))
+    sessionCatalog.alterTable(tbl1.copy(identifier = TableIdentifier("tbl1")))
     val newestTbl1 = externalCatalog.getTable("db2", "tbl1")
     assert(newestTbl1 == tbl1)
   }
@@ -368,7 +368,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val sessionCatalog = new SessionCatalog(externalCatalog)
     val tempTable1 = Range(1, 10, 1, 10, Seq())
     val metastoreTable1 = externalCatalog.getTable("db2", "tbl1")
-    sessionCatalog.createTempTable("tbl1", tempTable1, ignoreIfExists = false)
+    sessionCatalog.createTempTable("tbl1", tempTable1, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
     // If we explicitly specify the database, we'll look up the relation in that database
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1", Some("db2")))
@@ -406,7 +406,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(!catalog.tableExists(TableIdentifier("tbl2", Some("db1"))))
     // If database is explicitly specified, do not check temporary tables
     val tempTable = Range(1, 10, 1, 10, Seq())
-    catalog.createTempTable("tbl3", tempTable, ignoreIfExists = false)
+    catalog.createTempTable("tbl3", tempTable, overrideIfExists = false)
     assert(!catalog.tableExists(TableIdentifier("tbl3", Some("db2"))))
     // If database is not explicitly specified, check the current database
     catalog.setCurrentDatabase("db2")
@@ -418,8 +418,8 @@ class SessionCatalogSuite extends SparkFunSuite {
   test("list tables without pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val tempTable = Range(1, 10, 2, 10, Seq())
-    catalog.createTempTable("tbl1", tempTable, ignoreIfExists = false)
-    catalog.createTempTable("tbl4", tempTable, ignoreIfExists = false)
+    catalog.createTempTable("tbl1", tempTable, overrideIfExists = false)
+    catalog.createTempTable("tbl4", tempTable, overrideIfExists = false)
     assert(catalog.listTables("db1").toSet ==
       Set(TableIdentifier("tbl1"), TableIdentifier("tbl4")))
     assert(catalog.listTables("db2").toSet ==
@@ -435,8 +435,8 @@ class SessionCatalogSuite extends SparkFunSuite {
   test("list tables with pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val tempTable = Range(1, 10, 2, 10, Seq())
-    catalog.createTempTable("tbl1", tempTable, ignoreIfExists = false)
-    catalog.createTempTable("tbl4", tempTable, ignoreIfExists = false)
+    catalog.createTempTable("tbl1", tempTable, overrideIfExists = false)
+    catalog.createTempTable("tbl4", tempTable, overrideIfExists = false)
     assert(catalog.listTables("db1", "*").toSet == catalog.listTables("db1").toSet)
     assert(catalog.listTables("db2", "*").toSet == catalog.listTables("db2").toSet)
     assert(catalog.listTables("db2", "tbl*").toSet ==
@@ -826,7 +826,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.createFunction(newFunc("func1", Some("db2")))
     sessionCatalog.renameFunction(FunctionIdentifier("func1"), FunctionIdentifier("func4"))
     assert(sessionCatalog.getTempFunction("func4") ==
-      Some(tempFunc.copy(name = FunctionIdentifier("func4"))))
+      Some(tempFunc.copy(identifier = FunctionIdentifier("func4"))))
     assert(sessionCatalog.getTempFunction("func1") == None)
     assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func1", "func3"))
     // Then, if no such temporary function exist, rename the function in the current database
