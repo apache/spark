@@ -51,7 +51,7 @@ from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 from pyspark.sql.functions import UserDefinedFunction, sha2
 from pyspark.sql.window import Window
-from pyspark.sql.utils import AnalysisException, IllegalArgumentException
+from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
 
 class UTCOffsetTimezone(datetime.tzinfo):
@@ -1130,7 +1130,9 @@ class SQLTests(ReusedPySparkTestCase):
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.sqlCtx.sql("select abc"))
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
-        self.assertRaises(AnalysisException, lambda: self.sqlCtx.sql("abc"))
+
+    def test_capture_parse_exception(self):
+        self.assertRaises(ParseException, lambda: self.sqlCtx.sql("abc"))
 
     def test_capture_illegalargument_exception(self):
         self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapred.reduce.tasks",

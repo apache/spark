@@ -28,8 +28,12 @@ import org.apache.spark.storage.memory.MemoryStore
  * (caching).
  *
  * @param lock a [[MemoryManager]] instance to synchronize on
+ * @param memoryMode the type of memory tracked by this pool (on- or off-heap)
  */
-private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) with Logging {
+private[memory] class StorageMemoryPool(
+    lock: Object,
+    memoryMode: MemoryMode
+  ) extends MemoryPool(lock) with Logging {
 
   @GuardedBy("lock")
   private[this] var _memoryUsed: Long = 0L
@@ -79,7 +83,8 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
-    if (numBytesToFree > 0) {
+    // Once we support off-heap caching, this will need to change:
+    if (numBytesToFree > 0 && memoryMode == MemoryMode.ON_HEAP) {
       memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree)
     }
     // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
@@ -117,7 +122,14 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
     val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
     if (remainingSpaceToFree > 0) {
       // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
-      val spaceFreedByEviction = memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree)
+      val spaceFreedByEviction = {
+        // Once we support off-heap caching, this will need to change:
+        if (memoryMode == MemoryMode.ON_HEAP) {
+          memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree)
+        } else {
+          0
+        }
+      }
       // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
       // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.
       decrementPoolSize(spaceFreedByEviction)
