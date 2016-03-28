@@ -174,8 +174,8 @@ private[state] class HDFSBackedStateStoreProvider(
     }
 
     /**
-     * Get an iterator of all the store data. This can be called only after committing the
-     * updates.
+     * Get an iterator of all the store data.
+     * This can be called only after committing all the updates made in the current thread.
      */
     override def iterator(): Iterator[(UnsafeRow, UnsafeRow)] = {
       verify(state == COMMITTED, "Cannot get iterator of store data before comitting")
@@ -184,7 +184,7 @@ private[state] class HDFSBackedStateStoreProvider(
 
     /**
      * Get an iterator of all the updates made to the store in the current version.
-     * This can be called only after committing the updates.
+     * This can be called only after committing all the updates made in the current thread.
      */
     override def updates(): Iterator[StoreUpdate] = {
       verify(state == COMMITTED, "Cannot get iterator of updates before committing")
@@ -194,7 +194,7 @@ private[state] class HDFSBackedStateStoreProvider(
     /**
      * Whether all updates have been committed
      */
-    override def hasCommitted: Boolean = {
+    override private[state] def hasCommitted: Boolean = {
       state == COMMITTED
     }
   }

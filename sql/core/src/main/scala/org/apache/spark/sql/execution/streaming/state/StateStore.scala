@@ -47,10 +47,10 @@ trait StateStore {
   /** Version of the data in this store before committing updates. */
   def version: Long
 
-  /** Get the latest value of a key */
+  /** Get the current value of a key. */
   def get(key: UnsafeRow): Option[UnsafeRow]
 
-  /** Put new value for a key */
+  /** Put a new value for a key. */
   def put(key: UnsafeRow, value: UnsafeRow)
 
   /**
@@ -68,20 +68,20 @@ trait StateStore {
 
   /**
    * Iterator of store data after a set of updates have been committed.
-   * This can be called only after commitUpdates() has been called in the current thread.
+   * This can be called only after committing all the updates made in the current thread.
    */
   def iterator(): Iterator[(UnsafeRow, UnsafeRow)]
 
   /**
    * Iterator of the updates that have been committed.
-   * This can be called only after commitUpdates() has been called in the current thread.
+   * This can be called only after committing all the updates made in the current thread.
    */
   def updates(): Iterator[StoreUpdate]
 
   /**
    * Whether all updates have been committed
    */
-  def hasCommitted: Boolean
+  private[state] def hasCommitted: Boolean
 }
 
 
