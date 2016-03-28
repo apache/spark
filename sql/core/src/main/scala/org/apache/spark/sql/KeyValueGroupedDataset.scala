@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.QueryExecution
 class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],
-    val queryExecution: QueryExecution,
+    val ds: Dataset[_],
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
 
@@ -54,8 +54,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private val resolvedVEncoder =
     unresolvedVEncoder.resolve(dataAttributes, OuterScopes.outerScopes)
 
-  private def logicalPlan = queryExecution.analyzed
-  private def sqlContext = queryExecution.sqlContext
+  private def logicalPlan = ds.logicalPlan
+  private def sqlContext = ds.sqlContext
 
   private def groupedData = {
     new RelationalGroupedDataset(
@@ -75,7 +75,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     new KeyValueGroupedDataset(
       encoderFor[L],
       unresolvedVEncoder,
-      queryExecution,
+      ds,
       dataAttributes,
       groupingAttributes)
 
@@ -84,11 +84,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def keys: Dataset[K] = {
-    Dataset[K](
-      sqlContext,
-      Distinct(
-        Project(groupingAttributes, logicalPlan)))
+  def keys: Dataset[K] = ds.withTypedPlan {
+    Distinct(Project(groupingAttributes, logicalPlan))
   }
 
   /**
@@ -109,14 +106,13 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
-    Dataset[U](
-      sqlContext,
-      MapGroups(
-        f,
-        groupingAttributes,
-        dataAttributes,
-        logicalPlan))
+  def flatMapGroups[U : Encoder](
+      f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = ds.withTypedPlan {
+    MapGroups(
+      f,
+      groupingAttributes,
+      dataAttributes,
+      logicalPlan)
   }
 
   /**
@@ -231,12 +227,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
       Alias(CreateStruct(groupingAttributes), "key")()
     }
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
-    val execution = new QueryExecution(sqlContext, aggregate)
 
-    new Dataset(
-      sqlContext,
-      execution,
-      ExpressionEncoder.tuple(unresolvedKEncoder +: encoders))
+    ds.withTypedPlan(aggregate)(ExpressionEncoder.tuple(unresolvedKEncoder +: encoders))
   }
 
   /**
@@ -302,8 +294,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       other: KeyValueGroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
     implicit val uEncoder = other.unresolvedVEncoder
-    Dataset[R](
-      sqlContext,
+    ds.withTypedPlan {
       CoGroup(
         f,
         this.groupingAttributes,
@@ -311,7 +302,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
         this.dataAttributes,
         other.dataAttributes,
         this.logicalPlan,
-        other.logicalPlan))
+        other.logicalPlan)
+    }
   }
 
   /**

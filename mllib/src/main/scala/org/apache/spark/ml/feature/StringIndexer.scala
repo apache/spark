@@ -172,7 +172,7 @@ class StringIndexerModel (
       case _ => dataset
     }
     filteredDataset.select(col("*"),
-      indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
+      indexer(filteredDataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
   }
 
   override def transformSchema(schema: StructType): StructType = {

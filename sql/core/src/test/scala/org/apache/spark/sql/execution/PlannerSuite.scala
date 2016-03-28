@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, Row}
+import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -54,18 +54,18 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("count is partially aggregated") {
-    val query = testData.groupBy('value).agg(count('key)).queryExecution.optimizedPlan
+    val query = testData.groupBy('value).agg(count('key)).originalLogicalPlan
     testPartialAggregationPlan(query)
   }
 
   test("count distinct is partially aggregated") {
-    val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.optimizedPlan
+    val query = testData.groupBy('value).agg(countDistinct('key)).originalLogicalPlan
     testPartialAggregationPlan(query)
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
-      testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.optimizedPlan
+      testData.groupBy('value).agg(count('value), countDistinct('key)).originalLogicalPlan
     testPartialAggregationPlan(query)
   }
 
@@ -164,26 +164,30 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  private def checkOutput(planned: SparkPlan, df: DataFrame): Unit = {
+    assert(planned.output.map(_.withQualifier(None)) ===
+      df.logicalPlan.output.map(_.withQualifier(None)))
+  }
+
   test("efficient terminal limit -> sort should use TakeOrderedAndProject") {
     val query = testData.select('key, 'value).sort('key).limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProject])
-    assert(planned.output ===
-      testData.select('key, 'value).logicalPlan.output.map(_.withQualifier(None)))
+    checkOutput(planned, testData.select('key, 'value))
   }
 
   test("terminal limit -> project -> sort should use TakeOrderedAndProject") {
     val query = testData.select('key, 'value).sort('key).select('value, 'key).limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProject])
-    assert(planned.output === testData.select('value, 'key).logicalPlan.output)
+    checkOutput(planned, testData.select('value, 'key))
   }
 
   test("terminal limits that are not handled by TakeOrderedAndProject should use CollectLimit") {
     val query = testData.select('value).limit(2)
     val planned = query.queryExecution.sparkPlan
     assert(planned.isInstanceOf[CollectLimit])
-    assert(planned.output === testData.select('value).logicalPlan.output)
+    checkOutput(planned, testData.select('value))
   }
 
   test("TakeOrderedAndProject can appear in the middle of plans") {

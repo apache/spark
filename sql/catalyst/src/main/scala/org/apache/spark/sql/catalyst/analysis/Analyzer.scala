@@ -284,7 +284,7 @@ class Analyzer(
                     s"grouping columns (${x.groupByExprs.mkString(",")})")
               }
             case Grouping(col: Expression) =>
-              val idx = x.groupByExprs.indexOf(col)
+              val idx = x.groupByExprs.indexWhere(_ semanticEquals col)
               if (idx >= 0) {
                 Cast(BitwiseAnd(ShiftRight(gid, Literal(x.groupByExprs.length - 1 - idx)),
                   Literal(1)), ByteType)

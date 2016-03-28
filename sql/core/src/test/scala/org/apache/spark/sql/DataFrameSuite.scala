@@ -553,8 +553,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         case Row(id: Int, name: String, age: Int, idToDrop: Int, salary: Double) =>
           Row(id, name, age, salary)
       }.toSeq)
+    assert(joinedDf.schema.map(_.name) === Seq("id", "name", "age", "id", "salary"))
     assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
-    assert(df("id") == person("id"))
   }
 
   test("withColumnRenamed") {
@@ -1436,18 +1436,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("Un-direct self-join") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
     val df2 = df.filter($"i" > 0)
-
-    val err = intercept[AnalysisException](df.join(df2, (df("i") + 1) === df2("i")))
-    assert(err.message.contains("please eliminate ambiguity from the inputs first"))
-
-    val namedDf = df.as("x")
-    val namedDf2 = df2.as("y")
     checkAnswer(
-      namedDf.join(namedDf2, (namedDf("i") + 1) === namedDf2("i")),
-      Row(1, "a", 2, "b") :: Nil
-    )
-    checkAnswer(
-      namedDf.join(namedDf2, ($"x.i" + 1) === $"y.i"),
+      df.join(df2, (df("i") + 1) === df2("i")),
       Row(1, "a", 2, "b") :: Nil
     )
   }

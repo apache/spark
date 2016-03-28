@@ -116,11 +116,11 @@ class OneHotEncoderSuite
   test("OneHotEncoder with varying types") {
     val df = stringIndexed()
     val dfWithTypes = df
-      .withColumn("shortLabel", df("labelIndex").cast(ShortType))
-      .withColumn("longLabel", df("labelIndex").cast(LongType))
-      .withColumn("intLabel", df("labelIndex").cast(IntegerType))
-      .withColumn("floatLabel", df("labelIndex").cast(FloatType))
-      .withColumn("decimalLabel", df("labelIndex").cast(DecimalType(10, 0)))
+      .withColumn("shortLabel", col("labelIndex").cast(ShortType))
+      .withColumn("longLabel", col("labelIndex").cast(LongType))
+      .withColumn("intLabel", col("labelIndex").cast(IntegerType))
+      .withColumn("floatLabel", col("labelIndex").cast(FloatType))
+      .withColumn("decimalLabel", col("labelIndex").cast(DecimalType(10, 0)))
     val cols = Array("labelIndex", "shortLabel", "longLabel", "intLabel",
       "floatLabel", "decimalLabel")
     for (col <- cols) {
