@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
@@ -64,11 +64,18 @@ private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
             assert(evaluation != null, "Unable to evaluate PythonUDF.  Missing input attributes.")
 
             // Trim away the new UDF value if it was only used for filtering or something.
-            logical.Project(
-              plan.output,
-              plan.transformExpressions {
-                case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
-              }.withNewChildren(newChildren))
+            val transformed = plan.transformExpressions {
+              case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
+            }.withNewChildren(newChildren)
+
+            // If plan is an [[Aggregate]], return evaluated plan as is for
+            // [[ResolveAggregateFunctions]] rule in a batch for further resolution.
+            // Otherwise, construct a [[Project]] with evaluated udf.
+            if (plan.isInstanceOf[Aggregate]) {
+              transformed
+            } else {
+              logical.Project(plan.output, transformed)
+            }
 
           case None =>
             // If there is no Python UDF that is resolved, skip this round.

@@ -1342,6 +1342,14 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             sorted(df.select(functions.collect_list(df.value).alias('r')).collect()[0].r),
             ["1", "2", "2", "2"])
 
+    def test_udf_with_aggregate_function(self):
+        df = self.sqlCtx.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        from pyspark.sql.functions import udf, col
+        from pyspark.sql.types import BooleanType
+
+        my_filter = udf(lambda a: a == 1, BooleanType())
+        sel = df.select(col("key")).distinct().filter(my_filter(col("key")))
+        self.assertEqual(sel.collect(), [Row(key=1)])
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
