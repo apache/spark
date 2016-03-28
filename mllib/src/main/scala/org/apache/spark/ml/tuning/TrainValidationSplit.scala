@@ -17,6 +17,10 @@
 
 package org.apache.spark.ml.tuning
 
+import java.{util => ju}
+
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
@@ -192,6 +196,11 @@ class TrainValidationSplitModel private[ml] (
     @Since("1.5.0") val bestModel: Model[_],
     @Since("1.5.0") val validationMetrics: Array[Double])
   extends Model[TrainValidationSplitModel] with TrainValidationSplitParams with MLWritable {
+
+  /** A Java/Python-friendly auxiliary constructor. */
+  private[ml] def this(uid: String, bestModel: Model[_], validationMetrics: ju.List[Double]) = {
+    this(uid, bestModel, validationMetrics.asScala.toArray)
+  }
 
   @Since("1.5.0")
   override def transform(dataset: DataFrame): DataFrame = {

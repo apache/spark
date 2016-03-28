@@ -448,7 +448,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         return _java_obj
 
 
-class TrainValidationSplit(Estimator, ValidatorParams, HasSeed):
+class TrainValidationSplit(Estimator, ValidatorParams, HasSeed, MLReadable, MLWritable):
     """
     Train-Validation-Split.
 
@@ -551,7 +551,10 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasSeed):
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return TrainValidationSplitModel(bestModel)
+        return TrainValidationSplitModel(bestModel)\
+            .setEstimator(self.getEstimator())\
+            .setEstimatorParamMaps(self.getEstimatorParamMaps())\
+            .setEvaluator(self.getEvaluator())
 
     @since("2.0.0")
     def copy(self, extra=None):
@@ -623,7 +626,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasSeed):
         return _java_obj
 
 
-class TrainValidationSplitModel(Model, ValidatorParams):
+class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
     """
     Model from train validation split.
     """
