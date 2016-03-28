@@ -722,7 +722,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     withTable(tableName) {
       val schema = StructType(StructField("int", IntegerType, true) :: Nil)
       val hiveTable = CatalogTable(
-        name = TableIdentifier(tableName, Some("default")),
+        identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED_TABLE,
         schema = Seq.empty,
         storage = CatalogStorageFormat(

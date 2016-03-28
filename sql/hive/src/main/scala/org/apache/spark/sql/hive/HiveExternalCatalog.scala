@@ -34,7 +34,7 @@ import org.apache.spark.sql.hive.client.HiveClient
  * A persistent implementation of the system catalog using Hive.
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog with Logging {
+private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCatalog with Logging {
   import ExternalCatalog._
 
   // Exceptions thrown by the hive client that we would like to wrap
@@ -74,10 +74,10 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
   }
 
   private def requireDbMatches(db: String, table: CatalogTable): Unit = {
-    if (table.name.database != Some(db)) {
+    if (table.identifier.database != Some(db)) {
       throw new AnalysisException(
         s"Provided database $db does not much the one specified in the " +
-        s"table definition (${table.name.database.getOrElse("n/a")})")
+        s"table definition (${table.identifier.database.getOrElse("n/a")})")
     }
   }
 
@@ -160,7 +160,8 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
-    val newTable = client.getTable(db, oldName).copy(name = TableIdentifier(newName, Some(db)))
+    val newTable = client.getTable(db, oldName)
+      .copy(identifier = TableIdentifier(newName, Some(db)))
     client.alterTable(oldName, newTable)
   }
 
@@ -173,7 +174,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends ExternalCatalog wit
    */
   override def alterTable(db: String, tableDefinition: CatalogTable): Unit = withClient {
     requireDbMatches(db, tableDefinition)
-    requireTableExists(db, tableDefinition.name.table)
+    requireTableExists(db, tableDefinition.identifier.table)
     client.alterTable(tableDefinition)
   }
 

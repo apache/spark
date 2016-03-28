@@ -60,7 +60,7 @@ private[hive] case class CreateTableAsSelect(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean =
-    tableDesc.name.database.isDefined &&
+    tableDesc.identifier.database.isDefined &&
     tableDesc.schema.nonEmpty &&
     tableDesc.storage.serde.isDefined &&
     tableDesc.storage.inputFormat.isDefined &&
@@ -183,7 +183,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     val tableIdentifier = extractTableIdent(viewNameParts)
     val originalText = query.source
     val tableDesc = CatalogTable(
-      name = tableIdentifier,
+      identifier = tableIdentifier,
       tableType = CatalogTableType.VIRTUAL_VIEW,
       schema = schema,
       storage = CatalogStorageFormat(
@@ -352,7 +352,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
         // TODO add bucket support
         var tableDesc: CatalogTable = CatalogTable(
-          name = tableIdentifier,
+          identifier = tableIdentifier,
           tableType =
             if (externalTable.isDefined) {
               CatalogTableType.EXTERNAL_TABLE

@@ -155,7 +155,7 @@ class InMemoryCatalog extends ExternalCatalog {
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
     requireDbExists(db)
-    val table = tableDefinition.name.table
+    val table = tableDefinition.identifier.table
     if (tableExists(db, table)) {
       if (!ignoreIfExists) {
         throw new AnalysisException(s"Table '$table' already exists in database '$db'")
@@ -182,14 +182,14 @@ class InMemoryCatalog extends ExternalCatalog {
   override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
     requireTableExists(db, oldName)
     val oldDesc = catalog(db).tables(oldName)
-    oldDesc.table = oldDesc.table.copy(name = TableIdentifier(newName, Some(db)))
+    oldDesc.table = oldDesc.table.copy(identifier = TableIdentifier(newName, Some(db)))
     catalog(db).tables.put(newName, oldDesc)
     catalog(db).tables.remove(oldName)
   }
 
   override def alterTable(db: String, tableDefinition: CatalogTable): Unit = synchronized {
-    requireTableExists(db, tableDefinition.name.table)
-    catalog(db).tables(tableDefinition.name.table).table = tableDefinition
+    requireTableExists(db, tableDefinition.identifier.table)
+    catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
@@ -296,10 +296,10 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
-    if (functionExists(db, func.name.funcName)) {
+    if (functionExists(db, func.identifier.funcName)) {
       throw new AnalysisException(s"Function '$func' already exists in '$db' database")
     } else {
-      catalog(db).functions.put(func.name.funcName, func)
+      catalog(db).functions.put(func.identifier.funcName, func)
     }
   }
 
@@ -310,14 +310,14 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = synchronized {
     requireFunctionExists(db, oldName)
-    val newFunc = getFunction(db, oldName).copy(name = FunctionIdentifier(newName, Some(db)))
+    val newFunc = getFunction(db, oldName).copy(identifier = FunctionIdentifier(newName, Some(db)))
     catalog(db).functions.remove(oldName)
     catalog(db).functions.put(newName, newFunc)
   }
 
   override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = synchronized {
-    requireFunctionExists(db, funcDefinition.name.funcName)
-    catalog(db).functions.put(funcDefinition.name.funcName, funcDefinition)
+    requireFunctionExists(db, funcDefinition.identifier.funcName)
+    catalog(db).functions.put(funcDefinition.identifier.funcName, funcDefinition)
   }
 
   override def getFunction(db: String, funcName: String): CatalogFunction = synchronized {
