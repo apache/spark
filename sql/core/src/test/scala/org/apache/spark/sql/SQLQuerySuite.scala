@@ -2400,23 +2400,23 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |)
         """.stripMargin)
       checkAnswer(
-        sql("show tables from default 'show1*'"),
+        sql("SHOW TABLES FROM default 'show1*'"),
         Row("show1a", true) :: Nil)
 
       checkAnswer(
-        sql("show tables from default 'show1*|show2*'"),
+        sql("SHOW TABLES FROM default 'show1*|show2*'"),
         Row("show1a", true) ::
           Row("show2b", true) :: Nil)
 
       checkAnswer(
-        sql("show tables 'show1*|show2*'"),
+        sql("SHOW TABLES 'show1*|show2*'"),
         Row("show1a", true) ::
           Row("show2b", true) :: Nil)
 
       assert(
-        sql("show tables").count() >= 2)
+        sql("SHOW TABLES").count() >= 2)
       assert(
-        sql("show tables from default").count() >= 2)
+        sql("SHOW TABLES FROM default").count() >= 2)
     }
   }
 }

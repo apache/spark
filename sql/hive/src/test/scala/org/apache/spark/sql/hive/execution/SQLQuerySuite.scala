@@ -1814,23 +1814,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("show tables") {
     withTable("show1a", "show2b") {
-      sql("create table show1a(c1 int)")
-      sql("create table show2b(c2 int)")
+      sql("CREATE TABLE show1a(c1 int)")
+      sql("CREATE TABLE show2b(c2 int)")
       checkAnswer(
-        sql("show tables from default 'show1*'"),
+        sql("SHOW TABLES FROM default 'show1*'"),
         Row("show1a", false) :: Nil)
       checkAnswer(
-        sql("show tables from default 'show1*|show2*'"),
+        sql("SHOW TABLES FROM default 'show1*|show2*'"),
         Row("show1a", false) ::
           Row("show2b", false) :: Nil)
       checkAnswer(
-        sql("show tables 'show1*|show2*'"),
+        sql("SHOW TABLES 'show1*|show2*'"),
         Row("show1a", false) ::
           Row("show2b", false) :: Nil)
       assert(
-        sql("show tables").count() >= 2)
+        sql("SHOW TABLES").count() >= 2)
       assert(
-        sql("show tables from default").count() >= 2)
+        sql("SHOW TABLES FROM default").count() >= 2)
 
     }
   }
