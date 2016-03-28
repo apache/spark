@@ -126,6 +126,7 @@ private[sql] class DefaultSource
 
   override def buildReader(
       sqlContext: SQLContext,
+      physicalSchema: StructType,
       partitionSchema: StructType,
       dataSchema: StructType,
       filters: Seq[Filter],
@@ -145,9 +146,9 @@ private[sql] class DefaultSource
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
 
-      // SPARK-8501: Empty ORC files always have an empty schema stored in their footer.  In this
-      // case, `OrcFileOperator.readSchema` returns `None`, and we can simply return an empty
-      // iterator.
+      // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
+      // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
+      // using the given physical schema. Instead, we simply return an empty iterator.
       val maybePhysicalSchema = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf))
       if (maybePhysicalSchema.isEmpty) {
         Iterator.empty

@@ -329,6 +329,7 @@ class TestFileFormat extends FileFormat {
 
   override def buildReader(
       sqlContext: SQLContext,
+      physicalSchema: StructType,
       partitionSchema: StructType,
       dataSchema: StructType,
       filters: Seq[Filter],

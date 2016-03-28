@@ -291,6 +291,7 @@ private[sql] class DefaultSource
    */
   override def buildReader(
       sqlContext: SQLContext,
+      physicalSchema: StructType,
       partitionSchema: StructType,
       dataSchema: StructType,
       filters: Seq[Filter],

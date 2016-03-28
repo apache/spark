@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.RecordWriter
 import org.apache.hadoop.mapreduce.TaskAttemptContext
@@ -49,14 +49,10 @@ object CSVRelation extends Logging {
     }, true)
   }
 
-  def parseCsv(
-      tokenizedRDD: RDD[Array[String]],
+  def csvParser(
       schema: StructType,
       requiredColumns: Array[String],
-      inputs: Seq[FileStatus],
-      sqlContext: SQLContext,
-      params: CSVOptions): RDD[InternalRow] = {
-
+      params: CSVOptions): Array[String] => Option[InternalRow] = {
     val schemaFields = schema.fields
     val requiredFields = StructType(requiredColumns.map(schema(_))).fields
     val safeRequiredFields = if (params.dropMalformed) {
@@ -74,7 +70,8 @@ object CSVRelation extends Logging {
     }
     val requiredSize = requiredFields.length
     val row = new GenericMutableRow(requiredSize)
-    tokenizedRDD.flatMap { tokens =>
+
+    (tokens: Array[String]) => {
       if (params.dropMalformed && schemaFields.length != tokens.length) {
         logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
         None
@@ -117,6 +114,15 @@ object CSVRelation extends Logging {
         }
       }
     }
+  }
+
+  def parseCsv(
+      tokenizedRDD: RDD[Array[String]],
+      schema: StructType,
+      requiredColumns: Array[String],
+      options: CSVOptions): RDD[InternalRow] = {
+    val parser = csvParser(schema, requiredColumns, options)
+    tokenizedRDD.flatMap(parser(_).toSeq)
   }
 }
 
