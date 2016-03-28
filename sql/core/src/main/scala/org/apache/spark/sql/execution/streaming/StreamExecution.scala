@@ -47,7 +47,7 @@ class StreamExecution(
     val checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink,
-    triggerPeriodMs: Long) extends ContinuousQuery with Logging {
+    triggerIntervalMs: Long) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
   private val awaitBatchLock = new Object
@@ -213,13 +213,13 @@ class StreamExecution(
         val batchStartTimeMs = System.currentTimeMillis()
         if (dataAvailable) runBatch()
         commitAndConstructNextBatch()
-        if (triggerPeriodMs > 0) {
+        if (triggerIntervalMs > 0) {
           val batchElapsedTime = System.currentTimeMillis() - batchStartTimeMs
-          if (batchElapsedTime > triggerPeriodMs) {
-            logWarning("Current batch is falling behind. The trigger period is " +
-              s"${triggerPeriodMs} milliseconds, but spent ${batchElapsedTime} milliseconds")
+          if (batchElapsedTime > triggerIntervalMs) {
+            logWarning("Current batch is falling behind. The trigger interval is " +
+              s"${triggerIntervalMs} milliseconds, but spent ${batchElapsedTime} milliseconds")
           } else {
-            Thread.sleep(triggerPeriodMs - batchElapsedTime)
+            Thread.sleep(triggerIntervalMs - batchElapsedTime)
           }
         }
       }

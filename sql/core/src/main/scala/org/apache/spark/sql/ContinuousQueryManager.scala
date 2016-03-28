@@ -172,7 +172,7 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
       checkpointLocation: String,
       df: DataFrame,
       sink: Sink,
-      triggerPeriodMs: Long): ContinuousQuery = {
+      triggerIntervalMs: Long): ContinuousQuery = {
     activeQueriesLock.synchronized {
       if (activeQueries.contains(name)) {
         throw new IllegalArgumentException(
@@ -184,7 +184,7 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
         checkpointLocation,
         df.logicalPlan,
         sink,
-        triggerPeriodMs)
+        triggerIntervalMs)
       query.start()
       activeQueries.put(name, query)
       query

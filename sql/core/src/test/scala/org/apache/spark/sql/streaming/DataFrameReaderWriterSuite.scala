@@ -291,7 +291,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .startStream()
       .stop()
 
-    assert(LastOptions.parameters("period") == "10000")
+    assert(LastOptions.parameters("triggerInterval") == "10000")
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
@@ -300,6 +300,6 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .startStream()
       .stop()
 
-    assert(LastOptions.parameters("period") == "100000")
+    assert(LastOptions.parameters("triggerInterval") == "100000")
   }
 }

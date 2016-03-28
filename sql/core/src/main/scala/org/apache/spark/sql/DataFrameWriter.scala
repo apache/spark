@@ -79,22 +79,22 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Set the trigger period for the stream query.
+   * Set the trigger interval for the stream query.
    *
    * @since 2.0.0
    */
-  def trigger(period: Duration): DataFrameWriter = {
-    this.extraOptions += ("period" -> period.toMillis.toString)
+  def trigger(interval: Duration): DataFrameWriter = {
+    this.extraOptions += ("triggerInterval" -> interval.toMillis.toString)
     this
   }
 
   /**
-   * Set the trigger period for the stream query.
+   * Set the trigger interval for the stream query.
    *
    * @since 2.0.0
    */
-  def trigger(period: Long, unit: TimeUnit): DataFrameWriter = {
-    this.extraOptions += ("period" -> unit.toMillis(period).toString)
+  def trigger(interval: Long, unit: TimeUnit): DataFrameWriter = {
+    this.extraOptions += ("triggerInterval" -> unit.toMillis(interval).toString)
     this
   }
 
@@ -278,14 +278,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     val checkpointLocation = extraOptions.getOrElse("checkpointLocation", {
       new Path(df.sqlContext.conf.checkpointLocation, queryName).toUri.toString
     })
-    val triggerPeriodMs = extraOptions.getOrElse("period", "0").toLong
-    require(triggerPeriodMs >= 0, "the period of trigger should not be negative")
+    val triggerIntervalMs = extraOptions.getOrElse("triggerInterval", "0").toLong
+    require(triggerIntervalMs >= 0, "the interval of trigger should not be negative")
     df.sqlContext.sessionState.continuousQueryManager.startQuery(
       queryName,
       checkpointLocation,
       df,
       dataSource.createSink(),
-      triggerPeriodMs)
+      triggerIntervalMs)
   }
 
   /**
