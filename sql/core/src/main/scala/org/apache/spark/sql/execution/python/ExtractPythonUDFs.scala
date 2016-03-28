@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -29,13 +30,31 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * multiple child operators.
  */
 private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
+
+  private def hasUDF(e: Expression): Boolean = {
+    e.find(_.isInstanceOf[PythonUDF]).isDefined
+  }
+
+  private def canEvaluate(e: PythonUDF): Boolean = {
+    e.children match {
+      case Seq(u: PythonUDF) => canEvaluate(u)
+      case children => !children.exists(hasUDF)
+    }
+  }
+
+  private def collectEvaluatableUDF(expr: Expression): Seq[PythonUDF] = {
+    expr.collect {
+      case udf: PythonUDF if canEvaluate(udf) => udf
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // Skip EvaluatePython nodes.
     case plan: EvaluatePython => plan
 
     case plan: LogicalPlan if plan.resolved =>
       // Extract any PythonUDFs from the current operator.
-      val udfs = plan.expressions.flatMap(_.collect { case udf: PythonUDF => udf })
+      val udfs = plan.expressions.flatMap(collectEvaluatableUDF)
       if (udfs.isEmpty) {
         // If there aren't any, we are done.
         plan

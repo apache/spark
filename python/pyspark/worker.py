@@ -57,6 +57,11 @@ def read_command(serializer, file):
     return command
 
 
+def chain(f, g):
+    """chain two function together """
+    return lambda x: g(f(x))
+
+
 def main(infile, outfile):
     try:
         boot_time = time.time()
@@ -112,8 +117,7 @@ def main(infile, outfile):
                 if row_func is None:
                     row_func = f
                 else:
-                    # chain multiple UDF together
-                    row_func = lambda x: f(row_func(x))
+                    row_func = chain(row_func, f)
             serializer = deserializer
             func = lambda _, it: map(lambda x: returnType.toInternal(row_func(*x)), it)
         else:
