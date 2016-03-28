@@ -632,7 +632,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       case s: GenericFileFormatContext =>
         (Seq.empty[String], Option(s.identifier.getText))
       case s: TableFileFormatContext =>
-        val elements = Seq(s.inFmt, s.outFmt, s.serdeCls) ++
+        val elements = Seq(s.inFmt, s.outFmt) ++
+          Option(s.serdeCls).toSeq ++
           Option(s.inDriver).toSeq ++
           Option(s.outDriver).toSeq
         (elements.map(string), None)
