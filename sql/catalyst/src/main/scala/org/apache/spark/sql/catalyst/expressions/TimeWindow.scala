@@ -1,5 +1,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.commons.lang.StringUtils
+
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -12,8 +15,9 @@ case class TimeWindow(
 	with Unevaluable
 	with NonSQLExpression {
 
-	lazy val timeColumn = Cast(originalTimeColumn, TimestampType)
 	override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(TimestampType, LongType))
+	// the time column in Timestamp format
+	lazy val timeColumn = Cast(originalTimeColumn, TimestampType)
 	override def child: Expression = timeColumn
 	override def dataType: DataType = outputType
 
@@ -33,19 +37,34 @@ case class TimeWindow(
 	 *         therefore we use seconds here as well.
 	 */
 	private def getIntervalInSeconds(interval: String): Long = {
+		if (StringUtils.isBlank(interval)) {
+			throw new AnalysisException(
+				"The window duration, slide duration and start time cannot be null.")
+		}
 		val intervalString = if (interval.startsWith("interval")) {
 			interval
 		} else {
 			"interval " + interval
 		}
 		val cal = CalendarInterval.fromString(intervalString)
+		if (cal == null) {
+			throw new AnalysisException(
+				s"The provided interval ($interval) did not correspond to a valid interval string.")
+		}
 		(cal.months * 4 * CalendarInterval.MICROS_PER_WEEK + cal.microseconds) / 1000000
 	}
 
-	lazy val windowDuration = getIntervalInSeconds(_windowDuration)
-	lazy val slideDuration = getIntervalInSeconds(_slideDuration)
-	lazy val startTime = getIntervalInSeconds(_startTime)
+	// The window duration in seconds
+	lazy val windowDuration: Long = getIntervalInSeconds(_windowDuration)
+	// The slide duration in seconds
+	lazy val slideDuration: Long = getIntervalInSeconds(_slideDuration)
+	// The start time offset in seconds
+	lazy val startTime: Long = getIntervalInSeconds(_startTime)
 
+	/**
+	 * Validate the inputs for the window duration, slide duration, and start time.
+	 * @return Some string with a useful error message for the invalid input.
+	 */
 	def validate(): Option[String] = {
 		if (windowDuration <= 0) {
 			return Some(s"The window duration (${_windowDuration}) must be greater than 0.")

@@ -1594,14 +1594,6 @@ object ResolveUpCast extends Rule[LogicalPlan] {
  */
 object TimeWindowing extends Rule[LogicalPlan] {
 
-  private def addSlideDurationAndOffset(
-      expr: Expression,
-      windowExpr: TimeWindow,
-      window: Int): Expression = {
-    Multiply(Add(Add(expr, Multiply(Literal(window), Literal(windowExpr.slideDuration))),
-      Literal(windowExpr.startTime)), Literal(1000000))
-  }
-
   /**
    * Depending on the operation, the TimeWindow expression may be wrapped in an Alias (in case of
    * projections) or be simply by itself (in case of groupBy),
@@ -1613,37 +1605,75 @@ object TimeWindowing extends Rule[LogicalPlan] {
     case windowExpr: TimeWindow => f(windowExpr)
   }
 
-  private def generateWindows(p: LogicalPlan): (LogicalPlan, NamedExpression) = {
+  /**
+   * Generates the logical plan for generating window ranges on a timestamp column. Without
+   * knowing what the timestamp value is, it's non-trivial to figure out deterministically how many
+   * window ranges a timestamp will map to given all possible combinations of a window duration,
+   * slide duration and start time (offset). Therefore, we express and over-estimate the number of
+   * windows there may be, and filter the valid windows. We use last Project operator to group
+   * the window columns into a struct so they can be accessed as `window.start` and `window.end`.
+   *
+   * The windows are calculated as below:
+   * maxNumOverlapping <- ceil(windowDuration / slideDuration)
+   * for (i <- 0 until maxNumOverlapping)
+   *   windowId <- ceil((timestamp - startTime) / slideDuration)
+   *   windowStart <- windowId * slideDuration + (i - maxNumOverlapping) * slideDuration + startTime
+   *   windowEnd <- windowStart + windowDuration
+   *   return windowStart, windowEnd
+   *
+   * This behaves as follows for the given parameters for the time: 12:05. The valid windows are
+   * marked with a +, and invalid ones are marked with a x. The invalid ones are filtered using the
+   * Filter operator.
+   * window: 12m, slide: 5m, start: 0m :: window: 12m, slide: 5m, start: 2m
+   *     11:55 - 12:07 +                      11:52 - 12:04 x
+   *     12:00 - 12:12 +                      11:57 - 12:09 +
+   *     12:05 - 12:17 +                      12:02 - 12:14 +
+   *
+   * @param p The logical plan
+   * @return the logical plan that will generate the time windows using the Expand operator, with
+   *         the Filter operator for correctness and Project for usability.
+   */
+  private def generateWindows(p: LogicalPlan): LogicalPlan = {
     val windowExpr = p.expressions.collect(getWindowExpr[TimeWindow](e => e)).head
     val projections = Seq.tabulate(windowExpr.maxNumOverlapping) { i =>
-      val division = Divide(Subtract(Cast(windowExpr.timeColumn, LongType), Literal(windowExpr.startTime)),
-        Literal(windowExpr.slideDuration))
-      val windowStart = addSlideDurationAndOffset(Multiply(Ceil(division),
-        Literal(windowExpr.slideDuration)), windowExpr, i - windowExpr.maxNumOverlapping)
+      // windowId <- ceil((timestamp - startTime) / slideDuration)
+      val division = Ceil(Divide(Subtract(Cast(windowExpr.timeColumn, LongType),
+        Literal(windowExpr.startTime)), Literal(windowExpr.slideDuration)))
+      // start <- (windowId + i - maxNumOverlapping) * slideDuration + startTime
+      // the 1000000 is necessary for properly casting a LongType to a TimestampType
+      val windowStart =
+        Multiply(
+          Add(
+            Multiply(
+              Literal(windowExpr.slideDuration),
+              Add(division, Literal(i - windowExpr.maxNumOverlapping))),
+            Literal(windowExpr.startTime)),
+          Literal(1000000))
+      // windowEnd <- windowStart + windowDuration
       val windowEnd =
         Add(windowStart, Multiply(Literal(windowExpr.windowDuration), Literal(1000000)))
       windowStart :: windowEnd :: windowExpr.originalTimeColumn :: Nil
     }
     val timeCol = windowExpr.originalTimeColumn.references.toSeq
+    //
     val filterExpr = And(GreaterThanOrEqual(windowExpr.timeColumn, windowExpr.windowStartCol),
       LessThan(windowExpr.timeColumn, windowExpr.windowEndCol))
-    (Project(windowExpr.output ++ Seq(windowExpr.outputColumn) ++ timeCol,
+    Project(windowExpr.output ++ Seq(windowExpr.outputColumn) ++ timeCol,
       Filter(filterExpr,
-        Expand(projections, windowExpr.output ++ timeCol, p.children.head))),
-      windowExpr.outputColumn)
+        Expand(projections, windowExpr.output ++ timeCol, p.children.head)))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     val transformed = plan transform {
       case p: LogicalPlan if p.expressions.collect(getWindowExpr[TimeWindow](e => e)).nonEmpty &&
         p.children.length == 1 =>
-        val (windowed, columnRef) = generateWindows(p)
+        val windowed = generateWindows(p)
         val rewritten = p transformExpressions getWindowExpr { windowExpr =>
           windowExpr.validate() match {
             case Some(e) => throw new AnalysisException(e)
             case _ => // valid expression
           }
-          columnRef
+          windowExpr.outputColumn
         }
         rewritten.withNewChildren(windowed :: Nil)
     }

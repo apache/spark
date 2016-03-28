@@ -30,7 +30,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("time windowing") {
-    val df = Seq((1459103954L, 1), (1459103996L, 2), (1459103967L, 2)).toDF("time", "b")
+    val df = Seq((1459103996L, 1), (1459103996L, 2), (1459103967L, 2)).toDF("time", "b")
     // df.select(struct("time", "b")).explain(true)
     df.select(window($"time", "1 minute", "15 seconds", "5 seconds"), $"time").collect().foreach(println)
     println("\n\n")
