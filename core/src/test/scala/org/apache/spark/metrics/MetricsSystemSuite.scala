@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.codahale.metrics.MetricRegistry
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+import other.metrics.{CustomMetricsSink, CustomMetricsSource}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.master.MasterSource
@@ -269,4 +270,22 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === source.sourceName)
   }
 
+  test("MetricsSystem plug in customized Source and Sink") {
+    conf.set("spark.metrics.conf.test.source.fake.class",
+      classOf[CustomMetricsSource].getCanonicalName)
+      .set("spark.metrics.conf.test.sink.fake.class", classOf[CustomMetricsSink].getCanonicalName)
+      .set("spark.metrics.conf.test.sink.fake.prop1", "val1")
+      .set("spark.metrics.conf.test.sink.fake.prop2", "val2")
+
+    val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
+    metricsSystem.start()
+
+    val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+    val sinks = PrivateMethod[ArrayBuffer[Sink]]('sinks)
+    assert(metricsSystem.invokePrivate(sources()).length === 1)
+    assert(metricsSystem.invokePrivate(sources()).filter(_.sourceName == "fake").length === 1)
+    assert(metricsSystem.invokePrivate(sinks()).length === 2)
+    assert(metricsSystem.invokePrivate(sinks()).map(_.getClass.getCanonicalName)
+      .contains(classOf[CustomMetricsSink].getCanonicalName))
+  }
 }

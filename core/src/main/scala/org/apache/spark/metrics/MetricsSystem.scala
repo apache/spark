@@ -209,6 +209,7 @@ private[spark] class MetricsSystem private (
           case _: NoSuchMethodException =>
             try {
               sinks += cls.getConstructor(classOf[Properties], classOf[MetricRegistry])
+                .newInstance(kv._2, registry)
                 .asInstanceOf[Sink]
             } catch {
               case NonFatal(e) => logError("Sink class " + classPath + " cannot be instantiated", e)
