@@ -124,14 +124,6 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
     }
   }
 
-  override def sample(items: Iterator[T]): Iterator[T] = {
-    if (ub - lb <= 0.0) {
-      if (complement) items else Iterator.empty
-    } else {
-      items.filter(_ => sample > 0)
-    }
-  }
-
   /**
    *  Return a sampler that is the complement of the range specified of the current sampler.
    */
@@ -178,18 +170,6 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
       } else {
         0
       }
-    }
-  }
-
-  override def sample(items: Iterator[T]): Iterator[T] = {
-    if (fraction <= 0.0) {
-      Iterator.empty
-    } else if (fraction >= 1.0) {
-      items
-    } else if (fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
-      items.filter(_ => sample > 0)
-    } else {
-      items.filter { _ => rng.nextDouble() <= fraction }
     }
   }
 
