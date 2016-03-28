@@ -17,26 +17,119 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
+import org.apache.spark.sql.catalyst.parser.ParserUtils._
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DDLSuite extends QueryTest with SharedSQLContext {
 
-  test("Create/Drop/Alter/Describe Database") {
+  /**
+   * Drops database `databaseName` after calling `f`.
+   */
+  private def withDatabase(dbNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      dbNames.foreach { name =>
+        sqlContext.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
+      }
+    }
+  }
+
+  test("Create/Drop/Alter/Describe Database - basic") {
     val catalog = sqlContext.sessionState.catalog
 
-    val databaseName = "db1"
-    sql(s"CREATE DATABASE $databaseName")
-    val db1 = catalog.getDatabase(databaseName)
-    assert(db1 == CatalogDatabase(databaseName, "", "db1.db", Map.empty))
+    val databaseNames = Seq("db1", "`database`")
 
-    sql(s"DESCRIBE DATABASE EXTENDED $databaseName").show(false)
-    sql(s"ALTER DATABASE $databaseName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-    sql(s"DESCRIBE DATABASE EXTENDED $databaseName").show(false)
-    sql(s"ALTER DATABASE $databaseName SET DBPROPERTIES ('d'='d')")
-    sql(s"DESCRIBE DATABASE EXTENDED $databaseName").show(false)
-    sql(s"DROP DATABASE $databaseName CASCADE")
-    assert(!catalog.databaseExists(databaseName))
+    databaseNames.foreach { dbName =>
+      withDatabase(dbName) {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+        sql(s"CREATE DATABASE $dbName")
+        val db1 = catalog.getDatabase(dbNameWithoutBackTicks)
+        assert(db1 == CatalogDatabase(
+          dbNameWithoutBackTicks, "", s"$dbNameWithoutBackTicks.db", Map.empty))
+
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", s"$dbNameWithoutBackTicks.db") :: Nil)
+
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", s"$dbNameWithoutBackTicks.db") ::
+            Row("Properties", "") :: Nil)
+
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", s"$dbNameWithoutBackTicks.db") ::
+            Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
+
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", s"$dbNameWithoutBackTicks.db") ::
+            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
+
+        sql(s"DROP DATABASE $dbName CASCADE")
+        assert(!catalog.databaseExists(dbNameWithoutBackTicks))
+      }
+    }
   }
+
+  test("Create Database - database already exists") {
+    val catalog = sqlContext.sessionState.catalog
+    val databaseNames = Seq("db1", "`database`")
+
+    databaseNames.foreach { dbName =>
+      val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+      withDatabase(dbName) {
+        sql(s"CREATE DATABASE $dbName")
+        val db1 = catalog.getDatabase(dbNameWithoutBackTicks)
+        assert(db1 == CatalogDatabase(
+          dbNameWithoutBackTicks, "", s"$dbNameWithoutBackTicks.db", Map.empty))
+
+        val message = intercept[AnalysisException] {
+          sql(s"CREATE DATABASE $dbName")
+        }.getMessage
+        assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
+      }
+    }
+  }
+
+  test("Drop/Alter/Describe Database - database does not exists") {
+    val databaseNames = Seq("db1", "`database`")
+
+    databaseNames.foreach { dbName =>
+      val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+      assert(!sqlContext.sessionState.catalog.databaseExists(dbNameWithoutBackTicks))
+
+      var message = intercept[AnalysisException] {
+        sql(s"DROP DATABASE $dbName")
+      }.getMessage
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+
+      message = intercept[AnalysisException] {
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
+      }.getMessage
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+
+      message = intercept[AnalysisException] {
+        sql(s"DESCRIBE DATABASE EXTENDED $dbName")
+      }.getMessage
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+
+      sql(s"DROP DATABASE IF EXISTS $dbName")
+    }
+  }
+
+  // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
 }

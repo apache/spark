@@ -396,8 +396,8 @@ case class DescribeDatabase(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val dbMetadata: CatalogDatabase = sqlContext.sessionState.catalog.getDatabase(databaseName)
     val result =
-      Row("Database", dbMetadata.name) ::
-      Row("Comment", dbMetadata.description) ::
+      Row("Database Name", dbMetadata.name) ::
+      Row("Description", dbMetadata.description) ::
       Row("Location", dbMetadata.locationUri) :: Nil
 
     if (extended) {
