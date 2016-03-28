@@ -390,6 +390,8 @@ class KMeans private (
     // Initialize each run's first center to a random point.
     val seed = new XORShiftRandom(this.seed).nextInt()
     val sample = data.takeSample(true, runs, seed).toSeq
+    // Could be empty if data is empty; fail with a better message early:
+    require(sample.size >= runs, s"Required $runs samples but got ${sample.size} from $data")
     val newCenters = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
 
     /** Merges new centers to centers. */
