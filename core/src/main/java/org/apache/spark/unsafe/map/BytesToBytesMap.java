@@ -575,14 +575,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * Find the next pair that has the same key as current one.
      */
     public boolean nextValue() {
-      // Remember the current key
       assert isDefined;
       long nextAddr = Platform.getLong(baseObject, valueOffset + valueLength);
       if (nextAddr == 0) {
         return false;
+      } else {
+        updateAddressesAndSizes(nextAddr);
+        return true;
       }
-      updateAddressesAndSizes(nextAddr);
-      return true;
     }
 
     /**

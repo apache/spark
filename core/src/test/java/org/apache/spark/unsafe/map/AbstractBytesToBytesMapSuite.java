@@ -587,7 +587,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   }
 
   @Test
-  public void multpleValuesForSameKey() {
+  public void multipleValuesForSameKey() {
     BytesToBytesMap map =
       new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 1, 0.75, 1024, false);
     try {
