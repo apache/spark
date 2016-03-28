@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.joins
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.collection.CompactBuffer
 
 class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
@@ -69,10 +71,17 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("test serialization empty hash map") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new StaticMemoryManager(
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
+    val binaryMap = new BytesToBytesMap(taskMemoryManager, 1, 1)
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
-    val hashed = new UnsafeHashedRelation(
-      new java.util.HashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
+    val hashed = new UnsafeHashedRelation(1, binaryMap)
     hashed.writeExternal(out)
     out.flush()
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
