@@ -169,12 +169,14 @@ public class JavaDatasetSuite implements Serializable {
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
-    KeyValueGroupedDataset<Integer, String> grouped = ds.groupByKey(new MapFunction<String, Integer>() {
-      @Override
-      public Integer call(String v) throws Exception {
-        return v.length();
-      }
-    }, Encoders.INT());
+    KeyValueGroupedDataset<Integer, String> grouped = ds.groupByKey(
+      new MapFunction<String, Integer>() {
+        @Override
+        public Integer call(String v) throws Exception {
+          return v.length();
+        }
+      },
+      Encoders.INT());
 
     Dataset<String> mapped = grouped.mapGroups(new MapGroupsFunction<Integer, String, String>() {
       @Override
@@ -217,12 +219,14 @@ public class JavaDatasetSuite implements Serializable {
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT());
-    KeyValueGroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(new MapFunction<Integer, Integer>() {
-      @Override
-      public Integer call(Integer v) throws Exception {
-        return v / 2;
-      }
-    }, Encoders.INT());
+    KeyValueGroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(
+      new MapFunction<Integer, Integer>() {
+        @Override
+        public Integer call(Integer v) throws Exception {
+          return v / 2;
+        }
+      },
+      Encoders.INT());
 
     Dataset<String> cogrouped = grouped.cogroup(
       grouped2,
@@ -243,29 +247,6 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.STRING());
 
     Assert.assertEquals(asSet("1a#2", "3foobar#6", "5#10"), toSet(cogrouped.collectAsList()));
-  }
-
-  @Test
-  public void testGroupByColumn() {
-    List<String> data = Arrays.asList("a", "foo", "bar");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
-    KeyValueGroupedDataset<Integer, String> grouped =
-      ds.groupByKey(length(col("value"))).keyAs(Encoders.INT());
-
-    Dataset<String> mapped = grouped.mapGroups(
-      new MapGroupsFunction<Integer, String, String>() {
-        @Override
-        public String call(Integer key, Iterator<String> data) throws Exception {
-          StringBuilder sb = new StringBuilder(key.toString());
-          while (data.hasNext()) {
-            sb.append(data.next());
-          }
-          return sb.toString();
-        }
-      },
-      Encoders.STRING());
-
-    Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
   }
 
   @Test
