@@ -210,7 +210,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("get table") {
-    assert(newBasicCatalog().getTable("db2", "tbl1").name.table == "tbl1")
+    assert(newBasicCatalog().getTable("db2", "tbl1").identifier.table == "tbl1")
   }
 
   test("get table when database/table does not exist") {
@@ -452,7 +452,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     assert(catalog.getFunction("db2", "func1").className == funcClass)
     catalog.renameFunction("db2", "func1", newName)
     intercept[AnalysisException] { catalog.getFunction("db2", "func1") }
-    assert(catalog.getFunction("db2", newName).name.funcName == newName)
+    assert(catalog.getFunction("db2", newName).identifier.funcName == newName)
     assert(catalog.getFunction("db2", newName).className == funcClass)
     intercept[AnalysisException] { catalog.renameFunction("db2", "does_not_exist", "me") }
   }
@@ -549,7 +549,7 @@ abstract class CatalogTestUtils {
 
   def newTable(name: String, database: Option[String] = None): CatalogTable = {
     CatalogTable(
-      name = TableIdentifier(name, database),
+      identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL_TABLE,
       storage = storageFormat,
       schema = Seq(CatalogColumn("col1", "int"), CatalogColumn("col2", "string")),

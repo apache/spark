@@ -88,7 +88,7 @@ private[hive] trait HiveClient {
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit
 
   /** Alter a table whose name matches the one specified in `table`, assuming it exists. */
-  final def alterTable(table: CatalogTable): Unit = alterTable(table.name.table, table)
+  final def alterTable(table: CatalogTable): Unit = alterTable(table.identifier.table, table)
 
   /** Updates the given table with new metadata, optionally renaming the table. */
   def alterTable(tableName: String, table: CatalogTable): Unit
