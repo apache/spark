@@ -51,7 +51,7 @@ from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
-from pyspark.ml.util import MLWritable
+from pyspark.ml.util import MLWritable, MLWriter
 from pyspark.ml.wrapper import JavaWrapper
 from pyspark.mllib.linalg import DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
@@ -658,17 +658,7 @@ class PersistenceTest(PySparkTestCase):
 
     def test_write_property(self):
         lr = LinearRegression(maxIter=1)
-        path = tempfile.mkdtemp()
-        lr_path = path + "/lr"
-        lr.write.save(lr_path)
-        lr2 = LinearRegression.load(lr_path)
-        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
-                         "Loaded LinearRegression instance default params did not match " +
-                         "original defaults")
-        try:
-            rmtree(path)
-        except OSError:
-            pass
+        self.assertTrue(isinstance(lr.write, MLWriter))
 
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)
