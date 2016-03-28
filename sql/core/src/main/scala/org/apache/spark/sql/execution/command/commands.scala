@@ -21,15 +21,21 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row, SQLContext}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.SQLContext
 
 
 /**
@@ -429,6 +435,60 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     sqlContext.sessionState.catalog.setCurrentDatabase(databaseName)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
+}
+
+/**
+  * A command for users to create a function.
+  * The syntax of using this command in SQL is
+  * {{{
+  *   CREATE TEMPORARY FUNCTION function_name AS class_name;
+  *   CREATE FUNCTION [db_name.]function_name AS class_name
+  *     [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri'] ];
+  * }}}
+  */
+case class CreateFunction(
+    databaseName: Option[String],
+    functionName: String, alias: String,
+    resources: Seq[(String, String)],
+    isTemp: Boolean)(sql: String) extends RunnableCommand {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val db = if (databaseName.isDefined) {
+      databaseName
+    } else {
+      Some(catalog.getCurrentDatabase)
+    }
+    val functionIdentifier = FunctionIdentifier(functionName, db)
+    catalog.createFunction(CatalogFunction(functionIdentifier, alias))
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
+}
+
+/**
+  * The DDL command that drops a function.
+  * ifExists: returns an error if the function doesn't exist, unless this is true.
+  * isTemp: indicates if it is a temporary function.
+  */
+case class DropFunction(
+    databaseName: Option[String],
+    functionName: String,
+    ifExists: Boolean,
+    isTemp: Boolean)(sql: String) extends RunnableCommand {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val db = if (databaseName.isDefined) {
+      databaseName
+    } else {
+      Some(catalog.getCurrentDatabase)
+    }
+    val functionIdentifier = FunctionIdentifier(functionName, db)
+    catalog.dropFunction(functionIdentifier)
     Seq.empty[Row]
   }
 

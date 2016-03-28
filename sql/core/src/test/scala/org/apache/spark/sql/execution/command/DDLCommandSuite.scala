@@ -142,13 +142,13 @@ class DDLCommandSuite extends PlanTest {
   test("create function") {
     val sql1 =
       """
-       |CREATE TEMPORARY FUNCTION helloworld as
+       |CREATE TEMPORARY FUNCTION helloworld AS
        |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
        |JAR '/path/to/jar2'
      """.stripMargin
     val sql2 =
       """
-        |CREATE FUNCTION hello.world as
+        |CREATE FUNCTION hello.world AS
         |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
         |FILE '/path/to/file'
       """.stripMargin
