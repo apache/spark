@@ -463,7 +463,7 @@ class ExpressionParserSuite extends PlanTest {
       assertEqual(s"interval '$value' year to month", result)
     }
 
-    // Year-Month intervals.
+    // Day-Time intervals.
     val datTimeValues = Seq(
       "99 11:22:33.123456789",
       "-99 11:22:33.123456789",

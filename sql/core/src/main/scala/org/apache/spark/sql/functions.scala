@@ -1172,8 +1172,7 @@ object functions {
    * @group normal_funcs
    */
   def expr(expr: String): Column = {
-    val parser = SparkSqlParser
-    Column(parser.parseExpression(expr))
+    Column(SparkSqlParser.parseExpression(expr))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

@@ -64,7 +64,8 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 
   /** Create a native command, or fail when this is not supported. */
   protected def nativeCommand(sqlText: String): LogicalPlan = {
-    throw new AnalysisException(s"Unsupported SQL statement:\n$sqlText")
+    val position = Origin(None, None)
+    throw new ParseException(Option(sqlText), "Unsupported SQL statement", position, position)
   }
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
