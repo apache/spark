@@ -1593,7 +1593,7 @@ class Analyzer(
             wf.withNewChildren(newChildren)
 
           // Extracts expressions from the partition spec and order spec.
-          case wsc @ WindowSpecDefinition(partitionSpec, orderSpec, _, _) =>
+          case wsc @ WindowSpecDefinition(partitionSpec, orderSpec, _) =>
             val newPartitionSpec = partitionSpec.map(extractExpr)
             val newOrderSpec = orderSpec.map { so =>
               val newChild = extractExpr(so.child)
@@ -1827,31 +1827,29 @@ class Analyzer(
   object ResolveWindowFrame extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformExpressions {
-
         // Exclude clause only applies to WindowAggregation functions
         case WindowExpression(wf: WindowFunction,
-        WindowSpecDefinition(_, _, _, es: ExcludeClause))
-          if (wf.isInstanceOf[RowNumberLike]
-            || wf.isInstanceOf[RankLike]
-            || wf.isInstanceOf[OffsetWindowFunction])
-            && es.excludeType != ExcludeNoOthers =>
+        WindowSpecDefinition(_, _, SpecifiedWindowFrame(_,_,_,es)))
+          if es.excludeType != ExcludeNoOthers && notSupportForExclude(wf) =>
           failAnalysis(s"Window function ${wf.getClass} does not support exclude clause")
-
         case WindowExpression(wf: WindowFunction,
-        WindowSpecDefinition(_, _, f: SpecifiedWindowFrame, _))
+        WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
           if wf.frame != UnspecifiedFrame && wf.frame != f =>
           failAnalysis(s"Window Frame $f must match the required frame ${wf.frame}")
         case WindowExpression(wf: WindowFunction,
-        s @ WindowSpecDefinition(_, o, UnspecifiedFrame, _))
+        s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
           if wf.frame != UnspecifiedFrame =>
           WindowExpression(wf, s.copy(frameSpecification = wf.frame))
-        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame, _))
+        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
           if e.resolved =>
           val frame = SpecifiedWindowFrame.defaultWindowFrame(o.nonEmpty, acceptWindowFrame = true)
           we.copy(windowSpec = s.copy(frameSpecification = frame))
       }
     }
   }
+
+  private def notSupportForExclude(wf: WindowFunction): Boolean =
+    wf.isInstanceOf[RowNumberLike] || wf.isInstanceOf[RankLike] || wf.isInstanceOf[OffsetWindowFunction]
 
   /**
    * Check and add order to [[AggregateWindowFunction]]s.

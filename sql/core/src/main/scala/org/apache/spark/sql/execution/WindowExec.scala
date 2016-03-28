@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util
 
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.unsafe.types.{UTF8String, CalendarInterval}
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -31,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.types.{DataType, Decimal, IntegerType}
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, UnsafeSorterIterator}
 
 /**
@@ -180,7 +177,7 @@ case class WindowExec(
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
       val key = (tpe, fr.frameType, FrameBoundary(fr.frameStart), FrameBoundary(fr.frameEnd),
-          e.asInstanceOf[WindowExpression].windowSpec.excludeSpec.excludeType)
+          fr.excludeSpec.excludeType)
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e

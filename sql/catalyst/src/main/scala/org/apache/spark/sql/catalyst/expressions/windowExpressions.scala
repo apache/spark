@@ -40,8 +40,7 @@ sealed trait WindowSpec
 case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frameSpecification: WindowFrame,
-    excludeSpec: ExcludeClause = ExcludeClause.defaultExclude)
+    frameSpecification: WindowFrame)
   extends Expression with WindowSpec with Unevaluable {
 
   def validate: Option[String] = frameSpecification match {
@@ -94,7 +93,7 @@ case class WindowSpecDefinition(
       "ORDER BY " + orderSpec.map(_.sql).mkString(", ") + " "
     }
 
-    s"($partition$order${frameSpecification.toString}${excludeSpec.toString})"
+    s"($partition$order${frameSpecification.toString})"
   }
 }
 
@@ -229,7 +228,8 @@ case object UnspecifiedFrame extends WindowFrame
 case class SpecifiedWindowFrame(
     frameType: FrameType,
     frameStart: FrameBoundary,
-    frameEnd: FrameBoundary) extends WindowFrame {
+    frameEnd: FrameBoundary,
+    excludeSpec: ExcludeClause = ExcludeClause.defaultExclude) extends WindowFrame {
 
   /** If this WindowFrame is valid or not. */
   def validate: Option[String] = (frameType, frameStart, frameEnd) match {
@@ -251,8 +251,8 @@ case class SpecifiedWindowFrame(
   }
 
   override def toString: String = frameType match {
-    case RowFrame => s"ROWS BETWEEN $frameStart AND $frameEnd"
-    case RangeFrame => s"RANGE BETWEEN $frameStart AND $frameEnd"
+    case RowFrame => s"ROWS BETWEEN $frameStart AND $frameEnd ${excludeSpec.toString}"
+    case RangeFrame => s"RANGE BETWEEN $frameStart AND $frameEnd ${excludeSpec.toString}"
   }
 }
 
@@ -265,15 +265,16 @@ object SpecifiedWindowFrame {
    */
   def defaultWindowFrame(
       hasOrderSpecification: Boolean,
-      acceptWindowFrame: Boolean): SpecifiedWindowFrame = {
+      acceptWindowFrame: Boolean,
+      excludeSpec: ExcludeClause = ExcludeClause.defaultExclude): SpecifiedWindowFrame = {
     if (hasOrderSpecification && acceptWindowFrame) {
       // If order spec is defined and the window function supports user specified window frames,
       // the default frame is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
-      SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
+      SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow, excludeSpec)
     } else {
       // Otherwise, the default frame is
       // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING.
-      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing, excludeSpec)
     }
   }
 }
