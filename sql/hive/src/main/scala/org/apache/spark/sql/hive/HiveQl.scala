@@ -82,7 +82,28 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
   import ParseUtils._
   import ParserUtils._
 
-  protected val nativeCommands = Seq(
+  // Token text -> human readable text
+  private val hiveUnsupportedCommands = Map(
+    "TOK_CREATEROLE" -> "CREATE ROLE",
+    "TOK_DROPROLE" -> "DROP ROLE",
+    "TOK_EXPORT" -> "EXPORT TABLE",
+    "TOK_GRANT" -> "GRANT",
+    "TOK_GRANT_ROLE" -> "GRANT",
+    "TOK_IMPORT" -> "IMPORT TABLE",
+    "TOK_REVOKE" -> "REVOKE",
+    "TOK_REVOKE_ROLE" -> "REVOKE",
+    "TOK_SHOW_COMPACTIONS" -> "SHOW COMPACTIONS",
+    "TOK_SHOW_CREATETABLE" -> "SHOW CREATE TABLE",
+    "TOK_SHOW_GRANT" -> "SHOW GRANT",
+    "TOK_SHOW_ROLE_GRANT" -> "SHOW ROLE GRANT",
+    "TOK_SHOW_ROLE_PRINCIPALS" -> "SHOW PRINCIPALS",
+    "TOK_SHOW_ROLES" -> "SHOW ROLES",
+    "TOK_SHOW_SET_ROLE" -> "SHOW CURRENT ROLES / SET ROLE",
+    "TOK_SHOW_TRANSACTIONS" -> "SHOW TRANSACTIONS",
+    "TOK_SHOWINDEXES" -> "SHOW INDEXES",
+    "TOK_SHOWLOCKS" -> "SHOW LOCKS")
+
+  private val nativeCommands = Set(
     "TOK_ALTERDATABASE_OWNER",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
@@ -119,7 +140,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
   )
 
   // Commands that we do not need to explain.
-  protected val noExplainCommands = Seq(
+  private val noExplainCommands = Set(
     "TOK_DESCTABLE",
     "TOK_SHOWTABLES",
     "TOK_TRUNCATETABLE", // truncate table" is a NativeCommand, does not need to explain.
@@ -187,6 +208,9 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     safeParse(sql, ParseDriver.parsePlan(sql, conf)) { ast =>
       if (nativeCommands.contains(ast.text)) {
         HiveNativeCommand(sql)
+      } else if (hiveUnsupportedCommands.contains(ast.text)) {
+        val humanReadableText = hiveUnsupportedCommands(ast.text)
+        throw new AnalysisException("Unsupported Hive operation: " + humanReadableText)
       } else {
         nodeToPlan(ast) match {
           case NativePlaceholder => HiveNativeCommand(sql)
