@@ -478,7 +478,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableNotStoredAsDirs]] command.
+   * Create an [[AlterTableSkewedLocation]] command.
    *
    * For example:
    * {{{
