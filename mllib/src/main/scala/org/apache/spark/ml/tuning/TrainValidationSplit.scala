@@ -36,6 +36,7 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
   /**
    * Param for ratio between train and validation data. Must be between 0 and 1.
    * Default: 0.75
+   *
    * @group param
    */
   val trainRatio: DoubleParam = new DoubleParam(this, "trainRatio",
@@ -153,7 +154,7 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit =
-      MetaPipelineReadWrite.saveImpl(path, instance, sc)
+      ValidatorParams.saveImpl(path, instance, sc)
   }
 
   private class TrainValidationSplitReader extends MLReader[TrainValidationSplit] {
@@ -165,7 +166,7 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        MetaPipelineReadWrite.load(path, sc, className)
+        ValidatorParams.loadImpl(path, sc, className)
       val trainRatio = (metadata.params \ "trainRatio").extract[Double]
       new TrainValidationSplit(metadata.uid)
         .setEstimator(estimator)
@@ -233,7 +234,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     override protected def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
       val extraMetadata = "validationMetrics" -> instance.validationMetrics.toSeq
-      MetaPipelineReadWrite.saveImpl(path, instance, sc, Some(extraMetadata))
+      ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
     }
@@ -248,7 +249,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        MetaPipelineReadWrite.load(path, sc, className)
+        ValidatorParams.loadImpl(path, sc, className)
       val trainRatio = (metadata.params \ "trainRatio").extract[Double]
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
