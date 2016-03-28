@@ -214,6 +214,11 @@ private[json] trait TestJsonData {
       """{"a": {"b": 1}}""" ::
       """{"a": []}""" :: Nil)
 
+  def mixedIntegerAndDoubleRecords: RDD[String] =
+    sqlContext.sparkContext.parallelize(
+      """{"a": 3, "b": 1.1}""" ::
+      """{"a": 3.1, "b": 1}""" :: Nil)
+
   lazy val singleRow: RDD[String] = sqlContext.sparkContext.parallelize("""{"a":123}""" :: Nil)
 
   def empty: RDD[String] = sqlContext.sparkContext.parallelize(Seq[String]())

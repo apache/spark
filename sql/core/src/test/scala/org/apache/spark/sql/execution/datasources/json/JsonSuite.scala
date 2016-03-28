@@ -773,6 +773,23 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
+  test("Infer a correct compatible type even if inferred decimal type is not capable of others") {
+    val jsonDF = sqlContext.read
+      .option("floatAsBigDecimal", "true")
+      .json(mixedIntegerAndDoubleRecords)
+
+    val expectedSchema = StructType(
+      StructField("a", DecimalType(21, 1), true) ::
+        StructField("b", DecimalType(21, 1), true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(
+      jsonDF,
+      Seq(Row(BigDecimal("3"), BigDecimal("1.1")),
+        Row(BigDecimal("3.1"), BigDecimal("1")))
+    )
+  }
+
   test("Loading a JSON dataset from a text file with SQL") {
     val dir = Utils.createTempDir()
     dir.delete()
