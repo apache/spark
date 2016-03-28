@@ -222,13 +222,15 @@ final class RandomForestClassificationModel private[ml] (
   /**
    * Estimate of the importance of each feature.
    *
-   * Each feature's importance is the average of its importance across all trees in
-   * the ensemble.
+   * Each feature's importance is the average of its importance across all trees in the ensemble
+   * The importance vector is normalized to sum to 1. This method is suggested by Friedman
+   * (J. H. Friedman, "Greedy Function Approximation: A Gradient Boosting Machine", 1999)
+   * and follows the implementation from scikit-learn.
    *
    * @see [[DecisionTreeClassificationModel.featureImportances]]
    */
   @Since("1.5.0")
-  lazy val featureImportances: Vector = RandomForest.featureImportances(trees, numFeatures)
+  lazy val featureImportances: Vector = featureImportances(numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldRandomForestModel = {

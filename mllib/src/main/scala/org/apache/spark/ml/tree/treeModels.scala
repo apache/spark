@@ -22,6 +22,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.DefaultParamsReader
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
@@ -113,6 +114,11 @@ private[ml] trait TreeEnsembleModel {
 
   /** Total number of nodes, summed over all trees in the ensemble. */
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
+
+  /** Vector of feature importances for the ensemble model. */
+  def featureImportances(numFeatures: Int): Vector = {
+    RandomForest.featureImportances(trees, numFeatures)
+  }
 }
 
 /** Helper classes for tree model persistence */

@@ -282,24 +282,4 @@ private[ml] object GradientBoostedTrees extends Logging {
       (baseLearners, baseLearnerWeights)
     }
   }
-
-  /**
-   * Given a boosted tree ensemble, compute the importance of each feature.
-   *
-   * Each feature's importance is the average of its importance across all trees in
-   * the ensemble.
-   *
-   * References:
-   *  - Jerome H. Friedman. "Greedy Function Approximation: A Gradient Boosting Machine,"
-   *    February, 1999.
-   *
-   * @param trees  Unweighted boosted collection of trees.
-   * @param numFeatures  Number of features in model (even if not all are explicitly used by
-   *                     the model).
-   *                     If -1, then numFeatures is set based on the max feature index in all trees.
-   * @return  Feature importance values, of length numFeatures.
-   */
-  private[ml] def featureImportances(trees: Array[DecisionTreeModel], numFeatures: Int): Vector = {
-    RandomForest.featureImportances(trees, numFeatures)
-  }
 }

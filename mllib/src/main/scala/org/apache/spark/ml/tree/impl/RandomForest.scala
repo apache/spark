@@ -1106,7 +1106,7 @@ private[spark] object RandomForest extends Logging {
   }
 
   /**
-   * Given a Random Forest model, compute the importance of each feature.
+   * Given a tree ensemble model, compute the importance of each feature.
    * This generalizes the idea of "Gini" importance to other losses,
    * following the explanation of Gini importance from "Random Forests" documentation
    * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
@@ -1117,6 +1117,10 @@ private[spark] object RandomForest extends Logging {
    *       where gain is scaled by the number of instances passing through node
    *     - Normalize importances for tree to sum to 1.
    *  - Normalize feature importance vector to sum to 1.
+   *
+   *  References:
+   *  - Jerome H. Friedman. "Greedy Function Approximation: A Gradient Boosting Machine,"
+   *    February, 1999.
    *
    * @param trees  Unweighted forest of trees
    * @param numFeatures  Number of features in model (even if not all are explicitly used by
