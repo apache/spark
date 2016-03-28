@@ -40,6 +40,25 @@ import org.apache.spark.util.collection.BitSet
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
 
+  test("empty table") {
+    val table = createTable(Seq("file1" -> 0, "file2" -> 0))
+    checkScan(table.select('c1)) { partitions =>
+      assert(partitions.size == 0, "when checking partitions")
+    }
+  }
+
+  test("non-empty table with empty file") {
+    val table = createTable(Seq("file1" -> 1, "file2" -> 0))
+    checkScan(table.select('c1)) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+      // The empty file should be ignored.
+      assert(partitions.head.files.size == 1, "when checking partition 1")
+      // 1 byte files are too small to split so we should read the whole thing.
+      assert(partitions.head.files.head.start == 0)
+      assert(partitions.head.files.head.length == 1)
+    }
+  }
+
   test("unpartitioned table, single partition") {
     val table =
       createTable(
@@ -299,8 +318,8 @@ class TestFileFormat extends FileFormat {
       files: Seq[FileStatus]): Option[StructType] =
     Some(
       StructType(Nil)
-          .add("c1", IntegerType)
-          .add("c2", IntegerType))
+        .add("c1", IntegerType)
+        .add("c2", IntegerType))
 
   /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
