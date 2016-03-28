@@ -100,7 +100,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
         evictBlocksToFreeSpaceCalled.set(numBytesToFree)
         if (numBytesToFree <= mm.storageMemoryUsed) {
           // We can evict enough blocks to fulfill the request for space
-          mm.releaseStorageMemory(numBytesToFree)
+          mm.releaseStorageMemory(numBytesToFree, MemoryMode.ON_HEAP)
           evictedBlocks.append(
             (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L)))
           numBytesToFree

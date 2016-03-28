@@ -150,6 +150,10 @@ class MatricesSuite extends SparkFunSuite {
       sparseMat.update(0, 0, 10.0)
     }
 
+    intercept[NoSuchElementException] {
+      sparseMat.update(2, 1, 10.0)
+    }
+
     sparseMat.update(0, 1, 10.0)
     assert(sparseMat(0, 1) === 10.0)
     assert(sparseMat.values(2) === 10.0)
