@@ -68,6 +68,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  private def assertUnsupportedFeature(body: => Unit): Unit = {
+    val e = intercept[AnalysisException] { body }
+    assert(e.getMessage.toLowerCase.contains("unsupported operation"))
+  }
+
   test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
       sql("USE default")
@@ -1246,6 +1251,35 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   // Put tests that depend on specific Hive settings before these last two test,
   // since they modify /clear stuff.
+
+  test("role management commands are not supported") {
+    assertUnsupportedFeature { sql("CREATE ROLE my_role") }
+    assertUnsupportedFeature { sql("DROP ROLE my_role") }
+    assertUnsupportedFeature { sql("SHOW CURRENT ROLES") }
+    assertUnsupportedFeature { sql("SHOW ROLES") }
+    assertUnsupportedFeature { sql("SHOW GRANT") }
+    assertUnsupportedFeature { sql("SHOW ROLE GRANT USER my_principal") }
+    assertUnsupportedFeature { sql("SHOW PRINCIPALS my_role") }
+    assertUnsupportedFeature { sql("SET ROLE my_role") }
+    assertUnsupportedFeature { sql("GRANT my_role TO USER my_user") }
+    assertUnsupportedFeature { sql("GRANT ALL ON my_table TO USER my_user") }
+    assertUnsupportedFeature { sql("REVOKE my_role FROM USER my_user") }
+    assertUnsupportedFeature { sql("REVOKE ALL ON my_table FROM USER my_user") }
+  }
+
+  test("import/export commands are not supported") {
+    assertUnsupportedFeature { sql("IMPORT TABLE my_table FROM 'my_path'") }
+    assertUnsupportedFeature { sql("EXPORT TABLE my_table TO 'my_path'") }
+  }
+
+  test("some show commands are not supported") {
+    assertUnsupportedFeature { sql("SHOW CREATE TABLE my_table") }
+    assertUnsupportedFeature { sql("SHOW COMPACTIONS") }
+    assertUnsupportedFeature { sql("SHOW TRANSACTIONS") }
+    assertUnsupportedFeature { sql("SHOW INDEXES ON my_table") }
+    assertUnsupportedFeature { sql("SHOW LOCKS my_table") }
+  }
+
 }
 
 // for SPARK-2180 test
