@@ -1123,6 +1123,18 @@ if 'PostgresOperator' in dir(operators):
                 end_date=DEFAULT_DATE,
                 force=True)
 
+class FakeSession(object):
+    def __init__(self):
+        from requests import Response
+        self.response = Response()
+        self.response.status_code = 200
+        self.response._content = 'airbnb/airflow'.encode('ascii', 'ignore')
+
+    def send(self, request, **kwargs):
+        return self.response
+
+    def prepare_request(self, request):
+        return self.response
 
 class HttpOpSensorTest(unittest.TestCase):
     def setUp(self):
@@ -1131,6 +1143,7 @@ class HttpOpSensorTest(unittest.TestCase):
         dag = DAG(TEST_DAG_ID, default_args=args)
         self.dag = dag
 
+    @mock.patch('requests.Session', FakeSession)
     def test_get(self):
         t = operators.SimpleHttpOperator(
             task_id='get_op',
@@ -1141,6 +1154,7 @@ class HttpOpSensorTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    @mock.patch('requests.Session', FakeSession)
     def test_get_response_check(self):
         t = operators.SimpleHttpOperator(
             task_id='get_op',
@@ -1152,6 +1166,7 @@ class HttpOpSensorTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    @mock.patch('requests.Session', FakeSession)
     def test_sensor(self):
         sensor = operators.HttpSensor(
             task_id='http_sensor_check',
