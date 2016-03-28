@@ -454,5 +454,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         .orderBy($"window.start".asc).select("total"),
       Seq(Row(4), Row(8))
     )
+    // should result in negative timestamps in the window
+    val df4 = Seq((2L, 1), (12L, 2)).toDF("time", "value")
+    checkAnswer(
+      df4.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
+        .orderBy($"window.start".asc).select("value"),
+      Seq(Row(1), Row(2))
+    )
   }
 }
