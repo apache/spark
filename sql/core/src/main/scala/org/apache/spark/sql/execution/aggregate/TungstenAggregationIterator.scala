@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
+import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter, VectorizedAggregationMap}
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
@@ -166,6 +167,10 @@ class TungstenAggregationIterator(
     false // disable tracking of performance metrics
   )
 
+  private[this] val vectorizedAggregationMap = new VectorizedAggregationMap()
+  lazy val iter = vectorizedAggregationMap.batch.rowIterator()
+  var done: Boolean = false
+
   // The function used to read and process input rows. When processing input rows,
   // it first uses hash-based aggregation by putting groups and their buffers in
   // hashMap. If there is not enough memory, it will multiple hash-maps, spilling
@@ -187,34 +192,46 @@ class TungstenAggregationIterator(
         val newInput = inputIter.next()
         val groupingKey = groupingProjection.apply(newInput)
         var buffer: UnsafeRow = null
-        if (i < fallbackStartsAt) {
-          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
-        }
-        if (buffer == null) {
-          val sorter = hashMap.destructAndCreateExternalSorter()
-          if (externalSorter == null) {
-            externalSorter = sorter
-          } else {
-            externalSorter.merge(sorter)
+        if (false) {
+          require(vectorizedAggregationMap
+            .incrementCount(groupingKey.getLong(0), groupingKey.getLong(1)) != null)
+        } else {
+          if (i < fallbackStartsAt) {
+            buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
           }
-          i = 0
-          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
           if (buffer == null) {
-            // failed to allocate the first page
-            throw new OutOfMemoryError("No enough memory for aggregation")
+            val sorter = hashMap.destructAndCreateExternalSorter()
+            if (externalSorter == null) {
+              externalSorter = sorter
+            } else {
+              externalSorter.merge(sorter)
+            }
+            i = 0
+            buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+            if (buffer == null) {
+              // failed to allocate the first page
+              throw new OutOfMemoryError("No enough memory for aggregation")
+            }
           }
+          processRow(buffer, newInput)
+          i += 1
         }
-        processRow(buffer, newInput)
-        i += 1
-      }
 
-      if (externalSorter != null) {
-        val sorter = hashMap.destructAndCreateExternalSorter()
-        externalSorter.merge(sorter)
-        hashMap.free()
+        if (externalSorter != null) {
+          val sorter = hashMap.destructAndCreateExternalSorter()
+          externalSorter.merge(sorter)
+          hashMap.free()
 
-        switchToSortBasedAggregation()
+          switchToSortBasedAggregation()
+        }
       }
+/*
+      val iter = vectorizedAggregationMap.batch.rowIterator()
+      while (iter.hasNext) {
+        val row = iter.next()
+        println(row.getLong(0), row.getLong(1), row.getLong(2))
+      }
+*/
     }
   }
 
