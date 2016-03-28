@@ -81,7 +81,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
    */
-  lazy val sqlParser: ParserInterface = new SparkQl(conf)
+  lazy val sqlParser: ParserInterface = SparkSqlParser
 
   /**
    * Planner that converts optimized logical plans to physical plans.

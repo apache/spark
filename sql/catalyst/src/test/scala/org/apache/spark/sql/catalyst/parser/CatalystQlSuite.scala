@@ -21,15 +21,20 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.ng.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CatalystQlSuite extends PlanTest {
   val parser = new CatalystQl()
+  import org.apache.spark.sql.catalyst.dsl.expressions._
+  import org.apache.spark.sql.catalyst.dsl.plans._
+
+  val star = UnresolvedAlias(UnresolvedStar(None))
 
   test("test case insensitive") {
-    val result = Project(UnresolvedAlias(Literal(1)):: Nil, OneRowRelation)
+    val result = OneRowRelation.select(1)
     assert(result === parser.parsePlan("seLect 1"))
     assert(result === parser.parsePlan("select 1"))
     assert(result === parser.parsePlan("SELECT 1"))
@@ -37,52 +42,31 @@ class CatalystQlSuite extends PlanTest {
 
   test("test NOT operator with comparison operations") {
     val parsed = parser.parsePlan("SELECT NOT TRUE > TRUE")
-    val expected = Project(
-      UnresolvedAlias(
-        Not(
-          GreaterThan(Literal(true), Literal(true)))
-      ) :: Nil,
-      OneRowRelation)
+    val expected = OneRowRelation.select(Not(GreaterThan(true, true)))
     comparePlans(parsed, expected)
   }
 
   test("test Union Distinct operator") {
-    val parsed1 = parser.parsePlan("SELECT * FROM t0 UNION SELECT * FROM t1")
-    val parsed2 = parser.parsePlan("SELECT * FROM t0 UNION DISTINCT SELECT * FROM t1")
-    val expected =
-      Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
-        SubqueryAlias("u_1",
-          Distinct(
-            Union(
-              Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
-                UnresolvedRelation(TableIdentifier("t0"), None)),
-              Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
-                UnresolvedRelation(TableIdentifier("t1"), None))))))
+    val parsed1 = parser.parsePlan(
+      "SELECT * FROM t0 UNION SELECT * FROM t1")
+    val parsed2 = parser.parsePlan(
+      "SELECT * FROM t0 UNION DISTINCT SELECT * FROM t1")
+    val expected = Distinct(Union(table("t0").select(star), table("t1").select(star)))
+      .as("u_1").select(star)
     comparePlans(parsed1, expected)
     comparePlans(parsed2, expected)
   }
 
   test("test Union All operator") {
     val parsed = parser.parsePlan("SELECT * FROM t0 UNION ALL SELECT * FROM t1")
-    val expected =
-      Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
-        SubqueryAlias("u_1",
-          Union(
-            Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
-              UnresolvedRelation(TableIdentifier("t0"), None)),
-            Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
-              UnresolvedRelation(TableIdentifier("t1"), None)))))
+    val expected = Union(table("t0").select(star), table("t1").select(star)).as("u_1").select(star)
     comparePlans(parsed, expected)
   }
 
   test("support hive interval literal") {
     def checkInterval(sql: String, result: CalendarInterval): Unit = {
       val parsed = parser.parsePlan(sql)
-      val expected = Project(
-        UnresolvedAlias(
-          Literal(result)
-        ) :: Nil,
-        OneRowRelation)
+      val expected = OneRowRelation.select(Literal(result))
       comparePlans(parsed, expected)
     }
 
@@ -129,11 +113,7 @@ class CatalystQlSuite extends PlanTest {
   test("support scientific notation") {
     def assertRight(input: String, output: Double): Unit = {
       val parsed = parser.parsePlan("SELECT " + input)
-      val expected = Project(
-        UnresolvedAlias(
-          Literal(output)
-        ) :: Nil,
-        OneRowRelation)
+      val expected = OneRowRelation.select(Literal(output))
       comparePlans(parsed, expected)
     }
 

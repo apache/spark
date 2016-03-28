@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, OneRowRelation, Sample}
 import org.apache.spark.sql.catalyst.util._
 
 /**
@@ -32,6 +32,8 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
    */
   protected def normalizeExprIds(plan: LogicalPlan) = {
     plan transformAllExpressions {
+      case s: ScalarSubquery =>
+        ScalarSubquery(s.query, ExprId(0))
       case a: AttributeReference =>
         AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
       case a: Alias =>
@@ -40,21 +42,25 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
   }
 
   /**
-   * Normalizes the filter conditions that appear in the plan. For instance,
-   * ((expr 1 && expr 2) && expr 3), (expr 1 && expr 2 && expr 3), (expr 3 && (expr 1 && expr 2)
-   * etc., will all now be equivalent.
+   * Normalizes plans:
+   * - Filter the filter conditions that appear in a plan. For instance,
+   *   ((expr 1 && expr 2) && expr 3), (expr 1 && expr 2 && expr 3), (expr 3 && (expr 1 && expr 2)
+   *   etc., will all now be equivalent.
+   * - Sample the seed will replaced by 0L.
    */
-  private def normalizeFilters(plan: LogicalPlan) = {
+  private def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
       case filter @ Filter(condition: Expression, child: LogicalPlan) =>
         Filter(splitConjunctivePredicates(condition).sortBy(_.hashCode()).reduce(And), child)
+      case sample: Sample =>
+        sample.copy(seed = 0L)(true)
     }
   }
 
   /** Fails the test if the two plans do not match */
   protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
-    val normalized1 = normalizeFilters(normalizeExprIds(plan1))
-    val normalized2 = normalizeFilters(normalizeExprIds(plan2))
+    val normalized1 = normalizePlan(normalizeExprIds(plan1))
+    val normalized2 = normalizePlan(normalizeExprIds(plan2))
     if (normalized1 != normalized2) {
       fail(
         s"""
