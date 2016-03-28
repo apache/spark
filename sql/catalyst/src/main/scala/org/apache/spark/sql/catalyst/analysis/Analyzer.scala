@@ -77,7 +77,8 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
-      EliminateUnions),
+      EliminateUnions,
+      TimeWindowing),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -93,7 +94,6 @@ class Analyzer(
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
-      TimeWindowing ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -1605,6 +1605,16 @@ object TimeWindowing extends Rule[LogicalPlan] {
     case windowExpr: TimeWindow => f(windowExpr)
   }
 
+  /** Pass on other columns that are required either in a projection or grouping. */
+  private def getMissingAttributes(plan: LogicalPlan): Seq[NamedExpression] = {
+    val expressions = plan match {
+      case p: Project => p.projectList
+      case a: Aggregate => a.groupingExpressions
+      case _ => Seq.empty
+    }
+    expressions.flatMap(_.references)
+  }
+
   /**
    * Generates the logical plan for generating window ranges on a timestamp column. Without
    * knowing what the timestamp value is, it's non-trivial to figure out deterministically how many
@@ -1635,7 +1645,11 @@ object TimeWindowing extends Rule[LogicalPlan] {
    */
   private def generateWindows(p: LogicalPlan): LogicalPlan = {
     val windowExpr = p.expressions.collect(getWindowExpr[TimeWindow](e => e)).head
-    val projections = Seq.tabulate(windowExpr.maxNumOverlapping) { i =>
+    // get all expressions we need to pass on for projections
+    val otherExpressions =
+      getMissingAttributes(p).filterNot(_.children.exists(_.isInstanceOf[TimeWindow]))
+
+    val projections = Seq.tabulate(windowExpr.maxNumOverlapping + 1) { i =>
       // windowId <- ceil((timestamp - startTime) / slideDuration)
       val division = Ceil(Divide(Subtract(Cast(windowExpr.timeColumn, LongType),
         Literal(windowExpr.startTime)), Literal(windowExpr.slideDuration)))
@@ -1645,22 +1659,23 @@ object TimeWindowing extends Rule[LogicalPlan] {
         Multiply(
           Add(
             Multiply(
-              Literal(windowExpr.slideDuration),
-              Add(division, Literal(i - windowExpr.maxNumOverlapping))),
+              Add(division, Literal(i - windowExpr.maxNumOverlapping)),
+              Literal(windowExpr.slideDuration)),
             Literal(windowExpr.startTime)),
           Literal(1000000))
       // windowEnd <- windowStart + windowDuration
       val windowEnd =
         Add(windowStart, Multiply(Literal(windowExpr.windowDuration), Literal(1000000)))
-      windowStart :: windowEnd :: windowExpr.originalTimeColumn :: Nil
+      windowStart :: windowEnd :: windowExpr.originalTimeColumn :: Nil ++ otherExpressions
     }
     val timeCol = windowExpr.originalTimeColumn.references.toSeq
-    //
+    // timestamp >= window.start && timestamp < window.end
     val filterExpr = And(GreaterThanOrEqual(windowExpr.timeColumn, windowExpr.windowStartCol),
       LessThan(windowExpr.timeColumn, windowExpr.windowEndCol))
-    Project(windowExpr.output ++ Seq(windowExpr.outputColumn) ++ timeCol,
+    Project(windowExpr.output ++ Seq(windowExpr.outputColumn) ++ timeCol ++ otherExpressions,
       Filter(filterExpr,
-        Expand(projections, windowExpr.output ++ timeCol, p.children.head)))
+        Expand(projections, windowExpr.output ++ timeCol ++ otherExpressions.map(_.toAttribute),
+          p.children.head)))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {

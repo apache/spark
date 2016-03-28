@@ -29,16 +29,6 @@ import org.apache.spark.sql.types._
 class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  test("time windowing") {
-    val df = Seq((1459103996L, 1), (1459103996L, 2), (1459103967L, 2)).toDF("time", "b")
-    // df.select(struct("time", "b")).explain(true)
-    df.select(window($"time", "1 minute", "15 seconds", "5 seconds"), $"time").collect().foreach(println)
-    println("\n\n")
-    df.groupBy(window($"time", "1 minute", "15 seconds", "5 seconds")).agg(count("*")).collect().foreach(println)
-    // windowed.select($"window")
-  }
-
-  /*
   test("array with column name") {
     val df = Seq((0, 1)).toDF("a", "b")
     val row = df.select(array("a", "b")).first()
@@ -404,5 +394,65 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(true), Row(true))
     )
   }
-  */
+
+  test("time windowing") {
+    // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC, 2016-03-27 19:39:27 UTC
+    val df = Seq((1459103974L, 1, "a"), (1459103996L, 2, "a"),
+      (1459103967L, 4, "b")).toDF("time", "value", "id")
+    checkAnswer(
+      df.groupBy(window($"time", "10 seconds")).agg(count("*").as("counts"))
+        .orderBy($"window.start".asc).select("counts"),
+      Seq(Row(1), Row(1), Row(1))
+    )
+    checkAnswer(
+      df.groupBy(window($"time", "10 seconds", "10 seconds", "5 seconds"))
+        .agg(count("*").as("counts")).orderBy($"window.start".asc).select("counts"),
+      Seq(Row(2), Row(1))
+    )
+    checkAnswer(
+      df.groupBy(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"id")
+        .agg(count("*").as("counts")).orderBy($"window.start".asc).select("counts"),
+      Seq(Row(1), Row(1), Row(1))
+    )
+    checkAnswer(
+      df.groupBy(window($"time", "10 seconds", "3 seconds", "0 second"))
+        .agg(count("*").as("counts")).orderBy($"window.start".asc).select("counts"),
+      // 2016-03-27 19:39:27 UTC -> 4 bins
+      // 2016-03-27 19:39:34 UTC -> 3 bins
+      // 2016-03-27 19:39:56 UTC -> 3 bins
+      Seq(Row(1), Row(1), Row(1), Row(2), Row(1), Row(1), Row(1), Row(1), Row(1))
+    )
+    checkAnswer(
+      df.select(window($"time", "10 seconds"), $"value")
+        .orderBy($"window.start".asc).select("value"),
+      Seq(Row(4), Row(1), Row(2))
+    )
+  }
+
+  test("esoteric time windowing use cases") {
+    // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC
+    val df = Seq((1459103974L, 1, Seq("a", "b")),
+      (1459103996L, 2, Seq("a", "c", "d"))).toDF("time", "value", "ids")
+    checkAnswer(
+      df.select(window($"time", "10 seconds"), $"value", explode($"ids"))
+        .orderBy($"window.start".asc).select("value"),
+      // first window exploded to two rows for "a", and "b", second window exploded to 3 rows
+      Seq(Row(1), Row(1), Row(2), Row(2), Row(2))
+    )
+    val df2 = Seq(("2016-03-27 09:00:05", 1), ("2016-03-27 09:00:32", 2),
+      (null, 3), (null, 4)).toDF("time", "value")
+    val df3 = Seq(("2016-03-27 09:00:02", 3), ("2016-03-27 09:00:35", 6)).toDF("time", "othervalue")
+    checkAnswer(
+      df2.select(window($"time", "10 seconds"), $"value")
+        .orderBy($"window.start".asc).select("value"),
+      Seq(Row(1), Row(2)) // null columns are dropped
+    )
+    checkAnswer(
+      df2.select(window($"time", "10 seconds"), $"value").join(
+        df3.select(window($"time", "10 seconds"), $"othervalue"), Seq("window")).groupBy("window")
+        .agg((sum("value") + sum("othervalue")).as("total"))
+        .orderBy($"window.start".asc).select("total"),
+      Seq(Row(4), Row(8))
+    )
+  }
 }
