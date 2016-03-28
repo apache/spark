@@ -773,7 +773,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("Infer a correct compatible type even if inferred decimal type is not capable of others") {
+  test("Find compatible types even if inferred decimal type is not capable of the others") {
     val jsonDF = sqlContext.read
       .option("floatAsBigDecimal", "true")
       .json(mixedIntegerAndDoubleRecords)
