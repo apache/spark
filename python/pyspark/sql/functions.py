@@ -1655,6 +1655,7 @@ def _wrap_function(sc, func, returnType):
     return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
