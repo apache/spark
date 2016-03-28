@@ -128,7 +128,7 @@ private[sql] class DefaultSource
       sqlContext: SQLContext,
       physicalSchema: StructType,
       partitionSchema: StructType,
-      dataSchema: StructType,
+      requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
     val orcConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
@@ -154,7 +154,7 @@ private[sql] class DefaultSource
         Iterator.empty
       } else {
         val physicalSchema = maybePhysicalSchema.get
-        OrcRelation.setRequiredColumns(conf, physicalSchema, dataSchema)
+        OrcRelation.setRequiredColumns(conf, physicalSchema, requiredSchema)
 
         val orcRecordReader = {
           val job = Job.getInstance(conf)
@@ -172,11 +172,11 @@ private[sql] class DefaultSource
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
         val unsafeRowIterator = OrcRelation.unwrapOrcStructs(
-          file.filePath, conf, dataSchema, new RecordReaderIterator[OrcStruct](orcRecordReader)
+          file.filePath, conf, requiredSchema, new RecordReaderIterator[OrcStruct](orcRecordReader)
         )
 
         // Appends partition values
-        val fullOutput = dataSchema.toAttributes ++ partitionSchema.toAttributes
+        val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
         val joinedRow = new JoinedRow()
         val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
 
