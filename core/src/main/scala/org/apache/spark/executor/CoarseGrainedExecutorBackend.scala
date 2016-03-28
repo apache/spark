@@ -113,9 +113,9 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case Shutdown =>
       stopping.set(true)
-      executor.stop()
-      stop()
-      rpcEnv.shutdown()
+      new Thread("CoarseGrainedExecutorBackend-stop-executor") {
+        override def run(): Unit = executor.stop()
+      }.start()
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
