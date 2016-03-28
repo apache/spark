@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.rules._
 
 class EliminateSortsSuite extends PlanTest {
   val conf = new SimpleCatalystConf(caseSensitiveAnalysis = true, orderByOrdinal = false)
-  val catalog = new SessionCatalog(new InMemoryCatalog, conf)
+  val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
   val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
 
   object Optimize extends RuleExecutor[LogicalPlan] {

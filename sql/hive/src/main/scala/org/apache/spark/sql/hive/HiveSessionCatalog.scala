@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -31,8 +32,9 @@ class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
     client: HiveClient,
     context: HiveContext,
+    functionRegistry: FunctionRegistry,
     conf: SQLConf)
-  extends SessionCatalog(externalCatalog, conf) {
+  extends SessionCatalog(externalCatalog, functionRegistry, conf) {
 
   override def setCurrentDatabase(db: String): Unit = {
     super.setCurrentDatabase(db)

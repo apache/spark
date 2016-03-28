@@ -44,14 +44,14 @@ private[sql] class SessionState(ctx: SQLContext) {
   lazy val experimentalMethods = new ExperimentalMethods
 
   /**
-   * Internal catalog for managing table and database states.
-   */
-  lazy val catalog = new SessionCatalog(ctx.externalCatalog, conf)
-
-  /**
    * Internal catalog for managing functions registered by the user.
    */
   lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
+
+  /**
+   * Internal catalog for managing table and database states.
+   */
+  lazy val catalog = new SessionCatalog(ctx.externalCatalog, functionRegistry, conf)
 
   /**
    * Interface exposed to the user for registering user-defined functions.

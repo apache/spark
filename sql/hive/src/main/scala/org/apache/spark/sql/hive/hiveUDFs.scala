@@ -141,6 +141,16 @@ private[hive] class HiveFunctionRegistry(
       }
     }.getOrElse(None))
   }
+
+  override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = {
+    underlying.lookupFunctionBuilder(name)
+  }
+
+  // Note: This does not drop functions stored in the metastore
+  override def dropFunction(name: String): Boolean = {
+    underlying.dropFunction(name)
+  }
+
 }
 
 private[hive] case class HiveSimpleUDF(

@@ -45,6 +45,13 @@ trait FunctionRegistry {
 
   /* Get the class of the registered function by specified name. */
   def lookupFunction(name: String): Option[ExpressionInfo]
+
+  /* Get the builder of the registered function by specified name. */
+  def lookupFunctionBuilder(name: String): Option[FunctionBuilder]
+
+  /** Drop a function and return whether the function existed. */
+  def dropFunction(name: String): Boolean
+
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -74,6 +81,14 @@ class SimpleFunctionRegistry extends FunctionRegistry {
 
   override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
     functionBuilders.get(name).map(_._1)
+  }
+
+  override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = synchronized {
+    functionBuilders.get(name).map(_._2)
+  }
+
+  override def dropFunction(name: String): Boolean = synchronized {
+    functionBuilders.remove(name).isDefined
   }
 
   def copy(): SimpleFunctionRegistry = synchronized {
@@ -106,6 +121,15 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   override def lookupFunction(name: String): Option[ExpressionInfo] = {
     throw new UnsupportedOperationException
   }
+
+  override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def dropFunction(name: String): Boolean = {
+    throw new UnsupportedOperationException
+  }
+
 }
 
 
