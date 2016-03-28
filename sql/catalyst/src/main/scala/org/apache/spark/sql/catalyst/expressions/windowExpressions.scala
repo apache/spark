@@ -300,7 +300,7 @@ case object ExcludeNoOthers extends ExcludeType
 case class ExcludeClause (
     excludeType: ExcludeType,
     valueOrdering: Ordering[InternalRow] = null, // compare order by column value with current row
-    toBeCompare: Projection = null) {
+    toBeCompared: Projection = null) {
 
   override def toString: String = excludeType match {
     case ExcludeCurrentRow => s"EXCLUDE CURRENT ROW"

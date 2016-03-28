@@ -752,12 +752,12 @@ private[execution] final class SlidingWindowFunctionFrame(
         case ExcludeCurrentRow if (inputLowIndex + progress == index) =>
           shouldUpdate = false
         case ExcludeGroup if excludeSpec.valueOrdering.compare(
-          excludeSpec.toBeCompare(next).copy(),
-          excludeSpec.toBeCompare(current).copy()) == 0 =>
+          excludeSpec.toBeCompared(next).copy(),
+          excludeSpec.toBeCompared(current).copy()) == 0 =>
           shouldUpdate = false
         case ExcludeTies if excludeSpec.valueOrdering.compare(
-          excludeSpec.toBeCompare(next).copy(),
-          excludeSpec.toBeCompare(current).copy()) == 0 =>
+          excludeSpec.toBeCompared(next).copy(),
+          excludeSpec.toBeCompared(current).copy()) == 0 =>
           if (inputLowIndex + progress == index) {
             shouldUpdate = true
            } else{
@@ -771,8 +771,8 @@ private[execution] final class SlidingWindowFunctionFrame(
       progress += 1
       if(shouldUpdate)
         processor.update(next)
-      }
-      processor.evaluate(target)
+    }
+    processor.evaluate(target)
 
   }
 }
@@ -829,8 +829,8 @@ private[execution] final class UnboundedWindowFunctionFrame(
         val iter = buffer.iterator()
         while (iter.hasNext) {
           val next = iter.next()
-          val leftRow = excludeSpec.toBeCompare(next).copy
-          val rightRow = excludeSpec.toBeCompare(current).copy
+          val leftRow = excludeSpec.toBeCompared(next).copy
+          val rightRow = excludeSpec.toBeCompared(current).copy
           // not having the same value as the current row in terms of the order by column(s)
           if (excludeSpec.valueOrdering.compare(leftRow,rightRow) != 0)
             processor.update(next)
@@ -842,8 +842,8 @@ private[execution] final class UnboundedWindowFunctionFrame(
           val next = buffer.get(inputIndex)
           // not the current row
           if (inputIndex != index){
-            val leftRow = excludeSpec.toBeCompare(next).copy
-            val rightRow = excludeSpec.toBeCompare(current).copy
+            val leftRow = excludeSpec.toBeCompared(next).copy
+            val rightRow = excludeSpec.toBeCompared(current).copy
             // not having the same value as the current row in terms of the order by column(s)
             if (excludeSpec.valueOrdering.compare(leftRow, rightRow) != 0)
               processor.update(next)
@@ -942,11 +942,17 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
 
       case ExcludeGroup =>
         while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) < 0 ){
-          val leftRow = excludeSpec.toBeCompare(nextRow).copy
-          val rightRow = excludeSpec.toBeCompare(current).copy
+          val leftRow = excludeSpec.toBeCompared(nextRow).copy
+          val rightRow = excludeSpec.toBeCompared(current).copy
+
+          // set aside the rows that have the same value as the current row in terms of
+          // order by expressions, so that they are not part of the calculation for
+          // the current row
           if (excludeSpec.valueOrdering.compare(leftRow,rightRow) == 0) {
             buffer.add(nextRow)
           } else {
+            // when we move to the row that no long has the same order by value as
+            // the current row, add the previously saved rows to the calculation
             while (buffer.size() > 0) {
               processor.update(buffer.pop())
             }
@@ -964,8 +970,8 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
         inputIndex = 0
         nextRow = input.next()
         while(nextRow !=null && ubound.compare(nextRow, inputIndex, current, index) <= 0){
-          val leftRow = excludeSpec.toBeCompare(nextRow).copy
-          val rightRow = excludeSpec.toBeCompare(current).copy
+          val leftRow = excludeSpec.toBeCompared(nextRow).copy
+          val rightRow = excludeSpec.toBeCompared(current).copy
           if (excludeSpec.valueOrdering.compare(leftRow,rightRow) != 0) {
             processor.update(nextRow)
           }
@@ -1056,11 +1062,11 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
         excludeSpec.excludeType match{
           case ExcludeCurrentRow if inputIndex + progress == index =>
           case ExcludeGroup if excludeSpec.valueOrdering.compare(
-            excludeSpec.toBeCompare(nextRow).copy(),
-            excludeSpec.toBeCompare(current).copy()) == 0 =>
+            excludeSpec.toBeCompared(nextRow).copy(),
+            excludeSpec.toBeCompared(current).copy()) == 0 =>
           case ExcludeTies if excludeSpec.valueOrdering.compare(
-            excludeSpec.toBeCompare(nextRow).copy(),
-            excludeSpec.toBeCompare(current).copy()) == 0 =>
+            excludeSpec.toBeCompared(nextRow).copy(),
+            excludeSpec.toBeCompared(current).copy()) == 0 =>
             if (inputIndex + progress == index)
               processor.update(nextRow)
           case _ =>

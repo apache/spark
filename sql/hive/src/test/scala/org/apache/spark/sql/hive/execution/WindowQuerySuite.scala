@@ -833,6 +833,23 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
+      // order by with component expression
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3+col2  exclude current row)" +
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10, 1,  7),
+          Row(6,  7,  4,  10),
+          Row(6,  11, 4,  24),
+          Row(6,  7,  8,  28),
+          Row(6,  9,  10, 35),
+          Row(6,  12, 10,	44),
+          Row(6,  15, 8,  71),
+          Row(6,  15, 8,  71),
+          Row(6,  13, 11, 86)
+        )
+      )
+
       // trying on other aggregation functions, like AVG, MIN, MAX
       checkAnswer(sql("select col1, col2, col3, AVG(col2) over " +
         " (partition by col1 order by col3 exclude current row) " +
