@@ -30,10 +30,9 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.OneVsRestParams
-import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.RFormulaModel
-import org.apache.spark.ml.param.{ParamPair, Params, _}
-import org.apache.spark.ml.tuning.{CrossValidatorParams, TrainValidationSplitParams, ValidatorParams}
+import org.apache.spark.ml.param.{ParamPair, Params}
+import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
