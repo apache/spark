@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.parser.ng
 
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.PredictionMode
-import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
+import org.antlr.v4.runtime.misc.ParseCancellationException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -102,15 +103,8 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
       case e: ParseException =>
         throw e.withCommand(command)
       case e: AnalysisException =>
-        (e.line, e.startPosition) match {
-          case (Some(line), Some(position)) =>
-            throw new ParseException(
-              Option(command),
-              e.message,
-              (line, position),
-              (line, position))
-          case _ => throw e
-        }
+        val position = Origin(e.line, e.startPosition)
+        throw new ParseException(Option(command), e.message, position, position)
     }
   }
 }
@@ -161,41 +155,45 @@ case object ParseErrorListener extends BaseErrorListener {
       charPositionInLine: Int,
       msg: String,
       e: RecognitionException): Unit = {
-    val position = (line, charPositionInLine)
+    val position = Origin(Some(line), Some(charPositionInLine))
     throw new ParseException(None, msg, position, position)
   }
 }
 
 /**
  * A [[ParseException]] is an [[AnalysisException]] that is thrown during the parse process. It
- * contains a fields and an extended error message that make reporting and diagnosing errors easier.
+ * contains fields and an extended error message that make reporting and diagnosing errors easier.
  */
 class ParseException(
     val command: Option[String],
     message: String,
-    val start: (Int, Int),
-    val stop: (Int, Int)) extends AnalysisException(message, Some(start._1), Some(start._2)) {
+    val start: Origin,
+    val stop: Origin) extends AnalysisException(message, start.line, start.startPosition) {
 
   def this(message: String, ctx: ParserRuleContext) = {
-    this(ParseSource.cmd(ctx),
+    this(Option(ParserUtils.command(ctx)),
       message,
-      ParseSource.position(ctx.getStart),
-      ParseSource.position(ctx.getStop))
+      ParserUtils.position(ctx.getStart),
+      ParserUtils.position(ctx.getStop))
   }
 
   override def getMessage: String = {
-    val (line, position) = start
-
-    // Build the error message.
-    val location = s"(line $line, pos $position)"
     val builder = new StringBuilder
-    builder ++= s"\n$message $location\n"
-    command.foreach { cmd =>
-      val (above, below) = cmd.split("\n").splitAt(line)
-      builder ++= "\n== SQL ==\n"
-      above.foreach(builder ++= _ += '\n')
-      builder ++= (0 until position).map(_ => "-").mkString("") ++= "^^^\n"
-      below.foreach(builder ++= _ += '\n')
+    builder ++= "\n" ++= message
+    start match {
+      case Origin(Some(l), Some(p)) =>
+        builder ++= s"(line $l, pos $p)\n"
+        command.foreach { cmd =>
+          val (above, below) = cmd.split("\n").splitAt(l)
+          builder ++= "\n== SQL ==\n"
+          above.foreach(builder ++= _ += '\n')
+          builder ++= (0 until p).map(_ => "-").mkString("") ++= "^^^\n"
+          below.foreach(builder ++= _ += '\n')
+        }
+      case _ =>
+        command.foreach { cmd =>
+          builder ++= "\n== SQL ==\n" ++= cmd
+        }
     }
     builder.toString
   }
@@ -203,21 +201,6 @@ class ParseException(
   def withCommand(cmd: String): ParseException = {
     new ParseException(Option(cmd), message, start, stop)
   }
-}
-
-object ParseSource {
-  /** Get the command which created the token. */
-  def cmd(ctx: ParserRuleContext): Option[String] = {
-    cmd(ctx.getStart.getInputStream)
-  }
-
-  /** Get the command which created the token. */
-  def cmd(stream: CharStream): Option[String] = {
-    Option(stream.getText(Interval.of(0, stream.size())))
-  }
-
-  /** Get the line and position of the token. */
-  def position(token: Token): (Int, Int) = (token.getLine, token.getCharPositionInLine)
 }
 
 /**

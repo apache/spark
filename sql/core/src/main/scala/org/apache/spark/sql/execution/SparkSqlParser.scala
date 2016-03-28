@@ -37,7 +37,7 @@ object SparkSqlParser extends AbstractSqlParser{
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
 class SparkSqlAstBuilder extends AstBuilder {
-  import AstBuilder._
+  import org.apache.spark.sql.catalyst.parser.ng.ParserUtils._
 
   /**
    * Create a [[SetCommand]] logical plan.

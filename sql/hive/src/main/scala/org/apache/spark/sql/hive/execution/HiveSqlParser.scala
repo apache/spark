@@ -52,7 +52,7 @@ object HiveSqlParser extends AbstractSqlParser {
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
 class HiveSqlAstBuilder extends SparkSqlAstBuilder {
-  import AstBuilder._
+  import ParserUtils._
 
   /**
    * Get the current Hive Configuration.

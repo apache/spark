@@ -22,18 +22,15 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
-import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.ParseUtils._
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
@@ -43,7 +40,7 @@ import org.apache.spark.util.random.RandomSampler
  * TableIdentifier.
  */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
-  import AstBuilder._
+  import ParserUtils._
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
@@ -1453,89 +1450,5 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
 
     StructField(identifier.getText, typedVisit(dataType), nullable = true, builder.build())
-  }
-}
-
-private[sql] object AstBuilder extends Logging {
-  /**
-   * Register the origin of the context. Any TreeNode created in the closure will be assigned the
-   * registered origin. This method restores the previously set origin after completion of the
-   * closure.
-   */
-  def withOrigin[T](ctx: ParserRuleContext)(f: => T): T = {
-    val current = CurrentOrigin.get
-    val token = ctx.getStart
-    CurrentOrigin.setPosition(token.getLine, token.getCharPositionInLine)
-    try {
-      f
-    } finally {
-      CurrentOrigin.set(current)
-    }
-  }
-
-  /**
-   * Assert if a condition holds. If it doesn't throw a parse exception.
-   */
-  def assert(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
-    if (!f) {
-      throw new ParseException(message, ctx)
-    }
-  }
-
-  /** Get the code of the entire command that created the given node. */
-  def command(ctx: ParserRuleContext): String = ParseSource.cmd(ctx) match {
-    case Some(sql) => sql
-    case None => ""
-  }
-
-  /** Get the code that creates the given node. */
-  def source(ctx: ParserRuleContext): String = {
-    val stream = ctx.getStart.getInputStream
-    stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
-  }
-
-  /** Get all the text which comes after the given rule. */
-  def remainder(ctx: ParserRuleContext): String = remainder(ctx.getStop)
-
-  /** Get all the text which comes after the given token. */
-  def remainder(token: Token): String = {
-    val stream = token.getInputStream
-    val interval = Interval.of(token.getStopIndex + 1, stream.size())
-    stream.getText(interval)
-  }
-
-  /** Convert a string token into a string. */
-  def string(token: Token): String = unescapeSQLString(token.getText)
-
-  /** Convert a string node into a string. */
-  def string(node: TerminalNode): String = unescapeSQLString(node.getText)
-
-  /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
-  implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
-    /**
-     * Create a plan using the block of code when the given context exists. Otherwise return the
-     * original plan.
-     */
-    def optional(ctx: AnyRef)(f: => LogicalPlan): LogicalPlan = {
-      if (ctx != null) {
-        f
-      } else {
-        plan
-      }
-    }
-
-    /**
-     * Map a [[LogicalPlan]] to another [[LogicalPlan]] if the passed context exists using the
-     * passed function. The original plan is returned when the context does not exist.
-     */
-    def optionalMap[C <: ParserRuleContext](
-        ctx: C)(
-        f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
-      if (ctx != null) {
-        f(ctx, plan)
-      } else {
-        plan
-      }
-    }
   }
 }
