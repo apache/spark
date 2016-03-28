@@ -63,6 +63,19 @@ case class SortOrder(child: Expression, direction: SortDirection)
   def isAscending: Boolean = direction == Ascending
 }
 
+object SortOrder {
+  /**
+   * Returns true iff the `output` orders are sufficient to satisfy the `required` orders.
+   */
+  def satisfies(output: Seq[SortOrder], required: Seq[SortOrder]): Boolean = {
+    required.forall { requiredOrder =>
+      output.exists { case outputOrder =>
+        requiredOrder.child == outputOrder.child && requiredOrder.direction == outputOrder.direction
+      }
+    }
+  }
+}
+
 /**
  * An expression to generate a 64-bit long prefix used in sorting.
  */
