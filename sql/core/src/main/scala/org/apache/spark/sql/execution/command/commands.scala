@@ -388,7 +388,7 @@ case class DropDatabase(
  * does not exist.
  * The syntax of using this command in SQL is:
  * {{{
- *    DROP DATABASE [IF EXISTS] database_name [RESTRICT|CASCADE];
+ *    ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
  * }}}
  */
 case class AlterDatabaseProperties(
