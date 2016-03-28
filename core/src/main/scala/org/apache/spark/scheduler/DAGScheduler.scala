@@ -422,6 +422,7 @@ class DAGScheduler(
           case _ => true
         }
         if (deps.forall(dep => visited(dep.rdd))) {
+          waitingForVisit.pop()
           visited += r
           for (dep <- deps) {
             dep match {
@@ -431,17 +432,18 @@ class DAGScheduler(
             }
           }
         } else {
-          waitingForVisit.push(r)
           for (dep <- deps if !visited(dep.rdd)) {
             waitingForVisit.push(dep.rdd)
           }
         }
+      } else {
+        waitingForVisit.pop()
       }
     }
 
     waitingForVisit.push(rdd)
     while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.pop())
+      visit(waitingForVisit.top)
     }
     parents
   }
