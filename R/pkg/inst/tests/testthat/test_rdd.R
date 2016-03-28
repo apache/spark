@@ -791,3 +791,11 @@ test_that("sampleByKey() on pairwise RDDs", {
   expect_equal(lookup(sample, 3)[which.min(lookup(sample, 3))] >= 0, TRUE)
   expect_equal(lookup(sample, 3)[which.max(lookup(sample, 3))] <= 2000, TRUE)
 })
+
+test_that("Test correct concurrency of RRDD.compute()", {
+  rdd <- parallelize(sc, 1:1000, 100)
+  jrdd <- getJRDD(lapply(rdd, function(x) { x }), "row")
+  zrdd <- callJMethod(jrdd, "zip", jrdd)
+  count <- callJMethod(zrdd, "count")
+  expect_equal(count, 1000)
+})
