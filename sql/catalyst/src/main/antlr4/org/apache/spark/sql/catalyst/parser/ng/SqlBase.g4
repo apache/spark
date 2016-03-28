@@ -464,7 +464,6 @@ primaryExpression
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' expression (',' expression)+ ')'                                                     #rowConstructor
-    | qualifiedName '(' (ASTERISK) ')' (OVER windowSpec)?                                      #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
     | '(' query ')'                                                                            #subqueryExpression
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END                   #simpleCase

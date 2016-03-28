@@ -1029,19 +1029,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
+    // Create the function call.
     val name = ctx.qualifiedName.getText
-    val arguments = if (ctx.ASTERISK != null && name.toLowerCase == "count") {
-      Seq(Literal(1))
-    } else if (ctx.ASTERISK != null) {
-      Seq(UnresolvedStar(None))
-    } else {
-      ctx.expression().asScala.map(expression)
+    val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
+    val arguments = ctx.expression().asScala.map(expression) match {
+      case Seq(UnresolvedStar(None)) if name.toLowerCase == "count" && !isDistinct =>
+        // Transform COUNT(*) into COUNT(1). Move this to analysis?
+        Seq(Literal(1))
+      case expressions =>
+        expressions
     }
-
-    val function = UnresolvedFunction(
-      name,
-      arguments,
-      Option(ctx.setQuantifier()).exists(_.DISTINCT != null))
+    val function = UnresolvedFunction(name, arguments, isDistinct)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
