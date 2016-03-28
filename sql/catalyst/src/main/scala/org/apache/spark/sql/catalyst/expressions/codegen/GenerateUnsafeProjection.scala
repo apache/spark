@@ -44,7 +44,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   // TODO: if the nullability of field is correct, we can use it to save null check.
-  private def writeStructToBuffer(
+  private[sql] def writeStructToBuffer(
       ctx: CodegenContext,
       input: String,
       fieldTypes: Seq[DataType],
@@ -169,7 +169,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   // TODO: if the nullability of array element is correct, we can use it to save null check.
-  private def writeArrayToBuffer(
+  private[sql] def writeArrayToBuffer(
       ctx: CodegenContext,
       input: String,
       elementType: DataType,
@@ -202,10 +202,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), bufferHolder)}
         """
 
-      case a @ ArrayType(et, _) =>
+      case a @ ArrayType(at, _) =>
         s"""
           $arrayWriter.setOffset($index);
-          ${writeArrayToBuffer(ctx, element, et, bufferHolder)}
+          ${writeArrayToBuffer(ctx, element, at, bufferHolder)}
         """
 
       case m @ MapType(kt, vt, _) =>
@@ -242,7 +242,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   // TODO: if the nullability of value element is correct, we can use it to save null check.
-  private def writeMapToBuffer(
+  private[sql] def writeMapToBuffer(
       ctx: CodegenContext,
       input: String,
       keyType: DataType,
