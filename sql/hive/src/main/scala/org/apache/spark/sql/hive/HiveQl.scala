@@ -210,7 +210,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
         HiveNativeCommand(sql)
       } else if (hiveUnsupportedCommands.contains(ast.text)) {
         val humanReadableText = hiveUnsupportedCommands(ast.text)
-        throw new AnalysisException("Unsupported Hive operation: " + humanReadableText)
+        throw new AnalysisException("Unsupported operation: " + humanReadableText)
       } else {
         nodeToPlan(ast) match {
           case NativePlaceholder => HiveNativeCommand(sql)

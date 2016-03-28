@@ -70,7 +70,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   private def assertUnsupportedFeature(body: => Unit): Unit = {
     val e = intercept[AnalysisException] { body }
-    assert(e.getMessage.toLowerCase.contains("unsupported hive operation"))
+    assert(e.getMessage.toLowerCase.contains("unsupported operation"))
   }
 
   test("SPARK-4908: concurrent hive native commands") {
