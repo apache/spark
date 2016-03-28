@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, SimpleFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -47,7 +47,7 @@ class SessionCatalog(
 
   // For testing only.
   def this(externalCatalog: ExternalCatalog) {
-    this(externalCatalog, EmptyFunctionRegistry)
+    this(externalCatalog, new SimpleFunctionRegistry)
   }
 
   protected[this] val tempTables = new ConcurrentHashMap[String, LogicalPlan]
