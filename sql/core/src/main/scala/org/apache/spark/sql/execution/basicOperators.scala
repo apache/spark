@@ -152,10 +152,9 @@ case class Filter(condition: Expression, child: SparkPlan)
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
         if (idx != -1 && !generatedIsNotNullChecks(idx)) {
-          // Use the child's output. The nullability is what the child produced.
-          val code = genPredicate(notNullPreds(idx), input, child.output)
           generatedIsNotNullChecks(idx) = true
-          code
+          // Use the child's output. The nullability is what the child produced.
+          genPredicate(notNullPreds(idx), input, child.output)
         } else {
           ""
         }
@@ -178,7 +177,7 @@ case class Filter(condition: Expression, child: SparkPlan)
     }.mkString("\n")
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
-    // generate better code (remove dead branches).                                              O
+    // generate better code (remove dead branches).
     val resultVars = input.zipWithIndex.map { case (ev, i) =>
       if (notNullAttributes.exists(_.semanticEquals(child.output(i)))) {
         ev.isNull = "false"
