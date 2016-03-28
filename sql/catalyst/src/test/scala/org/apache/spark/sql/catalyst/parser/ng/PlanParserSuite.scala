@@ -64,9 +64,9 @@ class PlanParserSuite extends PlanTest {
     val a = table("a").select(star())
     val b = table("b").select(star())
 
-    assertEqual("select * from a union select * from b", Distinct(a.unionAll(b)))
-    assertEqual("select * from a union distinct select * from b", Distinct(a.unionAll(b)))
-    assertEqual("select * from a union all select * from b", a.unionAll(b))
+    assertEqual("select * from a union select * from b", Distinct(a.union(b)))
+    assertEqual("select * from a union distinct select * from b", Distinct(a.union(b)))
+    assertEqual("select * from a union all select * from b", a.union(b))
     assertEqual("select * from a except select * from b", a.except(b))
     intercept("select * from a except all select * from b", "EXCEPT ALL is not supported.")
     assertEqual("select * from a except distinct select * from b", a.except(b))
@@ -119,7 +119,7 @@ class PlanParserSuite extends PlanTest {
     assertEqual("from a select distinct b, c", Distinct(table("a").select('b, 'c)))
     assertEqual(
       "from (from a union all from b) c select *",
-      table("a").unionAll(table("b")).as("c").select(star()))
+      table("a").union(table("b")).as("c").select(star()))
   }
 
   test("transform query spec") {
@@ -135,13 +135,13 @@ class PlanParserSuite extends PlanTest {
   test("multi select query") {
     assertEqual(
       "from a select * select * where s < 10",
-      table("a").select(star()).unionAll(table("a").where('s < 10).select(star())))
+      table("a").select(star()).union(table("a").where('s < 10).select(star())))
     intercept(
       "from a select * select * from x where a.s < 10",
       "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
-      table("a").select(star()).insertInto("tbl1").unionAll(
+      table("a").select(star()).insertInto("tbl1").union(
         table("a").where('s < 10).select(star()).insertInto("tbl2")))
   }
 
@@ -207,7 +207,7 @@ class PlanParserSuite extends PlanTest {
     val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
       InsertIntoTable(
-        table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).unionAll(
+        table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).union(
         InsertIntoTable(
           table("u"), Map.empty, plan2, overwrite = false, ifNotExists = false)))
   }
@@ -376,11 +376,11 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select id from ((((((t0))))))", plan)
     assertEqual(
       "(select * from t1) union distinct (select * from t2)",
-      Distinct(table("t1").select(star()).unionAll(table("t2").select(star()))))
+      Distinct(table("t1").select(star()).union(table("t2").select(star()))))
     assertEqual(
       "select * from ((select * from t1) union (select * from t2)) t",
       Distinct(
-        table("t1").select(star()).unionAll(table("t2").select(star()))).as("t").select(star()))
+        table("t1").select(star()).union(table("t2").select(star()))).as("t").select(star()))
     assertEqual(
       """select  id
         |from (((select id from t0)
@@ -389,7 +389,7 @@ class PlanParserSuite extends PlanTest {
         |      union all
         |      (select id from t0)) as u_1
       """.stripMargin,
-      plan.unionAll(plan).unionAll(plan).as("u_1").select('id))
+      plan.union(plan).union(plan).as("u_1").select('id))
   }
 
   test("scalar sub-query") {
