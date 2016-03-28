@@ -320,7 +320,7 @@ case class DescribeCommand(
 }
 
 /**
- * CREATE DATABASE: Create a new database.
+ * A command for users to create a new database.
  *
  * It will issue an error message when the database with the same name already exists,
  * unless 'ifNotExists' is true.
@@ -353,7 +353,7 @@ case class CreateDatabase(
 }
 
 /**
- * DROP DATABASE: Removes a database from the system.
+ * A command for users to remove a database from the system.
  *
  * 'ignoreIfNotExists':
  * - true, if database_name does't exist, no action
@@ -365,7 +365,7 @@ case class CreateDatabase(
  *
  * The syntax of using this command in SQL is:
  * {{{
- *    ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
+ *    DROP DATABASE [IF EXISTS] database_name [RESTRICT|CASCADE];
  * }}}
  */
 case class DropDatabase(
@@ -383,7 +383,7 @@ case class DropDatabase(
 }
 
 /**
- * ALTER DATABASE: add new (key, value) pairs into DBPROPERTIES
+ * A command for users to add new (key, value) pairs into DBPROPERTIES
  * If the database does not exist, an error message will be issued to indicate the database
  * does not exist.
  * The syntax of using this command in SQL is:
@@ -408,10 +408,14 @@ case class AlterDatabaseProperties(
 }
 
 /**
- * DESCRIBE DATABASE: shows the name of the database, its comment (if one has been set), and its
+ * A command for users to show the name of the database, its comment (if one has been set), and its
  * root location on the filesystem. When extended is true, it also shows the database's properties
  * If the database does not exist, an error message will be issued to indicate the database
  * does not exist.
+ * The syntax of using this command in SQL is
+ * {{{
+ *    DESCRIBE DATABASE [EXTENDED] db_name
+ * }}}
  */
 case class DescribeDatabase(
     databaseName: String,
