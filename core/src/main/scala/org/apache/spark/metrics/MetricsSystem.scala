@@ -21,6 +21,7 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
@@ -194,19 +195,26 @@ private[spark] class MetricsSystem private (
     sinkConfigs.foreach { kv =>
       val classPath = kv._2.getProperty("class")
       if (null != classPath) {
+        val cls = Utils.classForName(classPath)
         try {
-          val sink = Utils.classForName(classPath)
-            .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-            .newInstance(kv._2, registry, securityMgr)
+          val sink = cls.getConstructor(
+            classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+              .newInstance(kv._2, registry, securityMgr)
           if (kv._1 == "servlet") {
             metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
           } else {
             sinks += sink.asInstanceOf[Sink]
           }
         } catch {
-          case e: Exception =>
-            logError("Sink class " + classPath + " cannot be instantiated")
-            throw e
+          case _: NoSuchMethodException =>
+            try {
+              sinks += cls.getConstructor(classOf[Properties], classOf[MetricRegistry])
+                .asInstanceOf[Sink]
+            } catch {
+              case NonFatal(e) => logError("Sink class " + classPath + " cannot be instantiated", e)
+            }
+
+          case NonFatal(e) => logError("Sink class " + classPath + " cannot be instantiated", e)
         }
       }
     }

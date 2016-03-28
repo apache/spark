@@ -19,7 +19,30 @@ package org.apache.spark.metrics.source
 
 import com.codahale.metrics.MetricRegistry
 
-private[spark] trait Source {
+import org.apache.spark.annotation.DeveloperApi
+
+/**
+  * :: DeveloperApi ::
+  * The interface of metrics Source, this could be mixed into user code to get different metrics
+  * offered by codahale metrics libray. To enable this metrics Souce, user should configure
+  * the full classpath into metrics.properties and make class be accessed by all instances.
+  *
+  * Metrics Source will be registered into MetricsSystem to downstream the collected metrics to
+  * metrics Sink.
+  */
+@DeveloperApi
+trait Source {
+
+  /**
+    * The name of this metrics Source, name should be unique and will be prepended with app id and
+    * exeuctor id to distinguish.
+    * @return name of this Source
+    */
   def sourceName: String
+
+  /**
+    * A [[MetricRegistry]] in which all the collected metrics are registered.
+    * @return a [[MetricRegistry]] object which will be registered in MetricsSystem for collection
+    */
   def metricRegistry: MetricRegistry
 }
