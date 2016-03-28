@@ -1,5 +1,4 @@
 from builtins import str
-import logging
 import subprocess
 
 from airflow.executors.base_executor import BaseExecutor
