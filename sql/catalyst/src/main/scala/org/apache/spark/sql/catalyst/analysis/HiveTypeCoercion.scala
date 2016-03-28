@@ -160,6 +160,9 @@ object HiveTypeCoercion {
     })
   }
 
+  private def haveSameType(exprs: Seq[Expression]): Boolean =
+    exprs.map(_.dataType).distinct.length == 1
+
   /**
    * Applies any changes to [[AttributeReference]] data types that are made by other rules to
    * instances higher in the query tree.
@@ -443,12 +446,36 @@ object HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ CreateArray(children) if children.map(_.dataType).distinct.size > 1 =>
+      case a @ CreateArray(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findTightestCommonTypeAndPromoteToString(types) match {
           case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
           case None => a
         }
+
+      case m @ CreateMap(children) if m.keys.length == m.values.length &&
+        (!haveSameType(m.keys) || !haveSameType(m.values)) =>
+        val newKeys = if (haveSameType(m.keys)) {
+          m.keys
+        } else {
+          val types = m.keys.map(_.dataType)
+          findTightestCommonTypeAndPromoteToString(types) match {
+            case Some(finalDataType) => m.keys.map(Cast(_, finalDataType))
+            case None => m.keys
+          }
+        }
+
+        val newValues = if (haveSameType(m.values)) {
+          m.values
+        } else {
+          val types = m.values.map(_.dataType)
+          findTightestCommonTypeAndPromoteToString(types) match {
+            case Some(finalDataType) => m.values.map(Cast(_, finalDataType))
+            case None => m.values
+          }
+        }
+
+        CreateMap(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
@@ -468,21 +495,21 @@ object HiveTypeCoercion {
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
       // compatible with every child column.
-      case c @ Coalesce(es) if es.map(_.dataType).distinct.size > 1 =>
+      case c @ Coalesce(es) if !haveSameType(es) =>
         val types = es.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
           case None => c
         }
 
-      case g @ Greatest(children) if children.map(_.dataType).distinct.size > 1 =>
+      case g @ Greatest(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findTightestCommonType(types) match {
           case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
           case None => g
         }
 
-      case l @ Least(children) if children.map(_.dataType).distinct.size > 1 =>
+      case l @ Least(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findTightestCommonType(types) match {
           case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
