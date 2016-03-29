@@ -58,7 +58,8 @@ trait FunctionRegistry {
     name: String,
     functionClassName: String): (ExpressionInfo, FunctionBuilder) = {
     val clazz = Utils.getContextOrSparkClassLoader.loadClass(functionClassName)
-    val (_, (info, builder)) = FunctionRegistry.expression(name, clazz.asInstanceOf[Class[Expression]])
+    val (_, (info, builder)) =
+      FunctionRegistry.expression(name, clazz.asInstanceOf[Class[Expression]])
     (info, builder)
   }
 }
