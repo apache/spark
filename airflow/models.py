@@ -1008,15 +1008,13 @@ class TaskInstance(Base):
             )
         elif force or self.state in State.runnable():
             HR = "\n" + ("-" * 80) + "\n"  # Line break
-            tot_tries = task.retries + 1
+
             # For reporting purposes, we report based on 1-indexed,
             # not 0-indexed lists (i.e. Attempt 1 instead of
-            # Attempt 0 for the first attempt)
-            msg = "Attempt {} out of {}".format(self.try_number+1,
-                                                tot_tries)
-            self.try_number += 1
-            msg = msg.format(**locals())
-            logging.info(HR + msg + HR)
+            # Attempt 0 for the first attempt).
+            msg = "Starting attempt {attempt} of {total}".format(
+                attempt=self.try_number % (task.retries + 1) + 1,
+                total=task.retries + 1)
             self.start_date = datetime.now()
 
             if not mark_success and self.state != State.QUEUED and (
@@ -1024,16 +1022,21 @@ class TaskInstance(Base):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
                 self.state = State.QUEUED
-                # Since we are just getting enqueued, we need to undo
-                # the try_number increment above and update the message as well
-                self.try_number -= 1
-                msg = "Queuing attempt {} out of {}".format(self.try_number+1,
-                                                            tot_tries)
+                msg = "Queuing attempt {attempt} of {total}".format(
+                    attempt=self.try_number % (task.retries + 1) + 1,
+                    total=task.retries + 1)
+                logging.info(HR + msg + HR)
+
                 self.queued_dttm = datetime.now()
                 session.merge(self)
                 session.commit()
                 logging.info("Queuing into pool {}".format(self.pool))
                 return
+
+            # print status message
+            logging.info(HR + msg + HR)
+            self.try_number += 1
+
             if not test_mode:
                 session.add(Log(State.RUNNING, self))
             self.state = State.RUNNING
@@ -1129,12 +1132,17 @@ class TaskInstance(Base):
 
         # Let's go deeper
         try:
-            if self.try_number <= task.retries:
+            if task.retries and self.try_number % (task.retries + 1) != 0:
                 self.state = State.UP_FOR_RETRY
+                logging.info('Marking task as UP_FOR_RETRY')
                 if task.email_on_retry and task.email:
                     self.email_alert(error, is_retry=True)
             else:
                 self.state = State.FAILED
+                if task.retries:
+                    logging.info('All retries failed; marking task as FAILED')
+                else:
+                    logging.info('Marking task as FAILED.')
                 if task.email_on_failure and task.email:
                     self.email_alert(error, is_retry=False)
         except Exception as e2:
