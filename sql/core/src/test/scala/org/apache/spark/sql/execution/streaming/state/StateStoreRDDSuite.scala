@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
 class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
 
   private val sparkConf = new SparkConf().setMaster("local").setAppName(this.getClass.getSimpleName)
-  private val tempDir = Files.createTempDirectory("StateStoreRDDSuite").toString
+  private var tempDir = Files.createTempDirectory("StateStoreRDDSuite").toString
   private val keySchema = StructType(Seq(StructField("key", StringType, true)))
   private val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
 
@@ -54,117 +54,128 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
   }
 
   test("versioning and immutability") {
-    withSpark(new SparkContext(sparkConf)) { sc =>
-      implicit val sqlContet = new SQLContext(sc)
-      val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
-      val increment = (store: StateStore, iter: Iterator[String]) => {
-        iter.foreach { s =>
-          store.update(
-            stringToRow(s), oldRow => {
-              val oldValue = oldRow.map(rowToInt).getOrElse(0)
-              intToRow(oldValue + 1)
-            })
+    quietly {
+      withSpark(new SparkContext(sparkConf)) { sc =>
+        implicit val sqlContet = new SQLContext(sc)
+        val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
+        val increment = (store: StateStore, iter: Iterator[String]) => {
+          iter.foreach { s =>
+            store.update(
+              stringToRow(s), oldRow => {
+                val oldValue = oldRow.map(rowToInt).getOrElse(0)
+                intToRow(oldValue + 1)
+              })
+          }
+          store.commit()
+          store.iterator().map(rowsToStringInt)
         }
-        store.commit()
-        store.iterator().map(rowsToStringInt)
+        val opId = 0
+        val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+          increment, path, opId, storeVersion = 0, keySchema, valueSchema)
+        assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
+
+        // Generate next version of stores
+        val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionWithStateStore(
+          increment, path, opId, storeVersion = 1, keySchema, valueSchema)
+        assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
+
+        // Make sure the previous RDD still has the same data.
+        assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
       }
-      val opId = 0
-      val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
-        increment, path, opId, storeVersion = 0, keySchema, valueSchema)
-      assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
-
-      // Generate next version of stores
-      val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionWithStateStore(
-        increment, path, opId, storeVersion = 1, keySchema, valueSchema)
-      assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
-
-      // Make sure the previous RDD still has the same data.
-      assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
     }
   }
 
   test("recovering from files") {
-    val opId = 0
-    val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
+    quietly {
+      val opId = 0
+      val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
 
-    def makeStoreRDD(
-      sc: SparkContext,
-      seq: Seq[String],
-      storeVersion: Int): RDD[(String, Int)] = {
-      implicit val sqlContext = new SQLContext(sc)
-      makeRDD(sc, Seq("a")).mapPartitionWithStateStore(
-        increment, path, opId, storeVersion, keySchema, valueSchema)
-    }
-
-    // Generate RDDs and state store data
-    withSpark(new SparkContext(sparkConf)) { sc =>
-      for (i <- 1 to 20) {
-        require(makeStoreRDD(sc, Seq("a"), i - 1).collect().toSet === Set("a" -> i))
+      def makeStoreRDD(
+          sc: SparkContext,
+          seq: Seq[String],
+          storeVersion: Int): RDD[(String, Int)] = {
+        implicit val sqlContext = new SQLContext(sc)
+        makeRDD(sc, Seq("a")).mapPartitionWithStateStore(
+          increment, path, opId, storeVersion, keySchema, valueSchema)
       }
-    }
 
-    // With a new context, try using the earlier state store data
-    withSpark(new SparkContext(sparkConf)) { sc =>
-      assert(makeStoreRDD(sc, Seq("a"), 20).collect().toSet === Set("a" -> 21))
+      // Generate RDDs and state store data
+      withSpark(new SparkContext(sparkConf)) { sc =>
+        for (i <- 1 to 20) {
+          require(makeStoreRDD(sc, Seq("a"), i - 1).collect().toSet === Set("a" -> i))
+        }
+      }
+
+      // With a new context, try using the earlier state store data
+      withSpark(new SparkContext(sparkConf)) { sc =>
+        assert(makeStoreRDD(sc, Seq("a"), 20).collect().toSet === Set("a" -> 21))
+      }
     }
   }
 
   test("preferred locations using StateStoreCoordinator") {
-    val opId = 0
-    val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
+    quietly {
+      val opId = 0
+      val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
 
-    withSpark(new SparkContext(sparkConf)) { sc =>
-      implicit val sqlContext = new SQLContext(sc)
-      val coordinatorRef = sqlContext.streams.stateStoreCoordinator
-      coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 0), "host1", "exec1")
-      coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 1), "host2", "exec2")
-      assert(
-        coordinatorRef.getLocation(StateStoreId(path, opId, 0)) ===
-          Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
+      withSpark(new SparkContext(sparkConf)) { sc =>
+        implicit val sqlContext = new SQLContext(sc)
+        val coordinatorRef = sqlContext.streams.stateStoreCoordinator
+        coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 0), "host1", "exec1")
+        coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 1), "host2", "exec2")
 
-      val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
-        increment, path, opId, storeVersion = 0, keySchema, valueSchema)
-      require(rdd.partitions.length === 2)
+        eventually(timeout(10 seconds)) {
+          assert(
+            coordinatorRef.getLocation(StateStoreId(path, opId, 0)) ===
+              Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
+        }
 
-      assert(
-        rdd.preferredLocations(rdd.partitions(0)) ===
-          Seq(ExecutorCacheTaskLocation("host1", "exec1").toString))
+        val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+          increment, path, opId, storeVersion = 0, keySchema, valueSchema)
+        require(rdd.partitions.length === 2)
 
-      assert(
-        rdd.preferredLocations(rdd.partitions(1)) ===
-          Seq(ExecutorCacheTaskLocation("host2", "exec2").toString))
+        assert(
+          rdd.preferredLocations(rdd.partitions(0)) ===
+            Seq(ExecutorCacheTaskLocation("host1", "exec1").toString))
 
-      rdd.collect()
+        assert(
+          rdd.preferredLocations(rdd.partitions(1)) ===
+            Seq(ExecutorCacheTaskLocation("host2", "exec2").toString))
+
+        rdd.collect()
+      }
     }
   }
 
   test("distributed test") {
-    withSpark(new SparkContext(sparkConf.setMaster("local-cluster[2, 1, 1024]"))) { sc =>
-      implicit val sqlContet = new SQLContext(sc)
-      val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
-      val increment = (store: StateStore, iter: Iterator[String]) => {
-        iter.foreach { s =>
-          store.update(
-            stringToRow(s), oldRow => {
-              val oldValue = oldRow.map(rowToInt).getOrElse(0)
-              intToRow(oldValue + 1)
-            })
+    quietly {
+      withSpark(new SparkContext(sparkConf.setMaster("local-cluster[2, 1, 1024]"))) { sc =>
+        implicit val sqlContet = new SQLContext(sc)
+        val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString
+        val increment = (store: StateStore, iter: Iterator[String]) => {
+          iter.foreach { s =>
+            store.update(
+              stringToRow(s), oldRow => {
+                val oldValue = oldRow.map(rowToInt).getOrElse(0)
+                intToRow(oldValue + 1)
+              })
+          }
+          store.commit()
+          store.iterator().map(rowsToStringInt)
         }
-        store.commit()
-        store.iterator().map(rowsToStringInt)
+        val opId = 0
+        val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
+          increment, path, opId, storeVersion = 0, keySchema, valueSchema)
+        assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
+
+        // Generate next version of stores
+        val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionWithStateStore(
+          increment, path, opId, storeVersion = 1, keySchema, valueSchema)
+        assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
+
+        // Make sure the previous RDD still has the same data.
+        assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
       }
-      val opId = 0
-      val rdd1 = makeRDD(sc, Seq("a", "b", "a")).mapPartitionWithStateStore(
-        increment, path, opId, storeVersion = 0, keySchema, valueSchema)
-      assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
-
-      // Generate next version of stores
-      val rdd2 = makeRDD(sc, Seq("a", "c")).mapPartitionWithStateStore(
-        increment, path, opId, storeVersion = 1, keySchema, valueSchema)
-      assert(rdd2.collect().toSet === Set("a" -> 3, "b" -> 1, "c" -> 1))
-
-      // Make sure the previous RDD still has the same data.
-      assert(rdd1.collect().toSet === Set("a" -> 2, "b" -> 1))
     }
   }
 
