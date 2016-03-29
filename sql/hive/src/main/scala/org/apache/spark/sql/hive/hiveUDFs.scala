@@ -94,7 +94,7 @@ private[hive] class HiveFunctionRegistry(
    * This performs reflection to decide what type of [[Expression]] to return in the builder.
    * This is useful for creating temporary functions.
    */
-  def makeFunctionBuilder(funcName: String, funcClassName: String): FunctionBuilder = {
+  override def makeFunctionBuilder(funcName: String, funcClassName: String): FunctionBuilder = {
     makeFunctionBuilder(funcName, Utils.classForName(funcClassName))
   }
 
