@@ -297,7 +297,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
       WholeStageCodegen.PIPELINE_DURATION_METRIC))
 
-  override def doExecute(): RDD[InternalRow] = {
+  private[sql] def doCodeGen(): (CodegenContext, String) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     val references = ctx.references.toArray
@@ -334,6 +334,12 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
     val cleanedSource = CodeFormatter.stripExtraNewLines(source)
     logDebug(s"${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
+    (ctx, cleanedSource)
+  }
+
+  override def doExecute(): RDD[InternalRow] = {
+    val (ctx, cleanedSource) = doCodeGen()
+    val references = ctx.references.toArray
 
     val durationMs = longMetric("pipelineTime")
 

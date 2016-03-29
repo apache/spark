@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeFormatter, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.internal.SQLConf
 
@@ -62,11 +62,33 @@ package object debug {
           visited += new TreeNodeRef(s)
           DebugNode(s)
       }
-      logDebug(s"Results returned: ${debugPlan.execute().count()}")
+      println(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
         case d: DebugNode => d.dumpStats()
         case _ =>
       }
+    }
+
+    def debugCodegen(): Unit = println(debugCodegen0())
+
+    def debugCodegen0(): String = {
+      val plan = query.queryExecution.executedPlan
+      val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegen]()
+      plan transform {
+        case s: WholeStageCodegen =>
+          codegenSubtrees += s
+          s
+        case s => s
+      }
+      var output = s"Found ${codegenSubtrees.size} WholeStageCodegen subtrees.\n"
+      for ((s, i) <- codegenSubtrees.toSeq.zipWithIndex) {
+        output += s"== Subtree ${i + 1} / ${codegenSubtrees.size} ==\n"
+        output += s
+        output += "\nGenerated code:\n"
+        val (_, source) = s.doCodeGen()
+        output += s"${CodeFormatter.format(source)}\n"
+      }
+      output
     }
   }
 
@@ -99,11 +121,11 @@ package object debug {
     val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
-      logDebug(s"== ${child.simpleString} ==")
-      logDebug(s"Tuples output: ${tupleCount.value}")
+      println(s"== ${child.simpleString} ==")
+      println(s"Tuples output: ${tupleCount.value}")
       child.output.zip(columnStats).foreach { case (attr, metric) =>
         val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
-        logDebug(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
+        println(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }
 
