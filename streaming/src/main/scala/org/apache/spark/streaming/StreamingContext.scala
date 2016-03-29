@@ -106,7 +106,7 @@ class StreamingContext private[streaming] (
    *                   HDFS compatible filesystems
    */
   def this(path: String, hadoopConf: Configuration) =
-    this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).get, null)
+    this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).getOrElse(null), null)
 
   /**
    * Recreate a StreamingContext from a checkpoint file.
@@ -122,7 +122,8 @@ class StreamingContext private[streaming] (
   def this(path: String, sparkContext: SparkContext) = {
     this(
       sparkContext,
-      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).get,
+      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration)
+        .getOrElse(null),
       null)
   }
 
