@@ -159,17 +159,6 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
               return(list(coefficients = coefficients))
-            } else if (modelName == "KMeansModel") {
-              modelSize <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                       "getKMeansModelSize", object@model)
-              cluster <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                     "getKMeansCluster", object@model, "classes")
-              k <- unlist(modelSize)[1]
-              size <- unlist(modelSize)[-1]
-              coefficients <- t(matrix(coefficients, ncol = k))
-              colnames(coefficients) <- unlist(features)
-              rownames(coefficients) <- 1:k
-              return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
             } else {
               stop(paste("Unsupported model", modelName, sep = " "))
             }
