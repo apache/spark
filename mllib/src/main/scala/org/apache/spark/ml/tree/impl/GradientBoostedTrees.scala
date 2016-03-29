@@ -34,6 +34,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to train a gradient boosting model
+   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @param seed Random seed.
    * @return tuple of ensemble models and weights:
@@ -59,6 +60,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to validate a gradient boosting model
+   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @param validationInput Validation dataset.
    *                        This dataset should be different from the training dataset,
@@ -94,6 +96,7 @@ private[spark] object GradientBoostedTrees extends Logging {
   /**
    * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
+   *
    * @param data: training data.
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
@@ -107,7 +110,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       initTree: DecisionTreeRegressionModel,
       loss: OldLoss): RDD[(Double, Double)] = {
     data.map { lp =>
-      val pred = initTreeWeight * initTree.rootNode.predictImpl(lp.features).prediction
+      val pred = updatePrediction(lp.features, 0.0, initTree, initTreeWeight)
       val error = loss.computeError(pred, lp.label)
       (pred, error)
     }
@@ -116,6 +119,7 @@ private[spark] object GradientBoostedTrees extends Logging {
   /**
    * Update a zipped predictionError RDD
    * (as obtained with computeInitialPredictionAndError)
+   *
    * @param data: training data.
    * @param predictionAndError: predictionError RDD
    * @param treeWeight: Learning rate.
@@ -133,7 +137,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     val newPredError = data.zip(predictionAndError).mapPartitions { iter =>
       iter.map { case (lp, (pred, error)) =>
-        val newPred = pred + tree.rootNode.predictImpl(lp.features).prediction * treeWeight
+        val newPred = updatePrediction(lp.features, pred, tree, treeWeight)
         val newError = loss.computeError(newPred, lp.label)
         (newPred, newError)
       }
@@ -142,7 +146,99 @@ private[spark] object GradientBoostedTrees extends Logging {
   }
 
   /**
+   * Add prediction from a new boosting iteration to an existing prediction.
+   *
+   * @param features Vector of features representing a single data point.
+   * @param prediction The existing prediction.
+   * @param tree New Decision Tree model.
+   * @param weight Learning rate.
+   * @return Updated prediction.
+   */
+  def updatePrediction(
+      features: Vector,
+      prediction: Double,
+      tree: DecisionTreeRegressionModel,
+      weight: Double): Double = {
+    prediction + tree.rootNode.predictImpl(features).prediction * weight
+  }
+
+  /**
+   * Method to calculate error of the base learner for the gradient boosting calculation.
+   * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
+   * purposes.
+   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param trees Boosted Decision Tree models
+   * @param treeWeights Learning rates at each boosting iteration.
+   * @param loss evaluation metric.
+   * @return Measure of model error on data
+   */
+  def computeError(
+      data: RDD[LabeledPoint],
+      trees: Array[DecisionTreeRegressionModel],
+      treeWeights: Array[Double],
+      loss: OldLoss): Double = {
+    data.map { lp =>
+      val predicted = trees.zip(treeWeights).foldLeft(0.0) { case (acc, (model, weight)) =>
+        updatePrediction(lp.features, acc, model, weight)
+      }
+      loss.computeError(predicted, lp.label)
+    }.mean()
+  }
+
+  /**
+   * Method to compute error or loss for every iteration of gradient boosting.
+   *
+   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param trees Boosted Decision Tree models
+   * @param treeWeights Learning rates at each boosting iteration.
+   * @param loss evaluation metric.
+   * @param algo algorithm for the ensemble, either Classification or Regression
+   * @return an array with index i having the losses or errors for the ensemble
+   *         containing the first i+1 trees
+   */
+  def evaluateEachIteration(
+      data: RDD[LabeledPoint],
+      trees: Array[DecisionTreeRegressionModel],
+      treeWeights: Array[Double],
+      loss: OldLoss,
+      algo: OldAlgo.Value): Array[Double] = {
+
+    val sc = data.sparkContext
+    val remappedData = algo match {
+      case OldAlgo.Classification => data.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
+      case _ => data
+    }
+
+    val numIterations = trees.length
+    val evaluationArray = Array.fill(numIterations)(0.0)
+    val localTreeWeights = treeWeights
+
+    var predictionAndError = computeInitialPredictionAndError(
+      remappedData, localTreeWeights(0), trees(0), loss)
+
+    evaluationArray(0) = predictionAndError.values.mean()
+
+    val broadcastTrees = sc.broadcast(trees)
+    (1 until numIterations).foreach { nTree =>
+      predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
+        val currentTree = broadcastTrees.value(nTree)
+        val currentTreeWeight = localTreeWeights(nTree)
+        iter.map { case (point, (pred, error)) =>
+          val newPred = updatePrediction(point.features, pred, currentTree, currentTreeWeight)
+          val newError = loss.computeError(newPred, point.label)
+          (newPred, newError)
+        }
+      }
+      evaluationArray(nTree) = predictionAndError.values.mean()
+    }
+
+    broadcastTrees.unpersist()
+    evaluationArray
+  }
+
+  /**
    * Internal method for performing regression using trees as base learners.
+   *
    * @param input training dataset
    * @param validationInput validation dataset, ignored if validate is set to false.
    * @param boostingStrategy boosting parameters

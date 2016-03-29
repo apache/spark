@@ -23,6 +23,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.impurity.Variance
+//import org.apache.spark.ml.tree.impl.{GradientBoostedTrees => GBT}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.tree.loss.{Loss, AbsoluteError, LogLoss, SquaredError}
@@ -38,7 +39,6 @@ import org.apache.spark.util.Utils
 class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
   test("runWithValidation stops early and performs better on a validation dataset") {
-    import GradientBoostedTreesSuite.predict
     // Set numIterations large enough so that it stops early.
     val numIterations = 20
     val trainRdd = sc.parallelize(OldGBTSuite.trainData, 2)
@@ -63,18 +63,19 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
       val (errorWithoutValidation, errorWithValidation) = {
         if (algo == Classification) {
           val remappedRdd = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))
-          (remappedRdd.map(lp => loss.computeError(predict(lp.features, trees, treeWeights))).mean(),
-            remappedRdd.map(lp => predict(lp.features, validateTrees, validateTreeWeights)).mean())
+          (GradientBoostedTrees.computeError(remappedRdd, trees, treeWeights, loss),
+            GradientBoostedTrees.computeError(remappedRdd, trees, treeWeights, loss))
         } else {
-          (validateRdd.map(lp => predict(lp.features, trees, treeWeights)).mean(),
-            validateRdd.map(lp => predict(lp.features, validateTrees, validateTreeWeights)).mean())
+          (GradientBoostedTrees.computeError(validateRdd, trees, treeWeights, loss),
+            GradientBoostedTrees.computeError(validateRdd, trees, treeWeights, loss))
         }
       }
       assert(errorWithValidation <= errorWithoutValidation)
 
       // Test that results from evaluateEachIteration comply with runWithValidation.
       // Note that convergenceTol is set to 0.0
-      val evaluationArray = gbt.evaluateEachIteration(validateRdd, loss)
+      val evaluationArray = GradientBoostedTrees
+        .evaluateEachIteration(validateRdd, trees, treeWeights, loss, algo)
       assert(evaluationArray.length === numIterations)
       assert(evaluationArray(numTrees) > evaluationArray(numTrees - 1))
       var i = 1
@@ -102,27 +103,4 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
     Utils.deleteRecursively(tempDir)
   }
 
-}
-
-private object GradientBoostedTreesSuite {
-
-  def computeError(
-      data: RDD[LabeledPoint],
-      trees: Array[DecisionTreeRegressionModel],
-      treeWeights: Array[Double],
-      loss: Loss): Double = {
-    data.map { lp =>
-      val predicted = trees.zip(treeWeights).foldLeft(0.0) { case (acc, (model, weight)) =>
-        acc + model.rootNode.predictImpl(lp.features).prediction * weight
-      }
-      loss.computeError(predicted, lp.label)
-    }.mean()
-  }
-
-  def predict(features: Vector, trees: Array[DecisionTreeRegressionModel],
-              treeWeights: Array[Double]): Double = {
-    trees.zip(treeWeights).foldLeft(0.0) { case (acc, (model, weight)) =>
-      acc + model.rootNode.predictImpl(features).prediction * weight
-    }
-  }
 }

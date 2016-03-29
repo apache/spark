@@ -257,7 +257,7 @@ final class GBTClassificationModel private[ml](
   }
 }
 
-private[ml] object GBTClassificationModel {
+private[spark] object GBTClassificationModel {
 
   /** (private[ml]) Convert a model from the old API */
   def fromOld(

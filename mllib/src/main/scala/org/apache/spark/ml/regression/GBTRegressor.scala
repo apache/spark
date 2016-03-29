@@ -243,7 +243,7 @@ final class GBTRegressionModel private[ml](
   }
 }
 
-private[ml] object GBTRegressionModel {
+private[spark] object GBTRegressionModel {
 
   /** (private[ml]) Convert a model from the old API */
   def fromOld(
