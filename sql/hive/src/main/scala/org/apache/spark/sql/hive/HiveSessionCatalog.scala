@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -28,11 +29,12 @@ import org.apache.spark.sql.types.StructType
 
 
 class HiveSessionCatalog(
-    externalCatalog: HiveCatalog,
+    externalCatalog: HiveExternalCatalog,
     client: HiveClient,
     context: HiveContext,
+    functionRegistry: FunctionRegistry,
     conf: SQLConf)
-  extends SessionCatalog(externalCatalog, conf) {
+  extends SessionCatalog(externalCatalog, functionRegistry, conf) {
 
   override def setCurrentDatabase(db: String): Unit = {
     super.setCurrentDatabase(db)
@@ -41,11 +43,11 @@ class HiveSessionCatalog(
 
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.containsKey(table)) {
+    if (name.database.isDefined || !tempTables.contains(table)) {
       val newName = name.copy(table = table)
       metastoreCatalog.lookupRelation(newName, alias)
     } else {
-      val relation = tempTables.get(table)
+      val relation = tempTables(table)
       val tableWithQualifiers = SubqueryAlias(table, relation)
       // If an alias was specified by the lookup, wrap the plan in a subquery so that
       // attributes are properly qualified with this alias.

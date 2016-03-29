@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 
 class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
   private val conf = new SimpleCatalystConf(caseSensitiveAnalysis = true)
-  private val catalog = new SessionCatalog(new InMemoryCatalog, conf)
+  private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
   private val analyzer = new Analyzer(catalog, EmptyFunctionRegistry, conf)
 
   private val relation = LocalRelation(
@@ -52,7 +52,7 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
   private val b: Expression = UnresolvedAttribute("b")
 
   before {
-    catalog.createTempTable("table", relation, ignoreIfExists = true)
+    catalog.createTempTable("table", relation, overrideIfExists = true)
   }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {
