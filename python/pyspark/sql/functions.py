@@ -25,7 +25,7 @@ if sys.version < "3":
     from itertools import imap as map
 
 from pyspark import since, SparkContext
-from pyspark.rdd import _wrap_function, ignore_unicode_prefix
+from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
@@ -1648,6 +1648,14 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
+def _wrap_function(sc, func, returnType):
+    ser = AutoBatchedSerializer(PickleSerializer())
+    command = (func, returnType, ser)
+    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
+                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
@@ -1662,14 +1670,12 @@ class UserDefinedFunction(object):
 
     def _create_judf(self, name):
         from pyspark.sql import SQLContext
-        f, returnType = self.func, self.returnType  # put them in closure `func`
-        func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
-        ser = AutoBatchedSerializer(PickleSerializer())
         sc = SparkContext.getOrCreate()
-        wrapped_func = _wrap_function(sc, func, ser, ser)
+        wrapped_func = _wrap_function(sc, self.func, self.returnType)
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:
+            f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             name, wrapped_func, jdt)

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -25,17 +26,40 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * Extracts PythonUDFs from operators, rewriting the query plan so that the UDF can be evaluated
  * alone in a batch.
  *
+ * Only extracts the PythonUDFs that could be evaluated in Python (the single child is PythonUDFs
+ * or all the children could be evaluated in JVM).
+ *
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
 private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
+
+  private def hasPythonUDF(e: Expression): Boolean = {
+    e.find(_.isInstanceOf[PythonUDF]).isDefined
+  }
+
+  private def canEvaluateInPython(e: PythonUDF): Boolean = {
+    e.children match {
+      // single PythonUDF child could be chained and evaluated in Python
+      case Seq(u: PythonUDF) => canEvaluateInPython(u)
+      // Python UDF can't be evaluated directly in JVM
+      case children => !children.exists(hasPythonUDF)
+    }
+  }
+
+  private def collectEvaluatableUDF(expr: Expression): Seq[PythonUDF] = {
+    expr.collect {
+      case udf: PythonUDF if canEvaluateInPython(udf) => udf
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // Skip EvaluatePython nodes.
     case plan: EvaluatePython => plan
 
     case plan: LogicalPlan if plan.resolved =>
       // Extract any PythonUDFs from the current operator.
-      val udfs = plan.expressions.flatMap(_.collect { case udf: PythonUDF => udf })
+      val udfs = plan.expressions.flatMap(collectEvaluatableUDF)
       if (udfs.isEmpty) {
         // If there aren't any, we are done.
         plan
