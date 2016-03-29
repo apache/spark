@@ -120,20 +120,16 @@ object RowEncoder {
 
     case StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
-        val method = if (f.dataType.isInstanceOf[StructType]) {
-          "getStruct"
-        } else {
-          "get"
-        }
         val x = extractorsFor(
-          Invoke(inputObject, method, externalDataTypeFor(f.dataType), Literal(i) :: Nil,
-            f.nullable),
-          f.dataType)
+          GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType), f.nullable),
+          f.dataType
+        )
         if (f.nullable) {
           If(
             Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
             Literal.create(null, f.dataType),
-            x)
+            x
+          )
         } else {
           x
         }
