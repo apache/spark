@@ -175,10 +175,11 @@ private[sql] case class DataSourceScan(
   }
 
   private def canProcessBatches(): Boolean = {
+    lazy val conf = SQLContext.getActive().get.conf
     relation match {
       case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] &&
-        SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED) &&
-        SQLContext.getActive().get.conf.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED) =>
+        conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED) &&
+        conf.wholeStageEnabled && schema.length <= conf.wholeStageMaxNumFields =>
         true
       case _ =>
         false

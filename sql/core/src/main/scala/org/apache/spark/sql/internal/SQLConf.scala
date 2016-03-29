@@ -519,6 +519,11 @@ object SQLConf {
       " method.",
     isPublic = false)
 
+  val WHOLESTAGE_MAX_NUM_FIELDS = intConf("spark.sql.codegen.maxFields",
+    defaultValue = Some(200),
+    doc = "The maxinum number of fields (nested) could be supported by whole stage codegen",
+    isPublic = false)
+
   val FILES_MAX_PARTITION_BYTES = longConf("spark.sql.files.maxPartitionBytes",
     defaultValue = Some(128 * 1024 * 1024), // parquet.block.size
     doc = "The maximum number of bytes to pack into a single partition when reading files.",
@@ -612,6 +617,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 

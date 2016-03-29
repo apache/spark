@@ -224,9 +224,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   /**
    * Can be called before any rows are returned to enable returning columnar batches directly.
+   *
+   * @param maxColumns The maximum number of fields supported by whole stage codegen.
    */
-  public void enableReturningBatches() {
-    returnColumnarBatch = true;
+  public boolean tryEnableReturningBatches(int maxColumns) {
+    // Nested type are not supported
+    returnColumnarBatch = columnReaders.length <= maxColumns;
+    return returnColumnarBatch;
   }
 
   /**

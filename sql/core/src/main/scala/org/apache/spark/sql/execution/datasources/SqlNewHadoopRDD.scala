@@ -101,8 +101,8 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
   // a subset of the types (no complex types).
   protected val enableVectorizedParquetReader: Boolean =
     sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
-  protected val enableWholestageCodegen: Boolean =
-    sqlContext.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key).toBoolean
+  protected val enableWholestageCodegen: Boolean = sqlContext.conf.wholeStageEnabled
+  protected val maxNumFields: Int = sqlContext.conf.wholeStageMaxNumFields
 
   override def getPartitions: Array[SparkPartition] = {
     val conf = getConf(isDriverSide = true)
@@ -182,7 +182,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
           parquetReader.resultBatch()
           // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
-          if (enableWholestageCodegen) parquetReader.enableReturningBatches()
+          if (enableWholestageCodegen) parquetReader.tryEnableReturningBatches(maxNumFields)
         }
       }
 

@@ -338,8 +338,8 @@ private[sql] class DefaultSource
     // a subset of the types (no complex types).
     val enableVectorizedParquetReader: Boolean =
       sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
-    val enableWholestageCodegen: Boolean =
-      sqlContext.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key).toBoolean
+    val enableWholestageCodegen: Boolean = sqlContext.conf.wholeStageEnabled
+    val maxNumFields: Int = sqlContext.conf.wholeStageMaxNumFields
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
@@ -367,9 +367,8 @@ private[sql] class DefaultSource
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
         // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
         // TODO: fix column appending
-        if (enableWholestageCodegen) {
+        if (enableWholestageCodegen && vectorizedReader.tryEnableReturningBatches(maxNumFields)) {
           logDebug(s"Enabling batch returning")
-          vectorizedReader.enableReturningBatches()
         }
         vectorizedReader
       } catch {
