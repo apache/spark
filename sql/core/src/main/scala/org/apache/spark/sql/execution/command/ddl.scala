@@ -89,7 +89,7 @@ case class DescribeDatabase(
 case class CreateFunction(
     databaseName: Option[String],
     functionName: String,
-    alias: String,
+    functionClassName: String,
     resources: Seq[(String, String)],
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
