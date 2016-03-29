@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import scala.util.Try
+
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
@@ -24,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
 
 private[sql] object InferSchema {
 
@@ -135,11 +136,16 @@ private[sql] object InferSchema {
           // when we see a Java BigInteger, we use DecimalType.
           case BIG_INTEGER | BIG_DECIMAL =>
             val v = parser.getDecimalValue
-            DecimalType(v.precision(), v.scale())
+            // Creating `DecimalType` here can fail when
+            //   1. The precision is bigger than 38.
+            Try(DecimalType(v.precision(), v.scale())).getOrElse(DoubleType)
           case FLOAT | DOUBLE =>
-            if (configOptions.floatAsBigDecimal) {
+            if (configOptions.prefersDecimal) {
               val v = parser.getDecimalValue
-              DecimalType(v.precision(), v.scale())
+              // Creating `DecimalType` here can fail when
+              //   1. The precision is bigger than 38.
+              //   2. scale is bigger than precision.
+              Try(DecimalType(v.precision(), v.scale())).getOrElse(DoubleType)
             } else {
               DoubleType
             }

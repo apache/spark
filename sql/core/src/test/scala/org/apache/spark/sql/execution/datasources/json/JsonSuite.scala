@@ -773,6 +773,23 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
+  test("Infer doubles when it does not fit in decimal") {
+    val jsonDF = sqlContext.read
+      .option("prefersDecimal", "true")
+      .json(doubleRecords)
+
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+        StructField("b", DoubleType, true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(
+      jsonDF,
+      Seq(Row(1.0E-39D, 0.02D),
+        Row(1.0E38D, 0.01D))
+    )
+  }
+
   test("Loading a JSON dataset from a text file with SQL") {
     val dir = Utils.createTempDir()
     dir.delete()
