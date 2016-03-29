@@ -498,7 +498,7 @@ private[spark] class Client(
      * Copy user jar to the distributed cache if their scheme is not "local".
      * Otherwise, set the corresponding key in our SparkConf to handle it downstream.
      */
-    for (jar <- Option(args.userJar); if !jar.trim.isEmpty) {
+    Option(args.userJar).filter(_.trim.nonEmpty).foreach { jar =>
       val (isLocal, localizedPath) = distribute(jar, destName = Some(APP_JAR_NAME))
       if (isLocal) {
         require(localizedPath != null, s"Path $jar already distributed")
@@ -516,12 +516,10 @@ private[spark] class Client(
      *   (3) whether to add these resources to the classpath
      */
     val cachedSecondaryJarLinks = ListBuffer.empty[String]
-    val files = sparkConf.get(FILES_TO_DISTRIBUTE).map(p => Utils.resolveURIs(p)).orNull
-    val archives = sparkConf.get(ARCHIVES_TO_DISTRIBUTE).map(p => Utils.resolveURIs(p)).orNull
     List(
       (sparkConf.get(JARS_TO_DISTRIBUTE).orNull, LocalResourceType.FILE, true),
-      (files, LocalResourceType.FILE, false),
-      (archives, LocalResourceType.ARCHIVE, false)
+      (sparkConf.get(FILES_TO_DISTRIBUTE).orNull, LocalResourceType.FILE, false),
+      (sparkConf.get(ARCHIVES_TO_DISTRIBUTE).orNull, LocalResourceType.ARCHIVE, false)
     ).foreach { case (flist, resType, addToClasspath) =>
       if (flist != null && !flist.isEmpty()) {
         flist.split(',').foreach { file =>

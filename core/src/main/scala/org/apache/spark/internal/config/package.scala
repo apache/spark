@@ -34,7 +34,7 @@ package object config {
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.driver.userClassPathFirst").booleanConf.withDefault(false)
 
-    private[spark] val DRIVER_MEMORY = ConfigBuilder("spark.driver.memory")
+  private[spark] val DRIVER_MEMORY = ConfigBuilder("spark.driver.memory")
     .bytesConf(ByteUnit.MiB)
     .withDefaultString("1g")
 
