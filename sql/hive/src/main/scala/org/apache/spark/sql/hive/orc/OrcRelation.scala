@@ -174,14 +174,10 @@ private[sql] class DefaultSource
           file.filePath, conf, dataSchema, new RecordReaderIterator[OrcStruct](orcRecordReader)
         )
 
-        // Appends partition values
-        val fullOutput = dataSchema.toAttributes ++ partitionSchema.toAttributes
-        val joinedRow = new JoinedRow()
-        val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
-
-        unsafeRowIterator.map { dataRow =>
-          appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
-        }
+        FileFormat.appendPartitionValues(
+          unsafeRowIterator,
+          dataSchema.toAttributes ++ partitionSchema.toAttributes,
+          file.partitionValues)
       }
     }
   }
