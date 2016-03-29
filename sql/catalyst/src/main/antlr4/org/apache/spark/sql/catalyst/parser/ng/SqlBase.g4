@@ -118,7 +118,9 @@ statement
     | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | ADD identifier .*?                                               #addResource
+    | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
+    | kws=unsupportedHiveNativeCommands .*?                            #failNativeCommand
     | hiveNativeCommands                                               #executeNativeCommand
     ;
 
@@ -145,7 +147,26 @@ hiveNativeCommands
     | ROLLBACK WORK?
     | SHOW PARTITIONS tableIdentifier partitionSpec?
     | DFS .*?
-    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD) .*?
+    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | LOCK | UNLOCK | MSCK | LOAD) .*?
+    ;
+
+unsupportedHiveNativeCommands
+    : kw1=CREATE kw2=ROLE
+    | kw1=DROP kw2=ROLE
+    | kw1=GRANT kw2=ROLE?
+    | kw1=REVOKE kw2=ROLE?
+    | kw1=SHOW kw2=GRANT
+    | kw1=SHOW kw2=ROLE kw3=GRANT?
+    | kw1=SHOW kw2=PRINCIPALS
+    | kw1=SHOW kw2=ROLES
+    | kw1=SHOW kw2=CURRENT kw3=ROLES
+    | kw1=EXPORT kw2=TABLE
+    | kw1=IMPORT kw2=TABLE
+    | kw1=SHOW kw2=COMPACTIONS
+    | kw1=SHOW kw2=CREATE kw3=TABLE
+    | kw1=SHOW kw2=TRANSACTIONS
+    | kw1=SHOW kw2=INDEXES
+    | kw1=SHOW kw2=LOCKS
     ;
 
 createTableHeader
@@ -619,7 +640,8 @@ nonReserved
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
     | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
-    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD | VALUES | COMMENT
+    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
+    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEXES | LOCKS | OPTION
     ;
 
 SELECT: 'SELECT';
@@ -834,6 +856,14 @@ MSCK: 'MSCK';
 EXPORT: 'EXPORT';
 IMPORT: 'IMPORT';
 LOAD: 'LOAD';
+ROLE: 'ROLE';
+ROLES: 'ROLES';
+COMPACTIONS: 'COMPACTIONS';
+PRINCIPALS: 'PRINCIPALS';
+TRANSACTIONS: 'TRANSACTIONS';
+INDEXES: 'INDEXES';
+LOCKS: 'LOCKS';
+OPTION: 'OPTION';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
