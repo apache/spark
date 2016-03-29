@@ -471,7 +471,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     // Test feature importance computed at different subtrees.
     def testNode(node: Node, expected: Map[Int, Double]): Unit = {
       val map = new OpenHashMap[Int, Double]()
-      RandomForest.computeFeatureImportance(node, map)
+      TreeEnsembleModel.computeFeatureImportance(node, map)
       assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
     }
 
@@ -493,7 +493,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       new DecisionTreeClassificationModel(root, numFeatures = 2, numClasses = 3)
         .asInstanceOf[DecisionTreeModel]
     }
-    val importances: Vector = RandomForest.featureImportances(trees, 2)
+    val importances: Vector = TreeEnsembleModel.featureImportances(trees, 2)
     val tree2norm = feature0importance + feature1importance
     val expected = Vectors.dense((1.0 + feature0importance / tree2norm) / 2.0,
       (feature1importance / tree2norm) / 2.0)
@@ -504,7 +504,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val map = new OpenHashMap[Int, Double]()
     map(0) = 1.0
     map(2) = 2.0
-    RandomForest.normalizeMapValues(map)
+    TreeEnsembleModel.normalizeMapValues(map)
     val expected = Map(0 -> 1.0 / 3.0, 2 -> 2.0 / 3.0)
     assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
   }

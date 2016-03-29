@@ -224,6 +224,19 @@ final class GBTRegressionModel private[ml](
     s"GBTRegressionModel (uid=$uid) with $numTrees trees"
   }
 
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * Each feature's importance is the average of its importance across all trees in the ensemble
+   * The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+   * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+   * and follows the implementation from scikit-learn.
+   *
+   * @see [[DecisionTreeRegressionModel.featureImportances]]
+   */
+  @Since("2.0.0")
+  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
+
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
     new OldGBTModel(OldAlgo.Regression, _trees.map(_.toOld), _treeWeights)

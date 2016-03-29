@@ -121,6 +121,31 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   */
 
   /////////////////////////////////////////////////////////////////////////////
+  // Tests of feature importance
+  /////////////////////////////////////////////////////////////////////////////
+  test("Feature importance with toy data") {
+    val numClasses = 2
+    val gbt = new GBTClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(3)
+      .setMaxIter(5)
+      .setSubsamplingRate(1.0)
+      .setStepSize(0.5)
+      .setSeed(123)
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+
+    val importances = gbt.fit(df).featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
+    assert(importances.toArray.sum === 1.0)
+    assert(importances.toArray.forall(_ >= 0.0))
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
