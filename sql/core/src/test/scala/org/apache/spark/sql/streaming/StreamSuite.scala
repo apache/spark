@@ -84,28 +84,6 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       CheckAnswer(2, 4))
   }
 
-  test("batch planner") {
-    val aggregatedBatch =
-      Seq(1, 2, 3).toDF()
-          .groupBy($"value")
-          .agg(count("*"))
-          .as[(Int, Long)]
-
-    aggregatedBatch.queryExecution.executedPlan.collect {
-      case ta: TungstenAggregate =>
-        println(
-          s"""
-             |requiredChildDistributionExpressions ${ta.requiredChildDistributionExpressions}
-             |groupingExpressions ${ta.groupingExpressions}
-             |aggregateExpressions ${ta.aggregateExpressions}
-             |aggregateAttributes ${ta.aggregateAttributes}
-             |initialInputBufferOffset ${ta.initialInputBufferOffset}
-             |resultExpressions ${ta.resultExpressions}
-             |child ${ta.child} [${ta.child.output.mkString(", ")}]
-          """.stripMargin)
-    }.foreach(println)
-  }
-
   test("aggregation") {
     val inputData = MemoryStream[Int]
 
@@ -117,11 +95,11 @@ class StreamSuite extends StreamTest with SharedSQLContext {
 
     testStream(aggregated)(
       AddData(inputData, 3),
-      CheckAnswer((3, 1)),
+      CheckLastBatch((3, 1)),
       AddData(inputData, 3, 2),
-      CheckAnswer((3, 2), (2, 1)),
+      CheckLastBatch((3, 2), (2, 1)),
       AddData(inputData, 3, 2, 1),
-      CheckAnswer((3, 3), (2, 2), (1, 1))
+      CheckLastBatch((3, 3), (2, 2), (1, 1))
     )
   }
 }
