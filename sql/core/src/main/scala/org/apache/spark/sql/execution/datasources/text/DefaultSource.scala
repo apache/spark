@@ -43,7 +43,7 @@ import org.apache.spark.util.collection.BitSet
 /**
  * A data source for reading text files.
  */
-class DefaultSource extends FileFormat with DataSourceRegister with Serializable {
+class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "text"
 

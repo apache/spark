@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.BucketSpec
@@ -52,10 +53,56 @@ case class CreateDatabase(
     props: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * Drop Database: Removes a database from the system.
+ *
+ * 'ifExists':
+ * - true, if database_name does't exist, no action
+ * - false (default), if database_name does't exist, a warning message will be issued
+ * 'restric':
+ * - true (default), the database cannot be dropped if it is not empty. The inclusive
+ * tables must be dropped at first.
+ * - false, it is in the Cascade mode. The dependent objects are automatically dropped
+ * before dropping database.
+ */
+case class DropDatabase(
+    databaseName: String,
+    ifExists: Boolean,
+    restrict: Boolean)(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
+/** ALTER DATABASE: add new (key, value) pairs into DBPROPERTIES */
+case class AlterDatabaseProperties(
+    databaseName: String,
+    props: Map[String, String])(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
+/**
+ * DESCRIBE DATABASE: shows the name of the database, its comment (if one has been set), and its
+ * root location on the filesystem. When extended is true, it also shows the database's properties
+ */
+case class DescribeDatabase(
+    databaseName: String,
+    extended: Boolean)(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
 case class CreateFunction(
+    databaseName: Option[String],
     functionName: String,
     alias: String,
     resources: Seq[(String, String)],
+    isTemp: Boolean)(sql: String)
+  extends NativeDDLCommand(sql) with Logging
+
+/**
+ * The DDL command that drops a function.
+ * ifExists: returns an error if the function doesn't exist, unless this is true.
+ * isTemp: indicates if it is a temporary function.
+ */
+case class DropFunction(
+    databaseName: Option[String],
+    functionName: String,
+    ifExists: Boolean,
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
