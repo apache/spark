@@ -388,7 +388,7 @@ object FunctionRegistry {
       (name, (new ExpressionInfo(runtimeClass.getCanonicalName, name), builder))
     }
   }
- 
+
   /** See usage above. */
   def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
