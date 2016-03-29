@@ -97,7 +97,7 @@ Currently **officially** using Airflow:
 * [Kogan.com](https://github.com/kogan) [[@geeknam](https://github.com/geeknam)]
 * [LendUp](https://www.lendup.com/) [[@lendup](https://github.com/lendup)]
 * [LingoChamp](http://www.liulishuo.com/) [[@haitaoyao](https://github.com/haitaoyao)]
-* Lyft
+* [Lyft](https://www.lyft.com/)[[@SaurabhBajaj](https://github.com/SaurabhBajaj)]
 * [Sense360](https://github.com/Sense360) [[@kamilmroczek](https://github.com/KamilMroczek)]
 * [Sidecar](https://hello.getsidecar.com/) [[@getsidecar](https://github.com/getsidecar)]
 * [SimilarWeb](https://www.similarweb.com/) [[@similarweb](https://github.com/similarweb)]
