@@ -56,6 +56,9 @@ private class CodeFormatter {
 
   private def addLine(line: String): Unit = {
 
+    // We currently infer the level of indentation of a given line based on a simple heuristic that
+    // examines the number of parenthesis and braces in that line. This isn't the most robust
+    // implementation but works for all code that we generate.
     val indentChange = line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
     var newIndentLevel = math.max(0, indentLevel + indentChange)
 

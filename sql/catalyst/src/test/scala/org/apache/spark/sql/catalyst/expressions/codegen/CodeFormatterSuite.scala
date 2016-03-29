@@ -116,7 +116,7 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("multi-line comments") {
-    """/* This is a comment about
+    """  /* This is a comment about
       |class A {
       |class body; ...*/
       |class A {
