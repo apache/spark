@@ -38,7 +38,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
-trait ClassifierTypeTrait {
+private[ml] trait ClassifierTypeTrait {
   // scalastyle:off structural.type
   type ClassifierType = Classifier[F, E, M] forSome {
     type F
@@ -53,7 +53,6 @@ trait ClassifierTypeTrait {
  */
 private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTrait {
 
-
   /**
    * param for the base binary classifier that we reduce multiclass classification into.
    * The base classifier input and output columns are ignored in favor of
@@ -64,6 +63,55 @@ private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTra
 
   /** @group getParam */
   def getClassifier: ClassifierType = $(classifier)
+}
+
+private[ml] object OneVsRestParams extends ClassifierTypeTrait {
+
+  def validateParams(instance: OneVsRestParams): Unit = {
+    def checkElement(elem: Params, name: String): Unit = elem match {
+      case stage: MLWritable => // good
+      case other =>
+        throw new UnsupportedOperationException("OneVsRest write will fail " +
+          s" because it contains $name which does not implement Writable." +
+          s" Non-Writable $name: ${other.uid} of type ${other.getClass}")
+    }
+
+    instance match {
+      case ovrModel: OneVsRestModel => ovrModel.models.foreach(checkElement(_, "model"))
+      case _ => // no need to check OneVsRest here
+    }
+
+    checkElement(instance.getClassifier, "classifier")
+  }
+
+  def saveImpl(
+      path: String,
+      instance: OneVsRestParams,
+      sc: SparkContext,
+      extraMetadata: Option[JObject] = None): Unit = {
+
+    val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
+    val jsonParams = render(params
+      .filter { case ParamPair(p, v) => p.name != "classifier" }
+      .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
+      .toList)
+
+    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+
+    val classifierPath = new Path(path, "metadata_classifier").toString
+    instance.getClassifier.asInstanceOf[MLWritable].save(classifierPath)
+  }
+
+  def loadImpl(
+      path: String,
+      sc: SparkContext,
+      expectedClassName: String): (DefaultParamsReader.Metadata, ClassifierType) = {
+
+    val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
+    val classifierPath = new Path(path, "metadata_classifier").toString
+    val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](classifierPath, sc)
+    (metadata, estimator)
+  }
 }
 
 /**
@@ -169,15 +217,16 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
   /** [[MLWriter]] instance for [[OneVsRestModel]] */
   private[OneVsRestModel] class OneVsRestModelWriter(instance: OneVsRestModel) extends MLWriter {
 
-    SharedReadWrite.validateParams(instance)
-
-    private case class Data(labelMetadata: Map[String, Any])
+    OneVsRestParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
-      // Save model data: labelMetadata
-      val dataPath = new Path(path, "data").toString
-      sc.parallelize(Seq(instance.labelMetadata.json), 1).saveAsTextFile(dataPath)
-      SharedReadWrite.saveImpl(path, instance, sc, Some("numClasses" -> instance.models.length))
+      val extraJson = ("labelMetadata" -> instance.labelMetadata.json) ~
+        ("numClasses" -> instance.models.length)
+      OneVsRestParams.saveImpl(path, instance, sc, Some(extraJson))
+      instance.models.zipWithIndex.foreach { case (model: MLWritable, idx) =>
+        val modelPath = new Path(path, s"model_$idx").toString
+        model.save(modelPath)
+      }
     }
   }
 
@@ -188,15 +237,13 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
 
     override def load(path: String): OneVsRestModel = {
       implicit val format = DefaultFormats
-      val (metadata, classifier) = SharedReadWrite.load(path, sc, className)
+      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
+      val labelMetadata = Metadata.fromJson((metadata.metadata \ "labelMetadata").extract[String])
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val models = Range(0, numClasses).toArray.map { idx =>
         val modelPath = new Path(path, s"model_$idx").toString
         DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sc)
       }
-      val dataPath = new Path(path, "data").toString
-      val dataStr = sc.textFile(dataPath, 1).first()
-      val labelMetadata = Metadata.fromJson(dataStr)
       val ovrModel = new OneVsRestModel(metadata.uid, labelMetadata, models)
       DefaultParamsReader.getAndSetParams(ovrModel, metadata)
       ovrModel.set("classifier", classifier)
@@ -308,68 +355,6 @@ final class OneVsRest @Since("1.4.0") (
   override def write: MLWriter = new OneVsRest.OneVsRestWriter(this)
 }
 
-private[classification] object SharedReadWrite extends ClassifierTypeTrait {
-
-  def validateParams(instance: OneVsRestParams): Unit = {
-    def checkElement(elem: Params, name: String): Unit = elem match {
-      case stage: MLWritable => // good
-      case other =>
-        throw new UnsupportedOperationException("OneVsRest write will fail " +
-          s" because it contains $name which does not implement Writable." +
-          s" Non-Writable $name: ${other.uid} of type ${other.getClass}")
-    }
-
-    instance match {
-      case ovrModel: OneVsRestModel => ovrModel.models.foreach(checkElement(_, "model"))
-      case _ => // no need to check OneVsRest here
-    }
-
-    checkElement(instance.getClassifier, "classifier")
-  }
-
-  private[classification] def saveImpl(
-      path: String,
-      instance: OneVsRestParams,
-      sc: SparkContext,
-      extraMetadata: Option[JObject] = None): Unit = {
-
-    val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
-    val jsonParams = render(params
-      .filter { case ParamPair(p, v) => p.name != "classifier" }
-      .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
-      .toList)
-
-    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
-
-    val classifierPath = new Path(path, "metadata_classifier").toString
-    instance.getClassifier.asInstanceOf[MLWritable].save(classifierPath)
-
-    instance match {
-      case ovrModel: OneVsRestModel =>
-        ovrModel.asInstanceOf[OneVsRestModel].models.zipWithIndex.foreach {
-          case (model: MLWritable, idx) =>
-            val modelPath = new Path(path, s"model_$idx").toString
-            model.save(modelPath)
-          case _ => // do nothing here since we have already checked the models
-        }
-      case _ => // OneVsRest has already saved
-    }
-  }
-
-  private[classification] def load(
-      path: String,
-      sc: SparkContext,
-      expectedClassName: String): (DefaultParamsReader.Metadata, ClassifierType) = {
-
-    val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-
-    val classifierPath = new Path(path, "metadata_classifier").toString
-    val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](classifierPath, sc)
-
-    (metadata, estimator)
-  }
-}
-
 @Since("2.0.0")
 object OneVsRest extends MLReadable[OneVsRest] {
 
@@ -382,10 +367,10 @@ object OneVsRest extends MLReadable[OneVsRest] {
   /** [[MLWriter]] instance for [[OneVsRest]] */
   private[OneVsRest] class OneVsRestWriter(instance: OneVsRest) extends MLWriter {
 
-    SharedReadWrite.validateParams(instance)
+    OneVsRestParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
-      SharedReadWrite.saveImpl(path, instance, sc)
+      OneVsRestParams.saveImpl(path, instance, sc)
     }
   }
 
@@ -395,7 +380,7 @@ object OneVsRest extends MLReadable[OneVsRest] {
     private val className = classOf[OneVsRest].getName
 
     override def load(path: String): OneVsRest = {
-      val (metadata, classifier) = SharedReadWrite.load(path, sc, className)
+      val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
       val ovr = new OneVsRest(metadata.uid)
       DefaultParamsReader.getAndSetParams(ovr, metadata)
       ovr.setClassifier(classifier)
