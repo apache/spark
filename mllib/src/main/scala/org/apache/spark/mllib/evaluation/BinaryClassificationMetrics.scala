@@ -27,14 +27,14 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for binary classification.
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
- * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally
- *                will be down-sampled to this many "bins". If 0, no down-sampling will occur.
- *                This is useful because the curve contains a point for each distinct score
- *                in the input, and this could be as large as the input itself -- millions of
- *                points or more, when thousands may be entirely sufficient to summarize
- *                the curve. After down-sampling, the curves will instead be made of approximately
- *                `numBins` points instead. Points are made from bins of equal numbers of
- *                consecutive points. The size of each bin is
+ * @param numBins if greater than 0, then the curves (ROC curve, PR curve, calibration curve)
+ *                computed internally will be down-sampled to this many "bins". If 0, no
+ *                down-sampling will occur. This is useful because the curve contains a point for
+ *                each distinct score in the input, and this could be as large as the input itself
+ *                -- millions of points or more, when thousands may be entirely sufficient to
+ *                summarize the curve. After down-sampling, the curves will instead be made of
+ *                approximately `numBins` points instead. Points are made from bins of equal
+ *                numbers of consecutive points. The size of each bin is
  *                `floor(scoreAndLabels.count() / numBins)`, which means the resulting number
  *                of bins may not exactly equal numBins. The last bin in each partition may
  *                be smaller as a result, meaning there may be an extra sample at
@@ -221,6 +221,98 @@ class BinaryClassificationMetrics @Since("1.3.0") (
       y: BinaryClassificationMetricComputer): RDD[(Double, Double)] = {
     confusions.map { case (_, c) =>
       (x(c), y(c))
+    }
+  }
+
+  /**
+   * Returns the calibration or reliability curve,
+   * which is represented as an RDD of `((s_min, s_max), (p, n))`
+   * where `s_min` is the least score, `s_max` is the greatest score,
+   * `p` is the fraction of positive examples, and `n` is the number of scores,
+   * for each bin.
+   *
+   * `RDD.count` returns the actual number of bins, which might or might not
+   * be the same as `numBins`.
+   *
+   * When `numBins` is zero, scores are not grouped;
+   * in effect, each score is put into its own distinct bin.
+   *
+   * When `numBins` is greater than (number of distinct scores)/2,
+   * `numBins` is ignored and scores are not grouped
+   * (same as `numBins` equal to zero).
+   *
+   * When `distinctScoresCount/numBins` (rounded up) is greater than or
+   * equal to `Int.MaxValue`, the actual number of bins is `distinctScoresCount/Int.MaxValue`
+   * (rounded up).
+   *
+   * Otherwise, the actual number of bins is equal to `numBins`.
+   *
+   * @see Wikipedia article on calibration in classification:
+   * [[http://en.wikipedia.org/wiki/Calibration_%28statistics%29#In_classification Link to article]]
+   *
+   * @see Mahdi Pakdaman Naeini, Gregory F. Cooper, Milos Hauskrecht.
+   * Binary Classifier Calibration: Non-parametric approach.
+   * [[http://arxiv.org/abs/1401.3390 Link to paper]]
+   *
+   * @see Alexandru Niculescu-Mizil, Rich Caruana.
+   * Predicting Good Probabilities With Supervised Learning.
+   * Appearing in Proceedings of the 22nd International Conference on Machine Learning,
+   * Bonn, Germany, 2005.
+   * [[http://www.cs.cornell.edu/~alexn/papers/calibration.icml05.crc.rev3.pdf Link to paper]]
+   *
+   * @see Properties and benefits of calibrated classifiers.
+   * Ira Cohen, Moises Goldszmidt.
+   * [[http://www.hpl.hp.com/techreports/2004/HPL-2004-22R1.pdf Link to paper]]
+   */
+  def calibration(): RDD[((Double, Double), (Double, Long))] = {
+    assessedCalibration
+  }
+
+  private lazy val assessedCalibration: RDD[((Double, Double), (Double, Long))] = {
+    val distinctScoresAndLabelCounts = scoreAndLabels.combineByKey(
+      createCombiner = (label: Double) => new BinaryLabelCounter(0L, 0L) += label,
+      mergeValue = (c: BinaryLabelCounter, label: Double) => c += label,
+      mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
+    ).sortByKey(ascending = true)
+
+    val binnedDistinctScoresAndLabelCounts =
+      if (numBins == 0) {
+        distinctScoresAndLabelCounts.map { case (score, count) => ((score, score), count) }
+      } else {
+        val distinctScoresCount = distinctScoresAndLabelCounts.count()
+
+        var groupCount =
+          if (distinctScoresCount % numBins == 0) {
+            distinctScoresCount / numBins
+          } else {
+            // prevent the last bin from being very small compared to the others
+            distinctScoresCount / numBins + 1
+          }
+
+        if (groupCount < 2) {
+          logInfo(s"Too few distinct scores ($distinctScoresCount) for $numBins bins to be useful;"
+            + " proceed with number of bins == number of distinct scores.")
+          distinctScoresAndLabelCounts.map { case (score, count) => ((score, score), count) }
+        } else {
+          if (groupCount >= Int.MaxValue) {
+            val n = distinctScoresCount
+            logWarning(
+              s"Too many distinct scores ($n) for $numBins bins; capping at ${Int.MaxValue}")
+            groupCount = Int.MaxValue
+          }
+          distinctScoresAndLabelCounts.mapPartitions(_.grouped(groupCount.toInt).map { pairs =>
+            val firstScore = pairs.head._1
+            val lastScore = pairs.last._1
+            val agg = new BinaryLabelCounter()
+            pairs.foreach { case (score, count) => agg += count }
+            ((firstScore, lastScore), agg)
+          })
+        }
+      }
+
+    binnedDistinctScoresAndLabelCounts.map { case (bounds, counts) =>
+      val n = counts.numPositives + counts.numNegatives
+      (bounds, (counts.numPositives / n.toDouble, n))
     }
   }
 }
