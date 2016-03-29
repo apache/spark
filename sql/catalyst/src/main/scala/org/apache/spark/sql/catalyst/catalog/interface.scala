@@ -291,5 +291,5 @@ case class CatalogRelation(
   override def output: Seq[Attribute] = Seq.empty
 
   require(metadata.identifier.database == Some(db),
-    "provided database does not much the one specified in the table definition")
+    "provided database does not match the one specified in the table definition")
 }
