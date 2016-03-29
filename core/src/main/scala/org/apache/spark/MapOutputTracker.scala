@@ -429,7 +429,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   }
 
   def getMapOutputStatuses(shuffleId: Int): Array[MapStatus] = epochLock.synchronized {
-    mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
+    Array[MapStatus]() ++ mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
   }
 
   def getSerializedMapOutputStatuses(shuffleId: Int): Array[Byte] = {
