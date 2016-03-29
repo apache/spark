@@ -412,8 +412,8 @@ private[spark] class BlockManager(
           val iter: Iterator[Any] = if (level.deserialized) {
             memoryStore.getValues(blockId).get
           } else {
-            serializerManager.dataDeserialize(
-              blockId, memoryStore.getBytes(blockId).get)(info.classTag)
+            serializerManager.dataDeserializeStream(
+              blockId, memoryStore.getBytes(blockId).get.toInputStream())(info.classTag)
           }
           val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))

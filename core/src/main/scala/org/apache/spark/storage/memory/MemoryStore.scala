@@ -725,18 +725,31 @@ private[storage] class PartiallySerializedBlock[T](
     rest: Iterator[T],
     classTag: ClassTag[T]) {
 
+  private[this] var discarded: Boolean = false
+
+  Option(TaskContext.get()).foreach { taskContext =>
+    taskContext.addTaskCompletionListener { _ =>
+      if (!discarded) {
+        discard()
+      }
+    }
+  }
+
   /**
    * Called to dispose of this block and free its memory.
    */
   def discard(): Unit = {
-    try {
-      // We want to close the output stream in order to free any resources associated with the
-      // serializer itself (such as Kryo's internal buffers). close() might cause data to be
-      // written, so redirect the output stream to discard that data.
-      redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
-      serializationStream.close()
-    } finally {
-      memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
+    if (!discarded) {
+      try {
+        // We want to close the output stream in order to free any resources associated with the
+        // serializer itself (such as Kryo's internal buffers). close() might cause data to be
+        // written, so redirect the output stream to discard that data.
+        redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
+        serializationStream.close()
+      } finally {
+        memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
+        discarded = true
+      }
     }
   }
 
@@ -762,10 +775,12 @@ private[storage] class PartiallySerializedBlock[T](
    * `close()` on it to free its resources.
    */
   def valuesIterator: PartiallyUnrolledIterator[T] = {
+    val unrolledIter =
+      serializerManager.dataDeserializeStream(blockId, unrolled.toInputStream())(classTag)
     new PartiallyUnrolledIterator(
       memoryStore,
       unrollMemory,
-      unrolled = serializerManager.dataDeserialize(blockId, unrolled)(classTag),
+      unrolled = CompletionIterator[T, Iterator[T]](unrolledIter, discard()),
       rest = rest)
   }
 }
