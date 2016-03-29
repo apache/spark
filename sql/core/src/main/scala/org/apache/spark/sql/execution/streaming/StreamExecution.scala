@@ -42,11 +42,11 @@ import org.apache.spark.util.UninterruptibleThread
  * and the results are committed transactionally to the given [[Sink]].
  */
 class StreamExecution(
-    val sqlContext: SQLContext,
+    override val sqlContext: SQLContext,
     override val name: String,
-    val checkpointRoot: String,
-    private[sql] val logicalPlan: LogicalPlan,
-    val sink: Sink) extends ContinuousQuery with Logging {
+    checkpointRoot: String,
+    _logicalPlan: LogicalPlan,
+    sink: Sink) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
   private val awaitBatchLock = new Object
@@ -71,9 +71,18 @@ class StreamExecution(
   /** The current batchId or -1 if execution has not yet been initialized. */
   private var currentBatchId: Long = -1
 
+  private[sql] val logicalPlan = _logicalPlan.transform {
+    case StreamingRelation(sourceCreator, output) =>
+      // Materialize source to avoid creating it in every batch
+      val source = sourceCreator()
+      // We still need to use the previous `output` instead of `source.schema` as attributes in
+      // "_logicalPlan" has already used attributes of the previous `output`.
+      StreamingRelation(() => source, output)
+  }
+
   /** All stream sources present the query plan. */
   private val sources =
-    logicalPlan.collect { case s: StreamingRelation => s.source }
+    logicalPlan.collect { case s: StreamingRelation => s.sourceCreator() }
 
   /** A list of unique sources in the query plan. */
   private val uniqueSources = sources.distinct
@@ -286,8 +295,8 @@ class StreamExecution(
     var replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
-      case StreamingRelation(source, output) =>
-        newData.get(source).map { data =>
+      case StreamingRelation(sourceCreator, output) =>
+        newData.get(sourceCreator()).map { data =>
           val newPlan = data.logicalPlan
           assert(output.size == newPlan.output.size,
             s"Invalid batch: ${output.mkString(",")} != ${newPlan.output.mkString(",")}")

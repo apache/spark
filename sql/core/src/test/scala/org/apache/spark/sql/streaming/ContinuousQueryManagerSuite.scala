@@ -293,8 +293,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       if (withError) {
         logDebug(s"Terminating query ${queryToStop.name} with error")
         queryToStop.asInstanceOf[StreamExecution].logicalPlan.collect {
-          case StreamingRelation(memoryStream, _) =>
-            memoryStream.asInstanceOf[MemoryStream[Int]].addData(0)
+          case StreamingRelation(sourceCreator, _) =>
+            sourceCreator().asInstanceOf[MemoryStream[Int]].addData(0)
         }
       } else {
         logDebug(s"Stopping query ${queryToStop.name}")
