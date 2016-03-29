@@ -298,7 +298,9 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
       WholeStageCodegen.PIPELINE_DURATION_METRIC))
 
   /**
-   * Returns the tuple of the codegen context and the actual generated source code.
+   * Generates code for this subtree.
+   *
+   * @return the tuple of the codegen context and the actual generated source.
    */
   def doCodeGen(): (CodegenContext, String) = {
     val ctx = new CodegenContext
