@@ -184,11 +184,10 @@ class IsotonicRegressionSuite
   test("should support all NumericType labels and not support other types") {
     val ir = new IsotonicRegression()
     MLTestingUtils.checkNumericTypes[IsotonicRegressionModel, IsotonicRegression](
-      ir, sqlContext) { (expected, actual) =>
+      ir, isClassification = false, sqlContext) { (expected, actual) =>
         assert(expected.boundaries === actual.boundaries)
         assert(expected.predictions === actual.predictions)
       }
-    MLTestingUtils.checkEstimatorRejectNotNumericTypes(ir, sqlContext)
   }
 }
 

@@ -113,9 +113,10 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("should support all NumericType labels and not support other types") {
     val gbt = new GBTRegressor()
-    MLTestingUtils.checkPredictorAcceptAllNumericTypes[GBTRegressionModel, GBTRegressor](
-      gbt, sqlContext)((expected, actual) => TreeTests.checkEqual(expected, actual))
-    MLTestingUtils.checkPredictorRejectNotNumericTypes(gbt, sqlContext)
+    MLTestingUtils.checkNumericTypes[GBTRegressionModel, GBTRegressor](
+      gbt, isClassification = false, sqlContext) { (expected, actual) =>
+        TreeTests.checkEqual(expected, actual)
+      }
   }
 
   // TODO: Reinstate test once runWithValidation is implemented  SPARK-7132
