@@ -254,14 +254,15 @@ final class RandomForestClassificationModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter =
     new RandomForestClassificationModel.RandomForestClassificationModelWriter(this)
+
+  @Since("2.0.0")
+  override def read: MLReader =
+    new RandomForestClassificationModel.RandomForestClassificationModelReader(this)
 }
 
 @Since("2.0.0")
 object RandomForestClassificationModel extends MLReadable[RandomForestClassificationModel] {
 
-  @Since("2.0.0")
-  override def read: MLReader[RandomForestClassificationModel] =
-    new RandomForestClassificationModelReader
 
   @Since("2.0.0")
   override def load(path: String): RandomForestClassificationModel = super.load(path)
@@ -291,17 +292,12 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
 
     override def load(path: String): RandomForestClassificationModel = {
       implicit val format = DefaultFormats
-      implicit val root: Seq[DecisionTreeClassificationModel] = Nil
-
+      implicit val root: Array[DecisionTreeClassificationModel] = _
+      var metadata: DefaultParamsReader.Metadata = null
       for(treeIndex <- 1 to instance.getNumTrees) {
         val dataPath = new Path(path, "data" + treeIndex).toString
-        val metadata = DefaultParamsReader.loadMetadata(dataPath, sc, className)
+        metadata = DefaultParamsReader.loadMetadata(dataPath, sc, className)
         root :+ loadTreeNodes(path, metadata, sqlContext)
-        val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-        val numClasses = (metadata.metadata \ "numClasses").extract[Int]
-        if(treeIndex >= instance.getNumTrees) {
-          
-        }
       }
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]

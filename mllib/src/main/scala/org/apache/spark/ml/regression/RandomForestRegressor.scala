@@ -214,14 +214,14 @@ final class RandomForestRegressionModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter =
     new RandomForestRegressionModel.RandomForestRegressionModelWriter(this)
+
+  @Since("2.0.0")
+  override def read: MLReader[RandomForestRegressionModel] =
+    new RandomForestRegressionModel.RandomForestRegressionModelReader(this)
 }
 
 @Since("2.0.0")
 object RandomForestRegressionModel extends MLReadable[RandomForestRegressionModel] {
-
-    @Since("2.0.0")
-    override def read: MLReader[RandomForestRegressionModel] =
-      new RandomForestRegressionModelReader
 
     @Since("2.0.0")
     override def load(path: String): RandomForestRegressionModel = super.load(path)
@@ -250,14 +250,14 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
 
           override def load(path: String): RandomForestRegressionModel = {
             implicit val format = DefaultFormats
-            implicit val root: Seq[DecisionTreeRegressionModel] = Nil
+            implicit val root: Array[DecisionTreeRegressionModel] = _
+            var metadata: DefaultParamsReader.Metadata = null
             for ( treeIndex <- 1 to instance.getNumTrees) {
               val dataPath = new Path(path, "data" + treeIndex).toString
-              val metadata = DefaultParamsReader.
-                loadMetadata(dataPath, sc, className)
-              val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
+              metadata = DefaultParamsReader.loadMetadata(dataPath, sc, className)
               root :+ loadTreeNodes(path, metadata, sqlContext)
             }
+            val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
             val model = new RandomForestRegressionModel(metadata.uid, root, numFeatures)
             DefaultParamsReader.getAndSetParams(model, metadata)
             model
