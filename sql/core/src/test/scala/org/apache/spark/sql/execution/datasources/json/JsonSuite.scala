@@ -776,14 +776,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("Infer big integers as doubles when it does not fit in decimal") {
     val jsonDF = sqlContext.read
       .json(doubleRecords)
+      .selectExpr("a")
 
     val expectedSchema = StructType(
-      StructField("a", DoubleType, true) ::
-        StructField("b", DoubleType, true) :: Nil)
+      StructField("a", DoubleType, true) :: Nil)
 
     assert(expectedSchema === jsonDF.schema)
     checkAnswer(
-      jsonDF.selectExpr("a"),
+      jsonDF,
       Seq(Row(2.0E38D), Row(1.0E38D))
     )
   }
@@ -792,14 +792,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val jsonDF = sqlContext.read
       .option("prefersDecimal", "true")
       .json(doubleRecords)
+      .selectExpr("b")
 
     val expectedSchema = StructType(
-      StructField("a", DoubleType, true) ::
-        StructField("b", DoubleType, true) :: Nil)
+      StructField("b", DoubleType, true) :: Nil)
 
     assert(expectedSchema === jsonDF.schema)
     checkAnswer(
-      jsonDF.selectExpr("b"),
+      jsonDF,
       Seq(Row(0.02D), Row(0.01D))
     )
   }

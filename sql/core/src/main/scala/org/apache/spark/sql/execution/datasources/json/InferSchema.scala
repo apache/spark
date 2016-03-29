@@ -136,14 +136,13 @@ private[sql] object InferSchema {
           // when we see a Java BigInteger, we use DecimalType.
           case BIG_INTEGER | BIG_DECIMAL =>
             val v = parser.getDecimalValue
-            // Creating `DecimalType` here can fail when
-            //   1. The precision is bigger than 38.
+            // Creating `DecimalType` here can fail when precision is bigger than 38.
             Try(DecimalType(v.precision(), v.scale())).getOrElse(DoubleType)
           case FLOAT | DOUBLE =>
             if (configOptions.prefersDecimal) {
               val v = parser.getDecimalValue
               // Creating `DecimalType` here can fail when
-              //   1. The precision is bigger than 38.
+              //   1. precision is bigger than 38.
               //   2. scale is bigger than precision.
               Try(DecimalType(v.precision(), v.scale())).getOrElse(DoubleType)
             } else {
