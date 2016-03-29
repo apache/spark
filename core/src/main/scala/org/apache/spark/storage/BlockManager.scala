@@ -40,8 +40,9 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
-import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
@@ -986,7 +987,7 @@ private[spark] class BlockManager(
         } else {
           val allocator = level.memoryMode match {
             case MemoryMode.ON_HEAP => ByteBuffer.allocate _
-            case MemoryMode.OFF_HEAP => ByteBuffer.allocateDirect _
+            case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
           }
           val putSucceeded = memoryStore.putBytes(blockId, diskBytes.size, level.memoryMode, () => {
             // https://issues.apache.org/jira/browse/SPARK-6076

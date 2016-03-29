@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel}
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
@@ -310,7 +311,7 @@ private[spark] class MemoryStore(
 
     val allocator = memoryMode match {
       case MemoryMode.ON_HEAP => ByteBuffer.allocate _
-      case MemoryMode.OFF_HEAP => ByteBuffer.allocateDirect _
+      case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
     }
 
     // Whether there is still enough memory for us to continue unrolling this block
