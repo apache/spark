@@ -51,7 +51,6 @@ private[deploy] class DriverRunner(
 
   private var workerThread: Thread = null
   private var process: Process = null
-  private var shutdownHook: AnyRef = null
 
   // Timeout to wait for when trying to terminate a driver.
   private val DRIVER_TERMINATE_TIMEOUT_MS = 10 * 1000
@@ -78,9 +77,11 @@ private[deploy] class DriverRunner(
   private[worker] def start() = {
     workerThread = new Thread("DriverRunner for " + driverId) {
       override def run() {
+        var shutdownHook: AnyRef = null
         try {
           shutdownHook = ShutdownHookManager.addShutdownHook { () =>
-            killProcessAndFinalize(DriverState.KILLED, new SparkException("Worker shutting down"))
+            logInfo(s"Worker shutting down, killing driver $driverId")
+            kill()
           }
 
           // prepare driver jars, launch driver and set final state from process exit code
@@ -128,9 +129,12 @@ private[deploy] class DriverRunner(
   /** Stop this driver, including the process it launched */
   private[worker] def kill(): Unit = {
     if (workerThread != null) {
-      // the workerThread will kill the child process when interrupted
-      workerThread.interrupt()
-      workerThread.join()
+      // make sure process does not start if being interrupted
+      this.synchronized {
+        // the workerThread will kill the child process when interrupted
+        workerThread.interrupt()
+        workerThread.join()
+      }
       workerThread = null
     }
   }
@@ -223,7 +227,10 @@ private[deploy] class DriverRunner(
     while (attemptRun) {
       logInfo("Launch Command: " + command.command.mkString("\"", "\" \"", "\""))
 
-      process = command.start()
+      // make sure process is assigned once start is attempted
+      this.synchronized {
+        process = command.start()
+      }
       initialize(process)
 
       val processStart = clock.getTimeMillis()
@@ -246,7 +253,6 @@ private[deploy] class DriverRunner(
     exitCode
   }
 }
-
 
 private[deploy] trait Sleeper {
   def sleep(seconds: Int)
