@@ -22,10 +22,10 @@ import scala.collection.JavaConverters._
 import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.PythonRunner
+import org.apache.spark.api.python.{PythonFunction, PythonRunner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow, JoinedRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -45,6 +45,18 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
   def children: Seq[SparkPlan] = child :: Nil
 
+  private def collectFunctions(udf: PythonUDF): (Seq[PythonFunction], Seq[Expression]) = {
+    udf.children match {
+      case Seq(u: PythonUDF) =>
+        val (fs, children) = collectFunctions(u)
+        (fs ++ Seq(udf.func), children)
+      case children =>
+        // There should not be any other UDFs, or the children can't be evaluated directly.
+        assert(children.forall(_.find(_.isInstanceOf[PythonUDF]).isEmpty))
+        (Seq(udf.func), udf.children)
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
@@ -57,9 +69,11 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       // combine input with output from Python.
       val queue = new java.util.concurrent.ConcurrentLinkedQueue[InternalRow]()
 
+      val (pyFuncs, children) = collectFunctions(udf)
+
       val pickle = new Pickler
-      val currentRow = newMutableProjection(udf.children, child.output)()
-      val fields = udf.children.map(_.dataType)
+      val currentRow = newMutableProjection(children, child.output)()
+      val fields = children.map(_.dataType)
       val schema = new StructType(fields.map(t => new StructField("", t, true)).toArray)
 
       // Input iterator to Python: input rows are grouped so we send them in batches to Python.
@@ -75,11 +89,8 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       val context = TaskContext.get()
 
       // Output iterator for results from Python.
-      val outputIterator = new PythonRunner(
-        udf.func,
-        bufferSize,
-        reuseWorker
-      ).compute(inputIterator, context.partitionId(), context)
+      val outputIterator = new PythonRunner(pyFuncs, bufferSize, reuseWorker, true)
+        .compute(inputIterator, context.partitionId(), context)
 
       val unpickle = new Unpickler
       val row = new GenericMutableRow(1)
