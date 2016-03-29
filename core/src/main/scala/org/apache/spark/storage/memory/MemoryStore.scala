@@ -90,7 +90,8 @@ private[spark] class MemoryStore(
 
   // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)
   // All accesses of this map are assumed to have manually synchronized on `memoryManager`
-  private val unrollMemoryMap = mutable.HashMap[Long, Long]()
+  private val onHeapUnrollMemoryMap = mutable.HashMap[Long, Long]()
+  private val offHeapUnrollMemoryMap = mutable.HashMap[Long, Long]()
 
   // Initial memory to request before unrolling any block
   private val unrollMemoryThreshold: Long =
@@ -195,7 +196,8 @@ private[spark] class MemoryStore(
     var vector = new SizeTrackingVector[T]()(classTag)
 
     // Request enough memory to begin unrolling
-    keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold)
+    keepUnrolling =
+      reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, MemoryMode.ON_HEAP)
 
     if (!keepUnrolling) {
       logWarning(s"Failed to reserve initial memory threshold of " +
@@ -212,7 +214,8 @@ private[spark] class MemoryStore(
         val currentSize = vector.estimateSize()
         if (currentSize >= memoryThreshold) {
           val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
-          keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest)
+          keepUnrolling =
+            reserveUnrollMemoryForThisTask(blockId, amountToRequest, MemoryMode.ON_HEAP)
           if (keepUnrolling) {
             unrollMemoryUsedByThisBlock += amountToRequest
           }
@@ -233,7 +236,7 @@ private[spark] class MemoryStore(
       def transferUnrollToStorage(amount: Long): Unit = {
         // Synchronize so that transfer is atomic
         memoryManager.synchronized {
-          releaseUnrollMemoryForThisTask(amount)
+          releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, amount)
           val success = memoryManager.acquireStorageMemory(blockId, amount, MemoryMode.ON_HEAP)
           assert(success, "transferring unroll memory to storage memory failed")
         }
@@ -252,7 +255,7 @@ private[spark] class MemoryStore(
           // If this task attempt already owns more unroll memory than is necessary to store the
           // block, then release the extra memory that will not be used.
           val excessUnrollMemory = unrollMemoryUsedByThisBlock - size
-          releaseUnrollMemoryForThisTask(excessUnrollMemory)
+          releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, excessUnrollMemory)
           transferUnrollToStorage(size)
           true
         }
@@ -326,7 +329,7 @@ private[spark] class MemoryStore(
     }
 
     // Request enough memory to begin unrolling
-    keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold)
+    keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
 
     if (!keepUnrolling) {
       logWarning(s"Failed to reserve initial memory threshold of " +
@@ -338,7 +341,7 @@ private[spark] class MemoryStore(
     def reserveAdditionalMemoryIfNecessary(): Unit = {
       if (bbos.size > unrollMemoryUsedByThisBlock) {
         val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock
-        keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest)
+        keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
         }
@@ -363,7 +366,7 @@ private[spark] class MemoryStore(
       val entry = SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
       // Synchronize so that transfer is atomic
       memoryManager.synchronized {
-        releaseUnrollMemoryForThisTask(unrollMemoryUsedByThisBlock)
+        releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
         val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode)
         assert(success, "transferring unroll memory to storage memory failed")
       }
@@ -384,6 +387,7 @@ private[spark] class MemoryStore(
           serializationStream,
           redirectableStream,
           unrollMemoryUsedByThisBlock,
+          memoryMode,
           bbos.toChunkedByteBuffer,
           values,
           classTag))
@@ -434,7 +438,8 @@ private[spark] class MemoryStore(
     entries.synchronized {
       entries.clear()
     }
-    unrollMemoryMap.clear()
+    onHeapUnrollMemoryMap.clear()
+    offHeapUnrollMemoryMap.clear()
     memoryManager.releaseAllStorageMemory()
     logInfo("MemoryStore cleared")
   }
@@ -549,11 +554,18 @@ private[spark] class MemoryStore(
    *
    * @return whether the request is granted.
    */
-  def reserveUnrollMemoryForThisTask(blockId: BlockId, memory: Long): Boolean = {
+  def reserveUnrollMemoryForThisTask(
+      blockId: BlockId,
+      memory: Long,
+      memoryMode: MemoryMode): Boolean = {
     memoryManager.synchronized {
-      val success = memoryManager.acquireUnrollMemory(blockId, memory, MemoryMode.ON_HEAP)
+      val success = memoryManager.acquireUnrollMemory(blockId, memory, memoryMode)
       if (success) {
         val taskAttemptId = currentTaskAttemptId()
+        val unrollMemoryMap = memoryMode match {
+          case MemoryMode.ON_HEAP => onHeapUnrollMemoryMap
+          case MemoryMode.OFF_HEAP => offHeapUnrollMemoryMap
+        }
         unrollMemoryMap(taskAttemptId) = unrollMemoryMap.getOrElse(taskAttemptId, 0L) + memory
       }
       success
@@ -564,9 +576,13 @@ private[spark] class MemoryStore(
    * Release memory used by this task for unrolling blocks.
    * If the amount is not specified, remove the current task's allocation altogether.
    */
-  def releaseUnrollMemoryForThisTask(memory: Long = Long.MaxValue): Unit = {
+  def releaseUnrollMemoryForThisTask(memoryMode: MemoryMode, memory: Long = Long.MaxValue): Unit = {
     val taskAttemptId = currentTaskAttemptId()
     memoryManager.synchronized {
+      val unrollMemoryMap = memoryMode match {
+        case MemoryMode.ON_HEAP => onHeapUnrollMemoryMap
+        case MemoryMode.OFF_HEAP => offHeapUnrollMemoryMap
+      }
       if (unrollMemoryMap.contains(taskAttemptId)) {
         val memoryToRelease = math.min(memory, unrollMemoryMap(taskAttemptId))
         if (memoryToRelease > 0) {
@@ -574,7 +590,7 @@ private[spark] class MemoryStore(
           if (unrollMemoryMap(taskAttemptId) == 0) {
             unrollMemoryMap.remove(taskAttemptId)
           }
-          memoryManager.releaseUnrollMemory(memoryToRelease, MemoryMode.ON_HEAP)
+          memoryManager.releaseUnrollMemory(memoryToRelease, memoryMode)
         }
       }
     }
@@ -584,20 +600,23 @@ private[spark] class MemoryStore(
    * Return the amount of memory currently occupied for unrolling blocks across all tasks.
    */
   def currentUnrollMemory: Long = memoryManager.synchronized {
-    unrollMemoryMap.values.sum
+    onHeapUnrollMemoryMap.values.sum + offHeapUnrollMemoryMap.values.sum
   }
 
   /**
    * Return the amount of memory currently occupied for unrolling blocks by this task.
    */
   def currentUnrollMemoryForThisTask: Long = memoryManager.synchronized {
-    unrollMemoryMap.getOrElse(currentTaskAttemptId(), 0L)
+    onHeapUnrollMemoryMap.getOrElse(currentTaskAttemptId(), 0L) +
+      offHeapUnrollMemoryMap.getOrElse(currentTaskAttemptId(), 0L)
   }
 
   /**
    * Return the number of tasks currently unrolling blocks.
    */
-  private def numTasksUnrolling: Int = memoryManager.synchronized { unrollMemoryMap.keys.size }
+  private def numTasksUnrolling: Int = memoryManager.synchronized {
+    (onHeapUnrollMemoryMap.keys ++ offHeapUnrollMemoryMap.keys).toSet.size
+  }
 
   /**
    * Log information about current memory usage.
@@ -646,7 +665,7 @@ private[storage] class PartiallyUnrolledIterator[T](
   private[this] var iter: Iterator[T] = {
     val completionIterator = CompletionIterator[T, Iterator[T]](unrolled, {
       unrolledIteratorIsConsumed = true
-      memoryStore.releaseUnrollMemoryForThisTask(unrollMemory)
+      memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, unrollMemory)
     })
     completionIterator ++ rest
   }
@@ -659,7 +678,7 @@ private[storage] class PartiallyUnrolledIterator[T](
    */
   def close(): Unit = {
     if (!unrolledIteratorIsConsumed) {
-      memoryStore.releaseUnrollMemoryForThisTask(unrollMemory)
+      memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, unrollMemory)
       unrolledIteratorIsConsumed = true
     }
     iter = null
@@ -688,6 +707,7 @@ private class RedirectableOutputStream extends OutputStream {
  * @param serializationStream a serialization stream which writes to [[redirectableOutputStream]].
  * @param redirectableOutputStream an OutputStream which can be redirected to a different sink.
  * @param unrollMemory the amount of unroll memory used by the values in `unrolled`.
+ * @param memoryMode whether the unroll memory is on- or off-heap
  * @param unrolled a byte buffer containing the partially-serialized values.
  * @param rest         the rest of the original iterator passed to
  *                     [[MemoryStore.putIteratorAsValues()]].
@@ -700,6 +720,7 @@ private[storage] class PartiallySerializedBlock[T](
     serializationStream: SerializationStream,
     redirectableOutputStream: RedirectableOutputStream,
     unrollMemory: Long,
+    memoryMode: MemoryMode,
     unrolled: ChunkedByteBuffer,
     rest: Iterator[T],
     classTag: ClassTag[T]) {
@@ -715,7 +736,7 @@ private[storage] class PartiallySerializedBlock[T](
       redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
       serializationStream.close()
     } finally {
-      memoryStore.releaseUnrollMemoryForThisTask(unrollMemory)
+      memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     }
   }
 
@@ -725,11 +746,12 @@ private[storage] class PartiallySerializedBlock[T](
    */
   def finishWritingToStream(os: OutputStream): Unit = {
     ByteStreams.copy(unrolled.toInputStream(), os)
+    memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     redirectableOutputStream.setOutputStream(os)
     while (rest.hasNext) {
       serializationStream.writeObject(rest.next())(classTag)
     }
-    discard()
+    serializationStream.close()
   }
 
   /**

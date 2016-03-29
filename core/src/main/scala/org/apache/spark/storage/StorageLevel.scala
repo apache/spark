@@ -83,7 +83,7 @@ class StorageLevel private(
       false
   }
 
-  def isValid: Boolean = (useMemory || useDisk || useOffHeap) && (replication > 0)
+  def isValid: Boolean = (useMemory || useDisk) && (replication > 0)
 
   def toInt: Int = {
     var ret = 0

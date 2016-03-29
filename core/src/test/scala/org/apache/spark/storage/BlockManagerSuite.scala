@@ -75,6 +75,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       master: BlockManagerMaster = this.master,
       transferService: Option[BlockTransferService] = Option.empty): BlockManager = {
     conf.set("spark.testing.memory", maxMem.toString)
+    conf.set("spark.memory.offHeap.size", maxMem.toString)
     val serializer = new KryoSerializer(conf)
     val transfer = transferService
       .getOrElse(new NettyBlockTransferService(conf, securityMgr, numCores = 1))
@@ -522,6 +523,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     testInMemoryLRUStorage(StorageLevel.MEMORY_ONLY_SER)
   }
 
+  test("in-memory LRU storage with off-heap") {
+    testInMemoryLRUStorage(StorageLevel(
+      useDisk = false,
+      useMemory = true,
+      useOffHeap = true,
+      deserialized = false, replication = 1))
+  }
+
   private def testInMemoryLRUStorage(storageLevel: StorageLevel): Unit = {
     store = makeBlockManager(12000)
     val a1 = new Array[Byte](4000)
@@ -610,6 +619,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("disk and memory storage with serialization and getLocalBytes") {
     testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = true)
+  }
+
+  test("disk and off-heap memory storage") {
+    testDiskAndMemoryStorage(StorageLevel.OFF_HEAP, getAsBytes = false)
+  }
+
+  test("disk and off-heap memory storage with getLocalBytes") {
+    testDiskAndMemoryStorage(StorageLevel.OFF_HEAP, getAsBytes = true)
   }
 
   def testDiskAndMemoryStorage(

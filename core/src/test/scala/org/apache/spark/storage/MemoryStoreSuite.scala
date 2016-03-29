@@ -86,7 +86,7 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     def reserveUnrollMemoryForThisTask(memory: Long): Boolean = {
-      memoryStore.reserveUnrollMemoryForThisTask(TestBlockId(""), memory)
+      memoryStore.reserveUnrollMemoryForThisTask(TestBlockId(""), memory, MemoryMode.ON_HEAP)
     }
 
     // Reserve
@@ -99,9 +99,9 @@ class MemoryStoreSuite
     assert(!reserveUnrollMemoryForThisTask(1000000))
     assert(memoryStore.currentUnrollMemoryForThisTask === 800) // not granted
     // Release
-    memoryStore.releaseUnrollMemoryForThisTask(100)
+    memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, 100)
     assert(memoryStore.currentUnrollMemoryForThisTask === 700)
-    memoryStore.releaseUnrollMemoryForThisTask(100)
+    memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, 100)
     assert(memoryStore.currentUnrollMemoryForThisTask === 600)
     // Reserve again
     assert(reserveUnrollMemoryForThisTask(4400))
@@ -109,9 +109,9 @@ class MemoryStoreSuite
     assert(!reserveUnrollMemoryForThisTask(20000))
     assert(memoryStore.currentUnrollMemoryForThisTask === 5000) // not granted
     // Release again
-    memoryStore.releaseUnrollMemoryForThisTask(1000)
+    memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, 1000)
     assert(memoryStore.currentUnrollMemoryForThisTask === 4000)
-    memoryStore.releaseUnrollMemoryForThisTask() // release all
+    memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP) // release all
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
   }
 
