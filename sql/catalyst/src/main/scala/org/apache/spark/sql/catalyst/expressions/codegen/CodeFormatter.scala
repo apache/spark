@@ -43,18 +43,41 @@ object CodeFormatter {
 
 private class CodeFormatter {
   private val code = new StringBuilder
-  private var indentLevel = 0
   private val indentSize = 2
+
+  // Tracks the level of indentation in the current line.
+  private var indentLevel = 0
   private var indentString = ""
   private var currentLine = 1
 
+  // Tracks the level of indentation in multi-line comment blocks.
+  private var inCommentBlock = false
+  private var indentLevelOutsideCommentBlock = indentLevel
+
   private def addLine(line: String): Unit = {
-    val indentChange = if (line.startsWith("/*") || line.startsWith("//")) {
-      0 // comments shouldn't affect indentation of subsequent lines
+
+    val indentChange = line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
+    var newIndentLevel = math.max(0, indentLevel + indentChange)
+
+    // Please note that while we try to format the comment blocks in exactly the same way as the
+    // rest of the code, once the block ends, we reset the next line's indentation level to what it
+    // was immediately before entering the comment block.
+    if (!inCommentBlock) {
+      if (line.startsWith("/*")) {
+        // Handle multi-line comments
+        inCommentBlock = true
+        indentLevelOutsideCommentBlock = indentLevel
+      } else if (line.startsWith("//")) {
+        // Handle single line comments
+        newIndentLevel = indentLevel
+      }
     } else {
-      line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
+      if (line.endsWith("*/")) {
+        inCommentBlock = false
+        newIndentLevel = indentLevelOutsideCommentBlock
+      }
     }
-    val newIndentLevel = math.max(0, indentLevel + indentChange)
+
     // Lines starting with '}' should be de-indented even if they contain '{' after;
     // in addition, lines ending with ':' are typically labels
     val thisLineIndent = if (line.startsWith("}") || line.startsWith(")") || line.endsWith(":")) {
