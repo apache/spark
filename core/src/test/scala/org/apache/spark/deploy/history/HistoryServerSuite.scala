@@ -126,8 +126,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
 
-    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
-    "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
+    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd"
+    // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
+    // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
