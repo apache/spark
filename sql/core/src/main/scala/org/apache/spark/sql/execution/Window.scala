@@ -885,11 +885,13 @@ private[execution] object AggregateProcessor {
     val evaluateExpressions = mutable.Buffer.fill[Expression](ordinal)(NoOp)
     val imperatives = mutable.Buffer.empty[ImperativeAggregate]
 
+    val windowPartitionSize = windowPartitionSizeAttribute(functions)
+
     // Check if there are any SizeBasedWindowFunctions. If there are, we add the partition size to
     // the aggregation buffer. Note that the ordinal of the partition size value will always be 0.
     val trackPartitionSize = functions.exists(_.isInstanceOf[SizeBasedWindowFunction])
     if (trackPartitionSize) {
-      aggBufferAttributes += SizeBasedWindowFunction.n
+      aggBufferAttributes += windowPartitionSize
       initialValues += NoOp
       updateExpressions += NoOp
     }
@@ -920,7 +922,7 @@ private[execution] object AggregateProcessor {
     // Create the projections.
     val initialProjection = newMutableProjection(
       initialValues,
-      Seq(SizeBasedWindowFunction.n))()
+      Seq(windowPartitionSize))()
     val updateProjection = newMutableProjection(
       updateExpressions,
       aggBufferAttributes ++ inputAttributes)()
@@ -936,6 +938,18 @@ private[execution] object AggregateProcessor {
       evaluateProjection,
       imperatives.toArray,
       trackPartitionSize)
+  }
+
+  // Tries to find and return `SizeBasedWindowFunction.n` generated on driver side from given
+  // expressions.  Returns executor side global `SizeBasedWindowFunction.n` if none can be found.
+  def windowPartitionSizeAttribute(expressions: Seq[Expression]): AttributeReference = {
+    val aggExpressions = expressions.flatMap(_.collect {
+      case agg: AggregateWindowFunction => agg.evaluateExpression
+    })
+
+    aggExpressions.flatMap(_.collectFirst {
+      case a: AttributeReference if a.name == SizeBasedWindowFunction.n.name => a
+    }).headOption.getOrElse(SizeBasedWindowFunction.n)
   }
 }
 
