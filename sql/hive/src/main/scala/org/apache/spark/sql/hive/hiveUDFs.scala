@@ -88,29 +88,41 @@ private[hive] class HiveFunctionRegistry(
         if (classOf[GenericUDFMacro].isAssignableFrom(hiveUDFClass)) {
           val udf = HiveGenericUDF(
             name, hiveUDFWrapper, children)
-          udf.dataType // Force it to check input data types.
+          if (udf.resolved) {
+            udf.dataType // Force it to check input data types.
+          }
           udf
         } else if (classOf[UDF].isAssignableFrom(hiveUDFClass)) {
           val udf = HiveSimpleUDF(name, hiveUDFWrapper, children)
-          udf.dataType // Force it to check input data types.
+          if (udf.resolved) {
+            udf.dataType // Force it to check input data types.
+          }
           udf
         } else if (classOf[GenericUDF].isAssignableFrom(hiveUDFClass)) {
           val udf = HiveGenericUDF(name, hiveUDFWrapper, children)
-          udf.dataType // Force it to check input data types.
+          if (udf.resolved) {
+            udf.dataType // Force it to check input data types.
+          }
           udf
         } else if (
           classOf[AbstractGenericUDAFResolver].isAssignableFrom(hiveUDFClass)) {
           val udaf = HiveUDAFFunction(name, hiveUDFWrapper, children)
-          udaf.dataType // Force it to check input data types.
+          if (udaf.resolved) {
+            udaf.dataType // Force it to check input data types.
+          }
           udaf
         } else if (classOf[UDAF].isAssignableFrom(hiveUDFClass)) {
           val udaf = HiveUDAFFunction(
             name, hiveUDFWrapper, children, isUDAFBridgeRequired = true)
-          udaf.dataType  // Force it to check input data types.
+          if (udaf.resolved) {
+            udaf.dataType  // Force it to check input data types.
+          }
           udaf
         } else if (classOf[GenericUDTF].isAssignableFrom(hiveUDFClass)) {
           val udtf = HiveGenericUDTF(name, hiveUDFWrapper, children)
-          udtf.elementTypes // Force it to check input data types.
+          if (udtf.resolved) {
+            udtf.elementTypes // Force it to check input data types.
+          }
           udtf
         } else {
           throw new AnalysisException(s"No handler for udf ${hiveUDFClass}")

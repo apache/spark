@@ -21,27 +21,28 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry
+import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.parse.EximUtil
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.ng._
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
-import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView}
+import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView, HiveSessionState}
 import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveSerDe}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 
 /**
  * Concrete parser for HiveQl statements.
  */
-object HiveSqlParser extends AbstractSqlParser {
-  val astBuilder = new HiveSqlAstBuilder
+case class HiveSqlParser(sessionState: HiveSessionState) extends AbstractSqlParser {
+  val astBuilder = new HiveSqlAstBuilder(sessionState)
 
   override protected def nativeCommand(sqlText: String): LogicalPlan = {
     HiveNativeCommand(sqlText)
@@ -51,7 +52,7 @@ object HiveSqlParser extends AbstractSqlParser {
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class HiveSqlAstBuilder extends SparkSqlAstBuilder {
+class HiveSqlAstBuilder(sessionState: HiveSessionState) extends SparkSqlAstBuilder {
   import ParserUtils._
 
   /**
@@ -280,10 +281,12 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       name: String,
       expressions: Seq[Expression],
       ctx: LateralViewContext): Generator = {
-    val info = Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse {
-      throw new ParseException(s"Couldn't find Generator function '$name'", ctx)
+    val functionRegistry = sessionState.functionRegistry
+    val func = functionRegistry.lookupFunction(name, expressions)
+    func match {
+      case g: Generator => g
+      case _ => throw new ParseException(s"Couldn't find Generator function '$name'", ctx)
     }
-    HiveGenericUDTF(name, new HiveFunctionWrapper(info.getFunctionClass.getName), expressions)
   }
 
   /**
