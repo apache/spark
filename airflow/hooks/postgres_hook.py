@@ -1,4 +1,5 @@
 import psycopg2
+import psycopg2.extensions
 
 from airflow.hooks.dbapi_hook import DbApiHook
 
@@ -29,3 +30,7 @@ class PostgresHook(DbApiHook):
         if psycopg2_conn.server_version < 70400:
             self.supports_autocommit = True
         return psycopg2_conn
+
+    @staticmethod
+    def _serialize_cell(cell):
+        return psycopg2.extensions.adapt(cell).getquoted().decode('utf-8')
