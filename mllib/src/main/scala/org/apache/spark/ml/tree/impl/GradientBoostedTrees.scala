@@ -19,7 +19,6 @@ package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
-import org.apache.spark.ml.tree.DecisionTreeModel
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -30,11 +29,27 @@ import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
+
+/**
+ * A package that implements
+ * [[http://en.wikipedia.org/wiki/Gradient_boosting  Stochastic Gradient Boosting]]
+ * for regression and binary classification.
+ *
+ * The implementation is based upon:
+ *   J.H. Friedman.  "Stochastic Gradient Boosting."  1999.
+ *
+ * Notes on Gradient Boosting vs. TreeBoost:
+ *  - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
+ *  - Both algorithms learn tree ensembles by minimizing loss functions.
+ *  - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
+ *    based on the loss function, whereas the original gradient boosting method does not.
+ *     - When the loss is SquaredError, these methods give the same result, but they could differ
+ *       for other loss functions.
+ */
 private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to train a gradient boosting model
-   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @param seed Random seed.
    * @return tuple of ensemble models and weights:
@@ -60,7 +75,6 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to validate a gradient boosting model
-   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @param validationInput Validation dataset.
    *                        This dataset should be different from the training dataset,
@@ -96,7 +110,6 @@ private[spark] object GradientBoostedTrees extends Logging {
   /**
    * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
-   *
    * @param data: training data.
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
@@ -119,7 +132,6 @@ private[spark] object GradientBoostedTrees extends Logging {
   /**
    * Update a zipped predictionError RDD
    * (as obtained with computeInitialPredictionAndError)
-   *
    * @param data: training data.
    * @param predictionAndError: predictionError RDD
    * @param treeWeight: Learning rate.
@@ -238,7 +250,6 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Internal method for performing regression using trees as base learners.
-   *
    * @param input training dataset
    * @param validationInput validation dataset, ignored if validate is set to false.
    * @param boostingStrategy boosting parameters

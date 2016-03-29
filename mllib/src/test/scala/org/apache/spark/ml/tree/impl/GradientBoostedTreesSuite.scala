@@ -20,18 +20,12 @@ package org.apache.spark.ml.tree.impl
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
-import org.apache.spark.mllib.tree.impurity.Variance
-//import org.apache.spark.ml.tree.impl.{GradientBoostedTrees => GBT}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.tree.loss.{Loss, AbsoluteError, LogLoss, SquaredError}
-import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.tree.{GradientBoostedTreesSuite => OldGBTSuite}
-import org.apache.spark.ml.regression.DecisionTreeRegressionModel
+import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
+import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.impurity.Variance
+import org.apache.spark.mllib.tree.loss.{AbsoluteError, LogLoss, SquaredError}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.util.Utils
 
 /**
  * Test suite for [[GradientBoostedTrees]].
@@ -84,23 +78,6 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
         i += 1
       }
     }
-  }
-
-  test("Checkpointing") {
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-    sc.setCheckpointDir(path)
-
-    val rdd = sc.parallelize(OldGBTSuite.data, 2)
-
-    val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
-      categoricalFeaturesInfo = Map.empty, checkpointInterval = 2)
-    val boostingStrategy = new BoostingStrategy(treeStrategy, SquaredError, 5, 0.1)
-
-    val gbt = GradientBoostedTrees.run(rdd, boostingStrategy, 42L)
-
-    sc.checkpointDir = None
-    Utils.deleteRecursively(tempDir)
   }
 
 }

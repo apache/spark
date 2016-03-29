@@ -158,6 +158,23 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
+  test("Checkpointing") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    sc.setCheckpointDir(path)
+
+    val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
+
+    val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
+      categoricalFeaturesInfo = Map.empty, checkpointInterval = 2)
+    val boostingStrategy = new BoostingStrategy(treeStrategy, SquaredError, 5, 0.1)
+
+    val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
+
+    sc.checkpointDir = None
+    Utils.deleteRecursively(tempDir)
+  }
+
 }
 
 private[spark] object GradientBoostedTreesSuite {
