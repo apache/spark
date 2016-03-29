@@ -55,19 +55,12 @@ case class StateStoreRestore(
       child.output.toStructType,
       new StateStoreConf(sqlContext.conf),
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
-        var lastRow: Option[UnsafeRow] = None
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-        val data = iter.toArray
-        val result = data.flatMap { row =>
+        iter.flatMap { row =>
           val key = getKey(row)
-          store.update(key, (f: Option[UnsafeRow]) => {
-            lastRow = f
-            f.orNull
-          })
-          row +: lastRow.toSeq
+          val savedState = store.get(key)
+          row +: savedState.toSeq
         }
-
-      result.toIterator
     }
   }
   override def output: Seq[Attribute] = child.output
@@ -87,20 +80,26 @@ case class StateStoreSave(
       child.output.toStructType,
       new StateStoreConf(sqlContext.conf),
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
-      val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        new Iterator[InternalRow] {
+          private[this] val baseIterator = iter
+          private[this] val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
 
-      val data = iter.toArray
+          override def hasNext: Boolean = {
+            if (!baseIterator.hasNext) {
+              store.commit()
+              false
+            } else {
+              true
+            }
+          }
 
-      val result = data.map { row =>
-        val key = getKey(row)
-        store.update(key.copy(), (_: Option[UnsafeRow]) => {
-          row.asInstanceOf[UnsafeRow].copy()
-        })
-        row
-      }
-
-      store.commit()
-      store.iterator().map(_._2)
+          override def next(): InternalRow = {
+            val row = baseIterator.next().asInstanceOf[UnsafeRow]
+            val key = getKey(row)
+            store.put(key.copy(), row.copy())
+            row
+          }
+        }
     }
   }
 

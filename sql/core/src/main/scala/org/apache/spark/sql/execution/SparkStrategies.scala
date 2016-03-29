@@ -233,20 +233,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * ch ild INPUT [value#113]
    *
    */
-  class StatefulAggregationStrategy(
-      checkpointLocation: String,
-      batchId: Long) extends Strategy {
-    var operatorId = 0
-
+  object StatefulAggregationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
-        operatorId += 1
 
         aggregate.Utils.planStreamingAggregation(
-          checkpointLocation,
-          batchId,
-          operatorId,
           namedGroupingExpressions,
           aggregateExpressions,
           rewrittenResultExpressions,

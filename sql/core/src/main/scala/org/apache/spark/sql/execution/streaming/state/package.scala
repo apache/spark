@@ -29,13 +29,13 @@ package object state {
 
     /** Map each partition of a RDD along with data in a [[StateStore]]. */
     def mapPartitionsWithStateStore[U: ClassTag](
-        storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
+        sqlContext: SQLContext,
         checkpointLocation: String,
         operatorId: Long,
         storeVersion: Long,
         keySchema: StructType,
-        valueSchema: StructType
-      )(implicit sqlContext: SQLContext): StateStoreRDD[T, U] = {
+        valueSchema: StructType)(
+        storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       mapPartitionsWithStateStore(
         checkpointLocation,

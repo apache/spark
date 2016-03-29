@@ -248,9 +248,6 @@ object Utils {
   }
 
   def planStreamingAggregation(
-      checkpointLocation: String,
-      batchId: Long,
-      operatorId: Long,
       groupingExpressions: Seq[NamedExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],

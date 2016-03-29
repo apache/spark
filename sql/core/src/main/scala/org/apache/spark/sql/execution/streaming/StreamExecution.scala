@@ -34,7 +34,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{SparkPlan, QueryExecution}
+import org.apache.spark.sql.execution.{SparkPlanner, SparkPlan, QueryExecution}
 import org.apache.spark.sql.util.ContinuousQueryListener
 import org.apache.spark.sql.util.ContinuousQueryListener._
 
@@ -337,6 +337,8 @@ class StreamExecution(
   private def runBatch(): Unit = {
     val startTime = System.nanoTime()
 
+    // TODO: Move this to IncrementalExecution.
+
     // Request unprocessed data from all sources.
     val newData = availableOffsets.flatMap {
       case (source, available) if committedOffsets.get(source).map(_ < available).getOrElse(true) =>
@@ -370,49 +372,14 @@ class StreamExecution(
     }
 
     val optimizerStart = System.nanoTime()
-
-    val ctx = sqlContext.newSession()
-    ctx.experimental.extraStrategies =
-        new sqlContext.sessionState.planner.StatefulAggregationStrategy(
-          checkpointLocation = checkpointFile("state"),
-          batchId = currentBatchId - 1) :: Nil
-
-    object UnaryPlan {
-      def unapply(a: Any): Option[(SparkPlan, SparkPlan)] = a match {
-        case s: SparkPlan if s.children.size == 1 => Some((s, s.children.head))
-        case _ => None
-      }
-    }
-
-    lastExecution = new QueryExecution(ctx, newPlan) {
-      var operatorId = 0
-
-      override def preparations = {
-        /** Locates save/restore pairs surounding aggregation. */
-        val state = new Rule[SparkPlan] {
-          override def apply(plan: SparkPlan): SparkPlan = plan transform {
-            case StateStoreSave(keys, None,
-                   UnaryPlan(agg,
-                     StateStoreRestore(keys2, None, child))) =>
-              val stateId = StateIdentifier(checkpointFile("state"), operatorId, currentBatchId - 1)
-              StateStoreSave(
-                keys,
-                Some(stateId),
-                agg.withNewChildren(
-                  StateStoreRestore(
-                    keys,
-                    Some(stateId),
-                    child) :: Nil))
-          }
-        }
-        state +: super.preparations
-      }
-    }
+    lastExecution =
+        new IncrementalExecution(sqlContext, newPlan, checkpointFile("state"), currentBatchId)
     lastExecution.executedPlan
     val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
     logDebug(s"Optimized batch in ${optimizerTime}ms")
 
-    val nextBatch = new Dataset(ctx, lastExecution, RowEncoder(lastExecution.analyzed.schema))
+    val nextBatch =
+      new Dataset(sqlContext, lastExecution, RowEncoder(lastExecution.analyzed.schema))
     sink.addBatch(currentBatchId - 1, nextBatch)
 
     awaitBatchLock.synchronized {
