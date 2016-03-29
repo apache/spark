@@ -67,7 +67,7 @@ public class JavaSaveLoadSuite {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
-    df = sqlContext.read().json(rdd).repartition(1);
+    df = sqlContext.read().json(rdd);
     df.registerTempTable("jsonTable");
   }
 

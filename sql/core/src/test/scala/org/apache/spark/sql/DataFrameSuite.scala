@@ -1039,11 +1039,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-10185: Read multiple Hadoop Filesystem paths and paths with a comma in it") {
     withTempDir { dir =>
-      val df1 = Seq((1, 22)).toDF("a", "b").repartition(1)
+      val df1 = Seq((1, 22)).toDF("a", "b")
       val dir1 = new File(dir, "dir,1").getCanonicalPath
       df1.write.format("json").save(dir1)
 
-      val df2 = Seq((2, 23)).toDF("a", "b").repartition(1)
+      val df2 = Seq((2, 23)).toDF("a", "b")
       val dir2 = new File(dir, "dir2").getCanonicalPath
       df2.write.format("json").save(dir2)
 
