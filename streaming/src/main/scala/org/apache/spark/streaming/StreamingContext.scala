@@ -109,7 +109,7 @@ class StreamingContext private[streaming] (
               "http://spark.apache.org/docs/latest/streaming-programming-guide.html#checkpointing",
               "2.0.0")
   def this(path: String, hadoopConf: Configuration) =
-    this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).getOrElse(null), null)
+    this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).get, null)
 
   /**
    * Recreate a StreamingContext from a checkpoint file.
@@ -131,8 +131,7 @@ class StreamingContext private[streaming] (
   def this(path: String, sparkContext: SparkContext) = {
     this(
       sparkContext,
-      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration)
-        .getOrElse(null),
+      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).get,
       null)
   }
 
