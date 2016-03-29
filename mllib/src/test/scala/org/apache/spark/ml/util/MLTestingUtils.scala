@@ -18,7 +18,7 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{Estimator, Model, PredictionModel, Predictor}
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.Regressor
 import org.apache.spark.ml.tree.impl.TreeTests
@@ -35,41 +35,22 @@ object MLTestingUtils extends SparkFunSuite {
     assert(copied.parent == model.parent)
   }
 
-  def checkPredictorAcceptAllNumericTypes[M <: PredictionModel[_, M], T <: Predictor[_, _, M]](
-      predictor: T, sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
-    val dfs = if (predictor.isInstanceOf[Regressor[_, _, _]]) {
+  def checkNumericTypes[M <: Model[M], T <: Estimator[M]](
+      estimator: T,
+      isClassification: Boolean,
+      sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
+    val dfs = if (estimator.isInstanceOf[Regressor[_, _, _]]) {
       genRegressionDFWithNumericLabelCol(sqlContext)
     } else {
       genClassifDFWithNumericLabelCol(sqlContext)
     }
-    val expected = predictor.fit(dfs(DoubleType))
-    val actuals = dfs.keys.filter(_ != DoubleType).map(t => predictor.fit(dfs(t)))
-    actuals.foreach(actual => check(expected, actual))
-  }
-
-  def checkPredictorRejectNotNumericTypes(
-      predictor: Predictor[_, _, _], sqlContext: SQLContext): Unit = {
-    val dfWithStringLabels = generateDFWithStringLabelCol(sqlContext)
-    val thrown = intercept[IllegalArgumentException] {
-      predictor.fit(dfWithStringLabels)
-    }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
-  }
-
-  def checkEstimatorAcceptAllNumericTypes[M <: Model[M], T <: Estimator[M]](
-      estimator: T, sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
-    val dfs = genRegressionDFWithNumericLabelCol(sqlContext)
     val expected = estimator.fit(dfs(DoubleType))
     val actuals = dfs.keys.filter(_ != DoubleType).map(t => estimator.fit(dfs(t)))
     actuals.foreach(actual => check(expected, actual))
-  }
-
-  def checkEstimatorRejectNotNumericTypes(
-      predictor: Estimator[_], sqlContext: SQLContext): Unit = {
+    
     val dfWithStringLabels = generateDFWithStringLabelCol(sqlContext)
     val thrown = intercept[IllegalArgumentException] {
-      predictor.fit(dfWithStringLabels)
+      estimator.fit(dfWithStringLabels)
     }
     assert(thrown.getMessage contains
       "Column label must be of type NumericType but was actually of type StringType")
