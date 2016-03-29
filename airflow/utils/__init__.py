@@ -29,7 +29,7 @@ def apply_defaults(func):
         from airflow.utils.decorators import apply_defaults
         """,
         category=PendingDeprecationWarning,
-        filename=func.func_code.co_filename,
-        lineno=func.func_code.co_firstlineno + 1
+        filename=func.__code__.co_filename,
+        lineno=func.__code__.co_firstlineno + 1
     )
     return _apply_defaults(func)
