@@ -37,7 +37,7 @@ import org.apache.spark.util.collection.OpenHashMap
  * If the input column is numeric, we cast values to strings and index the string values.
  *
  * When this class is used as an Estimator, fitting computes a label index.
- * The user may also specify a pre-computed index by setting the `labels` Param.
+ * The user may also specify a pre-computed index by setting `labels`.
  *
  * @see [[IndexToString]] for the inverse transformation
  */
@@ -50,6 +50,8 @@ class StringIndexer(override val uid: String) extends MutableEstimator[StringInd
   ////////////////////////////////////////////////////////////////////////////
   // Params
   ////////////////////////////////////////////////////////////////////////////
+
+  private[ml] var _labels: Array[String] = null
 
   /**
    * Array of labels specifying the index-string mapping to use during [[transform()]].
@@ -64,15 +66,19 @@ class StringIndexer(override val uid: String) extends MutableEstimator[StringInd
    *
    * @group param
    */
-  final val labels: StringArrayParam = new StringArrayParam(this, "labels",
-    "Array of labels specifying index-string mapping to use during transform()." +
-      " If not provided, then this is computed during fit().")
-
-  /** @group getParam */
-  final def getLabels: Array[String] = $(labels)
+  final def labels: Array[String] = {
+    if (_labels == null) {
+      throw new RuntimeException("StringIndexer.labels was called, but labels are not yet" +
+        " defined.  Either set labels manually, or call fit() to compute label index.")
+    }
+    _labels
+  }
 
   /** @group setParam */
-  def setLabels(value: Array[String]): this.type = set(labels, value)
+  def setLabels(value: Array[String]): this.type = {
+    _labels = value
+    this
+  }
 
   /** @group setParam */
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
@@ -113,7 +119,7 @@ class StringIndexer(override val uid: String) extends MutableEstimator[StringInd
         "Skip StringIndexer.")
       return dataset
     }
-    require(isSet(labels), s"StringIndexer.transform() was called without labels Param ever" +
+    require(_labels != null, s"StringIndexer.transform() was called without labels Param ever" +
       s" being set.  Either set labels manually, or call fit() to compute the labels index.")
     transformSchema(dataset.schema)
 
@@ -163,7 +169,7 @@ class StringIndexer(override val uid: String) extends MutableEstimator[StringInd
 
   private def getOutputAttr: NominalAttribute = {
     val attr = NominalAttribute.defaultAttr.withName($(outputCol))
-    if (isSet(labels)) attr.withValues(getLabels) else attr
+    if (_labels != null) attr.withValues(labels) else attr
   }
 
   override def copy(extra: ParamMap): StringIndexer = {
@@ -183,7 +189,7 @@ class StringIndexer(override val uid: String) extends MutableEstimator[StringInd
 
   private def labelToIndex: OpenHashMap[String, Double] = this.synchronized {
     // Do reference equality to check if the label has been changed.
-    val currentArray = $(labels)
+    val currentArray = labels
     if (cachedArray == null || !cachedArray.eq(currentArray)) {
       cachedArray = currentArray
       val n = currentArray.length

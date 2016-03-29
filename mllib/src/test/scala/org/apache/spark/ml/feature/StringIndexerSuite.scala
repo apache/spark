@@ -186,7 +186,7 @@ class StringIndexerSuite
     val idx2str = new IndexToString()
       .setInputCol("labelIndex")
       .setOutputCol("sameLabel")
-      .setLabels(indexer.getLabels)
+      .setLabels(indexer.labels)
     idx2str.transform(transformed).select("label", "sameLabel").collect().foreach {
       case Row(a: String, b: String) =>
         assert(a === b)

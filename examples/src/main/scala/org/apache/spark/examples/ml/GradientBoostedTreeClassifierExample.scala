@@ -64,7 +64,7 @@ object GradientBoostedTreeClassifierExample {
     val labelConverter = new IndexToString()
       .setInputCol("prediction")
       .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.getLabels)
+      .setLabels(labelIndexer.labels)
 
     // Chain indexers and GBT in a Pipeline
     val pipeline = new Pipeline()
