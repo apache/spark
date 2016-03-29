@@ -211,19 +211,21 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // INT Encode (Lower Skew):            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     // -------------------------------------------------------------------------------------------
-    // PassThrough(1.000)                         18 /   19       3716.4           0.3       1.0X
-    // RunLengthEncoding(1.001)                 1992 / 2056         33.7          29.7       0.0X
-    // DictionaryEncoding(0.500)                 723 /  739         92.8          10.8       0.0X
-    // IntDelta(0.250)                           368 /  377        182.2           5.5       0.0X
+    // PassThrough(1.000)                         17 /   18       3947.0           0.3       1.0X
+    // RunLengthEncoding(0.994)                 1865 / 1883         36.0          27.8       0.0X
+    // DictionaryEncoding(0.500)                 720 /  728         93.2          10.7       0.0X
+    // IntDelta(0.250)                           397 /  404        169.0           5.9       0.0X
+    // IntDeltaBinaryPacking(0.068)              822 /  838         81.7          12.2       0.0X
     runEncodeBenchmark("INT Encode (Lower Skew)", iters, count, INT, testData)
 
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // INT Decode (Lower Skew):            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     // -------------------------------------------------------------------------------------------
-    // PassThrough                               821 /  845         81.8          12.2       1.0X
-    // RunLengthEncoding                        1246 / 1256         53.9          18.6       0.7X
-    // DictionaryEncoding                        757 /  766         88.6          11.3       1.1X
-    // IntDelta                                  680 /  689         98.7          10.1       1.2X
+    // PassThrough                               808 /  856         83.1          12.0       1.0X
+    // RunLengthEncoding                        1264 / 1288         53.1          18.8       0.6X
+    // DictionaryEncoding                        747 /  755         89.8          11.1       1.1X
+    // IntDelta                                  674 /  677         99.6          10.0       1.2X
+    // IntDeltaBinaryPacking                     798 /  806         84.1          11.9       1.0X
     runDecodeBenchmark("INT Decode (Lower Skew)", iters, count, INT, testData)
 
     val g2 = genHigherSkewData()
@@ -234,19 +236,21 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // INT Encode (Higher Skew):           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     // -------------------------------------------------------------------------------------------
-    // PassThrough(1.000)                         17 /   19       3888.4           0.3       1.0X
-    // RunLengthEncoding(1.339)                 2127 / 2148         31.5          31.7       0.0X
-    // DictionaryEncoding(0.501)                 960 /  972         69.9          14.3       0.0X
-    // IntDelta(0.250)                           362 /  366        185.5           5.4       0.0X
+    // PassThrough(1.000)                         16 /   19       4084.1           0.2       1.0X
+    // RunLengthEncoding(1.328)                 2013 / 2079         33.3          30.0       0.0X
+    // DictionaryEncoding(0.501)                 811 /  814         82.8          12.1       0.0X
+    // IntDelta(0.250)                           399 /  403        168.3           5.9       0.0X
+    // IntDeltaBinaryPacking(0.180)              860 /  866         78.1          12.8       0.0X
     runEncodeBenchmark("INT Encode (Higher Skew)", iters, count, INT, testData)
 
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // INT Decode (Higher Skew):           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     // -------------------------------------------------------------------------------------------
-    // PassThrough                               838 /  884         80.1          12.5       1.0X
-    // RunLengthEncoding                        1287 / 1311         52.1          19.2       0.7X
-    // DictionaryEncoding                        844 /  859         79.5          12.6       1.0X
-    // IntDelta                                  764 /  784         87.8          11.4       1.1X
+    // PassThrough                               822 /  833         81.6          12.3       1.0X
+    // RunLengthEncoding                        1302 / 1368         51.6          19.4       0.6X
+    // DictionaryEncoding                        848 /  861         79.1          12.6       1.0X
+    // IntDelta                                  769 /  775         87.3          11.5       1.1X
+    // IntDeltaBinaryPacking                     878 /  888         76.4          13.1       0.9X
     runDecodeBenchmark("INT Decode (Higher Skew)", iters, count, INT, testData)
   }
 
