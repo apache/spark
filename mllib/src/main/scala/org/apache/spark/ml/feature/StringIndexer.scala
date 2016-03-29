@@ -51,7 +51,9 @@ class StringIndexer(override val uid: String) extends MutableEstimator[StringInd
   // Params
   ////////////////////////////////////////////////////////////////////////////
 
-  private[ml] var _labels: Array[String] = null
+  private[ml] val labelsParam: StringArrayParam = new StringArrayParam(this, "labelsParam",
+    "Array of labels specifying index-string mapping to use during transform()." +
+      " If not provided, then this is computed during fit().")
 
   /**
    * Array of labels specifying the index-string mapping to use during [[transform()]].
@@ -67,18 +69,15 @@ class StringIndexer(override val uid: String) extends MutableEstimator[StringInd
    * @group param
    */
   final def labels: Array[String] = {
-    if (_labels == null) {
+    if (!isSet(labelsParam)) {
       throw new RuntimeException("StringIndexer.labels was called, but labels are not yet" +
         " defined.  Either set labels manually, or call fit() to compute label index.")
     }
-    _labels
+    $(labelsParam)
   }
 
   /** @group setParam */
-  def setLabels(value: Array[String]): this.type = {
-    _labels = value
-    this
-  }
+  def setLabels(value: Array[String]): this.type = set(labelsParam, value)
 
   /** @group setParam */
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
@@ -119,7 +118,7 @@ class StringIndexer(override val uid: String) extends MutableEstimator[StringInd
         "Skip StringIndexer.")
       return dataset
     }
-    require(_labels != null, s"StringIndexer.transform() was called without labels Param ever" +
+    require(isSet(labelsParam), s"StringIndexer.transform() was called without labels Param ever" +
       s" being set.  Either set labels manually, or call fit() to compute the labels index.")
     transformSchema(dataset.schema)
 
@@ -169,7 +168,7 @@ class StringIndexer(override val uid: String) extends MutableEstimator[StringInd
 
   private def getOutputAttr: NominalAttribute = {
     val attr = NominalAttribute.defaultAttr.withName($(outputCol))
-    if (_labels != null) attr.withValues(labels) else attr
+    if (isSet(labelsParam)) attr.withValues(labels) else attr
   }
 
   override def copy(extra: ParamMap): StringIndexer = {
