@@ -86,7 +86,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Planner that converts optimized logical plans to physical plans.
    */
-  lazy val planner: SparkPlanner =
+  def planner: SparkPlanner =
     new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
 
   /**

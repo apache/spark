@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchang
  */
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
+  // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sqlContext.sessionState.planner
 
   def assertAnalyzed(): Unit = try sqlContext.sessionState.analyzer.checkAnalysis(analyzed) catch {
