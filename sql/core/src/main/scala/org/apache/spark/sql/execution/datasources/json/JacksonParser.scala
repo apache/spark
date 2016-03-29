@@ -250,7 +250,7 @@ object JacksonParser extends Logging {
     new GenericArrayData(values.toArray)
   }
 
-  private def parseJson(
+  def parseJson(
       input: Iterator[String],
       schema: StructType,
       columnNameOfCorruptRecords: String,
