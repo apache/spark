@@ -229,7 +229,7 @@ public class VectorizedColumnReader {
           }
         } else if (DecimalType.is64BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
-            column.putLong(i, dictionary.decodeToInt(dictionaryIds.getInt(i)));
+            column.putInt(i, dictionary.decodeToInt(dictionaryIds.getInt(i)));
           }
         } else {
           throw new NotImplementedException("Unimplemented type: " + column.dataType());
