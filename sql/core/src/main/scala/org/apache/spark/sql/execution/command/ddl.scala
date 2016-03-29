@@ -108,8 +108,9 @@ case class CreateFunction(
     if (isTemp) {
       // Set `ignoreIfExists` to false, so if the temporary function already exists,
       // an exception will be thrown.
-      val builder = sqlContext.sessionState.functionRegistry.getFunctionBuilder(functionName, alias)
-      sqlContext.sessionState.catalog.createTempFunction(functionName, builder, false)
+      val (info, builder) =
+        sqlContext.sessionState.functionRegistry.getFunctionBuilderAndInfo(functionName, alias)
+      sqlContext.sessionState.catalog.createTempFunction(functionName, info, builder, false)
     } else {
       // Check if the function to create is already existing. If so, throw exception.
       var funcExisting: Boolean = true

@@ -54,12 +54,12 @@ trait FunctionRegistry {
   def dropFunction(name: String): Boolean
 
   /** Get the builder of the specified function name and class name. */
-  def getFunctionBuilder(
+  def getFunctionBuilderAndInfo(
     name: String,
-    functionClassName: String): FunctionBuilder = {
+    functionClassName: String): (ExpressionInfo, FunctionBuilder) = {
     val clazz = Utils.getContextOrSparkClassLoader.loadClass(functionClassName)
-    val (_, (_, builder)) = FunctionRegistry.expression(name, clazz.asInstanceOf[Class[Expression]])
-    builder
+    val (_, (info, builder)) = FunctionRegistry.expression(name, clazz.asInstanceOf[Class[Expression]])
+    (info, builder)
   }
 }
 

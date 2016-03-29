@@ -463,12 +463,13 @@ class SessionCatalog(
    */
   def createTempFunction(
       name: String,
+      info: ExpressionInfo,
       funcDefinition: FunctionBuilder,
       ignoreIfExists: Boolean): Unit = {
     if (functionRegistry.lookupFunctionBuilder(name).isDefined && !ignoreIfExists) {
       throw new AnalysisException(s"Temporary function '$name' already exists.")
     }
-    functionRegistry.registerFunction(name, funcDefinition)
+    functionRegistry.registerFunction(name, info, funcDefinition)
   }
 
   /**

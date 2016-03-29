@@ -55,12 +55,14 @@ private[hive] class HiveFunctionRegistry(
     }
   }
 
-  override def getFunctionBuilder(
+  override def getFunctionBuilderAndInfo(
       name: String,
-      functionClassName: String): FunctionBuilder = {
+      functionClassName: String): (ExpressionInfo, FunctionBuilder) = {
     val hiveUDFWrapper = new HiveFunctionWrapper(functionClassName)
     val hiveUDFClass = hiveUDFWrapper.createFunction().getClass
-    genHiveUDFBuilder(name, functionClassName, hiveUDFClass, null, hiveUDFWrapper)
+    val info = new ExpressionInfo(functionClassName, name)
+    val builder = genHiveUDFBuilder(name, functionClassName, hiveUDFClass, null, hiveUDFWrapper)
+    (info, builder)
   }
 
   /**
