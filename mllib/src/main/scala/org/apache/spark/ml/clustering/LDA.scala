@@ -18,7 +18,10 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -34,8 +37,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
 import org.apache.spark.sql.types.StructType
-import org.json4s.DefaultFormats
-import org.json4s.jackson.JsonMethods._
+
 
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
