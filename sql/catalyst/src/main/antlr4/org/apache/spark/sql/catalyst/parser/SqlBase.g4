@@ -109,7 +109,8 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN explainOption* statement                                 #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
-        (LIKE (qualifiedName | pattern=STRING))?                       #showTables
+        (LIKE? (qualifiedName | pattern=STRING))?                       #showTables
+    | SHOW DATABASES (LIKE (qualifiedName | pattern=STRING))?          #showDatabases
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
@@ -840,6 +841,7 @@ OUTPUTFORMAT: 'OUTPUTFORMAT';
 INPUTDRIVER: 'INPUTDRIVER';
 OUTPUTDRIVER: 'OUTPUTDRIVER';
 DATABASE: 'DATABASE' | 'SCHEMA';
+DATABASES: 'DATABASES' | 'SCHEMAS';
 DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';
 METADATA: 'METADATA';

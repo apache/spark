@@ -70,12 +70,28 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   /**
    * Create a [[ShowTablesCommand]] logical plan.
+   * Example SQL :
+   * SHOW TABLES [(IN|FROM) database_name] ['identifier_with_wildcards']
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.LIKE != null) {
-      logWarning("SHOW TABLES LIKE option is ignored.")
+    if (ctx.qualifiedName() != null) {
+      logWarning("SHOW TABLES qualifiedName is ignored.")
     }
-    ShowTablesCommand(Option(ctx.db).map(_.getText), None)
+    ShowTablesCommand(
+      Option(ctx.db).map(_.getText),
+      Option(ctx.pattern).map(p => unquoteString(p.getText)))
+  }
+
+  /**
+   * Create a [[ShowDatabasesCommand]] logical plan.
+   * Example SQL:
+   * SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards']
+   */
+  override def visitShowDatabases(ctx: ShowDatabasesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.qualifiedName() != null) {
+      logWarning("SHOW DATABASES qualifiedName is ignored.")
+    }
+    ShowDatabasesCommand(Option(ctx.pattern).map(p => unquoteString(p.getText)))
   }
 
   /**

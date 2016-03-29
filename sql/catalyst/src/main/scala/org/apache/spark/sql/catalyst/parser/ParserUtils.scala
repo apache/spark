@@ -24,10 +24,15 @@ import org.apache.spark.sql.catalyst.parser.ParseUtils.unescapeSQLString
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 
+
 /**
  * A collection of utility methods for use during the parsing process.
  */
 object ParserUtils {
+  private val escapedIdentifier = "`(.+)`".r
+  private val doubleQuotedString = "\"([^\"]+)\"".r
+  private val singleQuotedString = "'([^']+)'".r
+
   /** Get the command which created the token. */
   def command(ctx: ParserRuleContext): String = {
     command(ctx.getStart.getInputStream)
@@ -63,6 +68,17 @@ object ParserUtils {
   /** Get the origin (line and position) of the token. */
   def position(token: Token): Origin = {
     Origin(Option(token.getLine), Option(token.getCharPositionInLine))
+  }
+
+  /**
+   * Strip quotes, if any, from the string.
+   */
+  def unquoteString(str: String): String = {
+    str match {
+      case singleQuotedString(s) => s
+      case doubleQuotedString(s) => s
+      case other => other
+    }
   }
 
   /** Assert if a condition holds. If it doesn't throw a parse exception. */
