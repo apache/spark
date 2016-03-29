@@ -169,12 +169,14 @@ public class JavaDatasetSuite implements Serializable {
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
-    KeyValueGroupedDataset<Integer, String> grouped = ds.groupByKey(new MapFunction<String, Integer>() {
-      @Override
-      public Integer call(String v) throws Exception {
-        return v.length();
-      }
-    }, Encoders.INT());
+    KeyValueGroupedDataset<Integer, String> grouped = ds.groupByKey(
+      new MapFunction<String, Integer>() {
+        @Override
+        public Integer call(String v) throws Exception {
+          return v.length();
+        }
+      },
+      Encoders.INT());
 
     Dataset<String> mapped = grouped.mapGroups(new MapGroupsFunction<Integer, String, String>() {
       @Override
@@ -217,12 +219,14 @@ public class JavaDatasetSuite implements Serializable {
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT());
-    KeyValueGroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(new MapFunction<Integer, Integer>() {
-      @Override
-      public Integer call(Integer v) throws Exception {
-        return v / 2;
-      }
-    }, Encoders.INT());
+    KeyValueGroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(
+      new MapFunction<Integer, Integer>() {
+        @Override
+        public Integer call(Integer v) throws Exception {
+          return v / 2;
+        }
+      },
+      Encoders.INT());
 
     Dataset<String> cogrouped = grouped.cogroup(
       grouped2,

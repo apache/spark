@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.ContinuousQueryListener
 import org.apache.spark.sql.util.ContinuousQueryListener._
+import org.apache.spark.util.UninterruptibleThread
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
@@ -88,9 +89,10 @@ class StreamExecution(
   private[sql] var streamDeathCause: ContinuousQueryException = null
 
   /** The thread that runs the micro-batches of this stream. */
-  private[sql] val microBatchThread = new Thread(s"stream execution thread for $name") {
-    override def run(): Unit = { runBatches() }
-  }
+  private[sql] val microBatchThread =
+    new UninterruptibleThread(s"stream execution thread for $name") {
+      override def run(): Unit = { runBatches() }
+    }
 
   /**
    * A write-ahead-log that records the offsets that are present in each batch. In order to ensure
@@ -227,14 +229,29 @@ class StreamExecution(
     // Update committed offsets.
     committedOffsets ++= availableOffsets
 
+    // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
+    // If we interrupt some thread running Shell.runCommand, we may hit this issue.
+    // As "FileStreamSource.getOffset" will create a file using HDFS API and call "Shell.runCommand"
+    // to set the file permission, we should not interrupt "microBatchThread" when running this
+    // method. See SPARK-14131.
+    //
     // Check to see what new data is available.
-    val newData = uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+    val newData = microBatchThread.runUninterruptibly {
+      uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+    }
     availableOffsets ++= newData
 
     if (dataAvailable) {
-      assert(
-        offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
-        s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
+      // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
+      // If we interrupt some thread running Shell.runCommand, we may hit this issue.
+      // As "offsetLog.add" will create a file using HDFS API and call "Shell.runCommand" to set
+      // the file permission, we should not interrupt "microBatchThread" when running this method.
+      // See SPARK-14131.
+      microBatchThread.runUninterruptibly {
+        assert(
+          offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
+          s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
+      }
       currentBatchId += 1
       logInfo(s"Committed offsets for batch $currentBatchId.")
       true

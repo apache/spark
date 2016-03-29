@@ -86,7 +86,7 @@ class HiveContext private[hive](
     @transient private[hive] val executionHive: HiveClientImpl,
     @transient private[hive] val metadataHive: HiveClient,
     isRootContext: Boolean,
-    @transient private[sql] val hiveCatalog: HiveCatalog)
+    @transient private[sql] val hiveCatalog: HiveExternalCatalog)
   extends SQLContext(sc, cacheManager, listener, isRootContext, hiveCatalog) with Logging {
   self =>
 
@@ -98,7 +98,7 @@ class HiveContext private[hive](
       execHive,
       metaHive,
       true,
-      new HiveCatalog(metaHive))
+      new HiveExternalCatalog(metaHive))
   }
 
   def this(sc: SparkContext) = {
