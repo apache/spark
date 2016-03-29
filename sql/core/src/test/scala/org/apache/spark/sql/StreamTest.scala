@@ -139,7 +139,7 @@ trait StreamTest extends QueryTest with Timeouts {
   case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean)
       extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
-    private def operatorName = if(lastOnly) "CheckLastBatch" else "CheckAnswer"
+    private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
 
   /** Stops the stream.  It must currently be running. */

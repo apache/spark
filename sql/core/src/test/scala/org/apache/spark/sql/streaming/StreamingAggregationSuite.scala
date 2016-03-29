@@ -18,8 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{SumOf, TypedColumn, Encoder, StreamTest}
-import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.{Encoder, StreamTest, SumOf, TypedColumn}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
