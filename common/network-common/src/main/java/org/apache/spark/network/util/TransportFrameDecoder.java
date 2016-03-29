@@ -139,14 +139,18 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
       return nextBufferForFrame(remaining);
     }
 
-    // Otherwise, create a composite buffer.
-    CompositeByteBuf frame = buffers.getFirst().alloc().compositeBuffer();
+    // Otherwise, create a new buffer to hold the data of all frame splits.
+    ByteBuf frame = buffers.getFirst().alloc().buffer(remaining, remaining);
     while (remaining > 0) {
       ByteBuf next = nextBufferForFrame(remaining);
       remaining -= next.readableBytes();
-      frame.addComponent(next).writerIndex(frame.writerIndex() + next.readableBytes());
+      frame.setBytes(frame.writerIndex(), next, next.readerIndex(), next.readableBytes());
+      frame.writerIndex(frame.writerIndex() + next.readableBytes());
+      // buffer is no longer referenced, so release it.
+      next.release();
     }
     assert remaining == 0;
+    assert frame.readableBytes() == (int) frameSize;
     return frame;
   }
 
