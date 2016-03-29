@@ -39,7 +39,6 @@ import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
 import org.apache.spark.sql.types.StructType
 
 
-
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
   with HasSeed with HasCheckpointInterval {
 
@@ -464,11 +463,9 @@ sealed abstract class LDAModel private[ml] (
 object LDAModel extends MLReadable[LDAModel] {
 
   private class LDAModelReader extends MLReader[LDAModel] {
-
     override def load(path: String): LDAModel = {
       val metadataPath = new Path(path, "metadata").toString
-      val metadataStr = sc.textFile(metadataPath, 1).first()
-      val metadata = parse(metadataStr)
+      val metadata = parse(sc.textFile(metadataPath, 1).first())
       implicit val format = DefaultFormats
       val className = (metadata \ "class").extract[String]
       className match {
@@ -476,7 +473,7 @@ object LDAModel extends MLReadable[LDAModel] {
           LocalLDAModel.load(path)
         case c if className == classOf[DistributedLDAModel].getName =>
           DistributedLDAModel.load(path)
-        case _ => throw new SparkException(s"$className is not a LDAModel")
+        case _ => throw new SparkException(s"$className in $path is not a LDAModel")
       }
     }
   }
