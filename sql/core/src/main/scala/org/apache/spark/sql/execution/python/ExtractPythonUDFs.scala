@@ -26,25 +26,30 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * Extracts PythonUDFs from operators, rewriting the query plan so that the UDF can be evaluated
  * alone in a batch.
  *
+ * Only extracts the PythonUDFs that could be evaluated in Python (the single child is PythonUDFs
+ * or all the children could be evaluated in JVM).
+ *
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
 private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
 
-  private def hasUDF(e: Expression): Boolean = {
+  private def hasPythonUDF(e: Expression): Boolean = {
     e.find(_.isInstanceOf[PythonUDF]).isDefined
   }
 
-  private def canEvaluate(e: PythonUDF): Boolean = {
+  private def canEvaluateInPython(e: PythonUDF): Boolean = {
     e.children match {
-      case Seq(u: PythonUDF) => canEvaluate(u)
-      case children => !children.exists(hasUDF)
+      // single PythonUDF child could be chained and evaluated in Python
+      case Seq(u: PythonUDF) => canEvaluateInPython(u)
+      // Python UDF can't be evaluated directly in JVM
+      case children => !children.exists(hasPythonUDF)
     }
   }
 
   private def collectEvaluatableUDF(expr: Expression): Seq[PythonUDF] = {
     expr.collect {
-      case udf: PythonUDF if canEvaluate(udf) => udf
+      case udf: PythonUDF if canEvaluateInPython(udf) => udf
     }
   }
 
