@@ -10,7 +10,6 @@ import tempfile
 from datetime import datetime, time, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
-import errno
 import signal
 from time import sleep
 
@@ -32,7 +31,6 @@ from airflow.utils.logging import LoggingMixin
 from lxml import html
 from airflow.exceptions import AirflowException
 from airflow.configuration import AirflowConfigException
-from airflow.minihivecluster import MiniHiveCluster
 
 import six
 
