@@ -54,7 +54,7 @@ doc = [
 docker = ['docker-py>=1.6.0']
 druid = ['pydruid>=0.2.1']
 gcloud = [
-    'gcloud>=1.1.0',
+    'gcloud>=0.11.0',
 ]
 gcp_api = [
     'httplib2',
