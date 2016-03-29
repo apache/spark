@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.{StateStoreSave, StateStoreRestore}
+import org.apache.spark.sql.execution.streaming.{StateStoreRestore, StateStoreSave}
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -247,6 +247,16 @@ object Utils {
     finalAndCompleteAggregate :: Nil
   }
 
+  /**
+   * Plans a streaming aggregation using the following progression:
+   *  - Partial Aggregation
+   *  - Shuffle
+   *  - Partial Merge (now there is at most 1 tuple per group)
+   *  - StateStoreRestore (now there is 1 tuple from this batch + optionally one from the previous)
+   *  - PartialMerge (now there is at most 1 tuple per group)
+   *  - StateStoreSave (saves the tuple for the next batch)
+   *  - Complete (output the current result of the aggregation)
+   */
   def planStreamingAggregation(
       groupingExpressions: Seq[NamedExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
@@ -255,7 +265,6 @@ object Utils {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
-    // 1. Create an Aggregate Operator for partial aggregations.
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
@@ -271,7 +280,6 @@ object Utils {
         child = child)
     }
 
-    // 2. Create an Aggregate Operator for partial merge aggregations.
     val partialMerged1: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
@@ -289,7 +297,6 @@ object Utils {
 
     val restored = StateStoreRestore(groupingAttributes, None, partialMerged1)
 
-    // 2. Create an Aggregate Operator for partial merge aggregations.
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
@@ -307,7 +314,6 @@ object Utils {
 
     val saved = StateStoreSave(groupingAttributes, None, partialMerged2)
 
-    // 4. Create an Aggregate Operator for the final aggregation.
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
       // The attributes of the final aggregation buffer, which is presented as input to the result

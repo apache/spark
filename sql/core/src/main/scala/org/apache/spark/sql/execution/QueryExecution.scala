@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
-import org.apache.spark.sql.execution.exchange.{ReuseExchange, EnsureRequirements}
 import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -67,11 +67,13 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
    * row format conversions as needed.
    */
-  def prepareForExecution(plan: SparkPlan): SparkPlan = {
+  protected def prepareForExecution(plan: SparkPlan): SparkPlan = {
     preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
   }
 
-  def preparations: Seq[Rule[SparkPlan]] = Seq(
+  /** A sequence of rules that will be applied in order to the physical plan before execution. */
+  protected def preparations: Seq[Rule[SparkPlan]] = Seq(
+    PlanSubqueries(sqlContext),
     EnsureRequirements(sqlContext.conf),
     CollapseCodegenStages(sqlContext.conf),
     ReuseExchange(sqlContext.conf))

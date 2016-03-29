@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.{StreamTest, Row}
+import org.apache.spark.sql.{Row, StreamTest}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
 class StreamSuite extends StreamTest with SharedSQLContext {
@@ -82,29 +80,5 @@ class StreamSuite extends StreamTest with SharedSQLContext {
     testStream(evens)(
       AddData(inputData, 1, 2, 3, 4),
       CheckAnswer(2, 4))
-  }
-
-  test("aggregation") {
-    val inputData = MemoryStream[Int]
-
-    val aggregated =
-      inputData.toDF()
-        .groupBy($"value")
-        .agg(count("*"))
-        .as[(Int, Long)]
-
-    testStream(aggregated)(
-      AddData(inputData, 3),
-      CheckLastBatch((3, 1)),
-      AddData(inputData, 3, 2),
-      CheckLastBatch((3, 2), (2, 1)),
-      StopStream,
-      StartStream,
-      AddData(inputData, 3, 2, 1),
-      CheckLastBatch((3, 3), (2, 2), (1, 1)),
-      // By default we run in new tuple mode.
-      AddData(inputData, 4, 4, 4, 4),
-      CheckLastBatch((4, 4))
-    )
   }
 }

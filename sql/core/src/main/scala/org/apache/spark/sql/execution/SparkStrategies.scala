@@ -20,21 +20,17 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BroadcastHint, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescribeCommand, _}
 import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
-import org.apache.spark.sql.execution.streaming.{StateStoreSave, StateStoreRestore}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.LongType
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -207,31 +203,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Aggregate [a], [a, count()]
-   *   FullInput
-   *
-   * TA(value#1, count(1).final, [value#1, count#2]
-   *   Save/Replay (value#1, count(1).partialMerge, [value#1, count#2]
-   *     TA(value#1, count(1).partial, [value#1, count#2]
-   *       BatchInput
-   *
-   * requiredChildDistributionExpressions Some(ArrayBuffer(value#113))
-   * groupingExpressions ArrayBuffer(value#113)
-   * aggregateExpressions ArrayBuffer((count(1),mode=Final,isDistinct=false))
-   * aggregateAttributes ArrayBuffer(count(1)#123L)
-   * initialInputBufferOffset 1
-   * resultExpressions ArrayBuffer(value#113, count(1)#123L AS count(1)#118L)
-   * child INPUT
-   * [value#113, count#125L]
-   *
-   * requiredChildDistributionExpressions None
-   * groupingExpressions ArrayBuffer(value#113)
-   * aggregateExpressions ArrayBuffer((count(1),mode=Partial,isDistinct=false))
-   * aggregateAttributes ArrayBuffer(count#124L)
-   * initialInputBufferOffset 0
-   * resultExpressions ArrayBuffer(value#113, count#125L)
-   * ch ild INPUT [value#113]
-   *
+   * Used to plan aggregation queries that are computed incrementally as part of a
+   * [[org.apache.spark.sql.ContinuousQuery]]. Currently this rule is injected into the planner
+   * on-demand, only when planning in a [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {

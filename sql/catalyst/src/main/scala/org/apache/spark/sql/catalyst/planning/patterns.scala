@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
@@ -219,10 +218,20 @@ object IntegerIndex {
   }
 }
 
+/**
+ * An extractor used when planning the physical execution of an aggregation. Compared with a logical
+ * aggregation, the following transformations are performed:
+ *  - Unnamed grouping expressions are named so that they can be referred to across phases of
+ *    aggregation
+ *  - Aggregations that appear multiple times are deduplicated.
+ *  - The compution of the aggregations themselves is separated from the final result. For example,
+ *    the `count` in `count + 1` will be split into an [[AggregateExpression]] and a final
+ *    computation that computes `count.resultAttribute + 1`.
+ */
 object PhysicalAggregation {
-  // GroupingExpressions, AggregateExpressions, ResultExpressions, Child
+  // groupingExpressions, aggregateExpressions, resultExpressions, child
   type ReturnType =
-  (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
+    (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>

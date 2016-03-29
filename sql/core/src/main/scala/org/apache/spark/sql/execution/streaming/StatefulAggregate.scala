@@ -26,25 +26,34 @@ import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.SparkPlan
 
-case class StateIdentifier(
+/** Used to identify the state store for a given operator. */
+case class OperatorStateId(
     checkpointLocation: String,
     operatorId: Long,
     batchId: Long)
 
-trait StatefulOperation extends SparkPlan {
-  def stateId: Option[StateIdentifier]
+/**
+ * An operator that saves or restores state from the [[StateStore]].  The [[OperatorStateId]] should
+ * be filled in by `prepareForExecution` in [[IncrementalExecution]].
+ */
+trait StatefulOperator extends SparkPlan {
+  def stateId: Option[OperatorStateId]
 
-  protected def getStateId: StateIdentifier = attachTree(this) {
+  protected def getStateId: OperatorStateId = attachTree(this) {
     stateId.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
   }
 }
 
+/**
+ * For each input tuple, the key is calculated and the value from the [[StateStore]] is added
+ * to the stream (in addition to the input tuple) if present.
+ */
 case class StateStoreRestore(
     keyExpressions: Seq[Attribute],
-    stateId: Option[StateIdentifier],
-    child: SparkPlan) extends execution.UnaryNode with StatefulOperation {
+    stateId: Option[OperatorStateId],
+    child: SparkPlan) extends execution.UnaryNode with StatefulOperator {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithStateStore(
@@ -66,10 +75,13 @@ case class StateStoreRestore(
   override def output: Seq[Attribute] = child.output
 }
 
+/**
+ * For each input tuple, the key is calculated and the tuple is `put` into the [[StateStore]].
+ */
 case class StateStoreSave(
     keyExpressions: Seq[Attribute],
-    stateId: Option[StateIdentifier],
-    child: SparkPlan) extends execution.UnaryNode with StatefulOperation {
+    stateId: Option[OperatorStateId],
+    child: SparkPlan) extends execution.UnaryNode with StatefulOperator {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithStateStore(
