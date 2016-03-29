@@ -43,7 +43,8 @@ public final class Platform {
     boolean _unaligned;
     // use reflection to access unaligned field
     try {
-      Class<?> bitsClass = Class.forName("java.nio.Bits", false,ClassLoader.getSystemClassLoader());
+      Class<?> bitsClass =
+        Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
       Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
       unalignedMethod.setAccessible(true);
       _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
