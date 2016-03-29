@@ -469,12 +469,10 @@ object LDAModel extends MLReadable[LDAModel] {
       val metadata = parse(metadataStr)
 
       val className = (metadata \ "class").extract[String]
-      val localName = classOf[LocalLDAModel].getName
-      val distributeName = classOf[DistributedLDAModel].getName
       className match {
-        case local if classOf[LocalLDAModel].getName =>
+        case c if classOf[LocalLDAModel].getName =>
           LocalLDAModel.load(path)
-        case distributeName =>
+        case c if classOf[DistributedLDAModel].getName =>
           DistributedLDAModel.load(path)
       }
     }
