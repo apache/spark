@@ -33,8 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 class WindowSpec private[sql](
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frame: catalyst.expressions.WindowFrame,
-    exclude: ExcludeClause =  ExcludeClause.defaultExclude ) {
+    frame: catalyst.expressions.WindowFrame) {
 
   /**
    * Defines the partitioning columns in a [[WindowSpec]].
@@ -139,7 +138,7 @@ class WindowSpec private[sql](
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
-    val spec = WindowSpecDefinition(partitionSpec, orderSpec, frame, exclude)
+    val spec = WindowSpecDefinition(partitionSpec, orderSpec, frame)
     new Column(WindowExpression(aggregate.expr, spec))
   }
 }
