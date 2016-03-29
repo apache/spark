@@ -60,7 +60,8 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    conf.set("spark.testing.memory", "10000")
+    conf.set("spark.testing.memory", maxMem.toString)
+    conf.set("spark.memory.offHeap.size", maxMem.toString)
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
@@ -174,6 +175,10 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
       MEMORY_ONLY
     )
     testReplication(5, storageLevels)
+  }
+
+  test("block replication - off-heap") {
+    testReplication(2, Seq(OFF_HEAP, StorageLevel(true, true, true, false, 2)))
   }
 
   test("block replication - 2x replication without peers") {
@@ -397,10 +402,14 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
         // If the block is supposed to be in memory, then drop the copy of the block in
         // this store test whether master is updated with zero memory usage this store
         if (storageLevel.useMemory) {
+          val sl = if (storageLevel.useOffHeap) {
+            StorageLevel(false, true, true, false, 1)
+          } else {
+            MEMORY_ONLY_SER
+          }
           // Force the block to be dropped by adding a number of dummy blocks
           (1 to 10).foreach {
-            i =>
-              testStore.putSingle(s"dummy-block-$i", new Array[Byte](1000), MEMORY_ONLY_SER)
+            i => testStore.putSingle(s"dummy-block-$i", new Array[Byte](1000), sl)
           }
           (1 to 10).foreach {
             i => testStore.removeBlock(s"dummy-block-$i")

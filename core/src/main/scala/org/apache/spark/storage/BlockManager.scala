@@ -1075,7 +1075,12 @@ private[spark] class BlockManager(
     val peersForReplication = new ArrayBuffer[BlockManagerId]
     val peersReplicatedTo = new ArrayBuffer[BlockManagerId]
     val peersFailedToReplicateTo = new ArrayBuffer[BlockManagerId]
-    val tLevel = StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
+    val tLevel = StorageLevel(
+      useDisk = level.useDisk,
+      useMemory = level.useMemory,
+      useOffHeap = level.useOffHeap,
+      deserialized = level.deserialized,
+      replication = 1)
     val startTime = System.currentTimeMillis
     val random = new Random(blockId.hashCode)
 
