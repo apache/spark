@@ -175,6 +175,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
         .runWithValidation(trainRdd, validateRdd)
       val numTrees = gbtValidate.numTrees
       assert(numTrees !== numIterations)
+      println(numTrees)
 
       // Test that it performs better on the validation dataset.
       val gbt = new GradientBoostedTrees(boostingStrategy, seed = 0).run(trainRdd)
@@ -191,6 +192,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
       // Test that results from evaluateEachIteration comply with runWithValidation.
       // Note that convergenceTol is set to 0.0
       val evaluationArray = gbt.evaluateEachIteration(validateRdd, loss)
+      evaluationArray.foreach(println)
       assert(evaluationArray.length === numIterations)
       assert(evaluationArray(numTrees) > evaluationArray(numTrees - 1))
       var i = 1
@@ -220,7 +222,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
 }
 
-private object GradientBoostedTreesSuite {
+private[spark] object GradientBoostedTreesSuite {
 
   // Combinations for estimators, learning rates and subsamplingRate
   val testCombinations = Array((10, 1.0, 1.0), (10, 0.1, 1.0), (10, 0.5, 0.75), (10, 0.1, 0.75))
