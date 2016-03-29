@@ -106,10 +106,10 @@ case class CreateFunction(
     val func = FunctionIdentifier(functionName, databaseName)
     val catalogFunc = CatalogFunction(func, alias)
     if (isTemp) {
-      println(s"CreateFunction: $func, $catalogFunc")
       // Set `ignoreIfExists` to false, so if the temporary function already exists,
       // an exception will be thrown.
-      sqlContext.sessionState.catalog.createTempFunction(catalogFunc, false)
+      val builder = sqlContext.sessionState.functionRegistry.getFunctionBuilder(functionName, alias)
+      sqlContext.sessionState.catalog.createTempFunction(functionName, builder, false)
     } else {
       // Check if the function to create is already existing. If so, throw exception.
       var funcExisting: Boolean = true
@@ -144,9 +144,7 @@ case class DropFunction(
   extends NativeDDLCommand(sql) with Logging {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    println("call DropFunction")
     if (isTemp) {
-      println("isTemp")
       require(databaseName.isEmpty,
         "attempted to drop a temporary function while specifying a database")
       sqlContext.sessionState.catalog.dropTempFunction(functionName, ifExists)

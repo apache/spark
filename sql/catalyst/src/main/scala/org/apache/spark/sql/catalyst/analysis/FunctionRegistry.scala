@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
+import org.apache.spark.util.Utils
 
 
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
@@ -52,6 +53,14 @@ trait FunctionRegistry {
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
 
+  /** Get the builder of the specified function name and class name. */
+  def getFunctionBuilder(
+    name: String,
+    functionClassName: String): FunctionBuilder = {
+    val clazz = Utils.getContextOrSparkClassLoader.loadClass(functionClassName)
+    val (_, (_, builder)) = FunctionRegistry.expression(name, clazz.asInstanceOf[Class[Expression]])
+    builder
+  }
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -67,9 +76,14 @@ class SimpleFunctionRegistry extends FunctionRegistry {
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    val builder = functionBuilders.get(name)
+    if (builder.isEmpty) {
+      throw new AnalysisException(s"undefined function $name")
+    }
     val func = synchronized {
-      functionBuilders.get(name).map(_._2).getOrElse {
-        throw new AnalysisException(s"undefined function $name")
+      Try(builder.map(_._2)) match {
+        case Success(e) => e.get
+        case Failure(e) => throw new AnalysisException(e.getMessage)
       }
     }
     func(children)
@@ -337,13 +351,12 @@ object FunctionRegistry {
     fr
   }
 
-  /** See usage above. */
-  def expression[T <: Expression](name: String)
-      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
-
+  def expression[T <: Expression](
+      name: String,
+      runtimeClass: Class[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
     // See if we can find a constructor that accepts Seq[Expression]
-    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
-    val builder = (expressions: Seq[Expression]) => {
+    val varargCtor = Try(runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
+    val builder: FunctionBuilder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
         Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
@@ -353,7 +366,7 @@ object FunctionRegistry {
       } else {
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
+        val f = Try(runtimeClass.getDeclaredConstructor(params : _*)) match {
           case Success(e) =>
             e
           case Failure(e) =>
@@ -366,14 +379,19 @@ object FunctionRegistry {
       }
     }
 
-    val clazz = tag.runtimeClass
-    val df = clazz.getAnnotation(classOf[ExpressionDescription])
+    val df = runtimeClass.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
       (name,
-        (new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended()),
+        (new ExpressionInfo(runtimeClass.getCanonicalName, name, df.usage(), df.extended()),
         builder))
     } else {
-      (name, (new ExpressionInfo(clazz.getCanonicalName, name), builder))
+      (name, (new ExpressionInfo(runtimeClass.getCanonicalName, name), builder))
     }
+  }
+ 
+  /** See usage above. */
+  def expression[T <: Expression](name: String)
+      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
+    expression(name, tag.runtimeClass.asInstanceOf[Class[T]])
   }
 }
