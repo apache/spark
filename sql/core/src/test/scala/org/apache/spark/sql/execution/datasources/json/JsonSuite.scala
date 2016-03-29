@@ -773,7 +773,22 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("Infer doubles when it does not fit in decimal") {
+  test("Infer big integers as doubles when it does not fit in decimal") {
+    val jsonDF = sqlContext.read
+      .json(doubleRecords)
+
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+        StructField("b", DoubleType, true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(
+      jsonDF.selectExpr("a"),
+      Seq(Row(2.0E38D), Row(1.0E38D))
+    )
+  }
+
+  test("Infer floating-point values as doubles when it does not fit in decimal") {
     val jsonDF = sqlContext.read
       .option("prefersDecimal", "true")
       .json(doubleRecords)
@@ -784,9 +799,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
     checkAnswer(
-      jsonDF,
-      Seq(Row(1.0E-39D, 0.02D),
-        Row(1.0E38D, 0.01D))
+      jsonDF.selectExpr("b"),
+      Seq(Row(0.02D), Row(0.01D))
     )
   }
 
