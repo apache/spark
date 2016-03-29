@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -104,12 +105,9 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
     currentDb = db
   }
 
-  // todo: what is the default path in SessionCatalog?
-  def getDefaultPath: String = ""
-
-  def getDefaultDBExtension: String = ".db"
-
-  def getDefaultDBPath(db: String): String = db + getDefaultDBExtension
+  def getDefaultDBPath(db: String): String = {
+    System.getProperty("java.io.tmpdir") + File.separator + db + ".db"
+  }
 
   // ----------------------------------------------------------------------------
   // Tables

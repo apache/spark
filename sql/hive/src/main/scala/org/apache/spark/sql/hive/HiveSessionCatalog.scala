@@ -61,11 +61,10 @@ class HiveSessionCatalog(
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
 
-  override def getDefaultPath: String = client.getConf(HiveConf.ConfVars.METASTOREWAREHOUSE.varname,
-    HiveConf.ConfVars.METASTOREWAREHOUSE.defaultStrVal)
-
   override def getDefaultDBPath(db: String): String = {
-    getDefaultPath + File.pathSeparator + db + getDefaultDBExtension
+    val defaultPath = client.getConf(HiveConf.ConfVars.METASTOREWAREHOUSE.varname,
+      HiveConf.ConfVars.METASTOREWAREHOUSE.defaultStrVal)
+    defaultPath + File.separator + db + ".db"
   }
 
   // Catalog for handling data source tables. TODO: This really doesn't belong here since it is

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.BucketSpec
@@ -42,6 +43,95 @@ abstract class NativeDDLCommand(val sql: String) extends RunnableCommand {
     Seq(AttributeReference("result", StringType, nullable = false)())
   }
 
+}
+
+/**
+ * A command for users to create a new database.
+ *
+ * It will issue an error message when the database with the same name already exists,
+ * unless 'ifNotExists' is true.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    CREATE DATABASE|SCHEMA [IF NOT EXISTS] database_name
+ * }}}
+ */
+case class CreateDatabase(
+    databaseName: String,
+    ifNotExists: Boolean,
+    path: Option[String],
+    comment: Option[String],
+    props: Map[String, String])
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    catalog.createDatabase(
+      CatalogDatabase(
+        databaseName,
+        comment.getOrElse(""),
+        path.getOrElse(catalog.getDefaultDBPath(databaseName)),
+        props),
+      ifNotExists)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
+}
+
+
+/**
+ * A command for users to remove a database from the system.
+ *
+ * 'ignoreIfNotExists':
+ * - true, if database_name does't exist, no action
+ * - false (default), if database_name does't exist, a warning message will be issued
+ * 'cascade':
+ * - true, the dependent objects are automatically dropped before dropping database.
+ * - false (default), it is in the Restrict mode. The database cannot be dropped if
+ * it is not empty. The inclusive tables must be dropped at first.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    DROP DATABASE [IF EXISTS] database_name [RESTRICT|CASCADE];
+ * }}}
+ */
+case class DropDatabase(
+    databaseName: String,
+    ignoreIfNotExists: Boolean,
+    cascade: Boolean)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.sessionState.catalog.dropDatabase(databaseName, ignoreIfNotExists, cascade)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
+}
+
+/**
+ * A command for users to add new (key, value) pairs into DBPROPERTIES
+ * If the database does not exist, an error message will be issued to indicate the database
+ * does not exist.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
+ * }}}
+ */
+case class AlterDatabaseProperties(
+    databaseName: String,
+    props: Map[String, String])
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val db: CatalogDatabase = catalog.getDatabase(databaseName)
+    catalog.alterDatabase(db.copy(properties = db.properties ++ props))
+
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
 }
 
 case class CreateFunction(
