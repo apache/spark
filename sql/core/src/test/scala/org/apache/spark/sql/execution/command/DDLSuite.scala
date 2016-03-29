@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.parser.ParserUtils._
@@ -35,7 +37,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("Create/Drop/Alter/Describe Database - basic") {
+  test("Create/Drop Database") {
     val catalog = sqlContext.sessionState.catalog
 
     val databaseNames = Seq("db1", "`database`")
@@ -43,42 +45,14 @@ class DDLSuite extends QueryTest with SharedSQLContext {
     databaseNames.foreach { dbName =>
       withDatabase(dbName) {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabase(dbNameWithoutBackTicks)
         assert(db1 == CatalogDatabase(
-          dbNameWithoutBackTicks, "", s"$dbNameWithoutBackTicks.db", Map.empty))
-
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", s"$dbNameWithoutBackTicks.db") :: Nil)
-
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", s"$dbNameWithoutBackTicks.db") ::
-            Row("Properties", "") :: Nil)
-
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", s"$dbNameWithoutBackTicks.db") ::
-            Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
-
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
-
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", s"$dbNameWithoutBackTicks.db") ::
-            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
-
+          dbNameWithoutBackTicks,
+          "",
+          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+          Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))
       }
@@ -95,12 +69,54 @@ class DDLSuite extends QueryTest with SharedSQLContext {
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabase(dbNameWithoutBackTicks)
         assert(db1 == CatalogDatabase(
-          dbNameWithoutBackTicks, "", s"$dbNameWithoutBackTicks.db", Map.empty))
+          dbNameWithoutBackTicks,
+          "",
+          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+          Map.empty))
 
         val message = intercept[AnalysisException] {
           sql(s"CREATE DATABASE $dbName")
         }.getMessage
         assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
+      }
+    }
+  }
+
+  test("Alter/Describe Database") {
+    val catalog = sqlContext.sessionState.catalog
+    val databaseNames = Seq("db1", "`database`")
+
+    databaseNames.foreach { dbName =>
+      withDatabase(dbName) {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+        val location =
+          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
+        sql(s"CREATE DATABASE $dbName")
+
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", location) ::
+            Row("Properties", "") :: Nil)
+
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", location) ::
+            Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
+
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", location) ::
+            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
       }
     }
   }

@@ -82,7 +82,7 @@ case class CreateDatabase(
 /**
  * A command for users to remove a database from the system.
  *
- * 'ignoreIfNotExists':
+ * 'ifExists':
  * - true, if database_name does't exist, no action
  * - false (default), if database_name does't exist, a warning message will be issued
  * 'cascade':
@@ -97,12 +97,12 @@ case class CreateDatabase(
  */
 case class DropDatabase(
     databaseName: String,
-    ignoreIfNotExists: Boolean,
+    ifExists: Boolean,
     cascade: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.dropDatabase(databaseName, ignoreIfNotExists, cascade)
+    sqlContext.sessionState.catalog.dropDatabase(databaseName, ifExists, cascade)
     Seq.empty[Row]
   }
 
@@ -132,6 +132,47 @@ case class AlterDatabaseProperties(
   }
 
   override val output: Seq[Attribute] = Seq.empty
+}
+
+/**
+ * A command for users to show the name of the database, its comment (if one has been set), and its
+ * root location on the filesystem. When extended is true, it also shows the database's properties
+ * If the database does not exist, an error message will be issued to indicate the database
+ * does not exist.
+ * The syntax of using this command in SQL is
+ * {{{
+ *    DESCRIBE DATABASE [EXTENDED] db_name
+ * }}}
+ */
+case class DescribeDatabase(
+    databaseName: String,
+    extended: Boolean)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val dbMetadata: CatalogDatabase = sqlContext.sessionState.catalog.getDatabase(databaseName)
+    val result =
+      Row("Database Name", dbMetadata.name) ::
+        Row("Description", dbMetadata.description) ::
+        Row("Location", dbMetadata.locationUri) :: Nil
+
+    if (extended) {
+      val properties =
+        if (dbMetadata.properties.isEmpty) {
+          ""
+        } else {
+          dbMetadata.properties.toSeq.mkString("(", ", ", ")")
+        }
+      result :+ Row("Properties", properties)
+    } else {
+      result
+    }
+  }
+
+  override val output: Seq[Attribute] = {
+    AttributeReference("database_description_item", StringType, nullable = false)() ::
+      AttributeReference("database_description_value", StringType, nullable = false)() :: Nil
+  }
 }
 
 case class CreateFunction(

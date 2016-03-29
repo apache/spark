@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
-
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -62,9 +61,8 @@ class HiveSessionCatalog(
   // ----------------------------------------------------------------
 
   override def getDefaultDBPath(db: String): String = {
-    val defaultPath = client.getConf(HiveConf.ConfVars.METASTOREWAREHOUSE.varname,
-      HiveConf.ConfVars.METASTOREWAREHOUSE.defaultStrVal)
-    defaultPath + File.separator + db + ".db"
+    val defaultPath = context.hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
+    new Path(new Path(defaultPath), db + ".db").toString
   }
 
   // Catalog for handling data source tables. TODO: This really doesn't belong here since it is

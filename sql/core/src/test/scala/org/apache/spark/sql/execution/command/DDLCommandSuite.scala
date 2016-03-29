@@ -65,19 +65,19 @@ class DDLCommandSuite extends PlanTest {
 
     val expected1 = DropDatabase(
       "database_name",
-      ignoreIfNotExists = true,
+      ifExists = true,
       cascade = false)
     val expected2 = DropDatabase(
       "database_name",
-      ignoreIfNotExists = true,
+      ifExists = true,
       cascade = true)
     val expected3 = DropDatabase(
       "database_name",
-      ignoreIfNotExists = false,
+      ifExists = false,
       cascade = false)
     val expected4 = DropDatabase(
       "database_name",
-      ignoreIfNotExists = false,
+      ifExists = false,
       cascade = true)
 
     comparePlans(parsed1, expected1)

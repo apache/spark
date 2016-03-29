@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
 import java.util.NoSuchElementException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -316,50 +314,6 @@ case class DescribeCommand(
       val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
       Row(field.name, field.dataType.simpleString, comment)
     }
-  }
-}
-
-/**
- * A command for users to show the name of the database, its comment (if one has been set), and its
- * root location on the filesystem. When extended is true, it also shows the database's properties
- * If the database does not exist, an error message will be issued to indicate the database
- * does not exist.
- * The syntax of using this command in SQL is
- * {{{
- *    DESCRIBE DATABASE [EXTENDED] db_name
- * }}}
- */
-case class DescribeDatabase(
-    databaseName: String,
-    extended: Boolean)
-  extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val dbMetadata: CatalogDatabase = sqlContext.sessionState.catalog.getDatabase(databaseName)
-    val result =
-      Row("Database Name", dbMetadata.name) ::
-      Row("Description", dbMetadata.description) ::
-      Row("Location", dbMetadata.locationUri) :: Nil
-
-    if (extended) {
-      val properties =
-        if (dbMetadata.properties.isEmpty) {
-          ""
-        } else {
-          dbMetadata.properties.toSeq.mkString("(", ", ", ")")
-        }
-      result :+ Row("Properties", properties)
-    } else {
-      result
-    }
-  }
-
-  override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("database_description_item", StringType, nullable = false) ::
-        StructField("database_description_value", StringType, nullable = false) :: Nil)
-
-    schema.toAttributes
   }
 }
 
