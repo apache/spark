@@ -214,9 +214,9 @@ private[v1] object AllStagesResource {
           raw.shuffleWriteMetrics
         }
         def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
-          writeBytes = submetricQuantiles(_.shuffleBytesWritten),
-          writeRecords = submetricQuantiles(_.shuffleRecordsWritten),
-          writeTime = submetricQuantiles(_.shuffleWriteTime)
+          writeBytes = submetricQuantiles(_.bytesWritten),
+          writeRecords = submetricQuantiles(_.recordsWritten),
+          writeTime = submetricQuantiles(_.writeTime)
         )
       }.metricOption
 
@@ -237,7 +237,8 @@ private[v1] object AllStagesResource {
   }
 
   def convertAccumulableInfo(acc: InternalAccumulableInfo): AccumulableInfo = {
-    new AccumulableInfo(acc.id, acc.name, acc.update, acc.value)
+    new AccumulableInfo(
+      acc.id, acc.name.orNull, acc.update.map(_.toString), acc.value.map(_.toString).orNull)
   }
 
   def convertUiTaskMetrics(internal: InternalTaskMetrics): TaskMetrics = {
@@ -283,9 +284,9 @@ private[v1] object AllStagesResource {
 
   def convertShuffleWriteMetrics(internal: InternalShuffleWriteMetrics): ShuffleWriteMetrics = {
     new ShuffleWriteMetrics(
-      bytesWritten = internal.shuffleBytesWritten,
-      writeTime = internal.shuffleWriteTime,
-      recordsWritten = internal.shuffleRecordsWritten
+      bytesWritten = internal.bytesWritten,
+      writeTime = internal.writeTime,
+      recordsWritten = internal.recordsWritten
     )
   }
 }

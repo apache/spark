@@ -357,9 +357,10 @@ private[spark] class MesosClusterScheduler(
     val appJar = CommandInfo.URI.newBuilder()
       .setValue(desc.jarUrl.stripPrefix("file:").stripPrefix("local:")).build()
     val builder = CommandInfo.newBuilder().addUris(appJar)
-    val entries =
-      (conf.getOption("spark.executor.extraLibraryPath").toList ++
-        desc.command.libraryPathEntries)
+    val entries = conf.getOption("spark.executor.extraLibraryPath")
+      .map(path => Seq(path) ++ desc.command.libraryPathEntries)
+      .getOrElse(desc.command.libraryPathEntries)
+
     val prefixEnv = if (!entries.isEmpty) {
       Utils.libraryPathEnvPrefix(entries)
     } else {
@@ -394,7 +395,7 @@ private[spark] class MesosClusterScheduler(
         .getOrElse {
           throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
         }
-      val cmdExecutable = new File(executorSparkHome, "./bin/spark-submit").getCanonicalPath
+      val cmdExecutable = new File(executorSparkHome, "./bin/spark-submit").getPath
       // Sandbox points to the current directory by default with Mesos.
       (cmdExecutable, ".")
     }
@@ -442,9 +443,12 @@ private[spark] class MesosClusterScheduler(
     options
   }
 
-  private class ResourceOffer(val offer: Offer, var cpu: Double, var mem: Double) {
+  private class ResourceOffer(
+      val offerId: OfferID,
+      val slaveId: SlaveID,
+      var resources: JList[Resource]) {
     override def toString(): String = {
-      s"Offer id: ${offer.getId.getValue}, cpu: $cpu, mem: $mem"
+      s"Offer id: ${offerId}, resources: ${resources}"
     }
   }
 
@@ -463,27 +467,29 @@ private[spark] class MesosClusterScheduler(
       val driverMem = submission.mem
       logTrace(s"Finding offer to launch driver with cpu: $driverCpu, mem: $driverMem")
       val offerOption = currentOffers.find { o =>
-        o.cpu >= driverCpu && o.mem >= driverMem
+        getResource(o.resources, "cpus") >= driverCpu &&
+        getResource(o.resources, "mem") >= driverMem
       }
       if (offerOption.isEmpty) {
         logDebug(s"Unable to find offer to launch driver id: ${submission.submissionId}, " +
           s"cpu: $driverCpu, mem: $driverMem")
       } else {
         val offer = offerOption.get
-        offer.cpu -= driverCpu
-        offer.mem -= driverMem
         val taskId = TaskID.newBuilder().setValue(submission.submissionId).build()
-        val cpuResource = createResource("cpus", driverCpu)
-        val memResource = createResource("mem", driverMem)
+        val (remainingResources, cpuResourcesToUse) =
+          partitionResources(offer.resources, "cpus", driverCpu)
+        val (finalResources, memResourcesToUse) =
+          partitionResources(remainingResources.asJava, "mem", driverMem)
         val commandInfo = buildDriverCommand(submission)
         val appName = submission.schedulerProperties("spark.app.name")
         val taskInfo = TaskInfo.newBuilder()
           .setTaskId(taskId)
           .setName(s"Driver for $appName")
-          .setSlaveId(offer.offer.getSlaveId)
+          .setSlaveId(offer.slaveId)
           .setCommand(commandInfo)
-          .addResources(cpuResource)
-          .addResources(memResource)
+          .addAllResources(cpuResourcesToUse.asJava)
+          .addAllResources(memResourcesToUse.asJava)
+        offer.resources = finalResources.asJava
         submission.schedulerProperties.get("spark.mesos.executor.docker.image").foreach { image =>
           val container = taskInfo.getContainerBuilder()
           val volumes = submission.schedulerProperties
@@ -496,11 +502,11 @@ private[spark] class MesosClusterScheduler(
             container, image, volumes = volumes, portmaps = portmaps)
           taskInfo.setContainer(container.build())
         }
-        val queuedTasks = tasks.getOrElseUpdate(offer.offer.getId, new ArrayBuffer[TaskInfo])
+        val queuedTasks = tasks.getOrElseUpdate(offer.offerId, new ArrayBuffer[TaskInfo])
         queuedTasks += taskInfo.build()
-        logTrace(s"Using offer ${offer.offer.getId.getValue} to launch driver " +
+        logTrace(s"Using offer ${offer.offerId.getValue} to launch driver " +
           submission.submissionId)
-        val newState = new MesosClusterSubmissionState(submission, taskId, offer.offer.getSlaveId,
+        val newState = new MesosClusterSubmissionState(submission, taskId, offer.slaveId,
           None, new Date(), None)
         launchedDrivers(submission.submissionId) = newState
         launchedDriversState.persist(submission.submissionId, newState)
@@ -510,13 +516,13 @@ private[spark] class MesosClusterScheduler(
   }
 
   override def resourceOffers(driver: SchedulerDriver, offers: JList[Offer]): Unit = {
-    val currentOffers = offers.asScala.map(o =>
-      new ResourceOffer(
-        o, getResource(o.getResourcesList, "cpus"), getResource(o.getResourcesList, "mem"))
-    ).toList
-    logTrace(s"Received offers from Mesos: \n${currentOffers.mkString("\n")}")
+    logTrace(s"Received offers from Mesos: \n${offers.asScala.mkString("\n")}")
     val tasks = new mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]()
     val currentTime = new Date()
+
+    val currentOffers = offers.asScala.map {
+      o => new ResourceOffer(o.getId, o.getSlaveId, o.getResourcesList)
+    }.toList
 
     stateLock.synchronized {
       // We first schedule all the supervised drivers that are ready to retry.
@@ -541,9 +547,10 @@ private[spark] class MesosClusterScheduler(
     tasks.foreach { case (offerId, taskInfos) =>
       driver.launchTasks(Collections.singleton(offerId), taskInfos.asJava)
     }
-    offers.asScala
-      .filter(o => !tasks.keySet.contains(o.getId))
-      .foreach(o => driver.declineOffer(o.getId))
+
+    for (o <- currentOffers if !tasks.contains(o.offerId)) {
+      driver.declineOffer(o.offerId)
+    }
   }
 
   private def copyBuffer(
@@ -573,6 +580,7 @@ private[spark] class MesosClusterScheduler(
   override def slaveLost(driver: SchedulerDriver, slaveId: SlaveID): Unit = {}
   override def error(driver: SchedulerDriver, error: String): Unit = {
     logError("Error received: " + error)
+    markErr()
   }
 
   /**

@@ -32,8 +32,10 @@ import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.sql.{SQLConf, SQLContext}
-import org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.execution.datasources.parquet.VectorizedParquetRecordReader
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
 
@@ -97,8 +99,10 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
 
   // If true, enable using the custom RecordReader for parquet. This only works for
   // a subset of the types (no complex types).
-  protected val enableUnsafeRowParquetReader: Boolean =
-    sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
+  protected val enableVectorizedParquetReader: Boolean =
+    sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
+  protected val enableWholestageCodegen: Boolean =
+    sqlContext.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key).toBoolean
 
   override def getPartitions: Array[SparkPartition] = {
     val conf = getConf(isDriverSide = true)
@@ -126,8 +130,8 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = getConf(isDriverSide = false)
 
-      val inputMetrics = context.taskMetrics
-        .getInputMetricsForReadMethod(DataReadMethod.Hadoop)
+      val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      val existingBytesRead = inputMetrics.bytesRead
 
       // Sets the thread local variable for the file's name
       split.serializableHadoopSplit.value match {
@@ -137,14 +141,21 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
-      val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
-        split.serializableHadoopSplit.value match {
-          case _: FileSplit | _: CombineFileSplit =>
-            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
-          case _ => None
+      val getBytesReadCallback: Option[() => Long] = split.serializableHadoopSplit.value match {
+        case _: FileSplit | _: CombineFileSplit =>
+              SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+        case _ => None
+      }
+
+      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // If we do a coalesce, however, we are likely to compute multiple partitions in the same
+      // task and in the same thread, in which case we need to avoid override values written by
+      // previous partitions (SPARK-13071).
+      def updateBytesRead(): Unit = {
+        getBytesReadCallback.foreach { getBytesRead =>
+          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
         }
       }
-      inputMetrics.setBytesReadCallback(bytesReadCallback)
 
       val format = inputFormatClass.newInstance
       format match {
@@ -161,14 +172,17 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         * fails (for example, unsupported schema), try with the normal reader.
         * TODO: plumb this through a different way?
         */
-      if (enableUnsafeRowParquetReader &&
+      if (enableVectorizedParquetReader &&
         format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
-        val parquetReader: UnsafeRowParquetRecordReader = new UnsafeRowParquetRecordReader()
+        val parquetReader: VectorizedParquetRecordReader = new VectorizedParquetRecordReader()
         if (!parquetReader.tryInitialize(
             split.serializableHadoopSplit.value, hadoopAttemptContext)) {
           parquetReader.close()
         } else {
           reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
+          parquetReader.resultBatch()
+          // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
+          if (enableWholestageCodegen) parquetReader.enableReturningBatches()
         }
       }
 
@@ -185,7 +199,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       private[this] var finished = false
 
       override def hasNext: Boolean = {
-        if (context.isInterrupted) {
+        if (context.isInterrupted()) {
           throw new TaskKilledException
         }
         if (!finished && !havePair) {
@@ -207,7 +221,10 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         }
         havePair = false
         if (!finished) {
-          inputMetrics.incRecordsRead(1)
+          inputMetrics.incRecordsReadInternal(1)
+        }
+        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+          updateBytesRead()
         }
         reader.getCurrentValue
       }
@@ -229,14 +246,14 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           } finally {
             reader = null
           }
-          if (bytesReadCallback.isDefined) {
-            inputMetrics.updateBytesRead()
+          if (getBytesReadCallback.isDefined) {
+            updateBytesRead()
           } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
             split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
+              inputMetrics.incBytesReadInternal(split.serializableHadoopSplit.value.getLength)
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)

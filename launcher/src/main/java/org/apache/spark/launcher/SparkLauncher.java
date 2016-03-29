@@ -75,7 +75,7 @@ public class SparkLauncher {
   /** Used internally to create unique logger names. */
   private static final AtomicInteger COUNTER = new AtomicInteger();
 
-  static final Map<String, String> launcherConfig = new HashMap<String, String>();
+  static final Map<String, String> launcherConfig = new HashMap<>();
 
   /**
    * Set a configuration value for the launcher library. These config values do not affect the
@@ -428,7 +428,7 @@ public class SparkLauncher {
   }
 
   private ProcessBuilder createBuilder() {
-    List<String> cmd = new ArrayList<String>();
+    List<String> cmd = new ArrayList<>();
     String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
     cmd.add(join(File.separator, builder.getSparkHome(), "bin", script));
     cmd.addAll(builder.buildSparkSubmitArgs());
@@ -437,7 +437,7 @@ public class SparkLauncher {
     // preserved, otherwise the batch interpreter will mess up the arguments. Batch scripts are
     // weird.
     if (isWindows()) {
-      List<String> winCmd = new ArrayList<String>();
+      List<String> winCmd = new ArrayList<>();
       for (String arg : cmd) {
         winCmd.add(quoteForBatchScript(arg));
       }

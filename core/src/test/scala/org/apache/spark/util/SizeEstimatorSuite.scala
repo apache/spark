@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
 

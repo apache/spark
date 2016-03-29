@@ -46,7 +46,6 @@ case class SortBasedAggregate(
       AttributeSet(aggregateBufferAttributes)
 
   override private[sql] lazy val metrics = Map(
-    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
@@ -68,7 +67,6 @@ case class SortBasedAggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsInternal { iter =>
       // Because the constructor of an aggregation iterator will read at least the first row,
@@ -87,8 +85,8 @@ case class SortBasedAggregate(
           aggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
-          newMutableProjection,
-          numInputRows,
+          (expressions, inputSchema) =>
+            newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
           numOutputRows)
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.

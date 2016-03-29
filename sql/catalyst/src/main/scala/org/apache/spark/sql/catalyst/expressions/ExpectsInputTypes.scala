@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion.ImplicitTypeCasts
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types.AbstractDataType
 
@@ -45,7 +44,7 @@ trait ExpectsInputTypes extends Expression {
     val mismatches = children.zip(inputTypes).zipWithIndex.collect {
       case ((child, expected), idx) if !expected.acceptsType(child.dataType) =>
         s"argument ${idx + 1} requires ${expected.simpleString} type, " +
-          s"however, '${child.prettyString}' is of ${child.dataType.simpleString} type."
+          s"however, '${child.sql}' is of ${child.dataType.simpleString} type."
     }
 
     if (mismatches.isEmpty) {

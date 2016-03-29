@@ -69,7 +69,7 @@ trait JavaTestBase extends TestSuiteBase {
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
     ssc.getState()
     val res = runStreams[V](ssc.ssc, numBatches, numExpectedOutput)
-    res.map(_.asJava).asJava
+    res.map(_.asJava).toSeq.asJava
   }
 
   /**
@@ -85,7 +85,7 @@ trait JavaTestBase extends TestSuiteBase {
     implicit val cm: ClassTag[V] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
     val res = runStreamsWithPartitions[V](ssc.ssc, numBatches, numExpectedOutput)
-    res.map(entry => entry.map(_.asJava).asJava).asJava
+    res.map(entry => entry.map(_.asJava).asJava).toSeq.asJava
   }
 }
 

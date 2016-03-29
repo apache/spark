@@ -50,7 +50,9 @@ object RowEncoder {
       inputObject: Expression,
       inputType: DataType): Expression = inputType match {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType => inputObject
+         FloatType | DoubleType | BinaryType | CalendarIntervalType => inputObject
+
+    case p: PythonUserDefinedType => extractorsFor(inputObject, p.sqlType)
 
     case udt: UserDefinedType[_] =>
       val obj = NewInstance(
@@ -77,7 +79,7 @@ object RowEncoder {
       StaticInvoke(
         Decimal.getClass,
         DecimalType.SYSTEM_DEFAULT,
-        "apply",
+        "fromDecimal",
         inputObject :: Nil)
 
     case StringType =>
@@ -93,7 +95,7 @@ object RowEncoder {
           classOf[GenericArrayData],
           inputObject :: Nil,
           dataType = t)
-      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeFor(et))
+      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeForInput(et))
     }
 
     case t @ MapType(kt, vt, valueNullable) =>
@@ -127,7 +129,7 @@ object RowEncoder {
           Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
           Literal.create(null, f.dataType),
           extractorsFor(
-            Invoke(inputObject, method, externalDataTypeFor(f.dataType), Literal(i) :: Nil),
+            Invoke(inputObject, method, externalDataTypeForInput(f.dataType), Literal(i) :: Nil),
             f.dataType))
       }
       If(IsNull(inputObject),
@@ -135,8 +137,24 @@ object RowEncoder {
         CreateStruct(convertedFields))
   }
 
+  /**
+   * Returns the `DataType` that can be used when generating code that converts input data
+   * into the Spark SQL internal format.  Unlike `externalDataTypeFor`, the `DataType` returned
+   * by this function can be more permissive since multiple external types may map to a single
+   * internal type.  For example, for an input with DecimalType in external row, its external types
+   * can be `scala.math.BigDecimal`, `java.math.BigDecimal`, or
+   * `org.apache.spark.sql.types.Decimal`.
+   */
+  private def externalDataTypeForInput(dt: DataType): DataType = dt match {
+    // In order to support both Decimal and java BigDecimal in external row, we make this
+    // as java.lang.Object.
+    case _: DecimalType => ObjectType(classOf[java.lang.Object])
+    case _ => externalDataTypeFor(dt)
+  }
+
   private def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
+    case CalendarIntervalType => dt
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
@@ -150,19 +168,23 @@ object RowEncoder {
 
   private def constructorFor(schema: StructType): Expression = {
     val fields = schema.zipWithIndex.map { case (f, i) =>
-      val field = BoundReference(i, f.dataType, f.nullable)
+      val dt = f.dataType match {
+        case p: PythonUserDefinedType => p.sqlType
+        case other => other
+      }
+      val field = BoundReference(i, dt, f.nullable)
       If(
         IsNull(field),
-        Literal.create(null, externalDataTypeFor(f.dataType)),
-        constructorFor(BoundReference(i, f.dataType, f.nullable))
+        Literal.create(null, externalDataTypeFor(dt)),
+        constructorFor(field)
       )
     }
-    CreateExternalRow(fields)
+    CreateExternalRow(fields, schema)
   }
 
   private def constructorFor(input: Expression): Expression = input.dataType match {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType => input
+         FloatType | DoubleType | BinaryType | CalendarIntervalType => input
 
     case udt: UserDefinedType[_] =>
       val obj = NewInstance(
@@ -216,7 +238,7 @@ object RowEncoder {
         "toScalaMap",
         keyData :: valueData :: Nil)
 
-    case StructType(fields) =>
+    case schema @ StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         If(
           Invoke(input, "isNullAt", BooleanType, Literal(i) :: Nil),
@@ -225,6 +247,6 @@ object RowEncoder {
       }
       If(IsNull(input),
         Literal.create(null, externalDataTypeFor(input.dataType)),
-        CreateExternalRow(convertedFields))
+        CreateExternalRow(convertedFields, schema))
   }
 }

@@ -21,6 +21,7 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.util.Utils
 
 /**
@@ -63,6 +64,11 @@ class StorageLevel private(
     require(!useMemory, "Off-heap storage level does not support using heap memory")
     require(!deserialized, "Off-heap storage level does not support deserialized storage")
     require(replication == 1, "Off-heap storage level does not support multiple replication")
+  }
+
+  private[spark] def memoryMode: MemoryMode = {
+    if (useOffHeap) MemoryMode.OFF_HEAP
+    else MemoryMode.ON_HEAP
   }
 
   override def clone(): StorageLevel = {
@@ -150,7 +156,9 @@ object StorageLevel {
   val MEMORY_AND_DISK_2 = new StorageLevel(true, true, false, true, 2)
   val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false)
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
-  val OFF_HEAP = new StorageLevel(false, false, true, false)
+
+  // Redirect to MEMORY_ONLY_SER for now.
+  val OFF_HEAP = MEMORY_ONLY_SER
 
   /**
    * :: DeveloperApi ::

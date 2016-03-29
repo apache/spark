@@ -46,7 +46,6 @@ private[ml] trait PredictorParams extends Params
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    validateParams()
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
@@ -122,8 +121,10 @@ abstract class Predictor[
    * and put it in an RDD with strong types.
    */
   protected def extractLabeledPoints(dataset: DataFrame): RDD[LabeledPoint] = {
-    dataset.select($(labelCol), $(featuresCol))
-      .map { case Row(label: Double, features: Vector) => LabeledPoint(label, features) }
+    dataset.select($(labelCol), $(featuresCol)).rdd.map {
+      case Row(label: Double, features: Vector) =>
+        LabeledPoint(label, features)
+    }
   }
 }
 

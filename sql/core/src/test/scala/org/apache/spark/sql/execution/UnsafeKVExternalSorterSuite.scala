@@ -40,8 +40,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
 
   private val rand = new Random(42)
   for (i <- 0 until 6) {
-    val keySchema = RandomDataGenerator.randomSchema(rand.nextInt(10) + 1, keyTypes)
-    val valueSchema = RandomDataGenerator.randomSchema(rand.nextInt(10) + 1, valueTypes)
+    val keySchema = RandomDataGenerator.randomSchema(rand, rand.nextInt(10) + 1, keyTypes)
+    val valueSchema = RandomDataGenerator.randomSchema(rand, rand.nextInt(10) + 1, valueTypes)
     testKVSorter(keySchema, valueSchema, spill = i > 3)
   }
 
@@ -117,11 +117,10 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       taskAttemptId = 98456,
       attemptNumber = 0,
       taskMemoryManager = taskMemMgr,
-      metricsSystem = null,
-      internalAccumulators = Seq.empty))
+      metricsSystem = null))
 
     val sorter = new UnsafeKVExternalSorter(
-      keySchema, valueSchema, SparkEnv.get.blockManager, pageSize)
+      keySchema, valueSchema, SparkEnv.get.blockManager, SparkEnv.get.serializerManager, pageSize)
 
     // Insert the keys and values into the sorter
     inputData.foreach { case (k, v) =>

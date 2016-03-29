@@ -19,11 +19,12 @@ package org.apache.spark.streaming.dstream
 
 import java.io._
 import java.net.{ConnectException, Socket}
+import java.nio.charset.StandardCharsets
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
@@ -31,12 +32,12 @@ import org.apache.spark.util.NextIterator
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](
-    ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     host: String,
     port: Int,
     bytesToObjects: InputStream => Iterator[T],
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[T](ssc_) {
+  ) extends ReceiverInputDStream[T](_ssc) {
 
   def getReceiver(): Receiver[T] = {
     new SocketReceiver(host, port, bytesToObjects, storageLevel)
@@ -113,7 +114,8 @@ object SocketReceiver  {
    * to '\n' delimited strings and returns an iterator to access the strings.
    */
   def bytesToLines(inputStream: InputStream): Iterator[String] = {
-    val dataInputStream = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"))
+    val dataInputStream = new BufferedReader(
+      new InputStreamReader(inputStream, StandardCharsets.UTF_8))
     new NextIterator[String] {
       protected override def getNext() = {
         val nextValue = dataInputStream.readLine()

@@ -19,19 +19,21 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.{Logging, TaskContext}
-import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
+import org.apache.spark.internal.Logging
+import org.apache.spark.storage.BlockId
+import org.apache.spark.storage.memory.MemoryStore
 
 /**
  * Performs bookkeeping for managing an adjustable-size pool of memory that is used for storage
  * (caching).
  *
  * @param lock a [[MemoryManager]] instance to synchronize on
+ * @param memoryMode the type of memory tracked by this pool (on- or off-heap)
  */
-private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) with Logging {
+private[memory] class StorageMemoryPool(
+    lock: Object,
+    memoryMode: MemoryMode
+  ) extends MemoryPool(lock) with Logging {
 
   @GuardedBy("lock")
   private[this] var _memoryUsed: Long = 0L
@@ -58,15 +60,12 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
 
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
+ *
    * @return whether all N bytes were successfully granted.
    */
-  def acquireMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = lock.synchronized {
+  def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = lock.synchronized {
     val numBytesToFree = math.max(0, numBytes - memoryFree)
-    acquireMemory(blockId, numBytes, numBytesToFree, evictedBlocks)
+    acquireMemory(blockId, numBytes, numBytesToFree)
   }
 
   /**
@@ -80,19 +79,13 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
   def acquireMemory(
       blockId: BlockId,
       numBytesToAcquire: Long,
-      numBytesToFree: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = lock.synchronized {
+      numBytesToFree: Long): Boolean = lock.synchronized {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
-    if (numBytesToFree > 0) {
-      memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree, evictedBlocks)
-      // Register evicted blocks, if any, with the active task metrics
-      Option(TaskContext.get()).foreach { tc =>
-        val metrics = tc.taskMetrics()
-        val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
-        metrics.updatedBlocks = Some(lastUpdatedBlocks ++ evictedBlocks.toSeq)
-      }
+    // Once we support off-heap caching, this will need to change:
+    if (numBytesToFree > 0 && memoryMode == MemoryMode.ON_HEAP) {
+      memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree)
     }
     // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
     // back into this StorageMemoryPool in order to free memory. Therefore, these variables
@@ -129,9 +122,14 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
     val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
     if (remainingSpaceToFree > 0) {
       // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
-      val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-      memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree, evictedBlocks)
-      val spaceFreedByEviction = evictedBlocks.map(_._2.memSize).sum
+      val spaceFreedByEviction = {
+        // Once we support off-heap caching, this will need to change:
+        if (memoryMode == MemoryMode.ON_HEAP) {
+          memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree)
+        } else {
+          0
+        }
+      }
       // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
       // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.
       decrementPoolSize(spaceFreedByEviction)

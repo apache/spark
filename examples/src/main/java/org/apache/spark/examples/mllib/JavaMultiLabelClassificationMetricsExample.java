@@ -25,10 +25,8 @@ import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.mllib.evaluation.MultilabelMetrics;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.SparkConf;
 // $example off$
-import org.apache.spark.SparkContext;
 
 public class JavaMultiLabelClassificationMetricsExample {
   public static void main(String[] args) {
@@ -76,5 +74,7 @@ public class JavaMultiLabelClassificationMetricsExample {
     // Subset accuracy
     System.out.format("Subset accuracy = %f\n", metrics.subsetAccuracy());
     // $example off$
+
+    sc.stop();
   }
 }

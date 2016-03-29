@@ -82,7 +82,24 @@ case class LessThanOrEqual(attribute: String, value: Any) extends Filter
  *
  * @since 1.3.0
  */
-case class In(attribute: String, values: Array[Any]) extends Filter
+case class In(attribute: String, values: Array[Any]) extends Filter {
+  override def hashCode(): Int = {
+    var h = attribute.hashCode
+    values.foreach { v =>
+      h *= 41
+      h += v.hashCode()
+    }
+    h
+  }
+  override def equals(o: Any): Boolean = o match {
+    case In(a, vs) =>
+      a == attribute && vs.length == values.length && vs.zip(values).forall(x => x._1 == x._2)
+    case _ => false
+  }
+  override def toString: String = {
+    s"In($attribute, [${values.mkString(",")}]"
+  }
+}
 
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to null.

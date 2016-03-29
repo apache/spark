@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
-import org.apache.spark.sql.types.DecimalType
 
 // MutableProjection is not accessible in Java
 abstract class BaseMutableProjection extends MutableProjection
@@ -38,12 +37,29 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
+  def generate(
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute],
+      useSubexprElimination: Boolean): (() => MutableProjection) = {
+    create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination)
+  }
+
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
+    create(expressions, false)
+  }
+
+  private def create(
+      expressions: Seq[Expression],
+      useSubexprElimination: Boolean): (() => MutableProjection) = {
     val ctx = newCodeGenContext()
-    val projectionCodes = expressions.zipWithIndex.map {
-      case (NoOp, _) => ""
-      case (e, i) =>
-        val evaluationCode = e.gen(ctx)
+    val (validExpr, index) = expressions.zipWithIndex.filter {
+      case (NoOp, _) => false
+      case _ => true
+    }.unzip
+    val exprVals = ctx.generateExpressions(validExpr, useSubexprElimination)
+    val projectionCodes = exprVals.zip(index).map {
+      case (ev, i) =>
+        val e = expressions(i)
         if (e.nullable) {
           val isNull = s"isNull_$i"
           val value = s"value_$i"
@@ -51,72 +67,52 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           ctx.addMutableState(ctx.javaType(e.dataType), value,
             s"this.$value = ${ctx.defaultValue(e.dataType)};")
           s"""
-            ${evaluationCode.code}
-            this.$isNull = ${evaluationCode.isNull};
-            this.$value = ${evaluationCode.value};
+            ${ev.code}
+            this.$isNull = ${ev.isNull};
+            this.$value = ${ev.value};
            """
         } else {
           val value = s"value_$i"
           ctx.addMutableState(ctx.javaType(e.dataType), value,
             s"this.$value = ${ctx.defaultValue(e.dataType)};")
           s"""
-            ${evaluationCode.code}
-            this.$value = ${evaluationCode.value};
+            ${ev.code}
+            this.$value = ${ev.value};
            """
         }
     }
-    val updates = expressions.zipWithIndex.map {
-      case (NoOp, _) => ""
-      case (e, i) =>
-        if (e.nullable) {
-          if (e.dataType.isInstanceOf[DecimalType]) {
-            // Can't call setNullAt on DecimalType, because we need to keep the offset
-            s"""
-              if (this.isNull_$i) {
-                ${ctx.setColumn("mutableRow", e.dataType, i, null)};
-              } else {
-                ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
-              }
-            """
-          } else {
-            s"""
-              if (this.isNull_$i) {
-                mutableRow.setNullAt($i);
-              } else {
-                ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
-              }
-            """
-          }
-        } else {
-          s"""
-            ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
-          """
-        }
 
+    // Evaluate all the subexpressions.
+    val evalSubexpr = ctx.subexprFunctions.mkString("\n")
+
+    val updates = validExpr.zip(index).map {
+      case (e, i) =>
+        val ev = ExprCode("", s"this.isNull_$i", s"this.value_$i")
+        ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
     }
 
     val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
     val code = s"""
-      public java.lang.Object generate($exprType[] expr) {
-        return new SpecificMutableProjection(expr);
+      public java.lang.Object generate(Object[] references) {
+        return new SpecificMutableProjection(references);
       }
 
       class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
 
-        private $exprType[] expressions;
-        private $mutableRowType mutableRow;
-        ${declareMutableStates(ctx)}
-        ${declareAddedFunctions(ctx)}
+        private Object[] references;
+        private MutableRow mutableRow;
+        ${ctx.declareMutableStates()}
+        ${ctx.declareAddedFunctions()}
 
-        public SpecificMutableProjection($exprType[] expr) {
-          expressions = expr;
+        public SpecificMutableProjection(Object[] references) {
+          this.references = references;
           mutableRow = new $genericMutableRowType(${expressions.size});
-          ${initMutableStates(ctx)}
+          ${ctx.initMutableStates()}
         }
 
-        public ${classOf[BaseMutableProjection].getName} target($mutableRowType row) {
+        public ${classOf[BaseMutableProjection].getName} target(MutableRow row) {
           mutableRow = row;
           return this;
         }
@@ -128,6 +124,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
         public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+          $evalSubexpr
           $allProjections
           // copy all the results into MutableRow
           $allUpdates
@@ -138,7 +135,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
+    val c = CodeGenerator.compile(code)
     () => {
       c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
     }

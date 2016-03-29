@@ -166,7 +166,7 @@ public class JavaRandomRDDsSuite {
   @SuppressWarnings("unchecked")
   public void testLogNormalVectorRDD() {
     double mean = 4.0;
-    double std = 2.0;  
+    double std = 2.0;
     long m = 100L;
     int n = 10;
     int p = 2;

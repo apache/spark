@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,12 +32,12 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("AnalysisNodes", Once,
-        EliminateSubQueries) ::
+        EliminateSubqueryAliases) ::
       Batch("Constant Folding", FixedPoint(50),
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
-        SimplifyFilters) :: Nil
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
@@ -80,7 +81,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
     checkCondition(('a < 2 || 'a > 3 || 'b > 5) && 'a < 2, 'a < 2)
 
-    checkCondition('a < 2 && ('a < 2 || 'a > 3 || 'b > 5) , 'a < 2)
+    checkCondition('a < 2 && ('a < 2 || 'a > 3 || 'b > 5), 'a < 2)
 
     checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), 'a < 2 || ('b > 3 && 'c > 5))
 
@@ -99,6 +100,34 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(('b || !'a ) && 'a, 'b && 'a)
   }
 
+  test("a < 1 && (!(a < 1) || b)") {
+    checkCondition('a < 1 && (!('a < 1) || 'b), ('a < 1) && 'b)
+    checkCondition('a < 1 && ('b || !('a < 1)), ('a < 1) && 'b)
+
+    checkCondition('a <= 1 && (!('a <= 1) || 'b), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && ('b || !('a <= 1)), ('a <= 1) && 'b)
+
+    checkCondition('a > 1 && (!('a > 1) || 'b), ('a > 1) && 'b)
+    checkCondition('a > 1 && ('b || !('a > 1)), ('a > 1) && 'b)
+
+    checkCondition('a >= 1 && (!('a >= 1) || 'b), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && ('b || !('a >= 1)), ('a >= 1) && 'b)
+  }
+
+  test("a < 1 && ((a >= 1) || b)") {
+    checkCondition('a < 1 && ('a >= 1 || 'b ), ('a < 1) && 'b)
+    checkCondition('a < 1 && ('b || 'a >= 1), ('a < 1) && 'b)
+
+    checkCondition('a <= 1 && ('a > 1 || 'b ), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && ('b || 'a > 1), ('a <= 1) && 'b)
+
+    checkCondition('a > 1 && (('a <= 1) || 'b), ('a > 1) && 'b)
+    checkCondition('a > 1 && ('b || ('a <= 1)), ('a > 1) && 'b)
+
+    checkCondition('a >= 1 && (('a < 1) || 'b), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && ('b || ('a < 1)), ('a >= 1) && 'b)
+  }
+
   test("DeMorgan's law") {
     checkCondition(!('a && 'b), !'a || !'b)
 
@@ -109,8 +138,11 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(!(('a || 'b) && ('c || 'd)), (!'a && !'b) || (!'c && !'d))
   }
 
-  private val caseInsensitiveAnalyzer =
-    new Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(false))
+  private val caseInsensitiveConf = new SimpleCatalystConf(false)
+  private val caseInsensitiveAnalyzer = new Analyzer(
+    new SessionCatalog(new InMemoryCatalog, caseInsensitiveConf),
+    EmptyFunctionRegistry,
+    caseInsensitiveConf)
 
   test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
     val plan = caseInsensitiveAnalyzer.execute(

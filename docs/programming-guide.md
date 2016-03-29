@@ -629,7 +629,7 @@ class MyClass {
 }
 {% endhighlight %}
 
-is equilvalent to writing `rdd.map(x => this.field + x)`, which references all of `this`. To avoid this
+is equivalent to writing `rdd.map(x => this.field + x)`, which references all of `this`. To avoid this
 issue, the simplest way is to copy `field` into a local variable instead of accessing it externally:
 
 {% highlight scala %}
@@ -755,7 +755,7 @@ One of the harder things about Spark is understanding the scope and life cycle o
 
 #### Example
 
-Consider the naive RDD element sum below, which behaves completely differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = local[n]`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN):
+Consider the naive RDD element sum below, which may behave differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = local[n]`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN):
 
 <div class="codetabs">
 
@@ -789,9 +789,12 @@ counter = 0
 rdd = sc.parallelize(data)
 
 # Wrong: Don't do this!!
-rdd.foreach(lambda x: counter += x)
+def increment_counter(x):
+    global counter
+    counter += x
+rdd.foreach(increment_counter)
 
-print("Counter value: " + counter)
+print("Counter value: ", counter)
 
 {% endhighlight %}
 </div>
@@ -800,11 +803,11 @@ print("Counter value: " + counter)
 
 #### Local vs. cluster modes
 
-The primary challenge is that the behavior of the above code is undefined. In local mode with a single JVM, the above code will sum the values within the RDD and store it in **counter**. This is because both the RDD and the variable **counter** are in the same memory space on the driver node.
+The behavior of the above code is undefined, and may not work as intended. To execute jobs, Spark breaks up the processing of RDD operations into tasks, each of which is executed by an executor. Prior to execution, Spark computes the task's **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor.
 
-However, in `cluster` mode, what happens is more complicated, and the above may not work as intended. To execute jobs, Spark breaks up the processing of RDD operations into tasks - each of which is operated on by an executor. Prior to execution, Spark computes the **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor. In `local` mode, there is only the one executors so everything shares the same closure. In other modes however, this is not the case and the executors running on separate worker nodes each have their own copy of the closure.
+The variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only see the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.
 
-What is happening here is that the variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only see the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.  
+In local mode, in some circumstances the `foreach` function will actually execute within the same JVM as the driver and will reference the same original **counter**, and may actually update it.
 
 To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#accumulators). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
 
@@ -1174,7 +1177,7 @@ that originally created it.
 
 In addition, each persisted RDD can be stored using a different *storage level*, allowing you, for example,
 to persist the dataset on disk, persist it in memory but as serialized Java objects (to save space),
-replicate it across nodes, or store it off-heap in [Tachyon](http://tachyon-project.org/).
+replicate it across nodes.
 These levels are set by passing a
 `StorageLevel` object ([Scala](api/scala/index.html#org.apache.spark.storage.StorageLevel),
 [Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
@@ -1215,24 +1218,11 @@ storage levels is:
   <td> MEMORY_ONLY_2, MEMORY_AND_DISK_2, etc.  </td>
   <td> Same as the levels above, but replicate each partition on two cluster nodes. </td>
 </tr>
-<tr>
-  <td> OFF_HEAP (experimental) </td>
-  <td> Store RDD in serialized format in <a href="http://tachyon-project.org">Tachyon</a>.
-    Compared to MEMORY_ONLY_SER, OFF_HEAP reduces garbage collection overhead and allows executors
-    to be smaller and to share a pool of memory, making it attractive in environments with
-    large heaps or multiple concurrent applications. Furthermore, as the RDDs reside in Tachyon,
-    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory
-    in Tachyon is discardable. Thus, Tachyon does not attempt to reconstruct a block that it evicts
-    from memory. If you plan to use Tachyon as the off heap store, Spark is compatible with Tachyon
-    out-of-the-box. Please refer to this <a href="http://tachyon-project.org/master/Running-Spark-on-Tachyon.html">page</a>
-    for the suggested version pairings.
-  </td>
-</tr>
 </table>
 
 **Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, 
 so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`, 
-`MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, `DISK_ONLY_2` and `OFF_HEAP`.*
+`MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, and `DISK_ONLY_2`.*
 
 Spark also automatically persists some intermediate data in shuffle operations (e.g. `reduceByKey`), even without users calling `persist`. This is done to avoid recomputing the entire input if a node fails during the shuffle. We still recommend users call `persist` on the resulting RDD if they plan to reuse it.
 
@@ -1256,11 +1246,6 @@ requests from a web application). *All* the storage levels provide full fault to
 recomputing lost data, but the replicated ones let you continue running tasks on the RDD without
 waiting to recompute a lost partition.
 
-* In environments with high amounts of memory or multiple applications, the experimental `OFF_HEAP`
-mode has several advantages:
-   * It allows multiple executors to share the same pool of memory in Tachyon.
-   * It significantly reduces garbage collection costs.
-   * Cached data is not lost if individual executors crash.
 
 ### Removing Data
 
@@ -1340,7 +1325,7 @@ value of the broadcast variable (e.g. if the variable is shipped to a new node l
 
 ## Accumulators
 
-Accumulators are variables that are only "added" to through an associative operation and can
+Accumulators are variables that are only "added" to through an associative and commutative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
 can add support for new types. If accumulators are created with a name, they will be

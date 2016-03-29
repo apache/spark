@@ -28,6 +28,7 @@ import org.eclipse.jetty.servlet.{DefaultServlet, ServletContextHandler, Servlet
 import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

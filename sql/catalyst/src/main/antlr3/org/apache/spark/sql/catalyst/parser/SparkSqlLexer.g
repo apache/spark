@@ -307,12 +307,12 @@ KW_AUTHORIZATION: 'AUTHORIZATION';
 KW_CONF: 'CONF';
 KW_VALUES: 'VALUES';
 KW_RELOAD: 'RELOAD';
-KW_YEAR: 'YEAR';
-KW_MONTH: 'MONTH';
-KW_DAY: 'DAY';
-KW_HOUR: 'HOUR';
-KW_MINUTE: 'MINUTE';
-KW_SECOND: 'SECOND';
+KW_YEAR: 'YEAR'|'YEARS';
+KW_MONTH: 'MONTH'|'MONTHS';
+KW_DAY: 'DAY'|'DAYS';
+KW_HOUR: 'HOUR'|'HOURS';
+KW_MINUTE: 'MINUTE'|'MINUTES';
+KW_SECOND: 'SECOND'|'SECONDS';
 KW_START: 'START';
 KW_TRANSACTION: 'TRANSACTION';
 KW_COMMIT: 'COMMIT';
@@ -324,6 +324,18 @@ KW_ISOLATION: 'ISOLATION';
 KW_LEVEL: 'LEVEL';
 KW_SNAPSHOT: 'SNAPSHOT';
 KW_AUTOCOMMIT: 'AUTOCOMMIT';
+KW_REFRESH: 'REFRESH';
+KW_OPTIONS: 'OPTIONS';
+KW_WEEK: 'WEEK'|'WEEKS';
+KW_MILLISECOND: 'MILLISECOND'|'MILLISECONDS';
+KW_MICROSECOND: 'MICROSECOND'|'MICROSECONDS';
+KW_CLEAR: 'CLEAR';
+KW_LAZY: 'LAZY';
+KW_CACHE: 'CACHE';
+KW_UNCACHE: 'UNCACHE';
+KW_DFS: 'DFS';
+
+KW_NATURAL: 'NATURAL';
 
 // Operators
 // NOTE: if you add a new function/operator, add it to sysFuncNames so that describe function _FUNC_ will work.
@@ -400,12 +412,6 @@ StringLiteral
     )+
     ;
 
-CharSetLiteral
-    :
-    StringLiteral
-    | '0' 'X' (HexDigit|Digit)+
-    ;
-
 BigintLiteral
     :
     (Digit)+ 'L'
@@ -421,9 +427,9 @@ TinyintLiteral
     (Digit)+ 'Y'
     ;
 
-DecimalLiteral
+DoubleLiteral
     :
-    Number 'B' 'D'
+    Number 'D'
     ;
 
 ByteLengthLiteral
@@ -433,7 +439,7 @@ ByteLengthLiteral
 
 Number
     :
-    (Digit)+ ( DOT (Digit)* (Exponent)? | Exponent)?
+    ((Digit+ (DOT Digit*)?) | (DOT Digit+)) Exponent?
     ;
 
 /*
@@ -456,10 +462,10 @@ An Identifier can be:
 - macro name
 - hint name
 - window name
-*/    
+*/
 Identifier
     :
-    (Letter | Digit) (Letter | Digit | '_')*
+    (Letter | Digit | '_')+
     | {allowQuotedId()}? QuotedIdentifier  /* though at the language level we allow all Identifiers to be QuotedIdentifiers; 
                                               at the API level only columns are allowed to be of this form */
     | '`' RegexComponent+ '`'
@@ -468,12 +474,7 @@ Identifier
 fragment    
 QuotedIdentifier 
     :
-    '`'  ( '``' | ~('`') )* '`' { setText(getText().substring(1, getText().length() -1 ).replaceAll("``", "`")); }
-    ;
-
-CharSetName
-    :
-    '_' (Letter | Digit | '_' | '-' | '.' | ':' )+
+    '`'  ( '``' | ~('`') )* '`' { setText(getText().replaceAll("``", "`")); }
     ;
 
 WS  :  (' '|'\r'|'\t'|'\n') {$channel=HIDDEN;}
@@ -484,3 +485,7 @@ COMMENT
     { $channel=HIDDEN; }
   ;
 
+/* Prevent that the lexer swallows unknown characters. */
+ANY
+ :.
+ ;

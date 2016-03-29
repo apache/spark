@@ -94,7 +94,7 @@ private[mesos] class MesosSubmitRequestServlet(
     val driverCores = sparkProperties.get("spark.driver.cores")
     val appArgs = request.appArgs
     val environmentVariables = request.environmentVariables
-    val name = request.sparkProperties.get("spark.app.name").getOrElse(mainClass)
+    val name = request.sparkProperties.getOrElse("spark.app.name", mainClass)
 
     // Construct driver description
     val conf = new SparkConf(false).setAll(sparkProperties)

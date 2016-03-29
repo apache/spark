@@ -46,7 +46,7 @@ object MultiBroadcastTest {
     val barr1 = sc.broadcast(arr1)
     val barr2 = sc.broadcast(arr2)
     val observedSizes: RDD[(Int, Int)] = sc.parallelize(1 to 10, slices).map { _ =>
-      (barr1.value.size, barr2.value.size)
+      (barr1.value.length, barr2.value.length)
     }
     // Collect the small RDD so we can print the observed sizes locally.
     observedSizes.collect().foreach(i => println(i))

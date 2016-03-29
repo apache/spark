@@ -18,7 +18,7 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -65,6 +65,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
             .setLossType(loss)
             .setMaxIter(maxIter)
             .setStepSize(learningRate)
+            .setSeed(123)
           compareAPIs(data, None, gbt, categoricalFeatures)
       }
     }
@@ -87,7 +88,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
     val preds = model.transform(df)
-    val predictions = preds.select("prediction").map(_.getDouble(0))
+    val predictions = preds.select("prediction").rdd.map(_.getDouble(0))
     // Checks based on SPARK-8736 (to ensure it is not doing classification)
     assert(predictions.max() > 2)
     assert(predictions.min() < -1)
@@ -104,6 +105,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMaxIter(5)
       .setStepSize(0.1)
       .setCheckpointInterval(2)
+      .setSeed(123)
     val model = gbt.fit(df)
 
     sc.checkpointDir = None
@@ -169,7 +171,7 @@ private object GBTRegressorSuite extends SparkFunSuite {
       categoricalFeatures: Map[Int, Int]): Unit = {
     val numFeatures = data.first().features.size
     val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
-    val oldGBT = new OldGBT(oldBoostingStrategy)
+    val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = gbt.fit(newData)
