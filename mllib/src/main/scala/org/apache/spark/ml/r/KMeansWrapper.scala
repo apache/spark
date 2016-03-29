@@ -19,7 +19,7 @@ package org.apache.spark.ml.r
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.clustering.{KMeansModel, KMeans}
+import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql.DataFrame
 
