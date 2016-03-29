@@ -467,13 +467,14 @@ object LDAModel extends MLReadable[LDAModel] {
       val metadataPath = new Path(path, "metadata").toString
       val metadataStr = sc.textFile(metadataPath, 1).first()
       val metadata = parse(metadataStr)
-
+      implicit val format = DefaultFormats
       val className = (metadata \ "class").extract[String]
       className match {
-        case c if classOf[LocalLDAModel].getName =>
+        case c if className == classOf[LocalLDAModel].getName =>
           LocalLDAModel.load(path)
-        case c if classOf[DistributedLDAModel].getName =>
+        case c if className == classOf[DistributedLDAModel].getName =>
           DistributedLDAModel.load(path)
+        case _ => throw new SparkException(s"$className is not a LDAModel")
       }
     }
   }
