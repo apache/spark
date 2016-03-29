@@ -57,13 +57,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private def logicalPlan = ds.logicalPlan
   private def sqlContext = ds.sqlContext
 
-  private def groupedData = {
-    new RelationalGroupedDataset(
-      Dataset.ofRows(sqlContext, logicalPlan),
-      groupingAttributes,
-      RelationalGroupedDataset.GroupByType)
-  }
-
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
    * specified type. The mapping of key columns to the type follows the same rules as `as` on
@@ -201,12 +194,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   def reduceGroups(f: ReduceFunction[V]): Dataset[(K, V)] = {
     reduceGroups(f.call _)
-  }
-
-  private def withEncoder(c: Column): Column = c match {
-    case tc: TypedColumn[_, _] =>
-      tc.withInputType(resolvedVEncoder.bind(dataAttributes), dataAttributes)
-    case _ => c
   }
 
   /**

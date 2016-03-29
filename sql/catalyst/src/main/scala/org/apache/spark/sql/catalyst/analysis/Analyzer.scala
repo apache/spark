@@ -42,9 +42,15 @@ import org.apache.spark.sql.types._
  * to resolve attribute references.
  */
 object SimpleAnalyzer
-  extends SimpleAnalyzer(new SimpleCatalystConf(caseSensitiveAnalysis = true))
-class SimpleAnalyzer(conf: CatalystConf)
-  extends Analyzer(new SessionCatalog(new InMemoryCatalog, conf), EmptyFunctionRegistry, conf)
+  extends SimpleAnalyzer(
+    EmptyFunctionRegistry,
+    new SimpleCatalystConf(caseSensitiveAnalysis = true))
+
+class SimpleAnalyzer(functionRegistry: FunctionRegistry, conf: CatalystConf)
+  extends Analyzer(
+    new SessionCatalog(new InMemoryCatalog, functionRegistry, conf),
+    functionRegistry,
+    conf)
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and

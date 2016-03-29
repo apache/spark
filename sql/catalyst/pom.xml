@@ -76,6 +76,10 @@
       <artifactId>antlr-runtime</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.antlr</groupId>
+      <artifactId>antlr4-runtime</artifactId>
+    </dependency>
+    <dependency>
       <groupId>commons-codec</groupId>
       <artifactId>commons-codec</artifactId>
     </dependency>
@@ -127,6 +131,21 @@
             <include>**/SparkSqlLexer.g</include>
             <include>**/SparkSqlParser.g</include>
           </includes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr4-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>antlr4</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <visitor>true</visitor>
+          <sourceDirectory>../catalyst/src/main/antlr4</sourceDirectory>
         </configuration>
       </plugin>
     </plugins>
