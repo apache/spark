@@ -40,6 +40,15 @@ import org.apache.spark.util.collection.BitSet
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
 
+  test("empty files") {
+    val table = createTable(Seq("file1" -> 1, "file2" -> 0, "file3" -> 0))
+    checkScan(table.select('c1)) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+      // We should pass empty files to FileFormat
+      assert(partitions.head.files.size == 3, "when checking partition 1")
+    }
+  }
+
   test("unpartitioned table, single partition") {
     val table =
       createTable(
@@ -299,8 +308,8 @@ class TestFileFormat extends FileFormat {
       files: Seq[FileStatus]): Option[StructType] =
     Some(
       StructType(Nil)
-          .add("c1", IntegerType)
-          .add("c2", IntegerType))
+        .add("c1", IntegerType)
+        .add("c2", IntegerType))
 
   /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
