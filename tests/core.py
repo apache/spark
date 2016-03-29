@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import doctest
 import json
-import logging
 import os
 import re
 import unittest
@@ -11,7 +10,6 @@ import tempfile
 from datetime import datetime, time, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
-import errno
 import signal
 from time import sleep
 
@@ -31,7 +29,6 @@ from airflow.utils import LoggingMixin, round_time
 from lxml import html
 from airflow.utils import AirflowException
 from airflow.configuration import AirflowConfigException
-from airflow.minihivecluster import MiniHiveCluster
 
 import six
 
