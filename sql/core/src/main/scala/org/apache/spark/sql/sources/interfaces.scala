@@ -484,6 +484,15 @@ trait FileFormat {
   }
 }
 
+private[sql] object FileFormat {
+  def appendPartitionValues(
+      rows: Iterator[InternalRow],
+      output: Seq[Attribute],
+      partitionValues: InternalRow): Iterator[InternalRow] = {
+
+  }
+}
+
 /**
  * A collection of data files from a partitioned relation, along with the partition values in the
  * form of an [[InternalRow]].
