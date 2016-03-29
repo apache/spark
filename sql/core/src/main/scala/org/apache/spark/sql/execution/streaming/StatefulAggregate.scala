@@ -19,24 +19,38 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.SparkPlan
 
-case class StateStoreRestore(
-    keyExpressions: Seq[Attribute],
+case class StateIdentifier(
     checkpointLocation: String,
     operatorId: Long,
-    batchId: Long,
-    child: SparkPlan) extends execution.UnaryNode {
+    batchId: Long)
+
+trait StatefulOperation extends SparkPlan {
+  def stateId: Option[StateIdentifier]
+
+  protected def getStateId: StateIdentifier = attachTree(this) {
+    stateId.getOrElse {
+      throw new IllegalStateException("State location not present for execution")
+    }
+  }
+}
+
+case class StateStoreRestore(
+    keyExpressions: Seq[Attribute],
+    stateId: Option[StateIdentifier],
+    child: SparkPlan) extends execution.UnaryNode with StatefulOperation {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithStateStore(
-      checkpointLocation,
-      operatorId = operatorId,
-      storeVersion = batchId,
+      getStateId.checkpointLocation,
+      operatorId = getStateId.operatorId,
+      storeVersion = getStateId.batchId,
       keyExpressions.toStructType,
       child.output.toStructType,
       new StateStoreConf(sqlContext.conf),
@@ -61,16 +75,14 @@ case class StateStoreRestore(
 
 case class StateStoreSave(
     keyExpressions: Seq[Attribute],
-    checkpointLocation: String,
-    operatorId: Long,
-    batchId: Long,
-    child: SparkPlan) extends execution.UnaryNode {
+    stateId: Option[StateIdentifier],
+    child: SparkPlan) extends execution.UnaryNode with StatefulOperation {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithStateStore(
-      checkpointLocation,
-      operatorId = operatorId,
-      storeVersion = batchId,
+      getStateId.checkpointLocation,
+      operatorId = getStateId.operatorId,
+      storeVersion = getStateId.batchId,
       keyExpressions.toStructType,
       child.output.toStructType,
       new StateStoreConf(sqlContext.conf),

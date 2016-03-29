@@ -239,67 +239,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     var operatorId = 0
 
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case Aggregate(
-             Seq(g: Attribute),
-             Seq(g2, c @ Alias(agg @ AggregateExpression(Count(_), _, _, _), _)),
-             child) if g == g2 =>
-        val partialCount = AttributeReference("partial", LongType)()
-
-        val partial = TungstenAggregate(
-          requiredChildDistributionExpressions = None,
-          groupingExpressions = g :: Nil,
-          aggregateExpressions = agg.copy(mode = Partial) :: Nil,
-          aggregateAttributes = agg.aggregateFunction.aggBufferAttributes,
-          initialInputBufferOffset = 0,
-          resultExpressions = g +: agg.aggregateFunction.inputAggBufferAttributes,
-          child = planLater(child))
-
-        val partialMerged1 = TungstenAggregate(
-          requiredChildDistributionExpressions = Some(g :: Nil),
-          groupingExpressions = g :: Nil,
-          aggregateExpressions = agg.copy(mode = PartialMerge) :: Nil,
-          aggregateAttributes = agg.aggregateFunction.aggBufferAttributes,
-          initialInputBufferOffset = 1,
-          resultExpressions = g +: agg.aggregateFunction.inputAggBufferAttributes,
-          child = partial)
-
-        val restored = StateStoreRestore(
-          g :: Nil,
-          checkpointLocation,
-          operatorId = operatorId,
-          batchId = batchId,
-          partialMerged1)
-
-        val partialMerged2 = TungstenAggregate(
-          requiredChildDistributionExpressions = Some(g :: Nil),
-          groupingExpressions = g :: Nil,
-          aggregateExpressions = agg.copy(mode = PartialMerge) :: Nil,
-          aggregateAttributes = agg.aggregateFunction.aggBufferAttributes,
-          initialInputBufferOffset = 1,
-          resultExpressions = g +: agg.aggregateFunction.inputAggBufferAttributes,
-          child = restored)
-
-        val saved = StateStoreSave(
-          g :: Nil,
-          checkpointLocation,
-          operatorId = operatorId,
-          batchId = batchId,
-          partialMerged2)
-
-        val finalOutput = TungstenAggregate(
-          requiredChildDistributionExpressions = Some(g :: Nil),
-          groupingExpressions = g :: Nil,
-          aggregateExpressions = agg.copy(mode = Final) :: Nil,
-          aggregateAttributes = partialCount :: Nil,
-          initialInputBufferOffset = 1,
-          resultExpressions = g :: partialCount :: Nil,
-          child = saved)
-
+      case PhysicalAggregation(
+        namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
         operatorId += 1
-        finalOutput :: Nil
 
-      case a: Aggregate =>
-        sys.error("Unsupported Aggregation!")
+        aggregate.Utils.planStreamingAggregation(
+          checkpointLocation,
+          batchId,
+          operatorId,
+          namedGroupingExpressions,
+          aggregateExpressions,
+          rewrittenResultExpressions,
+          planLater(child))
+
       case _ => Nil
     }
   }
@@ -310,7 +262,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(
-             namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
+          groupingExpressions, aggregateExpressions, resultExpressions, child) =>
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
@@ -328,23 +280,23 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 "aggregate functions which don't support partial aggregation.")
             } else {
               aggregate.Utils.planAggregateWithoutPartial(
-                namedGroupingExpressions,
+                groupingExpressions,
                 aggregateExpressions,
-                rewrittenResultExpressions,
+                resultExpressions,
                 planLater(child))
             }
           } else if (functionsWithDistinct.isEmpty) {
             aggregate.Utils.planAggregateWithoutDistinct(
-              namedGroupingExpressions,
+              groupingExpressions,
               aggregateExpressions,
-              rewrittenResultExpressions,
+              resultExpressions,
               planLater(child))
           } else {
             aggregate.Utils.planAggregateWithOneDistinct(
-              namedGroupingExpressions,
+              groupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
-              rewrittenResultExpressions,
+              resultExpressions,
               planLater(child))
           }
 

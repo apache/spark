@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{ExprId, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -56,19 +57,5 @@ case class ScalarSubquery(
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     Literal.create(result, dataType).genCode(ctx, ev)
-  }
-}
-
-/**
- * Convert the subquery from logical plan into executed plan.
- */
-case class PlanSubqueries(sessionState: SessionState) extends Rule[SparkPlan] {
-  def apply(plan: SparkPlan): SparkPlan = {
-    plan.transformAllExpressions {
-      case subquery: expressions.ScalarSubquery =>
-        val sparkPlan = sessionState.planner.plan(ReturnAnswer(subquery.query)).next()
-        val executedPlan = sessionState.prepareForExecution.execute(sparkPlan)
-        ScalarSubquery(executedPlan, subquery.exprId)
-    }
   }
 }

@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.rules.Rule
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -33,7 +34,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{SparkPlan, QueryExecution}
 import org.apache.spark.sql.util.ContinuousQueryListener
 import org.apache.spark.sql.util.ContinuousQueryListener._
 
@@ -376,8 +377,38 @@ class StreamExecution(
           checkpointLocation = checkpointFile("state"),
           batchId = currentBatchId - 1) :: Nil
 
-    lastExecution = new QueryExecution(ctx, newPlan)
-    val executedPlan = lastExecution.executedPlan
+    object UnaryPlan {
+      def unapply(a: Any): Option[(SparkPlan, SparkPlan)] = a match {
+        case s: SparkPlan if s.children.size == 1 => Some((s, s.children.head))
+        case _ => None
+      }
+    }
+
+    lastExecution = new QueryExecution(ctx, newPlan) {
+      var operatorId = 0
+
+      override def preparations = {
+        /** Locates save/restore pairs surounding aggregation. */
+        val state = new Rule[SparkPlan] {
+          override def apply(plan: SparkPlan): SparkPlan = plan transform {
+            case StateStoreSave(keys, None,
+                   UnaryPlan(agg,
+                     StateStoreRestore(keys2, None, child))) =>
+              val stateId = StateIdentifier(checkpointFile("state"), operatorId, currentBatchId - 1)
+              StateStoreSave(
+                keys,
+                Some(stateId),
+                agg.withNewChildren(
+                  StateStoreRestore(
+                    keys,
+                    Some(stateId),
+                    child) :: Nil))
+          }
+        }
+        state +: super.preparations
+      }
+    }
+    lastExecution.executedPlan
     val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
     logDebug(s"Optimized batch in ${optimizerTime}ms")
 
