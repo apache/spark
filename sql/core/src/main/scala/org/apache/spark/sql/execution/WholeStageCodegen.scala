@@ -297,7 +297,10 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
       WholeStageCodegen.PIPELINE_DURATION_METRIC))
 
-  private[sql] def doCodeGen(): (CodegenContext, String) = {
+  /**
+   * Returns the tuple of the codegen context and the actual generated source code.
+   */
+  def doCodeGen(): (CodegenContext, String) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     val references = ctx.references.toArray
