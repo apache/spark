@@ -21,9 +21,9 @@ import datetime
 import unittest
 import time
 
-from airflow import models
+from airflow import models, AirflowException
 from airflow.operators import DummyOperator, BashOperator
-from airflow.utils import State, AirflowException
+from airflow.utils.state import State
 
 
 class DagTest(unittest.TestCase):
