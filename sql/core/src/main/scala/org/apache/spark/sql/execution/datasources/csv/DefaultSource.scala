@@ -114,7 +114,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         }
       }
 
-      dropHeaderLine(file, lineIterator, csvOptions)
+      CSVRelation.dropHeaderLine(file, lineIterator, csvOptions)
 
       val unsafeRowIterator = {
         val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
@@ -130,24 +130,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       unsafeRowIterator.map { dataRow =>
         appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
       }
-    }
-  }
-
-  // Skips the header line of each file if the `header` option is set to true.
-  private def dropHeaderLine(
-      file: PartitionedFile, lines: Iterator[String], csvOptions: CSVOptions): Unit = {
-    // TODO What if the first partitioned file consists of only comments and empty lines?
-    if (csvOptions.headerFlag && file.start == 0) {
-      val nonEmptyLines = if (csvOptions.isCommentSet) {
-        val commentPrefix = csvOptions.comment.toString
-        lines.dropWhile { line =>
-          line.trim.isEmpty || line.trim.startsWith(commentPrefix)
-        }
-      } else {
-        lines.dropWhile(_.trim.isEmpty)
-      }
-
-      if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
     }
   }
 

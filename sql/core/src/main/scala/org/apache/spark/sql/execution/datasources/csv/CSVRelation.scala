@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -123,6 +124,24 @@ object CSVRelation extends Logging {
       options: CSVOptions): RDD[InternalRow] = {
     val parser = csvParser(schema, requiredColumns, options)
     tokenizedRDD.flatMap(parser(_).toSeq)
+  }
+
+  // Skips the header line of each file if the `header` option is set to true.
+  def dropHeaderLine(
+      file: PartitionedFile, lines: Iterator[String], csvOptions: CSVOptions): Unit = {
+    // TODO What if the first partitioned file consists of only comments and empty lines?
+    if (csvOptions.headerFlag && file.start == 0) {
+      val nonEmptyLines = if (csvOptions.isCommentSet) {
+        val commentPrefix = csvOptions.comment.toString
+        lines.dropWhile { line =>
+          line.trim.isEmpty || line.trim.startsWith(commentPrefix)
+        }
+      } else {
+        lines.dropWhile(_.trim.isEmpty)
+      }
+
+      if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
+    }
   }
 }
 
