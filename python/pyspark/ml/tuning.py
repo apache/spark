@@ -96,7 +96,7 @@ class ParamGridBuilder(object):
 
 class ValidatorParams(Params):
     """
-    Validator Params
+    Common params for TrainValidationSplit and CrossValidator.
     """
 
     estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
@@ -150,8 +150,7 @@ class ValidatorParams(Params):
     @classmethod
     def _from_java(cls, java_stage):
         """
-        Given a Java CrossValidator, create and return a Python wrapper of it.
-        Used for ML persistence.
+        Return Python estimator, estimatorParamMaps, and evaluator from a Java ValidatorParams.
         """
 
         # Load information from java_stage to the instance.
@@ -163,9 +162,7 @@ class ValidatorParams(Params):
 
     def _to_java(self):
         """
-        Transfer this instance to a Java CrossValidator.  Used for ML persistence.
-
-        :return: Java object equivalent to this instance.
+        Return Java estimator, estimatorParamMaps, and evaluator from this Python instance.
         """
 
         gateway = SparkContext._gateway
@@ -348,7 +345,7 @@ class CrossValidator(Estimator, ValidatorParams, HasSeed, MLReadable, MLWritable
 
     def _to_java(self):
         """
-        Transfer this instance to a Java CrossValidator.  Used for ML persistence.
+        Transfer this instance to a Java CrossValidator. Used for ML persistence.
 
         :return: Java object equivalent to this instance.
         """
@@ -414,7 +411,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
     @classmethod
     def _from_java(cls, java_stage):
         """
-        Given a Java CrossValidator, create and return a Python wrapper of it.
+        Given a Java CrossValidatorModel, create and return a Python wrapper of it.
         Used for ML persistence.
         """
 
@@ -429,7 +426,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
 
     def _to_java(self):
         """
-        Transfer this instance to a Java CrossValidator.  Used for ML persistence.
+        Transfer this instance to a Java CrossValidatorModel. Used for ML persistence.
 
         :return: Java object equivalent to this instance.
         """
@@ -595,7 +592,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasSeed, MLReadable, MLWr
     @classmethod
     def _from_java(cls, java_stage):
         """
-        Given a Java CrossValidator, create and return a Python wrapper of it.
+        Given a Java TrainValidationSplit, create and return a Python wrapper of it.
         Used for ML persistence.
         """
 
@@ -609,7 +606,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasSeed, MLReadable, MLWr
 
     def _to_java(self):
         """
-        Transfer this instance to a Java CrossValidator.  Used for ML persistence.
+        Transfer this instance to a Java TrainValidationSplit. Used for ML persistence.
 
         :return: Java object equivalent to this instance.
         """
@@ -673,7 +670,7 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
     @classmethod
     def _from_java(cls, java_stage):
         """
-        Given a Java CrossValidator, create and return a Python wrapper of it.
+        Given a Java TrainValidationSplitModel, create and return a Python wrapper of it.
         Used for ML persistence.
         """
 
@@ -688,7 +685,7 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
 
     def _to_java(self):
         """
-        Transfer this instance to a Java CrossValidator.  Used for ML persistence.
+        Transfer this instance to a Java TrainValidationSplitModel. Used for ML persistence.
 
         :return: Java object equivalent to this instance.
         """

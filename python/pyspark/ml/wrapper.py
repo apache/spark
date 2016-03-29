@@ -64,7 +64,6 @@ class JavaWrapper(Params):
         param = self._resolveParam(param)
         java_param = self._java_obj.getParam(param.name)
         java_value = _py2java(sc, value)
-        # return java_param.w(java_value)
         return java_param, java_value
 
     def _transfer_params_to_java(self):
@@ -74,9 +73,7 @@ class JavaWrapper(Params):
         paramMap = self.extractParamMap()
         for param in self.params:
             if param in paramMap:
-                # pair = self._make_java_param_pair(param, paramMap[param])
                 p, v = self._make_java_param_pair(param, paramMap[param])
-                # self._java_obj.set(pair)
                 self._java_obj.set(p.w(v))
 
     def _transfer_extra_params_to_java(self, extra):
