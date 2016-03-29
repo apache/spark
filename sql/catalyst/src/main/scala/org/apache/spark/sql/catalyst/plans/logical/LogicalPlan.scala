@@ -252,7 +252,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
       // No matches.
       case Seq() =>
-        logTrace(s"Could not find $name in ${input.mkString(", ")}")
+        logTrace(s"Could not find $name in ${input.map(_.qualifiedName).mkString(", ")}")
         None
 
       // More than one match.
