@@ -74,12 +74,9 @@ class SparkSqlAstBuilder extends AstBuilder {
    * SHOW TABLES [(IN|FROM) database_name] ['identifier_with_wildcards']
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.qualifiedName() != null) {
-      logWarning("SHOW TABLES qualifiedName is ignored.")
-    }
     ShowTablesCommand(
       Option(ctx.db).map(_.getText),
-      Option(ctx.pattern).map(p => unquoteString(p.getText)))
+      Option(ctx.pattern).map(string))
   }
 
   /**
@@ -88,10 +85,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards']
    */
   override def visitShowDatabases(ctx: ShowDatabasesContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.qualifiedName() != null) {
-      logWarning("SHOW DATABASES qualifiedName is ignored.")
-    }
-    ShowDatabasesCommand(Option(ctx.pattern).map(p => unquoteString(p.getText)))
+    ShowDatabasesCommand(Option(ctx.pattern).map(string))
   }
 
   /**

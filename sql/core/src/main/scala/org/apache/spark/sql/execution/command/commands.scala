@@ -331,11 +331,8 @@ case class ShowTablesCommand(
 
   // The result of SHOW TABLES has two columns, tableName and isTemporary.
   override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("tableName", StringType, false) ::
-      StructField("isTemporary", BooleanType, false) :: Nil)
-
-    schema.toAttributes
+    AttributeReference("tableName", StringType, nullable = false)() ::
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -345,11 +342,10 @@ case class ShowTablesCommand(
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
     val tables =
       tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
-    val rows = tables.map { t =>
+    tables.map { t =>
       val isTemp = t.database.isEmpty
       Row(t.table, isTemp)
     }
-    rows
   }
 }
 
@@ -366,18 +362,14 @@ case class ShowDatabasesCommand(databasePattern: Option[String]) extends Runnabl
 
   // The result of SHOW DATABASES has one column called 'result'
   override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("result", StringType, false) :: Nil)
-
-    schema.toAttributes
+    AttributeReference("result", StringType, nullable = false)() :: Nil
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
     val databases =
       databasePattern.map(catalog.listDatabases(_)).getOrElse(catalog.listDatabases())
-    val rows = databases.map{d => Row(d)}
-    rows
+    databases.map { d => Row(d) }
   }
 }
 

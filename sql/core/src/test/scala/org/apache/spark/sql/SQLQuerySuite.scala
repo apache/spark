@@ -2400,11 +2400,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |)
         """.stripMargin)
       checkAnswer(
-        sql("SHOW TABLES FROM default 'show1*'"),
+        sql("SHOW TABLES IN default 'show1*'"),
         Row("show1a", true) :: Nil)
 
       checkAnswer(
-        sql("SHOW TABLES FROM default 'show1*|show2*'"),
+        sql("SHOW TABLES IN default 'show1*|show2*'"),
         Row("show1a", true) ::
           Row("show2b", true) :: Nil)
 
@@ -2416,7 +2416,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       assert(
         sql("SHOW TABLES").count() >= 2)
       assert(
-        sql("SHOW TABLES FROM default").count() >= 2)
+        sql("SHOW TABLES IN default").count() >= 2)
     }
   }
 }
