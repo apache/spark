@@ -319,10 +319,14 @@ private[spark] class Executor(
 
         case _: TaskKilledException | _: InterruptedException if task.killed =>
           logInfo(s"Executor killed $taskName (TID $taskId)")
+          // Reset the interrupted status of the thread to update the status
+          Thread.interrupted()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
 
         case cDE: CommitDeniedException =>
           val reason = cDE.toTaskEndReason
+          // Reset the interrupted status of the thread to update the status
+          Thread.interrupted()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case t: Throwable =>
@@ -352,6 +356,8 @@ private[spark] class Executor(
                 ser.serialize(new ExceptionFailure(t, accumulatorUpdates, preserveCause = false))
             }
           }
+          // Reset the interrupted status of the thread to update the status
+          Thread.interrupted()
           execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
