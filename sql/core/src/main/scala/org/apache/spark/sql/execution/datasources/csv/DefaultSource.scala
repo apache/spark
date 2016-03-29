@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.net.URI
 import java.nio.charset.{Charset, StandardCharsets}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.{FileSplit, LineRecordReader}
-import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -34,7 +31,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{JoinedRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.datasources.{CompressionCodecs, PartitionedFile, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{CompressionCodecs, HadoopFileLinesReader, PartitionedFile}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -110,38 +107,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val broadcastedConf = sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
 
     (file: PartitionedFile) => {
-      val fileSplit = {
-        val filePath = new Path(new URI(file.filePath))
-        new FileSplit(filePath, file.start, file.length, Array.empty)
-      }
-
-      val hadoopAttemptContext = {
+      val lineIterator = {
         val conf = broadcastedConf.value.value
-        val attemptID = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-        new TaskAttemptContextImpl(conf, attemptID)
-      }
-
-      val reader = new LineRecordReader()
-      reader.initialize(fileSplit, hadoopAttemptContext)
-
-      val lineIterator = new RecordReaderIterator(reader).map { line =>
-        new String(line.getBytes, 0, line.getLength, csvOptions.charset)
-      }
-
-      // Skips the header line of each file if the `header` option is set to true.
-      // TODO What if the first partitioned file consists of only comments and empty lines?
-      if (csvOptions.headerFlag && file.start == 0) {
-        val nonEmptyLines = if (csvOptions.isCommentSet) {
-          val commentPrefix = csvOptions.comment.toString
-          lineIterator.dropWhile { line =>
-            line.trim.isEmpty || line.trim.startsWith(commentPrefix)
-          }
-        } else {
-          lineIterator.dropWhile(_.trim.isEmpty)
+        new HadoopFileLinesReader(file, conf).map { line =>
+          new String(line.getBytes, 0, line.getLength, csvOptions.charset)
         }
-
-        if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
       }
+
+      dropHeaderLine(file, lineIterator, csvOptions)
 
       val unsafeRowIterator = {
         val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
@@ -157,6 +130,24 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       unsafeRowIterator.map { dataRow =>
         appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
       }
+    }
+  }
+
+  // Skips the header line of each file if the `header` option is set to true.
+  private def dropHeaderLine(
+      file: PartitionedFile, lines: Iterator[String], csvOptions: CSVOptions): Unit = {
+    // TODO What if the first partitioned file consists of only comments and empty lines?
+    if (csvOptions.headerFlag && file.start == 0) {
+      val nonEmptyLines = if (csvOptions.isCommentSet) {
+        val commentPrefix = csvOptions.comment.toString
+        lines.dropWhile { line =>
+          line.trim.isEmpty || line.trim.startsWith(commentPrefix)
+        }
+      } else {
+        lines.dropWhile(_.trim.isEmpty)
+      }
+
+      if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
     }
   }
 
