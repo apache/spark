@@ -478,10 +478,10 @@ object LDAModel extends MLReadable[LDAModel] {
     }
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def read: MLReader[LDAModel] = new LDAModelReader
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def load(path: String): LDAModel = super.load(path)
 }
 
