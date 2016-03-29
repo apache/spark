@@ -187,12 +187,11 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
   test("should support all NumericType labels and not support other types") {
     val nb = new NaiveBayes()
-    MLTestingUtils.checkPredictorAcceptAllNumericTypes[NaiveBayesModel, NaiveBayes](
-      nb, sqlContext) { (expected, actual) =>
+    MLTestingUtils.checkNumericTypes[NaiveBayesModel, NaiveBayes](
+      nb, isClassification = true, sqlContext) { (expected, actual) =>
         assert(expected.pi === actual.pi)
         assert(expected.theta === actual.theta)
       }
-    MLTestingUtils.checkPredictorRejectNotNumericTypes(nb, sqlContext)
   }
 }
 

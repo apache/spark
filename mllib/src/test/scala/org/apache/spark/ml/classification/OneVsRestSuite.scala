@@ -225,10 +225,10 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     checkModelData(ovaModel, newOvaModel)
   }
 
-  test("should support all NumericType labels") {
+  test("should support all NumericType labels and not support other types") {
     val ovr = new OneVsRest().setClassifier(new LogisticRegression)
-    MLTestingUtils.checkEstimatorAcceptAllNumericTypes[OneVsRestModel, OneVsRest](
-      ovr, sqlContext) { (expected, actual) =>
+    MLTestingUtils.checkNumericTypes[OneVsRestModel, OneVsRest](
+      ovr, isClassification = true, sqlContext) { (expected, actual) =>
         val expectedModels = expected.models.map(m => m.asInstanceOf[LogisticRegressionModel])
         val actualModels = actual.models.map(m => m.asInstanceOf[LogisticRegressionModel])
         assert(expectedModels.length === actualModels.length)
@@ -237,16 +237,6 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
           assert(e.coefficients.toArray === a.coefficients.toArray)
         }
       }
-  }
-
-  test("shouldn't support non NumericType labels") {
-    val dfWithStringLabels = MLTestingUtils.generateDFWithStringLabelCol(sqlContext)
-    val ovr = new OneVsRest().setClassifier(new LogisticRegression)
-    // thrown by AttributeFactory#fromStructField and not by Predictor#validateAndTransformSchema
-    // because OneVsRest reimplements the fit method
-    intercept[IllegalArgumentException] {
-      ovr.fit(dfWithStringLabels)
-    }
   }
 }
 

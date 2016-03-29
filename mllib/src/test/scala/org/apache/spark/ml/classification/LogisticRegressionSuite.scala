@@ -937,12 +937,11 @@ class LogisticRegressionSuite
 
   test("should support all NumericType labels and not support other types") {
     val lr = new LogisticRegression()
-    MLTestingUtils.checkPredictorAcceptAllNumericTypes[LogisticRegressionModel, LogisticRegression](
-      lr, sqlContext) { (expected, actual) =>
+    MLTestingUtils.checkNumericTypes[LogisticRegressionModel, LogisticRegression](
+      lr, isClassification = true, sqlContext) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
       }
-    MLTestingUtils.checkPredictorRejectNotNumericTypes(lr, sqlContext)
   }
 }
 

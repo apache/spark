@@ -349,7 +349,7 @@ class AFTSurvivalRegressionSuite
 
   test("should support all NumericType labels") {
     val aft = new AFTSurvivalRegression()
-    MLTestingUtils.checkEstimatorAcceptAllNumericTypes[
+    MLTestingUtils.checkNumericTypes[
         AFTSurvivalRegressionModel, AFTSurvivalRegression](
       aft, sqlContext) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
