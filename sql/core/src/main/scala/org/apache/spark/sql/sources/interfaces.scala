@@ -549,18 +549,15 @@ class HDFSFileCatalog(
 
   refresh()
 
-  private def isInvalidFile(f: FileStatus): Boolean =
-    f.getPath.getName.startsWith("_") || f.getLen == 0
-
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
     if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles().filterNot(isInvalidFile)) :: Nil
+      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
         case PartitionDirectory(values, path) =>
           Partition(
             values,
-            getStatus(path).filterNot(isInvalidFile))
+            getStatus(path).filterNot(_.getPath.getName startsWith "_"))
       }
     }
   }
