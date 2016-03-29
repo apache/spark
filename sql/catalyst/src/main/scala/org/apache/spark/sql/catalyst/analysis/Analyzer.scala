@@ -862,12 +862,13 @@ class Analyzer(
           if (missingExpr.nonEmpty) {
             extractedExprBuffer += ne
           }
-          ne.toAttribute
+          // alias will be cleaned in the rule CleanupAliases
+          ne
         case e: Expression if e.foldable =>
           e // No need to create an attribute reference if it will be evaluated as a Literal.
         case e: Expression =>
           // For other expressions, we extract it and replace it with an AttributeReference (with
-          // an interal column name, e.g. "_w0").
+          // an internal column name, e.g. "_w0").
           val withName = Alias(e, s"_w${extractedExprBuffer.length}")()
           extractedExprBuffer += withName
           withName.toAttribute
@@ -1222,7 +1223,7 @@ object ResolveUpCast extends Rule[LogicalPlan] {
           fail(child, DateType, walkedTypePath)
         case (StringType, to: NumericType) =>
           fail(child, to, walkedTypePath)
-        case _ => Cast(child, dataType)
+        case _ => Cast(child, dataType.asNullable)
       }
     }
   }

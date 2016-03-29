@@ -94,7 +94,13 @@ abstract class QueryTest extends PlanTest {
            """.stripMargin, e)
     }
 
-    if (decoded != expectedAnswer.toSet) {
+    // Handle the case where the return type is an array
+    val isArray = decoded.headOption.map(_.getClass.isArray).getOrElse(false)
+    def normalEquality = decoded == expectedAnswer.toSet
+    def expectedAsSeq = expectedAnswer.map(_.asInstanceOf[Array[_]].toSeq).toSet
+    def decodedAsSeq = decoded.map(_.asInstanceOf[Array[_]].toSeq)
+
+    if (!((isArray && expectedAsSeq == decodedAsSeq) || normalEquality)) {
       val expected = expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted
       val actual = decoded.toSet.toSeq.map((a: Any) => a.toString).sorted
 

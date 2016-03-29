@@ -110,6 +110,14 @@ trait CaseWhenLike extends Expression {
     // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
     thenList.exists(_.nullable) || (elseValue.map(_.nullable).getOrElse(true))
   }
+
+  /**
+   * Whether should it fallback to interpret mode or not.
+   * @return
+   */
+  protected def shouldFallback: Boolean = {
+    branches.length > 20
+  }
 }
 
 // scalastyle:off
@@ -119,7 +127,7 @@ trait CaseWhenLike extends Expression {
  * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
  */
 // scalastyle:on
-case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
+case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike with CodegenFallback {
 
   // Use private[this] Array to speed up evaluation.
   @transient private[this] lazy val branchesArr = branches.toArray
@@ -157,6 +165,11 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    if (shouldFallback) {
+      // Fallback to interpreted mode if there are too many branches, as it may reach the
+      // 64K limit (limit on bytecode size for a single function).
+      return super[CodegenFallback].genCode(ctx, ev)
+    }
     val len = branchesArr.length
     val got = ctx.freshName("got")
 
@@ -213,7 +226,8 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
  * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
  */
 // scalastyle:on
-case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseWhenLike {
+case class CaseKeyWhen(key: Expression, branches: Seq[Expression])
+  extends CaseWhenLike with CodegenFallback {
 
   // Use private[this] Array to speed up evaluation.
   @transient private[this] lazy val branchesArr = branches.toArray
@@ -257,6 +271,11 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    if (shouldFallback) {
+      // Fallback to interpreted mode if there are too many branches, as it may reach the
+      // 64K limit (limit on bytecode size for a single function).
+      return super[CodegenFallback].genCode(ctx, ev)
+    }
     val keyEval = key.gen(ctx)
     val len = branchesArr.length
     val got = ctx.freshName("got")

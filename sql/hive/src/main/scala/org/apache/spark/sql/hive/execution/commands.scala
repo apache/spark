@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -70,7 +70,23 @@ case class DropTable(
       case e: Throwable => log.warn(s"${e.getMessage}", e)
     }
     hiveContext.invalidateTable(tableName)
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
+    val tableNameForHive = {
+      // Hive's parser will unquote an identifier (see the rule of QuotedIdentifier in
+      // HiveLexer.g of Hive 1.2.1). For the DROP TABLE command that we pass in Hive, we
+      // will use the quoted form (db.tableName) if the table name starts with a _.
+      // Otherwise, we keep the unquoted form (`db`.`tableName`), which is the same as tableName
+      // passed into this DropTable class. Please note that although QuotedIdentifier rule
+      // allows backticks appearing in an identifier, Hive does not actually allow such
+      // an identifier be a table name. So, we do not check if a table name part has
+      // any backtick or not.
+      //
+      // This change is at here because this patch is just for 1.6 branch and we try to
+      // avoid of affecting normal cases (tables do not use _ as the first character of
+      // their name).
+      val identifier = SqlParser.parseTableIdentifier(tableName)
+      if (identifier.table.startsWith("_")) identifier.quotedString else identifier.unquotedString
+    }
+    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableNameForHive")
     hiveContext.catalog.unregisterTable(TableIdentifier(tableName))
     Seq.empty[Row]
   }

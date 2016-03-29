@@ -41,10 +41,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.setCatalog("foo")
     conn.prepareStatement("CREATE TABLE bar (c0 text, c1 integer, c2 double precision, c3 bigint, "
       + "c4 bit(1), c5 bit(10), c6 bytea, c7 boolean, c8 inet, c9 cidr, "
-      + "c10 integer[], c11 text[])").executeUpdate()
+      + "c10 integer[], c11 text[], c12 real[])").executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES ('hello', 42, 1.25, 123456789012345, B'0', "
       + "B'1000100101', E'\\\\xDEADBEEF', true, '172.16.0.42', '192.168.0.0/16', "
-      + """'{1, 2}', '{"a", null, "b"}')""").executeUpdate()
+      + """'{1, 2}', '{"a", null, "b"}', '{0.11, 0.22}')""").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -52,7 +52,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass)
-    assert(types.length == 12)
+    assert(types.length == 13)
     assert(classOf[String].isAssignableFrom(types(0)))
     assert(classOf[java.lang.Integer].isAssignableFrom(types(1)))
     assert(classOf[java.lang.Double].isAssignableFrom(types(2)))
@@ -65,6 +65,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(classOf[String].isAssignableFrom(types(9)))
     assert(classOf[Seq[Int]].isAssignableFrom(types(10)))
     assert(classOf[Seq[String]].isAssignableFrom(types(11)))
+    assert(classOf[Seq[Double]].isAssignableFrom(types(12)))
     assert(rows(0).getString(0).equals("hello"))
     assert(rows(0).getInt(1) == 42)
     assert(rows(0).getDouble(2) == 1.25)
@@ -80,6 +81,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getString(9) == "192.168.0.0/16")
     assert(rows(0).getSeq(10) == Seq(1, 2))
     assert(rows(0).getSeq(11) == Seq("a", null, "b"))
+    assert(rows(0).getSeq(12).toSeq == Seq(0.11f, 0.22f))
   }
 
   test("Basic write test") {

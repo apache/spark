@@ -361,7 +361,7 @@ object MapObjects {
  *                       to handle collection elements.
  * @param inputData An expression that when evaluted returns a collection object.
  */
-case class MapObjects(
+case class MapObjects private(
     loopVar: LambdaVariable,
     lambdaFunction: Expression,
     inputData: Expression) extends Expression {
@@ -633,8 +633,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
  * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.
  */
-case class AssertNotNull(
-    child: Expression, parentType: String, fieldName: String, fieldType: String)
+case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   extends UnaryExpression {
 
   override def dataType: DataType = child.dataType
@@ -647,6 +646,14 @@ case class AssertNotNull(
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val childGen = child.gen(ctx)
 
+    // This is going to be a string literal in generated java code, so we should escape `"` by `\"`
+    // and wrap every line with `"` at left side and `\n"` at right side, and finally concat them by
+    // ` + `.
+    val typePathString = walkedTypePath
+      .map(s => s.replaceAll("\"", "\\\\\""))
+      .map(s => '"' + s + "\\n\"")
+      .mkString(" + ")
+
     ev.isNull = "false"
     ev.value = childGen.value
 
@@ -655,7 +662,8 @@ case class AssertNotNull(
 
       if (${childGen.isNull}) {
         throw new RuntimeException(
-          "Null value appeared in non-nullable field $parentType.$fieldName of type $fieldType. " +
+          "Null value appeared in non-nullable field:\\n" +
+          $typePathString +
           "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
           "please try to use scala.Option[_] or other nullable types " +
           "(e.g. java.lang.Integer instead of int/scala.Int)."

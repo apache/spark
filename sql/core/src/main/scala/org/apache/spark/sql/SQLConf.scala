@@ -396,7 +396,7 @@ private[spark] object SQLConf {
 
   val PARTITION_MAX_FILES =
     intConf("spark.sql.sources.maxConcurrentWrites",
-      defaultValue = Some(5),
+      defaultValue = Some(1),
       doc = "The maximum number of concurrent files to open before falling back on sorting when " +
             "writing out files using dynamic partitioning.")
 

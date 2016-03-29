@@ -23,8 +23,8 @@ usage: release-build.sh <package|docs|publish-snapshot|publish-release>
 Creates build deliverables from a Spark commit.
 
 Top level targets are
-  package: Create binary packages and copy them to people.apache
-  docs: Build docs and copy them to people.apache
+  package: Create binary packages and copy them to home.apache
+  docs: Build docs and copy them to home.apache
   publish-snapshot: Publish snapshot release to Apache snapshots
   publish-release: Publish a release to Apache release repo
 
@@ -64,13 +64,16 @@ for env in ASF_USERNAME ASF_RSA_KEY GPG_PASSPHRASE GPG_KEY; do
   fi
 done
 
+# Explicitly set locale in order to make `sort` output consistent across machines.
+# See https://stackoverflow.com/questions/28881 for more details.
+export LC_ALL=C
+
 # Commit ref to checkout when building
 GIT_REF=${GIT_REF:-master}
 
 # Destination directory parent on remote server
 REMOTE_PARENT_DIR=${REMOTE_PARENT_DIR:-/home/$ASF_USERNAME/public_html}
 
-SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
 GPG="gpg --no-tty --batch"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
@@ -97,7 +100,20 @@ if [ -z "$SPARK_PACKAGE_VERSION" ]; then
 fi
 
 DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
-USER_HOST="$ASF_USERNAME@people.apache.org"
+
+function LFTP {
+  SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
+  COMMANDS=$(cat <<EOF
+     set net:max-retries 1 &&
+     set sftp:connect-program $SSH &&
+     connect -u $ASF_USERNAME,p sftp://home.apache.org &&
+     $@
+EOF
+)
+  lftp --norc -c "$COMMANDS"
+}
+export -f LFTP
+
 
 git clean -d -f -x
 rm .gitignore
@@ -105,10 +121,14 @@ rm -rf .git
 cd ..
 
 if [ -n "$REMOTE_PARENT_MAX_LENGTH" ]; then
-  old_dirs=$($SSH $USER_HOST ls -t $REMOTE_PARENT_DIR | tail -n +$REMOTE_PARENT_MAX_LENGTH)
+  old_dirs=$(
+    LFTP nlist $REMOTE_PARENT_DIR \
+        | grep -v "^\." \
+        | sort -r \
+        | tail -n +$REMOTE_PARENT_MAX_LENGTH)
   for old_dir in $old_dirs; do
     echo "Removing directory: $old_dir"
-    $SSH $USER_HOST rm -r $REMOTE_PARENT_DIR/$old_dir
+    LFTP "rm -rf $REMOTE_PARENT_DIR/$old_dir && exit 0"
   done
 fi
 
@@ -180,11 +200,15 @@ if [[ "$1" == "package" ]]; then
   # Copy data
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-bin"
   echo "Copying release tarballs to $dest_dir"
-  $SSH $USER_HOST mkdir $dest_dir
-  rsync -e "$SSH" spark-* $USER_HOST:$dest_dir
-  echo "Linking /latest to $dest_dir"
-  $SSH $USER_HOST rm -f "$REMOTE_PARENT_DIR/latest"
-  $SSH $USER_HOST ln -s $dest_dir "$REMOTE_PARENT_DIR/latest"
+  # Put to new directory:
+  LFTP mkdir -p $dest_dir
+  LFTP mput -O $dest_dir 'spark-*'
+  # Delete /latest directory and rename new upload to /latest
+  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
+  LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
+  # Re-upload a second time and leave the files in the timestamped upload directory:
+  LFTP mkdir -p $dest_dir
+  LFTP mput -O $dest_dir 'spark-*'
   exit 0
 fi
 
@@ -198,11 +222,15 @@ if [[ "$1" == "docs" ]]; then
   # TODO: Make configurable to add this: PRODUCTION=1
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" jekyll build
   echo "Copying release documentation to $dest_dir"
-  $SSH $USER_HOST mkdir $dest_dir
-  echo "Linking /latest to $dest_dir"
-  $SSH $USER_HOST rm -f "$REMOTE_PARENT_DIR/latest"
-  $SSH $USER_HOST ln -s $dest_dir "$REMOTE_PARENT_DIR/latest"
-  rsync -e "$SSH" -r _site/* $USER_HOST:$dest_dir
+  # Put to new directory:
+  LFTP mkdir -p $dest_dir
+  LFTP mirror -R _site $dest_dir
+  # Delete /latest directory and rename new upload to /latest
+  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
+  LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
+  # Re-upload a second time and leave the files in the timestamped upload directory:
+  LFTP mkdir -p $dest_dir
+  LFTP mirror -R _site $dest_dir
   cd ..
   exit 0
 fi

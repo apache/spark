@@ -59,17 +59,6 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
-    val info = taskEnd.taskInfo
-    val metrics = taskEnd.taskMetrics
-    if (info != null && metrics != null) {
-      val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
-      if (updatedBlocks.length > 0) {
-        updateStorageStatus(info.executorId, updatedBlocks)
-      }
-    }
-  }
-
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD): Unit = synchronized {
     updateStorageStatus(unpersistRDD.rddId)
   }
@@ -89,6 +78,17 @@ class StorageStatusListener extends SparkListener {
       val executorId = blockManagerRemoved.blockManagerId.executorId
       executorIdToStorageStatus.remove(executorId)
     }
+  }
+
+  override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
+    val executorId = blockUpdated.blockUpdatedInfo.blockManagerId.executorId
+    val blockId = blockUpdated.blockUpdatedInfo.blockId
+    val storageLevel = blockUpdated.blockUpdatedInfo.storageLevel
+    val memSize = blockUpdated.blockUpdatedInfo.memSize
+    val diskSize = blockUpdated.blockUpdatedInfo.diskSize
+    val externalSize = blockUpdated.blockUpdatedInfo.externalBlockStoreSize
+    val blockStatus = BlockStatus(storageLevel, memSize, diskSize, externalSize)
+    updateStorageStatus(executorId, Seq((blockId, blockStatus)))
   }
 
 }

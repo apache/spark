@@ -149,6 +149,7 @@ class StringIndexerModel (
         "Skip StringIndexerModel.")
       return dataset
     }
+    validateAndTransformSchema(dataset.schema)
 
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {

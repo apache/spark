@@ -539,9 +539,14 @@ private[spark] class Client(
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
         if (dir.isDirectory()) {
-          dir.listFiles().foreach { file =>
-            if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
-              hadoopConfFiles(file.getName()) = file
+          val files = dir.listFiles()
+          if (files == null) {
+            logWarning("Failed to list files under directory " + dir)
+          } else {
+            files.foreach { file =>
+              if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
+                hadoopConfFiles(file.getName()) = file
+              }
             }
           }
         }

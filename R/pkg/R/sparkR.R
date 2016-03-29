@@ -153,7 +153,7 @@ sparkR.init <- function(
     if (!file.exists(path)) {
       stop("JVM is not ready after 10 seconds")
     }
-    f <- file(path, open="rb")
+    f <- file(path, open = "rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     rLibPath <- readString(f)
@@ -185,9 +185,9 @@ sparkR.init <- function(
   }
 
   sparkExecutorEnvMap <- convertNamedListToEnv(sparkExecutorEnv)
-  if(is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
+  if (is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
     sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <-
-      paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
+      paste0("$LD_LIBRARY_PATH:", Sys.getenv("LD_LIBRARY_PATH"))
   }
 
   # Classpath separator is ";" on Windows

@@ -44,13 +44,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1, 1, 1)
   }
 
-
   test("SPARK-12404: Datatype Helper Serializablity") {
     val ds = sparkContext.parallelize((
-          new Timestamp(0),
-          new Date(0),
-          java.math.BigDecimal.valueOf(1),
-          scala.math.BigDecimal(1)) :: Nil).toDS()
+      new Timestamp(0),
+      new Date(0),
+      java.math.BigDecimal.valueOf(1),
+      scala.math.BigDecimal(1)) :: Nil).toDS()
 
     ds.collect()
   }
@@ -542,9 +541,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       buildDataset(Row(Row("hello", null))).collect()
     }.getMessage
 
-    assert(message.contains(
-      "Null value appeared in non-nullable field org.apache.spark.sql.ClassData.b of type Int."
-    ))
+    assert(message.contains("Null value appeared in non-nullable field"))
   }
 
   test("SPARK-12478: top level null field") {

@@ -289,7 +289,7 @@ The example below demonstrates how to load the
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classifier.OneVsRest) for more details.
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.OneVsRest) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/OneVsRestExample.scala %}
 </div>

@@ -24,7 +24,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
@@ -262,10 +261,12 @@ object PowerIterationClustering extends Logging {
       },
       mergeMsg = _ + _,
       TripletFields.EdgeOnly)
-    GraphImpl.fromExistingRDDs(vD, graph.edges)
+    Graph(vD, graph.edges)
       .mapTriplets(
         e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
-        TripletFields.Src)
+        new TripletFields(/* useSrc */ true,
+                          /* useDst */ false,
+                          /* useEdge */ true))
   }
 
   /**
@@ -291,10 +292,12 @@ object PowerIterationClustering extends Logging {
       },
       mergeMsg = _ + _,
       TripletFields.EdgeOnly)
-    GraphImpl.fromExistingRDDs(vD, gA.edges)
+    Graph(vD, gA.edges)
       .mapTriplets(
         e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
-        TripletFields.Src)
+        new TripletFields(/* useSrc */ true,
+                          /* useDst */ false,
+                          /* useEdge */ true))
   }
 
   /**
@@ -315,7 +318,7 @@ object PowerIterationClustering extends Logging {
       }, preservesPartitioning = true).cache()
     val sum = r.values.map(math.abs).sum()
     val v0 = r.mapValues(x => x / sum)
-    GraphImpl.fromExistingRDDs(VertexRDD(v0), g.edges)
+    Graph(VertexRDD(v0), g.edges)
   }
 
   /**
@@ -330,7 +333,7 @@ object PowerIterationClustering extends Logging {
   def initDegreeVector(g: Graph[Double, Double]): Graph[Double, Double] = {
     val sum = g.vertices.values.sum()
     val v0 = g.vertices.mapValues(_ / sum)
-    GraphImpl.fromExistingRDDs(VertexRDD(v0), g.edges)
+    Graph(VertexRDD(v0), g.edges)
   }
 
   /**
@@ -355,7 +358,9 @@ object PowerIterationClustering extends Logging {
       val v = curG.aggregateMessages[Double](
         sendMsg = ctx => ctx.sendToSrc(ctx.attr * ctx.dstAttr),
         mergeMsg = _ + _,
-        TripletFields.Dst).cache()
+        new TripletFields(/* useSrc */ false,
+                          /* useDst */ true,
+                          /* useEdge */ true)).cache()
       // normalize v
       val norm = v.values.map(math.abs).sum()
       logInfo(s"$msgPrefix: norm(v) = $norm.")
@@ -368,7 +373,7 @@ object PowerIterationClustering extends Logging {
       diffDelta = math.abs(delta - prevDelta)
       logInfo(s"$msgPrefix: diff(delta) = $diffDelta.")
       // update v
-      curG = GraphImpl.fromExistingRDDs(VertexRDD(v1), g.edges)
+      curG = Graph(VertexRDD(v1), g.edges)
       prevDelta = delta
     }
     curG.vertices
@@ -385,7 +390,6 @@ object PowerIterationClustering extends Logging {
     val points = v.mapValues(x => Vectors.dense(x)).cache()
     val model = new KMeans()
       .setK(k)
-      .setRuns(5)
       .setSeed(0L)
       .run(points.values)
     points.mapValues(p => model.predict(p)).cache()

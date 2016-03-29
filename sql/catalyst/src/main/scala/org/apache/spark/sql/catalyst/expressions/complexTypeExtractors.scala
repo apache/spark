@@ -211,7 +211,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     val baseValue = value.asInstanceOf[ArrayData]
     val index = ordinal.asInstanceOf[Number].intValue()
-    if (index >= baseValue.numElements() || index < 0) {
+    if (index >= baseValue.numElements() || index < 0 || baseValue.isNullAt(index)) {
       null
     } else {
       baseValue.get(index, dataType)
@@ -260,6 +260,7 @@ case class GetMapValue(child: Expression, key: Expression)
     val map = value.asInstanceOf[MapData]
     val length = map.numElements()
     val keys = map.keyArray()
+    val values = map.valueArray()
 
     var i = 0
     var found = false
@@ -271,10 +272,10 @@ case class GetMapValue(child: Expression, key: Expression)
       }
     }
 
-    if (!found) {
+    if (!found || values.isNullAt(i)) {
       null
     } else {
-      map.valueArray().get(i, dataType)
+      values.get(i, dataType)
     }
   }
 
@@ -284,10 +285,12 @@ case class GetMapValue(child: Expression, key: Expression)
     val keys = ctx.freshName("keys")
     val found = ctx.freshName("found")
     val key = ctx.freshName("key")
+    val values = ctx.freshName("values")
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int $length = $eval1.numElements();
         final ArrayData $keys = $eval1.keyArray();
+        final ArrayData $values = $eval1.valueArray();
 
         int $index = 0;
         boolean $found = false;
@@ -300,10 +303,10 @@ case class GetMapValue(child: Expression, key: Expression)
           }
         }
 
-        if ($found) {
-          ${ev.value} = ${ctx.getValue(eval1 + ".valueArray()", dataType, index)};
-        } else {
+        if (!$found || $values.isNullAt($index)) {
           ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${ctx.getValue(values, dataType, index)};
         }
       """
     })

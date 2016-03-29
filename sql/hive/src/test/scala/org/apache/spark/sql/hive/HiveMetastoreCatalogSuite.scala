@@ -47,6 +47,27 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with TestHiveSingleton {
     logInfo(df.queryExecution.toString)
     df.as('a).join(df.as('b), $"a.key" === $"b.key")
   }
+
+  test("SPARK-13454: drop a table with a name starting with underscore") {
+    hiveContext.range(10).write.saveAsTable("_spark13454")
+    hiveContext.range(20).registerTempTable("_spark13454")
+    // This will drop both metastore table and temp table.
+    hiveContext.sql("drop table `_spark13454`")
+    assert(hiveContext.tableNames().filter(name => name == "_spark13454").length === 0)
+
+    hiveContext.range(10).write.saveAsTable("_spark13454")
+    hiveContext.range(20).registerTempTable("_spark13454")
+    hiveContext.sql("drop table default.`_spark13454`")
+    // This will drop the metastore table but keep the temptable.
+    assert(hiveContext.tableNames().filter(name => name == "_spark13454").length === 1)
+    // Make sure it is the temp table.
+    assert(hiveContext.table("_spark13454").count() === 20)
+    hiveContext.sql("drop table if exists `_spark13454`")
+    assert(hiveContext.tableNames().filter(name => name == "_spark13454").length === 0)
+
+    hiveContext.range(10).write.saveAsTable("spark13454")
+    hiveContext.sql("drop table spark13454")
+  }
 }
 
 class DataSourceWithHiveMetastoreCatalogSuite

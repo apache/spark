@@ -848,9 +848,7 @@ public class JavaDatasetSuite implements Serializable {
     }
 
     nullabilityCheck.expect(RuntimeException.class);
-    nullabilityCheck.expectMessage(
-      "Null value appeared in non-nullable field " +
-        "test.org.apache.spark.sql.JavaDatasetSuite$SmallBean.b of type int.");
+    nullabilityCheck.expectMessage("Null value appeared in non-nullable field");
 
     {
       Row row = new GenericRow(new Object[] {
