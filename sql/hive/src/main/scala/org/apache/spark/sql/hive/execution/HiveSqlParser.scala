@@ -79,6 +79,20 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
+   * Fail an unsupported Hive native command.
+   */
+  override def visitFailNativeCommand(
+      ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
+    val keywords = if (ctx.kws != null) {
+      Seq(ctx.kws.kw1, ctx.kws.kw2, ctx.kws.kw3).filter(_ != null).map(_.getText).mkString(" ")
+    } else {
+      // SET ROLE is the exception to the rule, because we handle this before other SET commands.
+      "SET ROLE"
+    }
+    throw new ParseException(s"Unsupported operation: $keywords", ctx)
+  }
+
+  /**
    * Create an [[AddJar]] or [[AddFile]] command depending on the requested resource.
    */
   override def visitAddResource(ctx: AddResourceContext): LogicalPlan = withOrigin(ctx) {
@@ -183,7 +197,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       )
 
       val tableDesc = CatalogTable(
-        name = table,
+        identifier = table,
         tableType = tableType,
         schema = schema,
         partitionColumns = partitionCols,
@@ -249,7 +263,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       replace: Boolean): LogicalPlan = {
     val sql = Option(source(query))
     val tableDesc = CatalogTable(
-      name = visitTableIdentifier(name),
+      identifier = visitTableIdentifier(name),
       tableType = CatalogTableType.VIRTUAL_VIEW,
       schema = schema,
       storage = EmptyStorageFormat,
