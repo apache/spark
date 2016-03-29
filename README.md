@@ -15,14 +15,17 @@ workflows.
 When workflows are defined as code, they become more maintainable,
 versionable, testable, and collaborative.
 
-Use airflow to author workflows as directed acyclic graphs (DAGs) of tasks.
-The airflow scheduler executes your tasks on an array of workers while
+Use Airflow to author workflows as directed acyclic graphs (DAGs) of tasks.
+The Airflow scheduler executes your tasks on an array of workers while
 following the specified dependencies. Rich command line utilities make
 performing complex surgeries on DAGs a snap. The rich user interface
 makes it easy to visualize pipelines running in production,
 monitor progress, and troubleshoot issues when needed.
 
-For more information and documentation, please visit the [Airflow Wiki](https://github.com/airbnb/airflow/wiki).
+## Getting started
+Please visit the Airflow Platform documentation for help with [installing Airflow](http://pythonhosted.org/airflow/installation.html), getting a [quick start](http://pythonhosted.org/airflow/start.html), or a more complete [tutorial](http://pythonhosted.org/airflow/tutorial.html).
+
+For further information, please visit the [Airflow Wiki](https://github.com/airbnb/airflow/wiki).
 
 ## Beyond the Horizon
 
