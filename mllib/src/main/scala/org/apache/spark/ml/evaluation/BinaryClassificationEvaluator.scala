@@ -63,14 +63,6 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("1.5.0")
   def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
 
-  /**
-   * @group setParam
-   * @deprecated use [[setRawPredictionCol()]] instead
-   */
-  @deprecated("use setRawPredictionCol instead", "1.5.0")
-  @Since("1.2.0")
-  def setScoreCol(value: String): this.type = set(rawPredictionCol, value)
-
   /** @group setParam */
   @Since("1.2.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)

@@ -34,7 +34,7 @@ private[sql] case class InsertIntoDataSource(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
-    val data = Dataset.newDataFrame(sqlContext, query)
+    val data = Dataset.ofRows(sqlContext, query)
     // Apply the schema of the existing table to the new data.
     val df = sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, logicalRelation.schema)
     relation.insert(df, overwrite)

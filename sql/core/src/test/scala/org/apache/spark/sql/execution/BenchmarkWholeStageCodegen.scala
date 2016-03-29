@@ -42,7 +42,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val sc = SparkContext.getOrCreate(conf)
   lazy val sqlContext = SQLContext.getOrCreate(sc)
 
-  def runBenchmark(name: String, values: Int)(f: => Unit): Unit = {
+  def runBenchmark(name: String, values: Long)(f: => Unit): Unit = {
     val benchmark = new Benchmark(name, values)
 
     Seq(false, true).foreach { enabled =>
@@ -57,7 +57,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
   // These benchmark are skipped in normal build
   ignore("range/filter/sum") {
-    val N = 500 << 20
+    val N = 500L << 20
     runBenchmark("rang/filter/sum", N) {
       sqlContext.range(N).filter("(id & 1) = 1").groupBy().sum().collect()
     }
@@ -71,7 +71,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("range/limit/sum") {
-    val N = 500 << 20
+    val N = 500L << 20
     runBenchmark("range/limit/sum", N) {
       sqlContext.range(N).limit(1000000).groupBy().sum().collect()
     }
@@ -110,7 +110,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("stat functions") {
-    val N = 100 << 20
+    val N = 100L << 20
 
     runBenchmark("stddev", N) {
       sqlContext.range(N).groupBy().agg("id" -> "stddev").collect()
@@ -209,11 +209,29 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /**
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Join w 2 longs:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Join w 2 longs:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Join w 2 longs codegen=false              7877 / 8358         13.3          75.1       1.0X
-    Join w 2 longs codegen=true               3877 / 3937         27.0          37.0       2.0X
+    Join w 2 longs codegen=false           12725 / 13158          8.2         121.4       1.0X
+    Join w 2 longs codegen=true              6044 / 6771         17.3          57.6       2.1X
       */
+
+    val dim4 = broadcast(sqlContext.range(M)
+      .selectExpr("cast(id/10 as long) as k1", "cast(id/10 as long) as k2"))
+
+    runBenchmark("Join w 2 longs duplicated", N) {
+      sqlContext.range(N).join(dim4,
+        (col("id") bitwiseAND M) === col("k1") && (col("id") bitwiseAND M) === col("k2"))
+        .count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Join w 2 longs:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    Join w 2 longs duplicated codegen=false 13066 / 13710          8.0         124.6       1.0X
+    Join w 2 longs duplicated codegen=true    7122 / 7277         14.7          67.9       1.8X
+     */
+
     runBenchmark("outer join w long", N) {
       sqlContext.range(N).join(dim, (col("id") bitwiseAND M) === col("k"), "left").count()
     }
@@ -272,7 +290,27 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       */
   }
 
-  ignore("rube") {
+  ignore("shuffle hash join") {
+    val N = 4 << 20
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+    sqlContext.setConf("spark.sql.autoBroadcastJoinThreshold", "10000000")
+    sqlContext.setConf("spark.sql.join.preferSortMergeJoin", "false")
+    runBenchmark("shuffle hash join", N) {
+      val df1 = sqlContext.range(N).selectExpr(s"id as k1")
+      val df2 = sqlContext.range(N / 5).selectExpr(s"id * 3 as k2")
+      df1.join(df2, col("k1") === col("k2")).count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    shuffle hash join:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    shuffle hash join codegen=false          1168 / 1902          3.6         278.6       1.0X
+    shuffle hash join codegen=true            850 / 1196          4.9         202.8       1.4X
+     */
+  }
+
+  ignore("cube") {
     val N = 5 << 20
 
     runBenchmark("cube", N) {
@@ -443,7 +481,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
             value.setInt(0, value.getInt(0) + 1)
             i += 1
           } else {
-            loc.putNewKey(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+            loc.append(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
               value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
           }
         }
