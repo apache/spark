@@ -20,7 +20,6 @@ package org.apache.spark.ml.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.regression.Regressor
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.sql.{DataFrame, SQLContext}
@@ -39,10 +38,10 @@ object MLTestingUtils extends SparkFunSuite {
       estimator: T,
       isClassification: Boolean,
       sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
-    val dfs = if (estimator.isInstanceOf[Regressor[_, _, _]]) {
-      genRegressionDFWithNumericLabelCol(sqlContext)
-    } else {
+    val dfs = if (isClassification) {
       genClassifDFWithNumericLabelCol(sqlContext)
+    } else {
+      genRegressionDFWithNumericLabelCol(sqlContext)
     }
     val expected = estimator.fit(dfs(DoubleType))
     val actuals = dfs.keys.filter(_ != DoubleType).map(t => estimator.fit(dfs(t)))
@@ -93,7 +92,7 @@ object MLTestingUtils extends SparkFunSuite {
     types
       .map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName)))
       .map { case (t, d) =>
-        t -> TreeTests.setMetadata(d, 2, labelColName).withColumn(censorColName, lit(0.0))
+        t -> TreeTests.setMetadata(d, 0, labelColName).withColumn(censorColName, lit(0.0))
       }
       .toMap
   }
