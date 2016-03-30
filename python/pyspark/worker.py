@@ -91,8 +91,9 @@ def read_udfs(pickleSer, infile):
     if num_udfs == 1:
         udf = udfs[0][2]
 
+        # fast path for single UDF
         def mapper(args):
-            return (udf(*args),)
+            return udf(*args)
     else:
         def mapper(args):
             return tuple(udf(*args[start:end]) for start, end, udf in udfs)

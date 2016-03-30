@@ -315,6 +315,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row[0], 6)
 
     def test_multiple_udfs(self):
+        self.sqlCtx.registerFunction("double", lambda x: x * 2, IntegerType())
         [row] = self.sqlCtx.sql("SELECT double(1), double(2)").collect()
         self.assertEqual(tuple(row), (2, 4))
         [row] = self.sqlCtx.sql("SELECT double(double(1)), double(double(2) + 2)").collect()

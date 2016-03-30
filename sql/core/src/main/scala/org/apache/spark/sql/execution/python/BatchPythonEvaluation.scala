@@ -71,7 +71,6 @@ case class BatchPythonEvaluation(udfs: Seq[PythonUDF], output: Seq[Attribute], c
 
       val (pyFuncs, children) = udfs.map(collectFunctions).unzip
       val numArgs = children.map(_.length)
-      val resultType = StructType(udfs.map(u => StructField("", u.dataType, u.nullable)))
 
       val pickle = new Pickler
       // flatten all the arguments
@@ -97,15 +96,26 @@ case class BatchPythonEvaluation(udfs: Seq[PythonUDF], output: Seq[Attribute], c
         .compute(inputIterator, context.partitionId(), context)
 
       val unpickle = new Unpickler
-      val row = new GenericMutableRow(1)
+      val mutableRow = new GenericMutableRow(1)
       val joined = new JoinedRow
+      val resultType = if (udfs.length == 1) {
+        udfs.head.dataType
+      } else {
+        StructType(udfs.map(u => StructField("", u.dataType, u.nullable)))
+      }
       val resultProj = UnsafeProjection.create(output, output)
 
       outputIterator.flatMap { pickedResult =>
         val unpickledBatch = unpickle.loads(pickedResult)
         unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
       }.map { result =>
-        val row = EvaluatePython.fromJava(result, resultType).asInstanceOf[InternalRow]
+        val row = if (udfs.length == 1) {
+          // fast path for single UDF
+          mutableRow(0) = EvaluatePython.fromJava(result, resultType)
+          mutableRow
+        } else {
+          EvaluatePython.fromJava(result, resultType).asInstanceOf[InternalRow]
+        }
         resultProj(joined(queue.poll(), row))
       }
     }
