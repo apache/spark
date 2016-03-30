@@ -600,22 +600,22 @@ class HiveContext private[hive](
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
      * execution is simply passed back to Hive.
      */
-    def stringResult(): Seq[String] = executedPlan match {
-      case ExecutedCommand(desc: DescribeHiveTableCommand) =>
-        // If it is a describe command for a Hive table, we want to have the output format
-        // be similar with Hive.
-        desc.run(self).map {
-          case Row(name: String, dataType: String, comment) =>
-            Seq(name, dataType,
-              Option(comment.asInstanceOf[String]).getOrElse(""))
-              .map(s => String.format(s"%-20s", s))
-              .mkString("\t")
-        }
-      case command: ExecutedCommand =>
-        command.executeCollect().map(_.getString(0))
+    def stringResult(): Seq[String] = SQLExecution.withNewExecutionId(self, this) {
+      executedPlan match {
+        case ExecutedCommand(desc: DescribeHiveTableCommand) =>
+          // If it is a describe command for a Hive table, we want to have the output format
+          // be similar with Hive.
+          desc.run(self).map {
+            case Row(name: String, dataType: String, comment) =>
+              Seq(name, dataType,
+                Option(comment.asInstanceOf[String]).getOrElse(""))
+                .map(s => String.format(s"%-20s", s))
+                .mkString("\t")
+          }
+        case command: ExecutedCommand =>
+          command.executeCollect().map(_.getString(0))
 
-      case other =>
-        SQLExecution.withNewExecutionId(other.sqlContext, this) {
+        case other =>
           val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
           // We need the types so we can output struct field names
           val types = analyzed.output.map(_.dataType)
