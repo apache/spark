@@ -110,7 +110,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
   /**
    * Returns a list of all known executors, represented by string with format: "host:port"
    */
-  def getExecutors(): Array[String] = {
+  def getExecutorList(): Array[String] = {
     sc.getExecutorStorageStatus.map { status =>
       status.blockManagerId.hostPort
     }
