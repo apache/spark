@@ -513,22 +513,7 @@ private[sql] object Expand {
       }
     }
     val expandChild = Project(child.output ++ groupByAliases, child)
-    val validConstraints = constructValidConstraints(expandChild.constraints, allNonSelectAttrSet)
-    Expand(projections, output, expandChild, validConstraints)
-  }
-
-  /**
-   * Filter out the `IsNotNull` constraints which cover the group by attributes in Expand operator.
-   * These constraints come from Expand's child plan. Because Expand will set group by attribute to
-   * null values in its projections, we need to filter out these `IsNotNull` constraints.
-   *
-   * @param constraints The constraints from Expand operator's child
-   * @param groupByAttrs The attributes of aliased group by expressions in Expand
-   */
-  def constructValidConstraints(
-      constraints: ExpressionSet,
-      groupByAttrs: AttributeSet): Seq[Expression] = {
-    constraints.filter(_.references.intersect(groupByAttrs).isEmpty).toSeq
+    Expand(projections, output, expandChild, allNonSelectAttrSet.toSeq)
   }
 }
 
@@ -539,12 +524,13 @@ private[sql] object Expand {
  * @param projections to apply
  * @param output of all projections.
  * @param child operator.
+ * @param groupByAttrs the attributes used in group by.
  */
 case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: LogicalPlan,
-    constraintsBase: Seq[Expression]) extends UnaryNode {
+    groupByAttrs: Seq[Attribute]) extends UnaryNode {
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
@@ -553,7 +539,13 @@ case class Expand(
     Statistics(sizeInBytes = sizeInBytes)
   }
 
-  override protected def validConstraints: Set[Expression] = constraintsBase.toSet
+  /**
+   * Filter out the `IsNotNull` constraints which cover the group by attributes in Expand operator.
+   * These constraints come from Expand's child plan. Because Expand will set group by attribute to
+   * null values in its projections, we need to filter out these `IsNotNull` constraints.
+   */
+  override protected def validConstraints: Set[Expression] =
+    child.constraints.filter(_.references.intersect(AttributeSet(groupByAttrs)).isEmpty)
 }
 
 /**

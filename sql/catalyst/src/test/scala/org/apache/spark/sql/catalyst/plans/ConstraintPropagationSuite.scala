@@ -104,18 +104,13 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         resolveColumn(notNullRelation.analyze, "b") > 2,
         IsNotNull(resolveColumn(notNullRelation.analyze, "b")))))
 
-    val constraints =
-      Expand.constructValidConstraints(
-        notNullRelation.analyze.constraints,
-        AttributeSet(resolveColumn(notNullRelation.analyze, "a").asInstanceOf[Attribute]))
-
     val expand = Expand(
           Seq(
             Seq('c, Literal.create(null, StringType), 1),
             Seq('c, 'a, 2)),
           Seq('c, 'a, 'gid.int),
           Project(Seq('a, 'c),
-            notNullRelation), constraints)
+            notNullRelation), Seq('a))
     verifyConstraints(expand.analyze.constraints,
       ExpressionSet(Seq(resolveColumn(expand.analyze, "c") > 10,
         IsNotNull(resolveColumn(expand.analyze, "c")))))

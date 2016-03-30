@@ -105,7 +105,6 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning for Expand") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val constraints = Expand.constructValidConstraints(input.constraints, AttributeSet('a))
     val query =
       Aggregate(
         Seq('aa, 'gid),
@@ -116,7 +115,7 @@ class ColumnPruningSuite extends PlanTest {
             Seq('a, 'b, 'c, 'a, 2)),
           Seq('a, 'b, 'c, 'aa.int, 'gid.int),
           input,
-          constraints)).analyze
+          Seq('a))).analyze
     val optimized = Optimize.execute(query)
     val expected =
       Aggregate(
@@ -128,7 +127,7 @@ class ColumnPruningSuite extends PlanTest {
             Seq('c, 'a, 2)),
           Seq('c, 'aa.int, 'gid.int),
           Project(Seq('a, 'c),
-            input), constraints)).analyze
+            input), Seq('a))).analyze
 
     comparePlans(optimized, expected)
   }
