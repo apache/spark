@@ -133,8 +133,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       dataSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
-    verifySchema(dataSchema)
-
     val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
     val broadcastedConf =
       sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
