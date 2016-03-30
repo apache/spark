@@ -45,9 +45,9 @@ public class AggregateHashMap {
   private int numRows = 0;
   private int maxSteps = 3;
 
-  private static int DEFAULT_NUM_BUCKETS = 65536 * 4;
+  private static int DEFAULT_CAPACITY = 1 << 16;
   private static double DEFAULT_LOAD_FACTOR = 0.25;
-  private static int MAX_STEPS = 3;
+  private static int DEFAULT_MAX_STEPS = 3;
 
   public AggregateHashMap(StructType schema, int capacity, double loadFactor, int maxSteps) {
 
@@ -59,14 +59,14 @@ public class AggregateHashMap {
     assert (capacity > 0 && ((capacity & (capacity - 1)) == 0));
 
     this.maxSteps = maxSteps;
-    numBuckets = capacity;
-    batch = ColumnarBatch.allocate(schema, MemoryMode.ON_HEAP, (int) (numBuckets * loadFactor));
+    numBuckets = (int) (capacity / loadFactor);
+    batch = ColumnarBatch.allocate(schema, MemoryMode.ON_HEAP, capacity);
     buckets = new int[numBuckets];
     Arrays.fill(buckets, -1);
   }
 
   public AggregateHashMap(StructType schema) {
-    this(schema, DEFAULT_NUM_BUCKETS, DEFAULT_LOAD_FACTOR, MAX_STEPS);
+    this(schema, DEFAULT_CAPACITY, DEFAULT_LOAD_FACTOR, DEFAULT_MAX_STEPS);
   }
 
   public int findOrInsert(long key) {
