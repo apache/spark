@@ -59,18 +59,10 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       if (files.fileFormat.toString == "TestFileFormat" ||
          files.fileFormat.isInstanceOf[parquet.DefaultSource] ||
          files.fileFormat.toString == "ORC" ||
-<<<<<<< 816f359cf043ef719a0bc7df0506a3a830fff70d
-         files.fileFormat.isInstanceOf[json.DefaultSource] ||
-         files.fileFormat.isInstanceOf[text.DefaultSource]) &&
-         files.sqlContext.conf.useFileScan =>
-||||||| merged common ancestors
-         files.fileFormat.isInstanceOf[json.DefaultSource]) &&
-         files.sqlContext.conf.parquetFileScan =>
-=======
          files.fileFormat.isInstanceOf[csv.DefaultSource] ||
+         files.fileFormat.isInstanceOf[text.DefaultSource] ||
          files.fileFormat.isInstanceOf[json.DefaultSource]) &&
-         files.sqlContext.conf.parquetFileScan =>
->>>>>>> buildReader() implementation for CSV
+         files.sqlContext.conf.useFileScan =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
