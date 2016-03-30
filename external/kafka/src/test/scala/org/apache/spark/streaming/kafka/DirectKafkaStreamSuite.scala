@@ -36,7 +36,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.dstream.{WindowMetric, DStream}
 import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
@@ -521,3 +521,69 @@ private[streaming] class ConstantRateController(id: Int, estimator: RateEstimato
   override def publish(rate: Long): Unit = ()
   override def getLatestRate(): Long = rate
 }
+
+object DirectKafkaWordCount {
+
+  import org.apache.spark.streaming._
+
+  def main(args: Array[String]) {
+    val brokers = "localhost:9092"
+    val topics = "stocks"
+
+
+    // Create context with 2 second batch interval
+    val sparkConf = new SparkConf().setMaster("local[*]").setAppName("DirectKafkaWordCount")
+    val ssc = new StreamingContext(sparkConf, Seconds(6))
+    ssc.checkpoint("/Users/mbriggs/work/stc/projects/logs")
+
+    // Create direct kafka stream with brokers and topics
+    val topicsSet = topics.split(",").toSet
+    val kafkaParams = Map[String, String]("metadata.broker.list" -> brokers,
+      "auto.offset.reset"->"smallest")
+
+    case class Tick(symbol: String, price: Int, ts: Long)
+
+    // Read a stream of message from kafka
+    val messages = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, topicsSet)
+
+    // Get each message and put into a Tick object
+    val ticks = messages.map(_._2)
+      .map(_.split("[,:]")).map(p => {
+      Tick(p(1), p(3).trim.toInt, p(5).trim.toLong)
+    })
+
+    // define rise, drop & deep predicates
+    def rise(in: Tick, ew: WindowMetric): Boolean = {
+      in.price > ew.first.asInstanceOf[Tick].price  &&
+        in.price >= ew.prev.asInstanceOf[Tick].price
+    }
+    def drop(in: Tick, ew: WindowMetric): Boolean = {
+      in.price >= ew.first.asInstanceOf[Tick].price  &&
+        in.price < ew.prev.asInstanceOf[Tick].price
+    }
+    def deep(in: Tick, ew: WindowMetric): Boolean = {
+      in.price < ew.first.asInstanceOf[Tick].price &&
+        in.price < ew.prev.asInstanceOf[Tick].price
+    }
+
+    // map the predicates to their state names
+    val predicateMapping: Map[String, (Tick, WindowMetric) => Boolean] =
+      Map("rise" -> rise, "drop" -> drop, "deep" -> deep)
+
+    val matches = ticks.matchPatternByWindow("rise drop [rise ]+ deep".r,
+      predicateMapping, Seconds(12), Seconds(6))
+
+    matches.print()
+
+
+    ssc.start()
+    ssc.awaitTermination()
+
+    //matches.foreachRDD(_.collect().foreach( x => println("match " + x)))
+
+    // Start the computation
+
+  }
+}
+
