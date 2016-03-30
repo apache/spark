@@ -19,6 +19,7 @@ package org.apache.spark.mllib.linalg
 
 import java.util.Random
 
+import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar._
 import scala.collection.mutable.{Map => MutableMap}
@@ -497,5 +498,16 @@ class MatricesSuite extends SparkFunSuite {
     val sm1 = Matrices.sparse(3, 2, Array(0, 2, 3), Array(0, 2, 1), Array(0.0, -1.2, 0.0))
     assert(sm1.numNonzeros === 1)
     assert(sm1.numActives === 3)
+  }
+
+  test("fromBreeze with sparse matrix") {
+    // colPtr.last does NOT always equal to values.length in breeze SCSMatrix and
+    // invocation of compact() may be necessary. Refer to SPARK-11507
+    val bm1: BM[Double] = new CSCMatrix[Double](
+      Array(1.0, 1, 1), 3, 3, Array(0, 1, 2, 3), Array(0, 1, 2))
+    val bm2: BM[Double] = new CSCMatrix[Double](
+      Array(1.0, 2, 2, 4), 3, 3, Array(0, 0, 2, 4), Array(1, 2, 1, 2))
+    val sum = bm1 + bm2
+    Matrices.fromBreeze(sum)
   }
 }
