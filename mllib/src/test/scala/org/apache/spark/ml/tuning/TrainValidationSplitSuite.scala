@@ -48,6 +48,7 @@ class TrainValidationSplitSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
+      .setSeed(42L)
     val cvModel = cv.fit(dataset)
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(cv.getTrainRatio === 0.5)
@@ -72,6 +73,7 @@ class TrainValidationSplitSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
+      .setSeed(42L)
     val cvModel = cv.fit(dataset)
     val parent = cvModel.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent.getRegParam === 0.001)
@@ -120,6 +122,7 @@ class TrainValidationSplitSuite
       .setEvaluator(evaluator)
       .setTrainRatio(0.5)
       .setEstimatorParamMaps(paramMaps)
+      .setSeed(42L)
 
     val tvs2 = testDefaultReadWrite(tvs, testParams = false)
 
@@ -140,6 +143,7 @@ class TrainValidationSplitSuite
       .set(tvs.evaluator, evaluator)
       .set(tvs.trainRatio, 0.5)
       .set(tvs.estimatorParamMaps, paramMaps)
+      .set(tvs.seed, 42L)
 
     val tvs2 = testDefaultReadWrite(tvs, testParams = false)
 
