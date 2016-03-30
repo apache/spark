@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.parser.ng.ParseException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
@@ -83,6 +84,31 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(
       sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
       Row(3) :: Row(3) :: Nil)
+
+    sql("DROP TEMPORARY FUNCTION udtf_count2")
+  }
+
+  test("permanent UDTF") {
+    sql(
+      s"""
+        |CREATE FUNCTION udtf_count_temp
+        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+        |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT key, cc FROM src LATERAL VIEW udtf_count_temp(value) dd AS cc"),
+      Row(97, 500) :: Row(97, 500) :: Nil)
+
+    checkAnswer(
+      sql("SELECT udtf_count_temp(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+      Row(3) :: Row(3) :: Nil)
+
+    sql("DROP FUNCTION udtf_count_temp")
+    val errMsg = intercept[ParseException] {
+      sql("SELECT key, cc FROM src LATERAL VIEW udtf_count_temp(value) dd AS cc")
+    }.getMessage
+    assert(errMsg.contains("undefined function udtf_count_temp"))
   }
 
   test("SPARK-6835: udtf in lateral view") {

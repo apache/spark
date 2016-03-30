@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
 /**
  * A class that holds all session-specific state in a given [[HiveContext]].
  */
-private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx) {
+private[hive] class HiveSessionState(val ctx: HiveContext) extends SessionState(ctx) {
 
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
@@ -40,7 +40,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    * Note that HiveUDFs will be overridden by functions registered in this context.
    */
   override lazy val functionRegistry: FunctionRegistry = {
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive)
+    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive, this)
   }
 
   /**

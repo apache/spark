@@ -207,6 +207,7 @@ case class CreateFunction(
           sqlContext.sessionState.catalog.getFunction(func) != null
         } catch {
           case _: NoSuchFunctionException => false
+          case _: AnalysisException => false // HiveExternalCatalog wraps all exceptions with it.
         }
       if (funcExisting) {
         val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)

@@ -21,6 +21,7 @@ import java.io.{File, PrintStream}
 
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
+import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -557,7 +558,10 @@ private[hive] class HiveClientImpl(
   override def getFunctionOption(
       db: String,
       name: String): Option[CatalogFunction] = withHiveState {
-    Option(client.getFunction(db, name)).map(fromHiveFunction)
+    client.getFunction(db, name)
+    Try {
+      Option(client.getFunction(db, name)).map(fromHiveFunction)
+    }.getOrElse(None)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withHiveState {
@@ -612,7 +616,7 @@ private[hive] class HiveClientImpl(
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
     val resourceUris = f.resources.map { resource =>
-      new ResourceUri(ResourceType.valueOf(resource._1), resource._2)
+      new ResourceUri(ResourceType.valueOf(resource._1.toUpperCase), resource._2)
     }
     new HiveFunction(
       f.identifier.funcName,

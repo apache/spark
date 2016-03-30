@@ -32,8 +32,9 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.Obje
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{analysis, InternalRow}
+import org.apache.spark.sql.catalyst.{analysis, FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -44,7 +45,8 @@ import org.apache.spark.sql.types._
 
 private[hive] class HiveFunctionRegistry(
     underlying: analysis.FunctionRegistry,
-    executionHive: HiveClientImpl)
+    executionHive: HiveClientImpl,
+    sessionStage: HiveSessionState)
   extends analysis.FunctionRegistry with HiveInspectors {
 
   def getFunctionInfo(name: String): FunctionInfo = {
@@ -53,6 +55,26 @@ private[hive] class HiveFunctionRegistry(
     executionHive.withHiveState {
       FunctionRegistry.getFunctionInfo(name)
     }
+  }
+
+  def loadHivePermanentFunction(name: String): Option[CatalogFunction] = {
+    val databaseName = sessionStage.catalog.getCurrentDatabase
+    val func = FunctionIdentifier(name, Option(databaseName))
+    val catalogFunc =
+      if (sessionStage.catalog.listFunctions(databaseName, name).size != 0) {
+        Some(sessionStage.catalog.getFunction(func))
+      } else {
+        None
+      }
+    catalogFunc.map(_.resources.foreach { resource =>
+      resource._1.toLowerCase match {
+        case "jar" => sessionStage.ctx.addJar(resource._2)
+        case _ =>
+          sessionStage.ctx.runSqlHive(s"ADD FILE ${resource._2}")
+          sessionStage.ctx.sparkContext.addFile(resource._2)
+      }
+    })
+    catalogFunc
   }
 
   override def makeFunctionBuilderAndInfo(
@@ -148,22 +170,29 @@ private[hive] class HiveFunctionRegistry(
     } else {
       // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
       // not always serializable.
-      val functionInfo: FunctionInfo =
-        Option(getFunctionInfo(name.toLowerCase)).getOrElse(
-          throw new AnalysisException(s"undefined function $name"))
+      val optFunctionInfo = Option(getFunctionInfo(name.toLowerCase))
+      if (optFunctionInfo.isEmpty) {
+        val catalogFunc = loadHivePermanentFunction(name).getOrElse(
+            throw new AnalysisException(s"undefined function $name"))
 
-      val functionClassName = functionInfo.getFunctionClass.getName
+        val functionClassName = catalogFunc.className
+        val (_, builder) = makeFunctionBuilderAndInfo(name, functionClassName)
+        builder(children)
+      } else {
+        val functionInfo = optFunctionInfo.get
+        val functionClassName = functionInfo.getFunctionClass.getName
 
-      // When we instantiate hive UDF wrapper class, we may throw exception if the input expressions
-      // don't satisfy the hive UDF, such as type mismatch, input number mismatch, etc. Here we
-      // catch the exception and throw AnalysisException instead.
-      val builder =
-        if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
-          makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass, functionInfo)
-        } else {
-          makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass)
-        }
-      builder(children)
+        // When we instantiate hive UDF wrapper class, we may throw exception if the input
+        // expressions don't satisfy the hive UDF, such as type mismatch, input number mismatch,
+        // etc. Here we catch the exception and throw AnalysisException instead.
+        val builder =
+          if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
+            makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass, functionInfo)
+          } else {
+            makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass)
+          }
+        builder(children)
+      }
     }
   }
 
