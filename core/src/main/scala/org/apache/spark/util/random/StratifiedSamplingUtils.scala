@@ -216,6 +216,35 @@ private[spark] object StratifiedSamplingUtils extends Logging {
   }
 
   /**
+   * Return the per partition sampling function used for partitioning a dataset without
+   * replacement.
+   *
+   * The sampling function has a unique seed per partition.
+   */
+  def getBernoulliCellSamplingFunction[K, V](rdd: RDD[(K, V)],
+      lb: Map[K, Double],
+      ub: Map[K, Double],
+      seed: Long,
+      complement: Boolean = false): (Int, Iterator[(K, V)]) => Iterator[(K, V)] = {
+    (idx: Int, iter: Iterator[(K, V)]) => {
+      val rng = new RandomDataGenerator()
+      rng.reSeed(seed + idx)
+
+      if (complement) {
+        iter.filter { case(k, _) =>
+          val x = rng.nextUniform()
+          (x < lb(k)) || (x >= ub(k))
+        }
+      } else {
+        iter.filter { case(k, _) =>
+          val x = rng.nextUniform()
+          (x >= lb(k)) && (x < ub(k))
+        }
+      }
+    }
+  }
+
+  /**
    * Return the per partition sampling function used for sampling with replacement.
    *
    * When exact sample size is required, we make two additional passed over the RDD to determine
