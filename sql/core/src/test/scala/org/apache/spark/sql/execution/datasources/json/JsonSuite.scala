@@ -776,15 +776,19 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("Infer big integers as doubles when it does not fit in decimal") {
     val jsonDF = sqlContext.read
       .json(doubleRecords)
-      .selectExpr("a")
+      .selectExpr("a", "c")
 
+    // The values in `a` field will be doubles as they all do not fit in decimal. For `c` field,
+    // it will be also doubles as `9.223372036854776E19` can be a decimal but `2.0E38` becomes
+    // a double as it does not fit in decimal. It makes the type as double in this case.
     val expectedSchema = StructType(
-      StructField("a", DoubleType, true) :: Nil)
+      StructField("a", DoubleType, true) ::
+      StructField("c", DoubleType, true):: Nil)
 
     assert(expectedSchema === jsonDF.schema)
     checkAnswer(
       jsonDF,
-      Seq(Row(2.0E38D), Row(1.0E38D))
+      Seq(Row(1.0E38D, 9.223372036854776E19), Row(2.0E38D, 2.0E38D))
     )
   }
 
@@ -792,15 +796,19 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val jsonDF = sqlContext.read
       .option("prefersDecimal", "true")
       .json(doubleRecords)
-      .selectExpr("b")
+      .selectExpr("b", "d")
 
+    // The values in `a` field will be doubles as they all do not fit in decimal. For `c` field,
+    // it will be also doubles as `1.01D` can be a decimal but `0.01D` becomes
+    // a double as it does not fit in decimal. It makes the type as double in this case.
     val expectedSchema = StructType(
-      StructField("b", DoubleType, true) :: Nil)
+      StructField("b", DoubleType, true) ::
+      StructField("d", DoubleType, true):: Nil)
 
     assert(expectedSchema === jsonDF.schema)
     checkAnswer(
       jsonDF,
-      Seq(Row(0.02D), Row(0.01D))
+      Seq(Row(0.01D, 1.01D), Row(0.02D, 0.01D))
     )
   }
 

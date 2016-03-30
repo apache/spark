@@ -216,8 +216,8 @@ private[json] trait TestJsonData {
 
   def doubleRecords: RDD[String] =
     sqlContext.sparkContext.parallelize(
-      s"""{"a": 1${"0" * 38}, "b": 0.01}""" ::
-      s"""{"a": 2${"0" * 38}, "b": 0.02}""" :: Nil)
+      s"""{"a": 1${"0" * 38}, "b": 0.01, "c": 92233720368547758070, "d": 1.01}""" ::
+      s"""{"a": 2${"0" * 38}, "b": 0.02, "c": 2${"0" * 38}, "d": 0.01}""" :: Nil)
 
   lazy val singleRow: RDD[String] = sqlContext.sparkContext.parallelize("""{"a":123}""" :: Nil)
 
