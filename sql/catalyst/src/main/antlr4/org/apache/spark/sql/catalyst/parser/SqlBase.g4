@@ -169,6 +169,11 @@ unsupportedHiveNativeCommands
     | kw1=SHOW kw2=TRANSACTIONS
     | kw1=SHOW kw2=INDEXES
     | kw1=SHOW kw2=LOCKS
+    | kw1=CREATE kw2=INDEX
+    | kw1=DROP kw2=INDEX
+    | kw1=LOCK kw2=TABLE
+    | kw1=UNLOCK kw2=TABLE
+    | kw1=ALTER kw2=INDEX
     ;
 
 createTableHeader
@@ -863,6 +868,7 @@ ROLES: 'ROLES';
 COMPACTIONS: 'COMPACTIONS';
 PRINCIPALS: 'PRINCIPALS';
 TRANSACTIONS: 'TRANSACTIONS';
+INDEX: 'INDEX';
 INDEXES: 'INDEXES';
 LOCKS: 'LOCKS';
 OPTION: 'OPTION';
