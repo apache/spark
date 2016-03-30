@@ -102,6 +102,15 @@ statement
         (PARTITIONED ON identifierList)?
         (TBLPROPERTIES tablePropertyList)? AS query                    #createView
     | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
+    | ALTER VIEW from=tableIdentifier AS? RENAME TO to=tableIdentifier #renameView
+    | ALTER VIEW from=tableIdentifier AS?
+        SET TBLPROPERTIES tablePropertyList                            #setViewProperties
+    | ALTER VIEW from=tableIdentifier AS?
+        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetViewProperties
+    | ALTER VIEW from=tableIdentifier AS?
+        ADD (IF NOT EXISTS)? partitionSpec+                            #addViewPartition
+    | ALTER VIEW from=tableIdentifier AS?
+        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropViewPartitions
     | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
@@ -131,15 +140,6 @@ hiveNativeCommands
     | DELETE FROM tableIdentifier (WHERE booleanExpression)?
     | TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
-    | ALTER VIEW from=tableIdentifier AS? RENAME TO to=tableIdentifier
-    | ALTER VIEW from=tableIdentifier AS?
-        SET TBLPROPERTIES tablePropertyList
-    | ALTER VIEW from=tableIdentifier AS?
-        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList
-    | ALTER VIEW from=tableIdentifier AS?
-        ADD (IF NOT EXISTS)? partitionSpecLocation+
-    | ALTER VIEW from=tableIdentifier AS?
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?
     | DROP VIEW (IF EXISTS)? qualifiedName
     | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
     | START TRANSACTION (transactionMode (',' transactionMode)*)?

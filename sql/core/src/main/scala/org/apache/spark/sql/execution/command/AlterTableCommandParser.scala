@@ -46,7 +46,7 @@ object AlterTableCommandParser {
         if (partSpec.isDefined && node.token.getText == "TOK_ALTERVIEW") {
           parseFailed("Could not parse ALTER VIEW command", node)
         }
-        matchAlterTableAlterViewCommands(node, otherNodes, tableIdent, partSpec)
+        matchAlterTableCommands(node, otherNodes, tableIdent, partSpec)
       case _ =>
         parseFailed("Could not parse ALTER TABLE/VIEW command", node)
     }
@@ -135,7 +135,7 @@ object AlterTableCommandParser {
    * @param partition spec identifying the partition this command is concerned with, if any.
    */
   // TODO: This method is massive. Break it down.
-  private def matchAlterTableAlterViewCommands(
+  private def matchAlterTableCommands(
       node: ASTNode,
       otherNodes: Seq[ASTNode],
       tableIdent: TableIdentifier,
@@ -147,14 +147,14 @@ object AlterTableCommandParser {
           if fieldName == "TOK_ALTERTABLE_RENAME" || fieldName == "TOK_ALTERVIEW_RENAME" =>
         val tableNameClause = getClause("TOK_TABNAME", renameArgs)
         val newTableIdent = extractTableIdent(tableNameClause)
-        AlterTableAlterViewRename(tableIdent, newTableIdent)(node.source)
+        AlterTableRename(tableIdent, newTableIdent)(node.source)
 
       // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
       // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
       case Token(fieldName, args) :: _
           if fieldName == "TOK_ALTERTABLE_PROPERTIES" || fieldName == "TOK_ALTERVIEW_PROPERTIES" =>
         val properties = extractTableProps(args.head)
-        AlterTableAlterViewSetProperties(tableIdent, properties)(node.source)
+        AlterTableSetProperties(tableIdent, properties)(node.source)
 
       // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
       // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
@@ -163,7 +163,7 @@ object AlterTableCommandParser {
             fieldName == "TOK_ALTERVIEW_DROPPROPERTIES" =>
         val properties = extractTableProps(args.head)
         val ifExists = getClauseOption("TOK_IFEXISTS", args).isDefined
-        AlterTableAlterViewUnsetProperties(tableIdent, properties, ifExists)(node.source)
+        AlterTableUnsetProperties(tableIdent, properties, ifExists)(node.source)
 
       // ALTER TABLE table_name [PARTITION spec] SET SERDE serde_name [WITH SERDEPROPERTIES props];
       case Token("TOK_ALTERTABLE_SERIALIZER", Token(serdeClassName, Nil) :: serdeArgs) :: _ =>
@@ -330,7 +330,7 @@ object AlterTableCommandParser {
           case _ =>
             parseFailed("Invalid ALTER TABLE/VIEW command", node)
         }
-        AlterTableAlterViewAddPartition(tableIdent, parsedParts, ifNotExists)(node.source)
+        AlterTableAddPartition(tableIdent, parsedParts, ifNotExists)(node.source)
 
       // ALTER TABLE table_name PARTITION spec1 RENAME TO PARTITION spec2;
       case Token("TOK_ALTERTABLE_RENAMEPART", spec :: Nil) :: _ =>

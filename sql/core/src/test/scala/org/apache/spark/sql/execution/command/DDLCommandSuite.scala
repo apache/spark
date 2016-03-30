@@ -202,10 +202,10 @@ class DDLCommandSuite extends PlanTest {
     val sql_view = sql_table.replace("TABLE", "VIEW")
     val parsed_table = parser.parsePlan(sql_table)
     val parsed_view = parser.parsePlan(sql_view)
-    val expected_table = AlterTableAlterViewRename(
+    val expected_table = AlterTableRename(
       TableIdentifier("table_name", None),
       TableIdentifier("new_table_name", None))(sql_table)
-    val expected_view = AlterTableAlterViewRename(
+    val expected_view = AlterTableRename(
       TableIdentifier("table_name", None),
       TableIdentifier("new_table_name", None))(sql_view)
     comparePlans(parsed_table, expected_table)
@@ -233,11 +233,11 @@ class DDLCommandSuite extends PlanTest {
     val parsed3_view = parser.parsePlan(sql3_view)
 
     val tableIdent = TableIdentifier("table_name", None)
-    val expected1_table = AlterTableAlterViewSetProperties(
+    val expected1_table = AlterTableSetProperties(
       tableIdent, Map("test" -> "test", "comment" -> "new_comment"))(sql1_table)
-    val expected2_table = AlterTableAlterViewUnsetProperties(
+    val expected2_table = AlterTableUnsetProperties(
       tableIdent, Map("comment" -> null, "test" -> null), ifExists = false)(sql2_table)
-    val expected3_table = AlterTableAlterViewUnsetProperties(
+    val expected3_table = AlterTableUnsetProperties(
       tableIdent, Map("comment" -> null, "test" -> null), ifExists = true)(sql3_table)
     val expected1_view = expected1_table.copy()(sql = sql1_view)
     val expected2_view = expected2_table.copy()(sql = sql2_view)
@@ -416,13 +416,13 @@ class DDLCommandSuite extends PlanTest {
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
 
-    val expected1 = AlterTableAlterViewAddPartition(
+    val expected1 = AlterTableAddPartition(
       TableIdentifier("table_name", None),
       Seq(
         (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
         (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
       ifNotExists = true)(sql1)
-    val expected2 = AlterTableAlterViewAddPartition(
+    val expected2 = AlterTableAddPartition(
       TableIdentifier("table_name", None),
       Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
       ifNotExists = false)(sql2)
@@ -445,13 +445,13 @@ class DDLCommandSuite extends PlanTest {
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
 
-    val expected1 = AlterTableAlterViewAddPartition(
+    val expected1 = AlterTableAddPartition(
       TableIdentifier("view_name", None),
       Seq(
         (Map("dt" -> "2008-08-08", "country" -> "us"), None),
         (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
       ifNotExists = true)(sql1)
-    val expected2 = AlterTableAlterViewAddPartition(
+    val expected2 = AlterTableAddPartition(
       TableIdentifier("view_name", None),
       Seq((Map("dt" -> "2008-08-08"), None)),
       ifNotExists = false)(sql2)

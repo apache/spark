@@ -345,6 +345,21 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[AlterTableRename]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW view1 RENAME TO view2;
+   * }}}
+   */
+  override def visitRenameView(ctx: RenameViewContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRename(
+      visitTableIdentifier(ctx.from),
+      visitTableIdentifier(ctx.to))(
+      command(ctx))
+  }
+
+  /**
    * Create an [[AlterTableSetProperties]] command.
    *
    * For example:
@@ -361,6 +376,22 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create an [[AlterTableSetProperties]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW view SET TBLPROPERTIES ('comment' = new_comment);
+   * }}}
+   */
+  override def visitSetViewProperties(
+      ctx: SetViewPropertiesContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableSetProperties(
+      visitTableIdentifier(ctx.tableIdentifier),
+      visitTablePropertyList(ctx.tablePropertyList))(
+      command(ctx))
+  }
+
+  /**
    * Create an [[AlterTableUnsetProperties]] command.
    *
    * For example:
@@ -370,6 +401,23 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitUnsetTableProperties(
       ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableUnsetProperties(
+      visitTableIdentifier(ctx.tableIdentifier),
+      visitTablePropertyList(ctx.tablePropertyList),
+      ctx.EXISTS != null)(
+      command(ctx))
+  }
+
+  /**
+   * Create an [[AlterTableUnsetProperties]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW view UNSET TBLPROPERTIES IF EXISTS ('comment', 'key');
+   * }}}
+   */
+  override def visitUnsetViewProperties(
+      ctx: UnsetViewPropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterTableUnsetProperties(
       visitTableIdentifier(ctx.tableIdentifier),
       visitTablePropertyList(ctx.tablePropertyList),
@@ -529,6 +577,28 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create an [[AlterTableAddPartition]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
+   * }}}
+   */
+  override def visitAddViewPartition(
+      ctx: AddViewPartitionContext): LogicalPlan = withOrigin(ctx) {
+    // Create partition spec to location mapping.
+    // Different from ALTER TABLE ADD PARTITION, location is not allowed here.
+    val specsAndLocs = ctx.partitionSpec.asScala.map {
+      visitNonOptionalPartitionSpec(_) -> None
+    }
+    AlterTableAddPartition(
+      visitTableIdentifier(ctx.tableIdentifier),
+      specsAndLocs,
+      ctx.EXISTS != null)(
+      command(ctx))
+  }
+
+  /**
    * Create an [[AlterTableExchangePartition]] command.
    *
    * For example:
@@ -577,6 +647,24 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
       ctx.EXISTS != null,
       ctx.PURGE != null)(
+      command(ctx))
+  }
+
+  /**
+   * Create an [[AlterViewDropPartition]] command
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+   * }}}
+   */
+  override def visitDropViewPartitions(
+      ctx: DropViewPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    // Different from ALTER TABLE DROP PARTITION, PURGE is not allowed here.
+    AlterViewDropPartition(
+      visitTableIdentifier(ctx.tableIdentifier),
+      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
+      ctx.EXISTS != null)(
       command(ctx))
   }
 
