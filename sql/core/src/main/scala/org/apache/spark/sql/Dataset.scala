@@ -22,8 +22,10 @@ import java.io.CharArrayWriter
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonFactory
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
@@ -39,7 +41,7 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
-import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
@@ -150,10 +152,10 @@ private[sql] object Dataset {
  * @since 1.6.0
  */
 class Dataset[T] private[sql](
-    @transient override val sqlContext: SQLContext,
-    @DeveloperApi @transient override val queryExecution: QueryExecution,
+    @transient val sqlContext: SQLContext,
+    @DeveloperApi @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
-  extends Queryable with Serializable {
+  extends Serializable {
 
   queryExecution.assertAnalyzed()
 
@@ -224,7 +226,7 @@ class Dataset[T] private[sql](
    * @param _numRows Number of rows to show
    * @param truncate Whether truncate long strings and align cells right
    */
-  override private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
     val takeResult = take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
@@ -249,7 +251,75 @@ class Dataset[T] private[sql](
       }: Seq[String]
     }
 
-    formatString ( rows, numRows, hasMoreData, truncate )
+    val sb = new StringBuilder
+    val numCols = schema.fieldNames.length
+
+    // Initialise the width of each column to a minimum value of '3'
+    val colWidths = Array.fill(numCols)(3)
+
+    // Compute the width of each column
+    for (row <- rows) {
+      for ((cell, i) <- row.zipWithIndex) {
+        colWidths(i) = math.max(colWidths(i), cell.length)
+      }
+    }
+
+    // Create SeparateLine
+    val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+
+    // column names
+    rows.head.zipWithIndex.map { case (cell, i) =>
+      if (truncate) {
+        StringUtils.leftPad(cell, colWidths(i))
+      } else {
+        StringUtils.rightPad(cell, colWidths(i))
+      }
+    }.addString(sb, "|", "|", "|\n")
+
+    sb.append(sep)
+
+    // data
+    rows.tail.map {
+      _.zipWithIndex.map { case (cell, i) =>
+        if (truncate) {
+          StringUtils.leftPad(cell.toString, colWidths(i))
+        } else {
+          StringUtils.rightPad(cell.toString, colWidths(i))
+        }
+      }.addString(sb, "|", "|", "|\n")
+    }
+
+    sb.append(sep)
+
+    // For Data that has more than "numRows" records
+    if (hasMoreData) {
+      val rowsString = if (numRows == 1) "row" else "rows"
+      sb.append(s"only showing top $numRows $rowsString\n")
+    }
+
+    sb.toString()
+  }
+
+  override def toString: String = {
+    try {
+      val builder = new StringBuilder
+      val fields = schema.take(2).map {
+        case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+      }
+      builder.append("[")
+      builder.append(fields.mkString(", "))
+      if (schema.length > 2) {
+        if (schema.length - fields.size == 1) {
+          builder.append(" ... 1 more field")
+        } else {
+          builder.append(" ... " + (schema.length - 2) + " more fields")
+        }
+      }
+      builder.append("]").toString()
+    } catch {
+      case NonFatal(e) =>
+        s"Invalid tree; ${e.getMessage}:\n$queryExecution"
+    }
   }
 
   /**
@@ -325,7 +395,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   // scalastyle:off println
-  override def printSchema(): Unit = println(schema.treeString)
+  def printSchema(): Unit = println(schema.treeString)
   // scalastyle:on println
 
   /**
@@ -334,7 +404,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  override def explain(extended: Boolean): Unit = {
+  def explain(extended: Boolean): Unit = {
     val explain = ExplainCommand(queryExecution.logical, extended = extended)
     sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
       // scalastyle:off println
@@ -349,7 +419,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  override def explain(): Unit = explain(extended = false)
+  def explain(): Unit = explain(extended = false)
 
   /**
    * Returns all column names and their data types as an array.
