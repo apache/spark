@@ -1831,7 +1831,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("SHOW TABLES").count() >= 2)
       assert(
         sql("SHOW TABLES IN default").count() >= 2)
-
     }
   }
 }

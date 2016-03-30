@@ -322,7 +322,7 @@ case class DescribeCommand(
  * If a databaseName is not given, the current database will be used.
  * The syntax of using this command in SQL is:
  * {{{
- *    SHOW TABLES [(IN|FROM) database_name] ['identifier_with_wildcards'];
+ *   SHOW TABLES [(IN|FROM) database_name] ['identifier_with_wildcards'];
  * }}}
  */
 case class ShowTablesCommand(
@@ -355,7 +355,7 @@ case class ShowTablesCommand(
  * pattern would be listed.
  * The syntax of using this command in SQL is:
  * {{{
- *    SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards'];
+ *   SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards'];
  * }}}
  */
 case class ShowDatabasesCommand(databasePattern: Option[String]) extends RunnableCommand {
