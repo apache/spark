@@ -441,7 +441,7 @@ object SQLConf {
   val CHECKPOINT_LOCATION = SQLConfigBuilder("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for continuously executing queries.")
     .stringConf
-    .createWithDefault("<undefined>")
+    .createOptional
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -625,6 +625,16 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   def getConf[T](entry: ConfigEntry[T]): T = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
     Option(settings.get(entry.key)).map(entry.valueConverter).orElse(entry.defaultValue).
+      getOrElse(throw new NoSuchElementException(entry.key))
+  }
+
+  /**
+   * Return the value of an optional Spark SQL configuration property for the given key. If the key
+   * is not set yet, throw an exception.
+   */
+  def getConf[T](entry: OptionalConfigEntry[T]): T = {
+    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    Option(settings.get(entry.key)).map(entry.rawValueConverter).
       getOrElse(throw new NoSuchElementException(entry.key))
   }
 
