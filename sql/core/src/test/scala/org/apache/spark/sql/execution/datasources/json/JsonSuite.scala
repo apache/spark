@@ -798,7 +798,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       .json(doubleRecords)
       .selectExpr("b", "d")
 
-    // The values in `a` field will be doubles as they all do not fit in decimal. For `c` field,
+    // The values in `b` field will be doubles as they all do not fit in decimal. For `d` field,
     // it will be also doubles as `1.01D` can be a decimal but `0.01D` becomes
     // a double as it does not fit in decimal. It makes the type as double in this case.
     val expectedSchema = StructType(
