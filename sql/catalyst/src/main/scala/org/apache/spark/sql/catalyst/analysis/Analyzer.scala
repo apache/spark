@@ -1634,7 +1634,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
       // Only support a single window expression for now?
       if (windowExpressions.size == 1 &&
           windowExpressions.head.timeColumn.resolved &&
-          windowExpressions.head.timeColumn.dataType == TimestampType) {
+          windowExpressions.head.timeColumn.dataType == TimestampType &&
+          windowExpressions.head.checkInputDataTypes().isSuccess) {
         val window = windowExpressions.head
         val windowAttr = AttributeReference("window", window.dataType)()
 

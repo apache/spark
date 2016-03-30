@@ -296,7 +296,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "negative window duration in time window",
     testRelation.select(
-      TimeWindow(Literal(1L), "-1 second", "1 second", "0 second").as("window")),
+      TimeWindow(Literal("2016-01-01 01:01:01"), "-1 second", "1 second", "0 second").as("window")),
       "The window duration (-1) must be greater than 0." :: Nil
   )
 
