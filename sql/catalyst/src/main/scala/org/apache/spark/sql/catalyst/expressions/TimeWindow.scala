@@ -25,32 +25,23 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 case class TimeWindow(
-    originalTimeColumn: Expression,
+    timeColumn: Expression,
     windowDuration: Long,
     slideDuration: Long,
     startTime: Long,
     private var outputColumnName: String = "window") extends UnaryExpression
-  with ExpectsInputTypes
+  with ImplicitCastInputTypes
   with Unevaluable
   with NonSQLExpression {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(TimestampType, LongType))
-  // the time column in Timestamp format
-  lazy val timeColumn = Cast(originalTimeColumn, TimestampType)
   override def child: Expression = timeColumn
-  override def dataType: DataType = outputType
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def dataType: DataType = new StructType()
+    .add(StructField("start", TimestampType))
+    .add(StructField("end", TimestampType))
 
-  private def outputType: StructType = StructType(Seq(
-    StructField("start", TimestampType), StructField("end", TimestampType)))
-  lazy val output: Seq[Attribute] = outputType.toAttributes
-  def outputColumn: NamedExpression = Alias(CreateStruct(output), outputColumnName)()
-  def windowStartCol: Attribute = output.head
-  def windowEndCol: Attribute = output.last
-
-  def withOutputColumnName(newName: String): this.type = {
-    outputColumnName = newName
-    this
-  }
+  // This expression is replaced in the analyzer.
+  override lazy val resolved = false
 
   /**
    * Validate the inputs for the window duration, slide duration, and start time.
@@ -76,12 +67,6 @@ case class TimeWindow(
     }
     None
   }
-
-  /**
-   * Returns the maximum possible number of overlapping windows we will have with the given
-   * window and slide durations.
-   */
-  def maxNumOverlapping: Int = math.ceil(windowDuration * 1.0 / slideDuration).toInt
 }
 
 object TimeWindow {

@@ -77,8 +77,7 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
-      EliminateUnions,
-      TimeWindowing),
+      EliminateUnions),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -97,6 +96,7 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
+      TimeWindowing ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -1593,32 +1593,7 @@ object ResolveUpCast extends Rule[LogicalPlan] {
  * filter out the rows where the time column is not inside the time window.
  */
 object TimeWindowing extends Rule[LogicalPlan] {
-
-  /**
-   * Depending on the operation, the TimeWindow expression may be wrapped in an Alias (in case of
-   * projections) or be simply by itself (in case of groupBy),
-   * @param f The function that we want to apply on the TimeWindow expression
-   * @return The user defined function applied on the TimeWindow expression
-   */
-  private def getWindowExpr[E](f: TimeWindow => E): PartialFunction[Expression, E] = {
-    case Alias(windowExpr: TimeWindow, name) =>
-      if (name == windowExpr.toString.toLowerCase) {
-        f(windowExpr)
-      } else {
-        f(windowExpr.withOutputColumnName(name))
-      }
-    case windowExpr: TimeWindow => f(windowExpr)
-  }
-
-  /** Pass on other columns that are required either in a projection or grouping. */
-  private def getMissingAttributes(plan: LogicalPlan): Seq[NamedExpression] = {
-    val expressions = plan match {
-      case p: Project => p.projectList
-      case a: Aggregate => a.groupingExpressions
-      case _ => Seq.empty
-    }
-    expressions.flatMap(_.references)
-  }
+  import org.apache.spark.sql.catalyst.dsl.expressions._
 
   /**
    * Generates the logical plan for generating window ranges on a timestamp column. Without
@@ -1648,44 +1623,53 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * @return the logical plan that will generate the time windows using the Expand operator, with
    *         the Filter operator for correctness and Project for usability.
    */
-  private def generateWindows(p: LogicalPlan): LogicalPlan = {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
-    val windowExpr = p.expressions.collect(getWindowExpr[TimeWindow](e => e)).head
-    // get all expressions we need to pass on for projections
-    val otherExpressions =
-      getMissingAttributes(p).filterNot(_.children.exists(_.isInstanceOf[TimeWindow]))
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case p: LogicalPlan if p.children.size == 1 =>
+      val child = p.children.head
+      val windowExpressions =
+        p.expressions.flatMap(_.collect { case t: TimeWindow => t }).distinct.toList // Not correct.
 
-    val projections = Seq.tabulate(windowExpr.maxNumOverlapping + 1) { i =>
-      val windowId = Ceil((Cast(windowExpr.timeColumn, LongType) - windowExpr.startTime) /
-        windowExpr.slideDuration)
-      val windowStart = (windowId + i - windowExpr.maxNumOverlapping) *
-        windowExpr.slideDuration + windowExpr.startTime
-      val windowEnd = windowStart + windowExpr.windowDuration
-      // the 1000000 is necessary for properly casting a LongType to a TimestampType
-      windowStart * 1000000 :: windowEnd * 1000000 :: windowExpr.originalTimeColumn :: Nil ++
-        otherExpressions
-    }
-    val timeCol = windowExpr.originalTimeColumn.references.toSeq
-    val filterExpr = windowExpr.timeColumn >= windowExpr.windowStartCol &&
-      windowExpr.timeColumn < windowExpr.windowEndCol
-    Project(windowExpr.output ++ Seq(windowExpr.outputColumn) ++ timeCol ++ otherExpressions,
-      Filter(filterExpr,
-        Expand(projections, windowExpr.output ++ timeCol ++ otherExpressions.map(_.toAttribute),
-          p.children.head)))
-  }
+      println(s"found: $windowExpressions")
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p: LogicalPlan if p.expressions.collect(getWindowExpr[TimeWindow](e => e)).nonEmpty &&
-      p.children.length == 1 =>
-      val windowed = generateWindows(p)
-      val rewritten = p transformExpressions getWindowExpr { windowExpr =>
-        windowExpr.validate() match {
-          case Some(e) => throw new AnalysisException(e)
-          case _ => // valid expression
+      // Only support a single window expression for now?
+      if (windowExpressions.size == 1 &&
+          windowExpressions.head.timeColumn.resolved &&
+          windowExpressions.head.timeColumn.dataType == TimestampType) {
+        val window = windowExpressions.head
+        val windowAttr = AttributeReference("window", window.dataType)()
+
+        val maxNumOverlapping = math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
+        val windows = Seq.tabulate(maxNumOverlapping + 1) { i =>
+          val windowId = Ceil((Cast(window.timeColumn, LongType) - window.startTime) /
+              window.slideDuration)
+          val windowStart = (windowId + i - maxNumOverlapping) *
+              window.slideDuration + window.startTime
+          val windowEnd = windowStart + window.windowDuration
+
+          // the 1000000 is necessary for properly casting a LongType to a TimestampType
+          CreateNamedStruct(
+            Literal("start") :: windowStart * 1000000 ::
+            Literal("end") :: windowEnd * 1000000 :: Nil)
         }
-        windowExpr.outputColumn
+
+        val projections = windows.map(_ +: p.children.head.output)
+
+        val filterExpr =
+          window.timeColumn >= windowAttr.getField("start")
+          window.timeColumn < windowAttr.getField("end")
+
+        val expandedPlan =
+          Filter(filterExpr,
+            Expand(projections, windowAttr +: child.output, child))
+
+        val substituedPlan = p transformExpressions {
+          case t: TimeWindow => windowAttr
+        }
+
+        substituedPlan.withNewChildren(expandedPlan :: Nil)
+      } else {
+        p // Return unchanged
       }
-      rewritten.withNewChildren(windowed :: Nil)
   }
 
 }
