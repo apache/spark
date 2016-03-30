@@ -21,39 +21,57 @@ import org.apache.commons.lang.StringUtils
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 case class TimeWindow(
-    originalTimeColumn: Expression,
+    timeColumn: Expression,
     windowDuration: Long,
     slideDuration: Long,
     startTime: Long,
     private var outputColumnName: String = "window") extends UnaryExpression
-  with ExpectsInputTypes
+  with ImplicitCastInputTypes
   with Unevaluable
   with NonSQLExpression {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(TimestampType, LongType))
-  // the time column in Timestamp format
-  lazy val timeColumn = Cast(originalTimeColumn, TimestampType)
   override def child: Expression = timeColumn
-  override def dataType: DataType = outputType
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def dataType: DataType = new StructType()
+    .add(StructField("start", TimestampType))
+    .add(StructField("end", TimestampType))
 
-  private def outputType: StructType = StructType(Seq(
-    StructField("start", TimestampType), StructField("end", TimestampType)))
-  lazy val output: Seq[Attribute] = outputType.toAttributes
-  def outputColumn: NamedExpression = Alias(CreateStruct(output), outputColumnName)()
-  def windowStartCol: Attribute = output.head
-  def windowEndCol: Attribute = output.last
+  // This expression is replaced in the analyzer.
+  override lazy val resolved = false
 
-  def withOutputColumnName(newName: String): this.type = {
-    outputColumnName = newName
-    this
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val dataTypeCheck = super.checkInputDataTypes()
+    if (dataTypeCheck.isSuccess) {
+      if (windowDuration <= 0) {
+        return TypeCheckFailure(s"The window duration ($windowDuration) must be greater than 0.")
+      }
+      if (slideDuration <= 0) {
+        return TypeCheckFailure(s"The slide duration ($slideDuration) must be greater than 0.")
+      }
+      if (startTime < 0) {
+        return TypeCheckFailure(s"The start time ($startTime) must be greater than or equal to 0.")
+      }
+      if (slideDuration > windowDuration) {
+        return TypeCheckFailure(s"The slide duration ($slideDuration) must be less than or equal to the " +
+            s"windowDuration ($windowDuration).")
+      }
+      if (startTime >= slideDuration) {
+        return TypeCheckFailure(s"The start time ($startTime) must be less than the " +
+            s"slideDuration ($slideDuration).")
+      }
+      return dataTypeCheck
+    } else {
+      return dataTypeCheck
+    }
   }
-
   /**
    * Validate the inputs for the window duration, slide duration, and start time.
+   *
    * @return Some string with a useful error message for the invalid input.
    */
   def validate(): Option[String] = {
@@ -76,12 +94,6 @@ case class TimeWindow(
     }
     None
   }
-
-  /**
-   * Returns the maximum possible number of overlapping windows we will have with the given
-   * window and slide durations.
-   */
-  def maxNumOverlapping: Int = math.ceil(windowDuration * 1.0 / slideDuration).toInt
 }
 
 object TimeWindow {
@@ -89,6 +101,7 @@ object TimeWindow {
    * Parses the interval string for a valid time duration. CalendarInterval expects interval
    * strings to start with the string `interval`. For usability, we prepend `interval` to the string
    * if the user ommitted it.
+   *
    * @param interval The interval string
    * @return The interval duration in seconds. SparkSQL casts TimestampType to Long in seconds,
    *         therefore we use seconds here as well.

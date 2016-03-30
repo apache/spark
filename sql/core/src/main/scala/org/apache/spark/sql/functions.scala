@@ -2598,9 +2598,12 @@ object functions {
       timeColumn: Column,
       windowDuration: String,
       slideDuration: String,
-      startTime: String): Column = withExpr {
-    TimeWindow(timeColumn.expr, windowDuration, slideDuration, startTime)
+      startTime: String): Column = {
+    withExpr {
+      TimeWindow(timeColumn.expr, windowDuration, slideDuration, startTime)
+    }.as("window")
   }
+
 
   /**
    * Bucketize rows into one or more time windows given a timestamp specifying column. Window
