@@ -1561,7 +1561,7 @@ class StringIndexer(JavaMutableEstimator, HasInputCol, HasOutputCol, HasHandleIn
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
     >>> inverter = IndexToString(inputCol="indexed", outputCol="label2",
-    ...     labels=stringIndexer.getLabels())
+    ...     labels=stringIndexer.labels)
     >>> itd = inverter.transform(td)
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
@@ -1580,12 +1580,6 @@ class StringIndexer(JavaMutableEstimator, HasInputCol, HasOutputCol, HasHandleIn
     .. versionadded:: 1.4.0
     """
 
-    # TODO: Make labels a shared param
-    labels = Param(Params._dummy(), "labels",
-                   "Optional array of labels specifying index-string mapping." +
-                   " If not provided or if empty, then metadata from inputCol is used instead.",
-                   typeConverter=TypeConverters.toListString)
-
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, handleInvalid="error", labels=None):
         """
@@ -1595,15 +1589,18 @@ class StringIndexer(JavaMutableEstimator, HasInputCol, HasOutputCol, HasHandleIn
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
         self._setDefault(handleInvalid="error")
-        kwargs = self.__init__._input_kwargs
+        kwargs = dict([(kw, self.__init__._input_kwargs[kw])
+                       for kw in self.__init__._input_kwargs
+                       if kw != 'labels'])
         self.setParams(**kwargs)
+        if labels is not None:
+            self._call_java("setLabels", labels)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error", labels=None):
+    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, inputCol=None, outputCol=None, handleInvalid="error",\
-          labels=None)
+        setParams(self, inputCol=None, outputCol=None, handleInvalid="error")
         Sets params for this StringIndexer.
         """
         kwargs = self.setParams._input_kwargs
@@ -1612,17 +1609,18 @@ class StringIndexer(JavaMutableEstimator, HasInputCol, HasOutputCol, HasHandleIn
     @since("2.0.0")
     def setLabels(self, value):
         """
-        Sets the value of :py:attr:`labels`.
+        Sets the value of `labels`.
         """
-        self._paramMap[self.labels] = value
+        self._call_java("setLabels", value)
         return self
 
+    @property
     @since("2.0.0")
-    def getLabels(self):
+    def labels(self):
         """
-        Gets the value of :py:attr:`labels` or its default value.
+        Gets the value of `labels`.
         """
-        return self.getOrDefault(self.labels)
+        return self._call_java("labels")
 
 
 @inherit_doc

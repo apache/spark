@@ -141,6 +141,12 @@ class JavaWrapper(Params):
                                       % stage_name)
         return py_stage
 
+    def _call_java(self, name, *args):
+        m = getattr(self._java_obj, name)
+        sc = SparkContext._active_spark_context
+        java_args = [_py2java(sc, arg) for arg in args]
+        return _java2py(sc, m(*java_args))
+
 
 @inherit_doc
 class JavaEstimator(Estimator, JavaWrapper):
@@ -235,12 +241,6 @@ class JavaModel(Model, JavaTransformer):
             that._java_obj = self._java_obj.copy(self._empty_java_param_map())
             that._transfer_params_to_java()
         return that
-
-    def _call_java(self, name, *args):
-        m = getattr(self._java_obj, name)
-        sc = SparkContext._active_spark_context
-        java_args = [_py2java(sc, arg) for arg in args]
-        return _java2py(sc, m(*java_args))
 
 
 @inherit_doc
