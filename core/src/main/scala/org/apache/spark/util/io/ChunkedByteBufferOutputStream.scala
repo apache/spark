@@ -107,7 +107,7 @@ private[spark] class ChunkedByteBufferOutputStream(
         ret(lastChunkIndex).flip()
         StorageUtils.dispose(chunks(lastChunkIndex))
       }
-     new ChunkedByteBuffer(ret)
+      new ChunkedByteBuffer(ret)
     }
   }
 }
