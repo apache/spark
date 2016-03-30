@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
+import java.io.{File, FileOutputStream}
 import java.net.URI
 import java.util.Properties
 
@@ -274,6 +274,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val jarsDir = new File(temp, "lib")
     assert(jarsDir.mkdir())
     val jar = TestUtils.createJarWithFiles(Map(), jarsDir)
+    new FileOutputStream(new File(temp, "RELEASE")).close()
 
     val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> temp.getAbsolutePath()))
     val client = createClient(sparkConf)
