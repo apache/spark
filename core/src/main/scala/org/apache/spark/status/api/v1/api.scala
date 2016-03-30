@@ -33,15 +33,16 @@ class ApplicationInfo private[spark](
 
 class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
-    val startTimeEpoch: Long,
-    val endTimeEpoch: Long,
-    val lastUpdatedEpoch: Long,
     val startTime: Date,
     val endTime: Date,
     val lastUpdated: Date,
     val duration: Long,
     val sparkUser: String,
-    val completed: Boolean = false)
+    val completed: Boolean = false) {
+    def getStartTimeEpoch: Long = startTime.getTime
+    def getEndTimeEpoch: Long = endTime.getTime
+    def getLastUpdatedEpoch: Long = lastUpdated.getTime
+}
 
 class ExecutorStageSummary private[spark](
     val taskTime : Long,

@@ -69,8 +69,6 @@ private[spark] object ApplicationsListResource {
       attempts = app.attempts.map { internalAttemptInfo =>
         new ApplicationAttemptInfo(
           attemptId = internalAttemptInfo.attemptId,
-          startTimeEpoch = internalAttemptInfo.startTime,
-          endTimeEpoch = internalAttemptInfo.endTime,
           startTime = new Date(internalAttemptInfo.startTime),
           endTime = new Date(internalAttemptInfo.endTime),
           duration =
@@ -79,7 +77,6 @@ private[spark] object ApplicationsListResource {
             } else {
               0
             },
-          lastUpdatedEpoch = internalAttemptInfo.lastUpdated,
           lastUpdated = new Date(internalAttemptInfo.lastUpdated),
           sparkUser = internalAttemptInfo.sparkUser,
           completed = internalAttemptInfo.completed
@@ -101,8 +98,6 @@ private[spark] object ApplicationsListResource {
       memoryPerExecutorMB = Some(internal.desc.memoryPerExecutorMB),
       attempts = Seq(new ApplicationAttemptInfo(
         attemptId = None,
-        startTimeEpoch = internal.startTime,
-        endTimeEpoch = internal.endTime,
         startTime = new Date(internal.startTime),
         endTime = new Date(internal.endTime),
         duration =
@@ -111,7 +106,6 @@ private[spark] object ApplicationsListResource {
           } else {
             0
           },
-        lastUpdatedEpoch = internal.endTime,
         lastUpdated = new Date(internal.endTime),
         sparkUser = internal.desc.user,
         completed = completed
