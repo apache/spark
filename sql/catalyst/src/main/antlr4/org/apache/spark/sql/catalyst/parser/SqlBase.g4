@@ -532,7 +532,7 @@ primaryExpression
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' expression (',' expression)+ ')'                                                     #rowConstructor
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
+    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (AS? (identifier | identifierList))? (OVER windowSpec)?  #functionCall
     | '(' query ')'                                                                            #subqueryExpression
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END                   #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
@@ -619,16 +619,27 @@ windowSpec
     ;
 
 windowFrame
-    : frameType=RANGE start=frameBound
-    | frameType=ROWS start=frameBound
-    | frameType=RANGE BETWEEN start=frameBound AND end=frameBound
-    | frameType=ROWS BETWEEN start=frameBound AND end=frameBound
+    : frameType=RANGE start=frameBound (exclude=excludeClause)?
+    | frameType=ROWS start=frameBound (exclude=excludeClause)?
+    | frameType=RANGE BETWEEN start=frameBound AND end=frameBound (exclude=excludeClause)?
+    | frameType=ROWS BETWEEN start=frameBound AND end=frameBound (exclude=excludeClause)?
     ;
 
 frameBound
     : UNBOUNDED boundType=(PRECEDING | FOLLOWING)
     | boundType=CURRENT ROW
     | expression boundType=(PRECEDING | FOLLOWING)
+    ;
+
+excludeClause
+    : EXCLUDE excludeType=CURRENT ROW
+    | EXCLUDE excludeType=GROUP
+    | EXCLUDE excludeType=TIES
+    | EXCLUDE excludeType=NO OTHERS
+    ;
+
+explainOption
+    : LOGICAL | FORMATTED | EXTENDED | CODEGEN
     ;
 
 qualifiedName

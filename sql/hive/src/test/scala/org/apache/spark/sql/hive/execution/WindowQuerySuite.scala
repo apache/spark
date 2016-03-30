@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SQLTestUtils
  * numerical differences or due semantic differences between Hive and Spark.
  */
 class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-
+/*
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql("DROP TABLE IF EXISTS part")
@@ -49,7 +49,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
          |LOAD DATA LOCAL INPATH '$testData1' overwrite into table part
       """.stripMargin)
   }
-
+*/
   override def afterAll(): Unit = {
     try {
       sql("DROP TABLE IF EXISTS part")
@@ -835,7 +835,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       // order by with component expression
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
-        " (partition by col1 order by col3+col2  exclude current row)" +
+        " (partition by col1 order by col3+col2 range between unbounded preceding and " +
+        " current row exclude current row)" +
         " from table1 where col1 = 6"),
         Seq(
           Row(6,  10, 1,  7),
@@ -852,7 +853,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       // trying on other aggregation functions, like AVG, MIN, MAX
       checkAnswer(sql("select col1, col2, col3, AVG(col2) over " +
-        " (partition by col1 order by col3 exclude current row) " +
+        " (partition by col1 order by col3 range between unbounded preceding and " +
+        " current row exclude current row) " +
         " from table1 where col1 = 6"),
         Seq(
            Row(6,  10,   1, null),
@@ -868,7 +870,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       )
 
       checkAnswer(sql("select col1, col2, col3, MIN(col2) over " +
-        " (partition by col1 order by col3 exclude group) " +
+        " (partition by col1 order by col3 range between unbounded preceding and " +
+        " current row exclude group) " +
         " from table1 where col1 = 6"),
         Seq(
            Row(6,  10,   1,   null),

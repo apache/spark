@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.parser
 import java.sql.{Date, Timestamp}
 import javax.xml.bind.DatatypeConverter
 
+import org.apache.spark.sql.catalyst.parser.ParserUtils._
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -1070,10 +1072,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case SqlBaseParser.ROWS => RowFrame
       }
 
+      val excludeSpec = Option(frame.exclude).map{excludeClause =>
+        excludeClause.excludeType.getType match {
+          case SqlBaseParser.CURRENT =>
+            ExcludeClause(ExcludeCurrentRow)
+          case SqlBaseParser.GROUP if order.isEmpty =>
+            throw new ParseException("For EXCLUDE GROUP clause, " +
+              "order by column(s) need to be specified", ctx)
+          case SqlBaseParser.GROUP  =>
+            ExcludeClause(ExcludeGroup)
+          case SqlBaseParser.TIES  if order.isEmpty =>
+            throw new ParseException("For EXCLUDE TIES clause, " +
+              "order by column(s) need to be specified", ctx)
+          case SqlBaseParser.TIES  =>
+            ExcludeClause(ExcludeTies)
+          case SqlBaseParser.NO  =>
+            ExcludeClause(ExcludeNoOthers)
+        }
+      }
+
       SpecifiedWindowFrame(
         frameType,
         visitFrameBound(frame.start),
-        Option(frame.end).map(visitFrameBound).getOrElse(CurrentRow))
+        Option(frame.end).map(visitFrameBound).getOrElse(CurrentRow),
+        excludeSpec.getOrElse(ExcludeClause.defaultExclude))
     }
 
     WindowSpecDefinition(
