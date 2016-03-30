@@ -50,13 +50,13 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
-    final BufferedInputStream bs = new BufferedInputStream(new FileInputStream(file));
+    final FileInputStream fs = new FileInputStream(file);
     try {
-      this.in = serializerManager.wrapForCompression(blockId, bs);
+      this.in = new BufferedInputStream(serializerManager.wrapForCompression(blockId, fs));
       this.din = new DataInputStream(this.in);
       numRecords = numRecordsRemaining = din.readInt();
     } catch (IOException e) {
-      Closeables.close(bs, /* swallowIOException = */ true);
+      Closeables.close(fs, /* swallowIOException = */ true);
       throw e;
     }
   }
