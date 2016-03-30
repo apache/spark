@@ -44,10 +44,10 @@ private[spark] object SchemaUtils {
   }
 
   /**
-    * Check whether the given schema contains a column of one of the require data types.
-    * @param colName  column name
-    * @param dataTypes  required column data types
-    */
+   * Check whether the given schema contains a column of one of the require data types.
+   * @param colName  column name
+   * @param dataTypes  required column data types
+   */
   def checkColumnTypes(
       schema: StructType,
       colName: String,
@@ -61,9 +61,9 @@ private[spark] object SchemaUtils {
   }
 
   /**
-    * Check whether the given schema contains a column of the numeric data type.
-    * @param colName  column name
-    */
+   * Check whether the given schema contains a column of the numeric data type.
+   * @param colName  column name
+   */
   def checkNumericType(
       schema: StructType,
       colName: String,
