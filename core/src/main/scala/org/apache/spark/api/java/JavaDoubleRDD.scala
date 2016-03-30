@@ -66,7 +66,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
    */
   def unpersist(blocking: Boolean): JavaDoubleRDD = fromRDD(srdd.unpersist(blocking))
 
-  // first() has to be overriden here in order for its return type to be Double instead of Object.
+  // first() has to be overridden here in order for its return type to be Double instead of Object.
   override def first(): JDouble = srdd.first()
 
   // Transformations (return a new RDD)

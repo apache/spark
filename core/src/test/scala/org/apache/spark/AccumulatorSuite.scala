@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.util.concurrent.Semaphore
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -57,7 +58,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       }
     }
 
-  test ("basic accumulation"){
+  test ("basic accumulation") {
     sc = new SparkContext("local", "test")
     val acc : Accumulator[Int] = sc.accumulator(0)
 
@@ -341,24 +342,21 @@ private class SaveInfoListener extends SparkListener {
   // Callback to call when a job completes. Parameter is job ID.
   @GuardedBy("this")
   private var jobCompletionCallback: () => Unit = null
-  private var calledJobCompletionCallback: Boolean = false
+  private val jobCompletionSem = new Semaphore(0)
   private var exception: Throwable = null
 
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
   def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.values.flatten.toSeq
   def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
-    completedTaskInfos.get((stageId, stageAttemptId)).getOrElse(Seq.empty[TaskInfo])
+    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo])
 
   /**
    * If `jobCompletionCallback` is set, block until the next call has finished.
    * If the callback failed with an exception, throw it.
    */
-  def awaitNextJobCompletion(): Unit = synchronized {
+  def awaitNextJobCompletion(): Unit = {
     if (jobCompletionCallback != null) {
-      while (!calledJobCompletionCallback) {
-        wait()
-      }
-      calledJobCompletionCallback = false
+      jobCompletionSem.acquire()
       if (exception != null) {
         exception = null
         throw exception
@@ -374,7 +372,7 @@ private class SaveInfoListener extends SparkListener {
     jobCompletionCallback = callback
   }
 
-  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = synchronized {
+  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
     if (jobCompletionCallback != null) {
       try {
         jobCompletionCallback()
@@ -383,8 +381,7 @@ private class SaveInfoListener extends SparkListener {
         // Otherwise, if `jobCompletionCallback` threw something it wouldn't fail the test.
         case NonFatal(e) => exception = e
       } finally {
-        calledJobCompletionCallback = true
-        notify()
+        jobCompletionSem.release()
       }
     }
   }

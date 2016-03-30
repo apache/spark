@@ -38,7 +38,7 @@ import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeU
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
 

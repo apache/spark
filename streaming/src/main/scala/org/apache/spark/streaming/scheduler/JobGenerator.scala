@@ -19,7 +19,8 @@ package org.apache.spark.streaming.scheduler
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
@@ -218,12 +219,12 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     // Batches that were unprocessed before failure
     val pendingTimes = ssc.initialCheckpoint.pendingTimes.sorted(Time.ordering)
-    logInfo("Batches pending processing (" + pendingTimes.size + " batches): " +
+    logInfo("Batches pending processing (" + pendingTimes.length + " batches): " +
       pendingTimes.mkString(", "))
     // Reschedule jobs for these times
     val timesToReschedule = (pendingTimes ++ downTimes).filter { _ < restartTime }
       .distinct.sorted(Time.ordering)
-    logInfo("Batches to reschedule (" + timesToReschedule.size + " batches): " +
+    logInfo("Batches to reschedule (" + timesToReschedule.length + " batches): " +
       timesToReschedule.mkString(", "))
     timesToReschedule.foreach { time =>
       // Allocate the related blocks when recovering from failure, because some blocks that were

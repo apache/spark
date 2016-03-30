@@ -35,12 +35,12 @@ to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/
 
 To create a Spark distribution like those distributed by the
 [Spark Downloads](http://spark.apache.org/downloads.html) page, and that is laid out so as
-to be runnable, use `make-distribution.sh` in the project root directory. It can be configured
+to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
+    ./dev/make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
 
-For more information on usage, run `./make-distribution.sh --help`
+For more information on usage, run `./dev/make-distribution.sh --help`
 
 # Setting up Maven's Memory Usage
 
@@ -98,8 +98,11 @@ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 # Apache Hadoop 2.4.X or 2.5.X
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=VERSION -DskipTests clean package
 
-Versions of Hadoop after 2.5.X may or may not work with the -Phadoop-2.4 profile (they were
-released after this version of Spark).
+# Apache Hadoop 2.6.X
+mvn -Pyarn -Phadoop-2.6 -Dhadoop.version=2.6.0 -DskipTests clean package
+
+# Apache Hadoop 2.7.X and later
+mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=VERSION -DskipTests clean package
 
 # Different versions of HDFS and YARN.
 mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests clean package
@@ -108,9 +111,9 @@ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests 
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 0.13.1 bindings.
+By default Spark will build with Hive 1.2.1 bindings.
 {% highlight bash %}
-# Apache Hadoop 2.4.X with Hive 13 support
+# Apache Hadoop 2.4.X with Hive 1.2.1 support
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
 
@@ -140,10 +143,10 @@ It's possible to build Spark sub-modules using the `mvn -pl` option.
 For instance, you can build the Spark Streaming module using:
 
 {% highlight bash %}
-mvn -pl :spark-streaming_2.10 clean install
+mvn -pl :spark-streaming_2.11 clean install
 {% endhighlight %}
 
-where `spark-streaming_2.10` is the `artifactId` as defined in `streaming/pom.xml` file.
+where `spark-streaming_2.11` is the `artifactId` as defined in `streaming/pom.xml` file.
 
 # Continuous Compilation
 

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{QueryTest, Row}
@@ -125,7 +126,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("decimal type") {
     // Casting is required here because ScalaReflection can't capture decimal precision information.
     val df = (1 to 10)
-      .map(i => Tuple1(Decimal(i, 15, 10)))
+      .map(i => Tuple1(Decimal(i, 15, 10).toJavaBigDecimal))
       .toDF("dec")
       .select($"dec" cast DecimalType(15, 10))
 
@@ -160,7 +161,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       sparkContext.parallelize((1 to 10000), 10).map { i =>
         Row(
           s"str${i}: test cache.",
-          s"binary${i}: test cache.".getBytes("UTF-8"),
+          s"binary${i}: test cache.".getBytes(StandardCharsets.UTF_8),
           null,
           i % 2 == 0,
           i.toByte,

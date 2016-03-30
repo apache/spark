@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -179,6 +180,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         context.reply(true)
 
       case RemoveExecutor(executorId, reason) =>
+        // We will remove the executor's state and cannot restore it. However, the connection
+        // between the driver and the executor may be still alive so that the executor won't exit
+        // automatically, so try to tell the executor to stop itself. See SPARK-13519.
+        executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
         context.reply(true)
 
@@ -351,20 +356,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   /**
    * Reset the state of CoarseGrainedSchedulerBackend to the initial state. Currently it will only
-   * be called in the yarn-client mode when AM re-registers after a failure, also dynamic
-   * allocation is enabled.
+   * be called in the yarn-client mode when AM re-registers after a failure.
    * */
   protected def reset(): Unit = synchronized {
-    if (Utils.isDynamicAllocationEnabled(conf)) {
-      numPendingExecutors = 0
-      executorsPendingToRemove.clear()
+    numPendingExecutors = 0
+    executorsPendingToRemove.clear()
 
-      // Remove all the lingering executors that should be removed but not yet. The reason might be
-      // because (1) disconnected event is not yet received; (2) executors die silently.
-      executorDataMap.toMap.foreach { case (eid, _) =>
-        driverEndpoint.askWithRetry[Boolean](
-          RemoveExecutor(eid, SlaveLost("Stale executor after cluster manager re-registered.")))
-      }
+    // Remove all the lingering executors that should be removed but not yet. The reason might be
+    // because (1) disconnected event is not yet received; (2) executors die silently.
+    executorDataMap.toMap.foreach { case (eid, _) =>
+      driverEndpoint.askWithRetry[Boolean](
+        RemoveExecutor(eid, SlaveLost("Stale executor after cluster manager re-registered.")))
     }
   }
 

@@ -22,8 +22,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand, _}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect, DescribeCommand}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescribeCommand, _}
+import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect,
+  DescribeCommand}
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
@@ -100,18 +102,8 @@ private[hive] trait HiveStrategies {
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case describe: DescribeCommand =>
-        val resolvedTable = context.executePlan(describe.table).analyzed
-        resolvedTable match {
-          case t: MetastoreRelation =>
-            ExecutedCommand(
-              DescribeHiveTableCommand(t, describe.output, describe.isExtended)) :: Nil
-
-          case o: LogicalPlan =>
-            val resultPlan = context.executePlan(o).executedPlan
-            ExecutedCommand(RunnableDescribeCommand(
-              resultPlan, describe.output, describe.isExtended)) :: Nil
-        }
-
+        ExecutedCommand(
+          DescribeHiveTableCommand(describe.table, describe.output, describe.isExtended)) :: Nil
       case _ => Nil
     }
   }

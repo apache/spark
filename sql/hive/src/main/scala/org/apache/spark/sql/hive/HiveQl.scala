@@ -30,12 +30,10 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
-import org.apache.spark.sql.catalyst.parser.ParseUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
@@ -61,7 +59,7 @@ private[hive] case class CreateTableAsSelect(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
   override lazy val resolved: Boolean =
-    tableDesc.specifiedDatabase.isDefined &&
+    tableDesc.identifier.database.isDefined &&
     tableDesc.schema.nonEmpty &&
     tableDesc.storage.serde.isDefined &&
     tableDesc.storage.inputFormat.isDefined &&
@@ -81,55 +79,50 @@ private[hive] case class CreateViewAsSelect(
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging {
-  protected val nativeCommands = Seq(
+  import ParseUtils._
+  import ParserUtils._
+
+  // Token text -> human readable text
+  private val hiveUnsupportedCommands = Map(
+    "TOK_CREATEROLE" -> "CREATE ROLE",
+    "TOK_DROPROLE" -> "DROP ROLE",
+    "TOK_EXPORT" -> "EXPORT TABLE",
+    "TOK_GRANT" -> "GRANT",
+    "TOK_GRANT_ROLE" -> "GRANT",
+    "TOK_IMPORT" -> "IMPORT TABLE",
+    "TOK_REVOKE" -> "REVOKE",
+    "TOK_REVOKE_ROLE" -> "REVOKE",
+    "TOK_SHOW_COMPACTIONS" -> "SHOW COMPACTIONS",
+    "TOK_SHOW_CREATETABLE" -> "SHOW CREATE TABLE",
+    "TOK_SHOW_GRANT" -> "SHOW GRANT",
+    "TOK_SHOW_ROLE_GRANT" -> "SHOW ROLE GRANT",
+    "TOK_SHOW_ROLE_PRINCIPALS" -> "SHOW PRINCIPALS",
+    "TOK_SHOW_ROLES" -> "SHOW ROLES",
+    "TOK_SHOW_SET_ROLE" -> "SHOW CURRENT ROLES / SET ROLE",
+    "TOK_SHOW_TRANSACTIONS" -> "SHOW TRANSACTIONS",
+    "TOK_SHOWINDEXES" -> "SHOW INDEXES",
+    "TOK_SHOWLOCKS" -> "SHOW LOCKS")
+
+  private val nativeCommands = Set(
     "TOK_ALTERDATABASE_OWNER",
-    "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
-    "TOK_ALTERTABLE",
-    "TOK_ALTERTABLE_ADDCOLS",
-    "TOK_ALTERTABLE_ADDPARTS",
     "TOK_ALTERTABLE_ALTERPARTS",
-    "TOK_ALTERTABLE_ARCHIVE",
-    "TOK_ALTERTABLE_CLUSTER_SORT",
-    "TOK_ALTERTABLE_DROPPARTS",
     "TOK_ALTERTABLE_PARTITION",
-    "TOK_ALTERTABLE_PROPERTIES",
-    "TOK_ALTERTABLE_RENAME",
-    "TOK_ALTERTABLE_RENAMECOL",
-    "TOK_ALTERTABLE_REPLACECOLS",
-    "TOK_ALTERTABLE_SKEWED",
-    "TOK_ALTERTABLE_TOUCH",
-    "TOK_ALTERTABLE_UNARCHIVE",
     "TOK_ALTERVIEW_ADDPARTS",
     "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
 
-    "TOK_CREATEDATABASE",
-    "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
     "TOK_CREATEMACRO",
-    "TOK_CREATEROLE",
 
-    "TOK_DESCDATABASE",
-
-    "TOK_DROPDATABASE",
-    "TOK_DROPFUNCTION",
     "TOK_DROPINDEX",
     "TOK_DROPMACRO",
-    "TOK_DROPROLE",
     "TOK_DROPTABLE_PROPERTIES",
     "TOK_DROPVIEW",
     "TOK_DROPVIEW_PROPERTIES",
-
-    "TOK_EXPORT",
-
-    "TOK_GRANT",
-    "TOK_GRANT_ROLE",
-
-    "TOK_IMPORT",
 
     "TOK_LOAD",
 
@@ -137,32 +130,21 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
     "TOK_MSCK",
 
-    "TOK_REVOKE",
-
-    "TOK_SHOW_COMPACTIONS",
-    "TOK_SHOW_CREATETABLE",
-    "TOK_SHOW_GRANT",
-    "TOK_SHOW_ROLE_GRANT",
-    "TOK_SHOW_ROLE_PRINCIPALS",
-    "TOK_SHOW_ROLES",
-    "TOK_SHOW_SET_ROLE",
     "TOK_SHOW_TABLESTATUS",
     "TOK_SHOW_TBLPROPERTIES",
-    "TOK_SHOW_TRANSACTIONS",
     "TOK_SHOWCOLUMNS",
     "TOK_SHOWDATABASES",
-    "TOK_SHOWINDEXES",
-    "TOK_SHOWLOCKS",
     "TOK_SHOWPARTITIONS",
 
     "TOK_UNLOCKTABLE"
   )
 
   // Commands that we do not need to explain.
-  protected val noExplainCommands = Seq(
+  private val noExplainCommands = Set(
     "TOK_DESCTABLE",
     "TOK_SHOWTABLES",
-    "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
+    "TOK_TRUNCATETABLE", // truncate table" is a NativeCommand, does not need to explain.
+    "TOK_ALTERTABLE"
   ) ++ nativeCommands
 
   /**
@@ -197,13 +179,10 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
       properties: Map[String, String],
       allowExist: Boolean,
       replace: Boolean): CreateViewAsSelect = {
-    val TableIdentifier(viewName, dbName) = extractTableIdent(viewNameParts)
-
+    val tableIdentifier = extractTableIdent(viewNameParts)
     val originalText = query.source
-
     val tableDesc = CatalogTable(
-      specifiedDatabase = dbName,
-      name = viewName,
+      identifier = tableIdentifier,
       tableType = CatalogTableType.VIRTUAL_VIEW,
       schema = schema,
       storage = CatalogStorageFormat(
@@ -229,6 +208,9 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     safeParse(sql, ParseDriver.parsePlan(sql, conf)) { ast =>
       if (nativeCommands.contains(ast.text)) {
         HiveNativeCommand(sql)
+      } else if (hiveUnsupportedCommands.contains(ast.text)) {
+        val humanReadableText = hiveUnsupportedCommands(ast.text)
+        throw new AnalysisException("Unsupported operation: " + humanReadableText)
       } else {
         nodeToPlan(ast) match {
           case NativePlaceholder => HiveNativeCommand(sql)
@@ -257,7 +239,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
         val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
         DropTable(tableName, ifExists.nonEmpty)
 
-      // Support "ANALYZE TABLE tableNmae COMPUTE STATISTICS noscan"
+      // Support "ANALYZE TABLE tableName COMPUTE STATISTICS noscan"
       case Token("TOK_ANALYZE",
         Token("TOK_TAB", Token("TOK_TABNAME", tableNameParts) :: partitionSpec) :: isNoscan) =>
         // Reference:
@@ -368,12 +350,11 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
               "TOK_TABLELOCATION",
               "TOK_TABLEPROPERTIES"),
             children)
-        val TableIdentifier(tblName, dbName) = extractTableIdent(tableNameParts)
+        val tableIdentifier = extractTableIdent(tableNameParts)
 
         // TODO add bucket support
         var tableDesc: CatalogTable = CatalogTable(
-          specifiedDatabase = dbName,
-          name = tblName,
+          identifier = tableIdentifier,
           tableType =
             if (externalTable.isDefined) {
               CatalogTableType.EXTERNAL_TABLE
@@ -547,7 +528,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
           case Token("TOK_STORAGEHANDLER", _) =>
             throw new AnalysisException(
               "CREATE TABLE AS SELECT cannot be used for a non-native table")
-          case _ => // Unsupport features
+          case _ => // Unsupported features
         }
 
         CreateTableAsSelect(tableDesc, nodeToPlan(query), allowExisting.isDefined)
@@ -583,11 +564,11 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
       val (output, schemaLess) = outputClause match {
         case Token("TOK_ALIASLIST", aliases) :: Nil =>
-          (aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() },
-            false)
+          (aliases.map { case Token(name, Nil) =>
+            AttributeReference(cleanIdentifier(name), StringType)() }, false)
         case Token("TOK_TABCOLLIST", attributes) :: Nil =>
           (attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
-            AttributeReference(name, nodeToDataType(dataType))() }, false)
+            AttributeReference(cleanIdentifier(name), nodeToDataType(dataType))() }, false)
         case Nil =>
           (List(AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()), true)

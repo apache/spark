@@ -26,7 +26,8 @@ import org.apache.spark.ml.regression.LinearRegression;
 import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.ml.tuning.TrainValidationSplit;
 import org.apache.spark.ml.tuning.TrainValidationSplitModel;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 // $example off$
 import org.apache.spark.sql.SQLContext;
 
@@ -41,13 +42,13 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
     SQLContext jsql = new SQLContext(sc);
 
     // $example on$
-    DataFrame data = jsql.read().format("libsvm")
+    Dataset<Row> data = jsql.read().format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt");
 
     // Prepare training and test data.
-    DataFrame[] splits = data.randomSplit(new double[] {0.9, 0.1}, 12345);
-    DataFrame training = splits[0];
-    DataFrame test = splits[1];
+    Dataset<Row>[] splits = data.randomSplit(new double[] {0.9, 0.1}, 12345);
+    Dataset<Row> training = splits[0];
+    Dataset<Row> test = splits[1];
 
     LinearRegression lr = new LinearRegression();
 

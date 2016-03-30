@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.annotation.tailrec
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -196,15 +197,17 @@ object NewInstance {
  * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
  *                 to manually specify the type when the object in question is a valid internal
  *                 representation (i.e. ArrayData) instead of an object.
- * @param outerPointer If the object being constructed is an inner class the outerPointer must
- *                     for the containing class must be specified.
+ * @param outerPointer If the object being constructed is an inner class, the outerPointer for the
+ *                     containing class must be specified. This parameter is defined as an optional
+ *                     function, which allows us to get the outer pointer lazily,and it's useful if
+ *                     the inner class is defined in REPL.
  */
 case class NewInstance(
     cls: Class[_],
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[Literal]) extends Expression with NonSQLExpression {
+    outerPointer: Option[() => AnyRef]) extends Expression with NonSQLExpression {
   private val className = cls.getName
 
   override def nullable: Boolean = propagateNull
@@ -219,12 +222,12 @@ case class NewInstance(
     val argGen = arguments.map(_.gen(ctx))
     val argString = argGen.map(_.value).mkString(", ")
 
-    val outer = outerPointer.map(_.gen(ctx))
+    val outer = outerPointer.map(func => Literal.fromObject(func()).gen(ctx))
 
     val setup =
       s"""
          ${argGen.map(_.code).mkString("\n")}
-         ${outer.map(_.code.mkString("")).getOrElse("")}
+         ${outer.map(_.code).getOrElse("")}
        """.stripMargin
 
     val constructorCall = outer.map { gen =>
@@ -363,13 +366,14 @@ object MapObjects {
  *                used as input for the `lambdaFunction`. It also carries the element type info.
  * @param lambdaFunction A function that take the `loopVar` as input, and used as lambda function
  *                       to handle collection elements.
- * @param inputData An expression that when evaluted returns a collection object.
+ * @param inputData An expression that when evaluated returns a collection object.
  */
 case class MapObjects private(
     loopVar: LambdaVariable,
     lambdaFunction: Expression,
     inputData: Expression) extends Expression with NonSQLExpression {
 
+  @tailrec
   private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
     case NullType =>
       val nullTypeClassName = NullType.getClass.getName + ".MODULE$"
@@ -386,6 +390,8 @@ case class MapObjects private(
     case a: ArrayType => (i: String) => s".getArray($i)"
     case _: MapType => (i: String) => s".getMap($i)"
     case udt: UserDefinedType[_] => itemAccessorMethod(udt.sqlType)
+    case DecimalType.Fixed(p, s) => (i: String) => s".getDecimal($i, $p, $s)"
+    case DateType => (i: String) => s".getInt($i)"
   }
 
   private lazy val (lengthFunction, itemAccessor, primitiveElement) = inputData.dataType match {
@@ -483,7 +489,9 @@ case class MapObjects private(
  *
  * @param children A list of expression to use as content of the external row.
  */
-case class CreateExternalRow(children: Seq[Expression]) extends Expression with NonSQLExpression {
+case class CreateExternalRow(children: Seq[Expression], schema: StructType)
+  extends Expression with NonSQLExpression {
+
   override def dataType: DataType = ObjectType(classOf[Row])
 
   override def nullable: Boolean = false
@@ -492,8 +500,9 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression with 
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val rowClass = classOf[GenericRow].getName
+    val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
+    val schemaField = ctx.addReferenceObj("schema", schema)
     s"""
       boolean ${ev.isNull} = false;
       final Object[] $values = new Object[${children.size}];
@@ -508,7 +517,7 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression with 
           }
          """
       }.mkString("\n") +
-      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values);"
+      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);"
   }
 }
 

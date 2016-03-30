@@ -18,12 +18,12 @@
 package org.apache.spark.streaming
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, ObjectOutputStream}
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -609,7 +609,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
      */
     def writeFile(i: Int, clock: Clock): Unit = {
       val file = new File(testDir, i.toString)
-      Files.write(i + "\n", file, Charsets.UTF_8)
+      Files.write(i + "\n", file, StandardCharsets.UTF_8)
       assert(file.setLastModified(clock.getTimeMillis()))
       // Check that the file's modification date is actually the value we wrote, since rounding or
       // truncation will break the test:

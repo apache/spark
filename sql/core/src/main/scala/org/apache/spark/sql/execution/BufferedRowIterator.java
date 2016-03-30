@@ -29,14 +29,12 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 /**
  * An iterator interface used to pull the output from generated function for multiple operators
  * (whole stage codegen).
- *
- * TODO: replaced it by batched columnar format.
  */
-public class BufferedRowIterator {
+public abstract class BufferedRowIterator {
   protected LinkedList<InternalRow> currentRows = new LinkedList<>();
-  protected Iterator<InternalRow> input;
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
+  private long startTimeNs = System.nanoTime();
 
   public boolean hasNext() throws IOException {
     if (currentRows.isEmpty()) {
@@ -49,8 +47,24 @@ public class BufferedRowIterator {
     return currentRows.remove();
   }
 
-  public void setInput(Iterator<InternalRow> iter) {
-    input = iter;
+  /**
+   * Returns the elapsed time since this object is created. This object represents a pipeline so
+   * this is a measure of how long the pipeline has been running.
+   */
+  public long durationMs() {
+    return (System.nanoTime() - startTimeNs) / (1000 * 1000);
+  }
+
+  /**
+   * Initializes from array of iterators of InternalRow.
+   */
+  public abstract void init(Iterator<InternalRow> iters[]);
+
+  /**
+   * Append a row to currentRows.
+   */
+  protected void append(InternalRow row) {
+    currentRows.add(row);
   }
 
   /**
@@ -74,9 +88,5 @@ public class BufferedRowIterator {
    *
    * After it's called, if currentRow is still null, it means no more rows left.
    */
-  protected void processNext() throws IOException {
-    if (input.hasNext()) {
-      currentRows.add(input.next());
-    }
-  }
+  protected abstract void processNext() throws IOException;
 }

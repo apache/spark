@@ -26,6 +26,7 @@ import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAg
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -127,6 +128,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   import testImplicits._
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -187,10 +189,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   override def afterAll(): Unit = {
-    sqlContext.sql("DROP TABLE IF EXISTS agg1")
-    sqlContext.sql("DROP TABLE IF EXISTS agg2")
-    sqlContext.sql("DROP TABLE IF EXISTS agg3")
-    sqlContext.dropTempTable("emptyTable")
+    try {
+      sqlContext.sql("DROP TABLE IF EXISTS agg1")
+      sqlContext.sql("DROP TABLE IF EXISTS agg2")
+      sqlContext.sql("DROP TABLE IF EXISTS agg3")
+      sqlContext.dropTempTable("emptyTable")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("group by function") {
@@ -966,7 +972,7 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
         // Create a new df to make sure its physical operator picks up
         // spark.sql.TungstenAggregate.testFallbackStartsAt.
         // todo: remove it?
-        val newActual = DataFrame(sqlContext, actual.logicalPlan)
+        val newActual = Dataset.ofRows(sqlContext, actual.logicalPlan)
 
         QueryTest.checkAnswer(newActual, expectedAnswer) match {
           case Some(errorMessage) =>

@@ -63,14 +63,6 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("1.5.0")
   def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
 
-  /**
-   * @group setParam
-   * @deprecated use [[setRawPredictionCol()]] instead
-   */
-  @deprecated("use setRawPredictionCol instead", "1.5.0")
-  @Since("1.2.0")
-  def setScoreCol(value: String): this.type = set(rawPredictionCol, value)
-
   /** @group setParam */
   @Since("1.2.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
@@ -84,11 +76,10 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
     SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
-    val scoreAndLabels = dataset.select($(rawPredictionCol), $(labelCol))
-      .map {
-        case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
-        case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
-      }
+    val scoreAndLabels = dataset.select($(rawPredictionCol), $(labelCol)).rdd.map {
+      case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
+      case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
+    }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val metric = $(metricName) match {
       case "areaUnderROC" => metrics.areaUnderROC()

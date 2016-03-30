@@ -150,6 +150,10 @@ class MatricesSuite extends SparkFunSuite {
       sparseMat.update(0, 0, 10.0)
     }
 
+    intercept[NoSuchElementException] {
+      sparseMat.update(2, 1, 10.0)
+    }
+
     sparseMat.update(0, 1, 10.0)
     assert(sparseMat(0, 1) === 10.0)
     assert(sparseMat.values(2) === 10.0)
@@ -493,5 +497,18 @@ class MatricesSuite extends SparkFunSuite {
     val sm1 = Matrices.sparse(3, 2, Array(0, 2, 3), Array(0, 2, 1), Array(0.0, -1.2, 0.0))
     assert(sm1.numNonzeros === 1)
     assert(sm1.numActives === 3)
+  }
+
+  test("row/col iterator") {
+    val dm = new DenseMatrix(3, 2, Array(0, 1, 2, 3, 4, 0))
+    val sm = dm.toSparse
+    val rows = Seq(Vectors.dense(0, 3), Vectors.dense(1, 4), Vectors.dense(2, 0))
+    val cols = Seq(Vectors.dense(0, 1, 2), Vectors.dense(3, 4, 0))
+    for (m <- Seq(dm, sm)) {
+      assert(m.rowIter.toSeq === rows)
+      assert(m.colIter.toSeq === cols)
+      assert(m.transpose.rowIter.toSeq === cols)
+      assert(m.transpose.colIter.toSeq === rows)
+    }
   }
 }

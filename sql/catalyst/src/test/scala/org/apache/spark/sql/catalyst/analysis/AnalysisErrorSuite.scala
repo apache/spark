@@ -36,11 +36,7 @@ private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
 
   override def sqlType: DataType = IntegerType
 
-  override def serialize(obj: Any): Int = {
-    obj match {
-      case groupableData: GroupableData => groupableData.data
-    }
-  }
+  override def serialize(groupableData: GroupableData): Int = groupableData.data
 
   override def deserialize(datum: Any): GroupableData = {
     datum match {
@@ -60,13 +56,10 @@ private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
 
   override def sqlType: DataType = MapType(IntegerType, IntegerType)
 
-  override def serialize(obj: Any): MapData = {
-    obj match {
-      case groupableData: UngroupableData =>
-        val keyArray = new GenericArrayData(groupableData.data.keys.toSeq)
-        val valueArray = new GenericArrayData(groupableData.data.values.toSeq)
-        new ArrayBasedMapData(keyArray, valueArray)
-    }
+  override def serialize(ungroupableData: UngroupableData): MapData = {
+    val keyArray = new GenericArrayData(ungroupableData.data.keys.toSeq)
+    val valueArray = new GenericArrayData(ungroupableData.data.values.toSeq)
+    new ArrayBasedMapData(keyArray, valueArray)
   }
 
   override def deserialize(datum: Any): UngroupableData = {
@@ -197,6 +190,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "cannot resolve" :: "havingCondition" :: Nil)
 
   errorTest(
+    "unresolved star expansion in max",
+    testRelation2.groupBy('a)(sum(UnresolvedStar(None))),
+    "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
+
+  errorTest(
     "bad casts",
     testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
   "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
@@ -252,7 +250,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "union with unequal number of columns",
-    testRelation.unionAll(testRelation2),
+    testRelation.union(testRelation2),
     "union" :: "number of columns" :: testRelation2.output.length.toString ::
       testRelation.output.length.toString :: Nil)
 
@@ -276,7 +274,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
-    // Since we manually construct the logical plan at here and Sum only accetp
+    // Since we manually construct the logical plan at here and Sum only accept
     // LongType, DoubleType, and DecimalType. We use LongType as the type of a.
     val plan =
       Aggregate(

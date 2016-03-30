@@ -501,7 +501,7 @@ class StandaloneDynamicAllocationSuite
     master.self.askWithRetry[MasterStateResponse](RequestMasterState)
   }
 
-  /** Get the applictions that are active from Master */
+  /** Get the applications that are active from Master */
   private def getApplications(): Seq[ApplicationInfo] = {
     getMasterState.activeApps
   }

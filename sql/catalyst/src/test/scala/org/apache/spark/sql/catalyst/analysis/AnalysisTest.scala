@@ -18,26 +18,21 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 
 trait AnalysisTest extends PlanTest {
 
-  val (caseSensitiveAnalyzer, caseInsensitiveAnalyzer) = {
-    val caseSensitiveConf = new SimpleCatalystConf(true)
-    val caseInsensitiveConf = new SimpleCatalystConf(false)
+  protected val caseSensitiveAnalyzer = makeAnalyzer(caseSensitive = true)
+  protected val caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
 
-    val caseSensitiveCatalog = new SimpleCatalog(caseSensitiveConf)
-    val caseInsensitiveCatalog = new SimpleCatalog(caseInsensitiveConf)
-
-    caseSensitiveCatalog.registerTable(TableIdentifier("TaBlE"), TestRelations.testRelation)
-    caseInsensitiveCatalog.registerTable(TableIdentifier("TaBlE"), TestRelations.testRelation)
-
-    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitiveConf) {
-      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
-    } ->
-    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseInsensitiveConf) {
+  private def makeAnalyzer(caseSensitive: Boolean): Analyzer = {
+    val conf = new SimpleCatalystConf(caseSensitive)
+    val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
+    catalog.createTempTable("TaBlE", TestRelations.testRelation, overrideIfExists = true)
+    new Analyzer(catalog, EmptyFunctionRegistry, conf) {
       override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     }
   }
@@ -60,7 +55,18 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
     val analyzer = getAnalyzer(caseSensitive)
-    analyzer.checkAnalysis(analyzer.execute(inputPlan))
+    val analysisAttempt = analyzer.execute(inputPlan)
+    try analyzer.checkAnalysis(analysisAttempt) catch {
+      case a: AnalysisException =>
+        fail(
+          s"""
+            |Failed to Analyze Plan
+            |$inputPlan
+            |
+            |Partial Analysis
+            |$analysisAttempt
+          """.stripMargin, a)
+    }
   }
 
   protected def assertAnalysisError(

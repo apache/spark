@@ -24,8 +24,10 @@ import com.google.common.collect.Lists;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+// $example on$
 import org.apache.spark.mllib.clustering.PowerIterationClustering;
 import org.apache.spark.mllib.clustering.PowerIterationClusteringModel;
+// $example off$
 
 /**
  * Java example for graph clustering using power iteration clustering (PIC).
@@ -36,6 +38,7 @@ public class JavaPowerIterationClusteringExample {
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
     @SuppressWarnings("unchecked")
+    // $example on$
     JavaRDD<Tuple3<Long, Long, Double>> similarities = sc.parallelize(Lists.newArrayList(
       new Tuple3<Long, Long, Double>(0L, 1L, 0.9),
       new Tuple3<Long, Long, Double>(1L, 2L, 0.9),
@@ -51,6 +54,7 @@ public class JavaPowerIterationClusteringExample {
     for (PowerIterationClustering.Assignment a: model.assignments().toJavaRDD().collect()) {
       System.out.println(a.id() + " -> " + a.cluster());
     }
+    // $example off$
 
     sc.stop();
   }

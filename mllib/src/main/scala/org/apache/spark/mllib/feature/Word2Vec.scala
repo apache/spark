@@ -21,17 +21,16 @@ import java.lang.{Iterable => JavaIterable}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuilder
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.Logging
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
@@ -85,6 +84,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("2.0.0")
   def setMaxSentenceLength(maxSentenceLength: Int): this.type = {
+    require(maxSentenceLength > 0,
+      s"Maximum length of sentences must be positive but got ${maxSentenceLength}")
     this.maxSentenceLength = maxSentenceLength
     this
   }
@@ -94,6 +95,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setVectorSize(vectorSize: Int): this.type = {
+    require(vectorSize > 0,
+      s"vector size must be positive but got ${vectorSize}")
     this.vectorSize = vectorSize
     this
   }
@@ -103,6 +106,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setLearningRate(learningRate: Double): this.type = {
+    require(learningRate > 0,
+      s"Initial learning rate must be positive but got ${learningRate}")
     this.learningRate = learningRate
     this
   }
@@ -112,7 +117,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setNumPartitions(numPartitions: Int): this.type = {
-    require(numPartitions > 0, s"numPartitions must be greater than 0 but got $numPartitions")
+    require(numPartitions > 0,
+      s"Number of partitions must be positive but got ${numPartitions}")
     this.numPartitions = numPartitions
     this
   }
@@ -123,6 +129,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setNumIterations(numIterations: Int): this.type = {
+    require(numIterations >= 0,
+      s"Number of iterations must be nonnegative but got ${numIterations}")
     this.numIterations = numIterations
     this
   }
@@ -141,6 +149,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.6.0")
   def setWindowSize(window: Int): this.type = {
+    require(window > 0,
+      s"Window of words must be positive but got ${window}")
     this.window = window
     this
   }
@@ -151,6 +161,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.3.0")
   def setMinCount(minCount: Int): this.type = {
+    require(minCount >= 0,
+      s"Minimum number of times must be nonnegative but got ${minCount}")
     this.minCount = minCount
     this
   }
@@ -346,9 +358,9 @@ class Word2Vec extends Serializable with Logging {
               if (alpha < learningRate * 0.0001) alpha = learningRate * 0.0001
               logInfo("wordCount = " + wordCount + ", alpha = " + alpha)
             }
-            wc += sentence.size
+            wc += sentence.length
             var pos = 0
-            while (pos < sentence.size) {
+            while (pos < sentence.length) {
               val word = sentence(pos)
               val b = random.nextInt(window)
               // Train Skip-gram
@@ -356,7 +368,7 @@ class Word2Vec extends Serializable with Logging {
               while (a < window * 2 + 1 - b) {
                 if (a != window) {
                   val c = pos - window + a
-                  if (c >= 0 && c < sentence.size) {
+                  if (c >= 0 && c < sentence.length) {
                     val lastWord = sentence(c)
                     val l1 = lastWord * vectorSize
                     val neu1e = new Array[Float](vectorSize)
@@ -579,7 +591,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
   private def buildWordVectors(model: Map[String, Array[Float]]): Array[Float] = {
     require(model.nonEmpty, "Word2VecMap should be non-empty")
-    val (vectorSize, numWords) = (model.head._2.size, model.size)
+    val (vectorSize, numWords) = (model.head._2.length, model.size)
     val wordList = model.keys.toArray
     val wordVectors = new Array[Float](vectorSize * numWords)
     var i = 0
@@ -615,7 +627,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
-      val vectorSize = model.values.head.size
+      val vectorSize = model.values.head.length
       val numWords = model.size
       val metadata = compact(render(
         ("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
@@ -646,7 +658,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     (loadedClassName, loadedVersion) match {
       case (classNameV1_0, "1.0") =>
         val model = SaveLoadV1_0.load(sc, path)
-        val vectorSize = model.getVectors.values.head.size
+        val vectorSize = model.getVectors.values.head.length
         val numWords = model.getVectors.size
         require(expectedVectorSize == vectorSize,
           s"Word2VecModel requires each word to be mapped to a vector of size " +

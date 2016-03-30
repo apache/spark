@@ -71,7 +71,7 @@ object MapPartitions {
       child: LogicalPlan): MapPartitions = {
     MapPartitions(
       func.asInstanceOf[Iterator[Any] => Iterator[Any]],
-      encoderFor[T].fromRowExpression,
+      encoderFor[T].deserializer,
       encoderFor[U].namedExpressions,
       child)
   }
@@ -98,7 +98,7 @@ object AppendColumns {
       child: LogicalPlan): AppendColumns = {
     new AppendColumns(
       func.asInstanceOf[Any => Any],
-      encoderFor[T].fromRowExpression,
+      encoderFor[T].deserializer,
       encoderFor[U].namedExpressions,
       child)
   }
@@ -133,8 +133,8 @@ object MapGroups {
       child: LogicalPlan): MapGroups = {
     new MapGroups(
       func.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
-      encoderFor[K].fromRowExpression,
-      encoderFor[T].fromRowExpression,
+      encoderFor[K].deserializer,
+      encoderFor[T].deserializer,
       encoderFor[U].namedExpressions,
       groupingAttributes,
       dataAttributes,
@@ -178,9 +178,9 @@ object CoGroup {
 
     CoGroup(
       func.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],
-      encoderFor[Key].fromRowExpression,
-      encoderFor[Left].fromRowExpression,
-      encoderFor[Right].fromRowExpression,
+      encoderFor[Key].deserializer,
+      encoderFor[Left].deserializer,
+      encoderFor[Right].deserializer,
       encoderFor[Result].namedExpressions,
       leftGroup,
       rightGroup,
@@ -207,8 +207,6 @@ case class CoGroup(
     rightAttr: Seq[Attribute],
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectOperator {
-
-  override def producedAttributes: AttributeSet = outputSet
 
   override def deserializers: Seq[(Expression, Seq[Attribute])] =
     // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to resolve

@@ -46,7 +46,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   def isMaterialized(rddId: Int): Boolean = {
-    sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
+    val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
+    maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
+    maybeBlock.nonEmpty
   }
 
   test("withColumn doesn't invalidate cached dataframe") {
@@ -361,7 +363,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("A cached table preserves the partitioning and ordering of its cached SparkPlan") {
-    val table3x = testData.unionAll(testData).unionAll(testData)
+    val table3x = testData.union(testData).union(testData)
     table3x.registerTempTable("testData3x")
 
     sql("SELECT key, value FROM testData3x ORDER BY key").registerTempTable("orderedTable")

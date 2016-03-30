@@ -19,14 +19,12 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
 import java.util.{Collections, List => JList}
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{Buffer, HashMap, HashSet}
 
-import com.google.common.base.Stopwatch
 import org.apache.mesos.{Scheduler => MScheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 
@@ -151,7 +149,8 @@ private[spark] class CoarseMesosSchedulerBackend(
       sc.sparkUser,
       sc.appName,
       sc.conf,
-      sc.ui.map(_.appUIAddress))
+      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress))
+    )
     startScheduler(driver)
   }
 
@@ -449,7 +448,12 @@ private[spark] class CoarseMesosSchedulerBackend(
             s"host ${slave.hostname}, port $externalShufflePort for app ${conf.getAppId}")
 
         mesosExternalShuffleClient.get
-          .registerDriverWithShuffleService(slave.hostname, externalShufflePort)
+          .registerDriverWithShuffleService(
+            slave.hostname,
+            externalShufflePort,
+            sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
+              s"${sc.conf.getTimeAsMs("spark.network.timeout", "120s")}ms"),
+            sc.conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
         slave.shuffleRegistered = true
       }
 
@@ -493,12 +497,11 @@ private[spark] class CoarseMesosSchedulerBackend(
 
     // Wait for executors to report done, or else mesosDriver.stop() will forcefully kill them.
     // See SPARK-12330
-    val stopwatch = new Stopwatch()
-    stopwatch.start()
+    val startTime = System.nanoTime()
 
     // slaveIdsWithExecutors has no memory barrier, so this is eventually consistent
     while (numExecutors() > 0 &&
-      stopwatch.elapsed(TimeUnit.MILLISECONDS) < shutdownTimeoutMS) {
+      System.nanoTime() - startTime < shutdownTimeoutMS * 1000L * 1000L) {
       Thread.sleep(100)
     }
 
@@ -507,6 +510,9 @@ private[spark] class CoarseMesosSchedulerBackend(
         + s"to terminate within $shutdownTimeoutMS ms. This may leave temporary files "
         + "on the mesos nodes.")
     }
+
+    // Close the mesos external shuffle client if used
+    mesosExternalShuffleClient.foreach(_.close())
 
     if (mesosDriver != null) {
       mesosDriver.stop()

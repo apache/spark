@@ -73,23 +73,31 @@ private[spark] class DTStatsAggregator(
    * Flat array of elements.
    * Index for start of stats for a (feature, bin) is:
    *   index = featureOffsets(featureIndex) + binIndex * statsSize
-   * Note: For unordered features,
-   *       the left child stats have binIndex in [0, numBins(featureIndex) / 2))
-   *       and the right child stats in [numBins(featureIndex) / 2), numBins(featureIndex))
    */
   private val allStats: Array[Double] = new Array[Double](allStatsSize)
 
+  /**
+   * Array of parent node sufficient stats.
+   *
+   * Note: this is necessary because stats for the parent node are not available
+   *       on the first iteration of tree learning.
+   */
+  private val parentStats: Array[Double] = new Array[Double](statsSize)
 
   /**
    * Get an [[ImpurityCalculator]] for a given (node, feature, bin).
-   * @param featureOffset  For ordered features, this is a pre-computed (node, feature) offset
+   * @param featureOffset  This is a pre-computed (node, feature) offset
    *                           from [[getFeatureOffset]].
-   *                           For unordered features, this is a pre-computed
-   *                           (node, feature, left/right child) offset from
-   *                           [[getLeftRightFeatureOffsets]].
    */
   def getImpurityCalculator(featureOffset: Int, binIndex: Int): ImpurityCalculator = {
     impurityAggregator.getCalculator(allStats, featureOffset + binIndex * statsSize)
+  }
+
+  /**
+   * Get an [[ImpurityCalculator]] for the parent node.
+   */
+  def getParentImpurityCalculator(): ImpurityCalculator = {
+    impurityAggregator.getCalculator(parentStats, 0)
   }
 
   /**
@@ -101,13 +109,17 @@ private[spark] class DTStatsAggregator(
   }
 
   /**
+   * Update the parent node stats using the given label.
+   */
+  def updateParent(label: Double, instanceWeight: Double): Unit = {
+    impurityAggregator.update(parentStats, 0, label, instanceWeight)
+  }
+
+  /**
    * Faster version of [[update]].
    * Update the stats for a given (feature, bin), using the given label.
-   * @param featureOffset  For ordered features, this is a pre-computed feature offset
+   * @param featureOffset  This is a pre-computed feature offset
    *                           from [[getFeatureOffset]].
-   *                           For unordered features, this is a pre-computed
-   *                           (feature, left/right child) offset from
-   *                           [[getLeftRightFeatureOffsets]].
    */
   def featureUpdate(
       featureOffset: Int,
@@ -125,21 +137,9 @@ private[spark] class DTStatsAggregator(
   def getFeatureOffset(featureIndex: Int): Int = featureOffsets(featureIndex)
 
   /**
-   * Pre-compute feature offset for use with [[featureUpdate]].
-   * For unordered features only.
-   */
-  def getLeftRightFeatureOffsets(featureIndex: Int): (Int, Int) = {
-    val baseOffset = featureOffsets(featureIndex)
-    (baseOffset, baseOffset + (numBins(featureIndex) >> 1) * statsSize)
-  }
-
-  /**
    * For a given feature, merge the stats for two bins.
-   * @param featureOffset  For ordered features, this is a pre-computed feature offset
+   * @param featureOffset  This is a pre-computed feature offset
    *                           from [[getFeatureOffset]].
-   *                           For unordered features, this is a pre-computed
-   *                           (feature, left/right child) offset from
-   *                           [[getLeftRightFeatureOffsets]].
    * @param binIndex  The other bin is merged into this bin.
    * @param otherBinIndex  This bin is not modified.
    */
@@ -162,6 +162,17 @@ private[spark] class DTStatsAggregator(
       allStats(i) += other.allStats(i)
       i += 1
     }
+
+    require(statsSize == other.statsSize,
+      s"DTStatsAggregator.merge requires that both aggregators have the same length parent " +
+        s"stats vectors. This aggregator's parent stats are length $statsSize, " +
+        s"but the other is ${other.statsSize}.")
+    var j = 0
+    while (j < statsSize) {
+      parentStats(j) += other.parentStats(j)
+      j += 1
+    }
+
     this
   }
 }

@@ -58,7 +58,7 @@ public class JavaGradientBoostingClassificationExample {
     boostingStrategy.getTreeStrategy().setNumClasses(2);
     boostingStrategy.getTreeStrategy().setMaxDepth(5);
     // Empty categoricalFeaturesInfo indicates all features are continuous.
-    Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     boostingStrategy.treeStrategy().setCategoricalFeaturesInfo(categoricalFeaturesInfo);
 
     final GradientBoostedTreesModel model =
@@ -69,7 +69,7 @@ public class JavaGradientBoostingClassificationExample {
       testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
         @Override
         public Tuple2<Double, Double> call(LabeledPoint p) {
-          return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+          return new Tuple2<>(model.predict(p.features()), p.label());
         }
       });
     Double testErr =
@@ -87,6 +87,8 @@ public class JavaGradientBoostingClassificationExample {
     GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(jsc.sc(),
       "target/tmp/myGradientBoostingClassificationModel");
     // $example off$
+
+    jsc.stop();
   }
 
 }

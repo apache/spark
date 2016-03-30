@@ -63,4 +63,5 @@ case class GroupingID(groupByExprs: Seq[Expression]) extends Expression with Une
   override def children: Seq[Expression] = groupByExprs
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = false
+  override def prettyName: String = "grouping_id"
 }

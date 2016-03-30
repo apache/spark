@@ -27,7 +27,6 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
-
 /**
   * An optimized CartesianRDD for UnsafeRow, which will cache the rows from second child RDD,
   * will be much faster than building the right partition for every row in left RDD, it also
@@ -42,6 +41,7 @@ class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numField
     val sorter = UnsafeExternalSorter.create(
       context.taskMemoryManager(),
       SparkEnv.get.blockManager,
+      SparkEnv.get.serializerManager,
       context,
       null,
       null,

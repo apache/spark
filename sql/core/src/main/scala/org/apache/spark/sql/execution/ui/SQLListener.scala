@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.ui
 
 import scala.collection.mutable
 
-import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
+import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric._
@@ -335,7 +336,7 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
       taskEnd.taskInfo.accumulables.flatMap { a =>
         // Filter out accumulators that are not SQL metrics
         // For now we assume all SQL metrics are Long's that have been JSON serialized as String's
-        if (a.metadata.exists(_ == SQLMetrics.ACCUM_IDENTIFIER)) {
+        if (a.metadata == Some(SQLMetrics.ACCUM_IDENTIFIER)) {
           val newValue = new LongSQLMetricValue(a.update.map(_.toString.toLong).getOrElse(0L))
           Some(a.copy(update = Some(newValue)))
         } else {

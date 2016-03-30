@@ -32,7 +32,7 @@ import org.jboss.netty.channel.{ChannelPipeline, ChannelPipelineFactory, Channel
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
