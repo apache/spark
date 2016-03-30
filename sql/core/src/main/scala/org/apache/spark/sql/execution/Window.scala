@@ -890,11 +890,11 @@ private[execution] object AggregateProcessor {
     // side contains global window partition size attribute reference (`SizeBasedWindowFunction.n`),
     // and must be rewritten using the one instantiated on executor side. Otherwise, attribute
     // binding fails because of different expression ID.
-    val rewrittenFunctions = functions.map(rewriteWindowPartitionSize)
+    functions.foreach(rewriteWindowPartitionSize)
 
     // Check if there are any SizeBasedWindowFunctions. If there are, we add the partition size to
     // the aggregation buffer. Note that the ordinal of the partition size value will always be 0.
-    val trackPartitionSize = rewrittenFunctions.exists(_.isInstanceOf[SizeBasedWindowFunction])
+    val trackPartitionSize = functions.exists(_.isInstanceOf[SizeBasedWindowFunction])
     if (trackPartitionSize) {
       aggBufferAttributes += SizeBasedWindowFunction.n
       initialValues += NoOp
@@ -902,7 +902,7 @@ private[execution] object AggregateProcessor {
     }
 
     // Add an AggregateFunction to the AggregateProcessor.
-    rewrittenFunctions.foreach {
+    functions.foreach {
       case agg: DeclarativeAggregate =>
         aggBufferAttributes ++= agg.aggBufferAttributes
         initialValues ++= agg.initialValues
@@ -947,9 +947,10 @@ private[execution] object AggregateProcessor {
 
   // Rewrites the window partition size attribute in all `SizeBasedWindowFunction`s using executor
   // side `SizeBasedWindowFunction.n`.
-  def rewriteWindowPartitionSize(expression: Expression): Expression = {
-    expression.transformDown {
-      case f: SizeBasedWindowFunction => f.withPartitionSize(SizeBasedWindowFunction.n)
+  def rewriteWindowPartitionSize(expression: Expression): Unit = {
+    expression.foreach {
+      case f: SizeBasedWindowFunction => f.replacePartitionSize()
+      case _ =>
     }
   }
 }

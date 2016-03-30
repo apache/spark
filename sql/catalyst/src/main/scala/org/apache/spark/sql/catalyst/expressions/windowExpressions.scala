@@ -451,9 +451,14 @@ abstract class RowNumberLike extends AggregateWindowFunction {
  * A [[SizeBasedWindowFunction]] needs the size of the current window for its calculation.
  */
 trait SizeBasedWindowFunction extends AggregateWindowFunction {
-  def n: AttributeReference
+  protected var n: AttributeReference = SizeBasedWindowFunction.n
 
-  def withPartitionSize(n: AttributeReference): SizeBasedWindowFunction
+  // SPARK-14244: `n` is firstly initialized with singleton value `SizeBasedWindowFunction.n`
+  // created on driver side, since a window function is always firstly created on driver side.
+  // After being serialized and sent to executor side, we need to replace `n` with the corresponding
+  // singleton value instantiated on executor side so that attribute binding won't fail because of
+  // wrong expression ID.
+  def replacePartitionSize(): Unit = this.n = SizeBasedWindowFunction.n
 }
 
 object SizeBasedWindowFunction {
@@ -486,8 +491,7 @@ case class RowNumber() extends RowNumberLike {
 @ExpressionDescription(usage =
   """_FUNC_() - The CUME_DIST() function computes the position of a value relative to
      a all values in the partition.""")
-case class CumeDist(n: AttributeReference = SizeBasedWindowFunction.n)
-  extends RowNumberLike with SizeBasedWindowFunction {
+case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
 
   override def dataType: DataType = DoubleType
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
@@ -495,8 +499,6 @@ case class CumeDist(n: AttributeReference = SizeBasedWindowFunction.n)
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
   override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
   override def sql: String = "CUME_DIST()"
-
-  override def withPartitionSize(n: AttributeReference): CumeDist = copy(n = n)
 }
 
 /**
@@ -523,8 +525,7 @@ case class CumeDist(n: AttributeReference = SizeBasedWindowFunction.n)
 @ExpressionDescription(usage =
   """_FUNC_(x) - The NTILE(n) function divides the rows for each window partition
      into 'n' buckets ranging from 1 to at most 'n'.""")
-case class NTile(buckets: Expression, n: AttributeReference = SizeBasedWindowFunction.n)
-  extends RowNumberLike with SizeBasedWindowFunction {
+case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
 
   def this() = this(Literal(1))
 
@@ -584,8 +585,6 @@ case class NTile(buckets: Expression, n: AttributeReference = SizeBasedWindowFun
   )
 
   override val evaluateExpression = bucket
-
-  override def withPartitionSize(n: AttributeReference): NTile = copy(n = n)
 }
 
 /**
@@ -697,8 +696,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
 @ExpressionDescription(usage =
   """_FUNC_() - PERCENT_RANK() The PercentRank function computes the percentage
      ranking of a value in a group of values.""")
-case class PercentRank(children: Seq[Expression], n: AttributeReference = SizeBasedWindowFunction.n)
-  extends RankLike with SizeBasedWindowFunction {
+case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBasedWindowFunction {
 
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)
@@ -707,6 +705,4 @@ case class PercentRank(children: Seq[Expression], n: AttributeReference = SizeBa
       Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
       Literal(0.0d))
   override def sql: String = "PERCENT_RANK()"
-
-  override def withPartitionSize(n: AttributeReference): PercentRank = copy(n = n)
 }
