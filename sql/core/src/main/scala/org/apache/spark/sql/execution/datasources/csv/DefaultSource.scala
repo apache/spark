@@ -95,13 +95,13 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def buildReader(
       sqlContext: SQLContext,
-      physicalSchema: StructType,
-      partitionSchema: StructType,
       dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
     val csvOptions = new CSVOptions(options)
-    val headers = dataSchema.fields.map(_.name)
+    val headers = requiredSchema.fields.map(_.name)
 
     val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
     val broadcastedConf = sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
@@ -118,12 +118,12 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
       val unsafeRowIterator = {
         val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
-        val parser = CSVRelation.csvParser(physicalSchema, dataSchema.fieldNames, csvOptions)
+        val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
         tokenizedIterator.flatMap(parser(_).toSeq)
       }
 
       // Appends partition values
-      val fullOutput = dataSchema.toAttributes ++ partitionSchema.toAttributes
+      val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
       val joinedRow = new JoinedRow()
       val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
 

@@ -462,9 +462,11 @@ trait FileFormat {
   /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
    *
-   * @param physicalSchema The actual schema of the data in physical files.
+   * @param dataSchema The global data schema. It can be either specified by the user, or
+   *                   reconciled/merged from all underlying data files. If any partition columns
+   *                   are contained in the files, they are preserved in this schema.
    * @param partitionSchema The schema of the partition column row that will be present in each
-   *                        PartitionedFile.  These columns should be prepended to the rows that
+   *                        PartitionedFile. These columns should be appended to the rows that
    *                        are produced by the iterator.
    * @param requiredSchema The schema of the data that should be output for each row.  This may be a
    *                       subset of the columns that are present in the file if column pruning has
@@ -475,7 +477,7 @@ trait FileFormat {
    */
   def buildReader(
       sqlContext: SQLContext,
-      physicalSchema: StructType,
+      dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],

@@ -276,22 +276,9 @@ private[sql] class DefaultSource
         file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
   }
 
-  /**
-   * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
-   *
-   * @param partitionSchema The schema of the partition column row that will be present in each
-   *                        PartitionedFile.  These columns should be prepended to the rows that
-   *                        are produced by the iterator.
-   * @param requiredSchema The schema of the data that should be output for each row.  This may be a
-   *                       subset of the columns that are present in the file if  column pruning has
-   *                       occurred.
-   * @param filters A set of filters than can optionally be used to reduce the number of rows output
-   * @param options A set of string -> string configuration options.
-   * @return
-   */
   override def buildReader(
       sqlContext: SQLContext,
-      physicalSchema: StructType,
+      dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],

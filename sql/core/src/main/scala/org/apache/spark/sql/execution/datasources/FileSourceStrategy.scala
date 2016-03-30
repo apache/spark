@@ -114,7 +114,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val readFile = files.fileFormat.buildReader(
         sqlContext = files.sqlContext,
-        physicalSchema = files.dataSchema,
+        dataSchema = files.dataSchema,
         partitionSchema = files.partitionSchema,
         requiredSchema = prunedDataSchema,
         filters = pushedDownFilters,

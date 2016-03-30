@@ -124,7 +124,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def buildReader(
       sqlContext: SQLContext,
-      physicalSchema: StructType,
+      dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
