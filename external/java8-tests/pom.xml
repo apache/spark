@@ -82,32 +82,6 @@
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>test</id>
-            <goals>
-              <goal>test</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <systemPropertyVariables>
-            <!-- For some reason surefire isn't setting this log4j file on the
-                 test classpath automatically. So we add it manually. -->
-            <log4j.configuration>
-              file:src/test/resources/log4j.properties
-            </log4j.configuration>
-          </systemPropertyVariables>
-          <skipTests>false</skipTests>
-          <includes>
-            <include>**/Suite*.java</include>
-            <include>**/*Suite.java</include>
-          </includes>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <executions>
           <execution>
