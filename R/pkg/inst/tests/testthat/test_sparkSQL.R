@@ -1914,8 +1914,7 @@ test_that("collect/show/head on Columns", {
   expect_equal(length(head(z + y, 100)), 100)
 
   # Columns without parent DataFrame
-  expect_error(x <- collect(rand()),
-               "This column cannot be collected as it's not associated to any DataFrame.")
+  expect_equal(is.numeric(collect(rand())), TRUE)
 })
 
 test_that("Minimal column test.", {
