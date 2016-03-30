@@ -2160,7 +2160,11 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 setMethod("rand", signature(seed = "missing"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "rand")
-            column(jc)
+
+            # By assigning a one-row data.frame, the result of this function can be collected
+            # returning a one-element Column
+            df <- as.DataFrame(sparkRSQL.init(), data.frame(0))
+            column(jc, df)
           })
 
 #' @rdname rand
@@ -2169,7 +2173,11 @@ setMethod("rand", signature(seed = "missing"),
 setMethod("rand", signature(seed = "numeric"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "rand", as.integer(seed))
-            column(jc)
+
+            # By assigning a one-row data.frame, the result of this function can be collected
+            # returning a one-element Column
+            df <- as.DataFrame(sparkRSQL.init(), data.frame(0))
+            column(jc, df)
           })
 
 #' randn
@@ -2184,7 +2192,11 @@ setMethod("rand", signature(seed = "numeric"),
 setMethod("randn", signature(seed = "missing"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "randn")
-            column(jc)
+
+            # By assigning a one-row data.frame, the result of this function can be collected
+            # returning a one-element Column
+            df <- as.DataFrame(sparkRSQL.init(), data.frame(0))
+            column(jc, df)
           })
 
 #' @rdname randn
@@ -2193,7 +2205,8 @@ setMethod("randn", signature(seed = "missing"),
 setMethod("randn", signature(seed = "numeric"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "randn", as.integer(seed))
-            column(jc)
+            df <- as.DataFrame(sparkRSQL.init(), data.frame(0))
+            column(jc, df)
           })
 
 #' regexp_extract
@@ -2311,7 +2324,11 @@ setMethod("translate",
 setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
           function(x, format) {
             jc <- callJStatic("org.apache.spark.sql.functions", "unix_timestamp")
-            column(jc)
+
+            # By assigning a one-row data.frame, the result of this function can be collected
+            # returning a one-element Column
+            df <- as.DataFrame(sparkRSQL.init(), data.frame(0))
+            column(jc, df)
           })
 
 #' @rdname unix_timestamp

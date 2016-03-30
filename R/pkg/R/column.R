@@ -46,22 +46,34 @@ setMethod("initialize", "Column", function(.Object, jc, df) {
 
 setMethod("show", signature="Column", definition=function(object) {
   MAX_ELEMENTS <- 20
-  show(head(object, MAX_ELEMENTS))
-  cat(paste0("\b...\nDisplaying up to ", as.character(MAX_ELEMENTS) ," elements only."))
+  head.df <- head(object, MAX_ELEMENTS)
+
+  if (length(head.df) == 0) {
+    colname <- callJMethod(object@jc, "toString")
+    cat(paste0(colname, "\n"))
+    cat(paste0("<Empty column>\n"))
+  } else {
+    show(head.df)
+  }
+  if (length(head.df) == MAX_ELEMENTS)  {
+    cat(paste0("\b...\nDisplaying up to ", as.character(MAX_ELEMENTS) ," elements only."))
+  }
 })
 
 setMethod("collect", signature="Column", definition=function(x) {
   if (is.null(x@df)) {
-    stop("This column cannot be collected as it's not associated to any DataFrame.")
+    character(0)
+  } else {
+    collect(select(x@df, x))[, 1]
   }
-  collect(select(x@df, x))[, 1]
 })
 
 setMethod("head", signature="Column", definition=function(x, n=6) {
   if (is.null(x@df)) {
-    stop("This column cannot be collected as it's not associated to any DataFrame.")
+    collect(x)
+  } else {
+    head(select(x@df, x), n)[, 1]
   }
-  head(select(x@df, x), n)[, 1]
 })
 
 setMethod("column",
