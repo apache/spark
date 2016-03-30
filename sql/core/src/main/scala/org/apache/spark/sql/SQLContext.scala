@@ -272,11 +272,11 @@ class SQLContext private[sql](
   }
 
   /**
-   * Returns true if the [[Queryable]] is currently cached in-memory.
+   * Returns true if the [[Dataset]] is currently cached in-memory.
    * @group cachemgmt
    * @since 1.3.0
    */
-  private[sql] def isCached(qName: Queryable): Boolean = {
+  private[sql] def isCached(qName: Dataset[_]): Boolean = {
     cacheManager.lookupCachedData(qName).nonEmpty
   }
 
@@ -671,7 +671,7 @@ class SQLContext private[sql](
     sessionState.catalog.createTempTable(
       sessionState.sqlParser.parseTableIdentifier(tableName).table,
       df.logicalPlan,
-      ignoreIfExists = true)
+      overrideIfExists = true)
   }
 
   /**

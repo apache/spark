@@ -146,9 +146,9 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PARQUET_FILE_SCAN = SQLConfigBuilder("spark.sql.parquet.fileScan")
+  val USE_FILE_SCAN = SQLConfigBuilder("spark.sql.sources.fileScan")
     .internal()
-    .doc("Use the new FileScanRDD path for reading parquet data.")
+    .doc("Use the new FileScanRDD path for reading HDSF based data sources.")
     .booleanConf
     .createWithDefault(true)
 
@@ -479,9 +479,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
-  def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+  def useFileScan: Boolean = getConf(USE_FILE_SCAN)
 
-  def parquetFileScan: Boolean = getConf(PARQUET_FILE_SCAN)
+  def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
