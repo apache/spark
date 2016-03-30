@@ -142,8 +142,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         """
     }
 
-    /* 4000 = 64000 bytes / 16 (up to 16 bytes per one call)) */
-    val numberOfStatementsThreshold = 4000
+    /*
+     * 500 = 7500 bytes / 15 (up to 15 bytes per one call))
+     * the maximum byte code size to be compiled for HotSpot is 8000.
+     * We should keep less than 8000
+     */
+    val numberOfStatementsThreshold = 500
     val (initializerAccessorFuncs, initializerAccessorCalls, extractorFuncs, extractorCalls) =
       if (initializeAccessors.length <= numberOfStatementsThreshold) {
         ("", initializeAccessors.mkString("\n"), "", extractors.mkString("\n"))
