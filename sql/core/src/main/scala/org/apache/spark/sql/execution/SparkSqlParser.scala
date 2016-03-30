@@ -72,7 +72,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[ShowTablesCommand]] logical plan.
    * Example SQL :
    * {{{
-   *   SHOW TABLES [(IN|FROM) database_name] ['identifier_with_wildcards'];
+   *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
    * }}}
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
