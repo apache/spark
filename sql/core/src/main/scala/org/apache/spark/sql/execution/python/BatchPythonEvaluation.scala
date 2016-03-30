@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * we drain the queue to find the original input row. Note that if the Python process is way too
  * slow, this could lead to the queue growing unbounded and eventually run out of memory.
  */
-case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: SparkPlan)
+case class BatchPythonEvaluation(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
   extends SparkPlan {
 
   def children: Seq[SparkPlan] = child :: Nil
@@ -69,11 +69,15 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       // combine input with output from Python.
       val queue = new java.util.concurrent.ConcurrentLinkedQueue[InternalRow]()
 
-      val (pyFuncs, children) = collectFunctions(udf)
+      val (pyFuncs, children) = udfs.map(collectFunctions).unzip
+      val numArgs = children.map(_.length)
+      val resultType = StructType(udfs.map(u => StructField("", u.dataType, u.nullable)))
 
       val pickle = new Pickler
-      val currentRow = newMutableProjection(children, child.output)()
-      val fields = children.map(_.dataType)
+      // flatten all the arguments
+      val allChildren = children.flatMap(x => x)
+      val currentRow = newMutableProjection(allChildren, child.output)()
+      val fields = allChildren.map(_.dataType)
       val schema = new StructType(fields.map(t => new StructField("", t, true)).toArray)
 
       // Input iterator to Python: input rows are grouped so we send them in batches to Python.
@@ -89,7 +93,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       val context = TaskContext.get()
 
       // Output iterator for results from Python.
-      val outputIterator = new PythonRunner(pyFuncs, bufferSize, reuseWorker, true)
+      val outputIterator = new PythonRunner(pyFuncs, bufferSize, reuseWorker, true, numArgs)
         .compute(inputIterator, context.partitionId(), context)
 
       val unpickle = new Unpickler
@@ -101,7 +105,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
         val unpickledBatch = unpickle.loads(pickedResult)
         unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
       }.map { result =>
-        row(0) = EvaluatePython.fromJava(result, udf.dataType)
+        val row = EvaluatePython.fromJava(result, resultType).asInstanceOf[InternalRow]
         resultProj(joined(queue.poll(), row))
       }
     }

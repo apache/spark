@@ -59,7 +59,7 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = new PythonRunner(Seq(func), bufferSize, reuse_worker, false)
+    val runner = PythonRunner(func, bufferSize, reuse_worker)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
 }
@@ -77,22 +77,30 @@ private[spark] case class PythonFunction(
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]])
 
+
+object PythonRunner {
+  def apply(func: PythonFunction, bufferSize: Int, reuse_worker: Boolean): PythonRunner = {
+    new PythonRunner(Seq(Seq(func)), bufferSize, reuse_worker, false, Seq(1))
+  }
+}
+
 /**
- * A helper class to run Python UDFs in Spark.
+ * A helper class to run Python mapPartition/UDFs in Spark.
  */
 private[spark] class PythonRunner(
-    funcs: Seq[PythonFunction],
+    funcs: Seq[Seq[PythonFunction]],
     bufferSize: Int,
     reuse_worker: Boolean,
-    rowBased: Boolean)
+    isUDF: Boolean,
+    numArgs: Seq[Int])
   extends Logging {
 
   // All the Python functions should have the same exec, version and envvars.
-  private val envVars = funcs.head.envVars
-  private val pythonExec = funcs.head.pythonExec
-  private val pythonVer = funcs.head.pythonVer
+  private val envVars = funcs.head.head.envVars
+  private val pythonExec = funcs.head.head.pythonExec
+  private val pythonVer = funcs.head.head.pythonVer
 
-  private val accumulator = funcs.head.accumulator // TODO: support accumulator in multiple UDF
+  private val accumulator = funcs.head.head.accumulator // TODO: support accumulator in multiple UDF
 
   def compute(
       inputIterator: Iterator[_],
@@ -232,8 +240,8 @@ private[spark] class PythonRunner(
 
     @volatile private var _exception: Exception = null
 
-    private val pythonIncludes = funcs.flatMap(_.pythonIncludes.asScala).toSet
-    private val broadcastVars = funcs.flatMap(_.broadcastVars.asScala)
+    private val pythonIncludes = funcs.flatMap(_.flatMap(_.pythonIncludes.asScala)).toSet
+    private val broadcastVars = funcs.flatMap(_.flatMap(_.broadcastVars.asScala))
 
     setDaemon(true)
 
@@ -284,11 +292,22 @@ private[spark] class PythonRunner(
         }
         dataOut.flush()
         // Serialized command:
-        dataOut.writeInt(if (rowBased) 1 else 0)
-        dataOut.writeInt(funcs.length)
-        funcs.foreach { f =>
-          dataOut.writeInt(f.command.length)
-          dataOut.write(f.command)
+        if (isUDF) {
+          dataOut.writeInt(1)
+          dataOut.writeInt(funcs.length)
+          funcs.zip(numArgs).foreach { case (fs, numArg) =>
+            dataOut.writeInt(numArg)
+            dataOut.writeInt(fs.length)
+            fs.foreach { f =>
+              dataOut.writeInt(f.command.length)
+              dataOut.write(f.command)
+            }
+          }
+        } else {
+          dataOut.writeInt(0)
+          val command = funcs.head.head.command
+          dataOut.writeInt(command.length)
+          dataOut.write(command)
         }
         // Data values
         PythonRDD.writeIteratorToStream(inputIterator, dataOut)

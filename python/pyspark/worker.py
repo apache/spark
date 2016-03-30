@@ -29,7 +29,7 @@ from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
-    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer
+    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, AutoBatchedSerializer
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -59,7 +59,48 @@ def read_command(serializer, file):
 
 def chain(f, g):
     """chain two function together """
-    return lambda x: g(f(x))
+    return lambda *a: g(f(*a))
+
+
+def wrap_udf(f, return_type):
+    return lambda *a: return_type.toInternal(f(*a))
+
+
+def read_single_udf(pickleSer, infile):
+    num_arg = read_int(infile)
+    row_func = None
+    for i in range(read_int(infile)):
+        f, return_type = read_command(pickleSer, infile)
+        if row_func is None:
+            row_func = f
+        else:
+            row_func = chain(row_func, f)
+    # the last returnType will be the return type of UDF
+    return num_arg, wrap_udf(row_func, return_type)
+
+
+def read_udfs(pickleSer, infile):
+    num_udfs = read_int(infile)
+    udfs = []
+    offset = 0
+    for i in range(num_udfs):
+        num_arg, udf = read_single_udf(pickleSer, infile)
+        udfs.append((offset, offset + num_arg, udf))
+        offset += num_arg
+
+    if num_udfs == 1:
+        udf = udfs[0][2]
+
+        def mapper(args):
+            return (udf(*args),)
+    else:
+        def mapper(args):
+            return tuple(udf(*args[start:end]) for start, end, udf in udfs)
+
+    func = lambda _, it: map(mapper, it)
+    ser = AutoBatchedSerializer(PickleSerializer())
+    # profiling is not supported for UDF
+    return func, None, ser, ser
 
 
 def main(infile, outfile):
@@ -107,21 +148,10 @@ def main(infile, outfile):
                 _broadcastRegistry.pop(bid)
 
         _accumulatorRegistry.clear()
-        row_based = read_int(infile)
-        num_commands = read_int(infile)
-        if row_based:
-            profiler = None  # profiling is not supported for UDF
-            row_func = None
-            for i in range(num_commands):
-                f, returnType, deserializer = read_command(pickleSer, infile)
-                if row_func is None:
-                    row_func = f
-                else:
-                    row_func = chain(row_func, f)
-            serializer = deserializer
-            func = lambda _, it: map(lambda x: returnType.toInternal(row_func(*x)), it)
+        is_udf = read_int(infile)
+        if is_udf:
+            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile)
         else:
-            assert num_commands == 1
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
 
         init_time = time.time()

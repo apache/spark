@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -47,10 +49,9 @@ private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
     }
   }
 
-  private def collectEvaluatableUDF(expr: Expression): Seq[PythonUDF] = {
-    expr.collect {
-      case udf: PythonUDF if canEvaluateInPython(udf) => udf
-    }
+  private def collectEvaluatableUDF(expr: Expression): Seq[PythonUDF] = expr match {
+    case udf: PythonUDF if canEvaluateInPython(udf) => Seq(udf)
+    case e => e.children.flatMap(collectEvaluatableUDF)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -59,45 +60,43 @@ private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
 
     case plan: LogicalPlan if plan.resolved =>
       // Extract any PythonUDFs from the current operator.
-      val udfs = plan.expressions.flatMap(collectEvaluatableUDF)
+      val udfs = plan.expressions.flatMap(collectEvaluatableUDF).filter(_.resolved)
       if (udfs.isEmpty) {
         // If there aren't any, we are done.
         plan
       } else {
-        // Pick the UDF we are going to evaluate (TODO: Support evaluating multiple UDFs at a time)
-        // If there is more than one, we will add another evaluation operator in a subsequent pass.
-        udfs.find(_.resolved) match {
-          case Some(udf) =>
-            var evaluation: EvaluatePython = null
-
-            // Rewrite the child that has the input required for the UDF
-            val newChildren = plan.children.map { child =>
-              // Check to make sure that the UDF can be evaluated with only the input of this child.
-              // Other cases are disallowed as they are ambiguous or would require a cartesian
-              // product.
-              if (udf.references.subsetOf(child.outputSet)) {
-                evaluation = EvaluatePython(udf, child)
-                evaluation
-              } else if (udf.references.intersect(child.outputSet).nonEmpty) {
-                sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
-              } else {
-                child
-              }
-            }
-
-            assert(evaluation != null, "Unable to evaluate PythonUDF.  Missing input attributes.")
-
-            // Trim away the new UDF value if it was only used for filtering or something.
-            logical.Project(
-              plan.output,
-              plan.transformExpressions {
-                case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
-              }.withNewChildren(newChildren))
-
-          case None =>
-            // If there is no Python UDF that is resolved, skip this round.
-            plan
+        val attributeMap = mutable.HashMap[PythonUDF, Expression]()
+        // Rewrite the child that has the input required for the UDF
+        val newChildren = plan.children.map { child =>
+          // Pick the UDF we are going to evaluate
+          val validUdfs = udfs.filter { case udf =>
+            // Check to make sure that the UDF can be evaluated with only the input of this child.
+            udf.references.subsetOf(child.outputSet)
+          }
+          if (validUdfs.nonEmpty) {
+            val evaluation = EvaluatePython(validUdfs, child)
+            attributeMap ++= validUdfs.zip(evaluation.resultAttribute)
+            evaluation
+          } else {
+            child
+          }
         }
+        // Other cases are disallowed as they are ambiguous or would require a cartesian
+        // product.
+        udfs.filterNot(attributeMap.contains).foreach { udf =>
+          if (udf.references.subsetOf(plan.inputSet)) {
+            sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
+          } else {
+            sys.error(s"Unable to evaluate PythonUDF $udf. Missing input attributes.")
+          }
+        }
+
+        // Trim away the new UDF value if it was only used for filtering or something.
+        logical.Project(
+          plan.output,
+          plan.transformExpressions {
+            case p: PythonUDF if attributeMap.contains(p) => attributeMap(p)
+          }.withNewChildren(newChildren))
       }
   }
 }
