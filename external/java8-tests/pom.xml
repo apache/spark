@@ -64,11 +64,6 @@
     </dependency>
   </dependencies>
 
-  <profiles>
-    <profile>
-      <id>java8-tests</id>
-    </profile>
-  </profiles>
   <build>
     <plugins>
       <plugin>
