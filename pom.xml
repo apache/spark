@@ -2345,6 +2345,9 @@
 
     <profile>
       <id>java8-tests</id>
+      <activation>
+        <jdk>[1.8,)</jdk>
+      </activation>
       <modules>
         <module>external/java8-tests</module>
       </modules>
