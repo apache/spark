@@ -19,8 +19,8 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
