@@ -232,8 +232,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx.EXISTS != null,
       Option(ctx.locationSpec).map(visitLocationSpec),
       Option(ctx.comment).map(string),
-      Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))(
-      command(ctx))
+      Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))
   }
 
   /**
@@ -248,8 +247,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterDatabaseProperties(
       ctx.identifier.getText,
-      visitTablePropertyList(ctx.tablePropertyList))(
-      command(ctx))
+      visitTablePropertyList(ctx.tablePropertyList))
   }
 
   /**
@@ -261,7 +259,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDropDatabase(ctx: DropDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DropDatabase(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE == null)(command(ctx))
+    DropDatabase(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE != null)
   }
 
   /**
@@ -273,7 +271,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DescribeDatabase(ctx.identifier.getText, ctx.EXTENDED != null)(command(ctx))
+    DescribeDatabase(ctx.identifier.getText, ctx.EXTENDED != null)
   }
 
   /**

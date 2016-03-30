@@ -39,7 +39,7 @@ abstract class ExternalCatalog {
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"Database $db does not exist")
+      throw new AnalysisException(s"Database '$db' does not exist")
     }
   }
 
