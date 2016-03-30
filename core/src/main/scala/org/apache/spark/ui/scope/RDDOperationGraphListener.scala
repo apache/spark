@@ -89,6 +89,14 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
     trimJobsIfNecessary()
   }
 
+  /** Keep track of stages that have submitted. */
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
+    val stageId = stageSubmitted.stageInfo.stageId
+    if (stageIdToJobId.contains(stageId)) {
+      RDDOperationGraph.getStageInfo(stageSubmitted.stageInfo)
+    }
+  }
+
   /** Keep track of stages that have completed. */
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
     val stageId = stageCompleted.stageInfo.stageId
