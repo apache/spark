@@ -47,7 +47,7 @@ object MLTestingUtils extends SparkFunSuite {
     val expected = estimator.fit(dfs(DoubleType))
     val actuals = dfs.keys.filter(_ != DoubleType).map(t => estimator.fit(dfs(t)))
     actuals.foreach(actual => check(expected, actual))
-    
+
     val dfWithStringLabels = generateDFWithStringLabelCol(sqlContext)
     val thrown = intercept[IllegalArgumentException] {
       estimator.fit(dfWithStringLabels)
