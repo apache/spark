@@ -25,25 +25,48 @@ import org.apache.spark.sql.types.StructType;
 import static org.apache.spark.sql.types.DataTypes.LongType;
 
 /**
- * This is an illustrative implementation of a single-key/single value vectorized hash map that can
- * be potentially 'codegened' in TungstenAggregate to speed up aggregate w/ key
+ * This is an illustrative implementation of an append-only single-key/single value aggregate hash
+ * map that can act as a 'cache' for extremely fast key-value lookups while evaluating aggregates
+ * (and fall back to the `BytesToBytesMap` if a given key isn't found). This can be potentially
+ * 'codegened' in TungstenAggregate to speed up aggregates w/ key.
+ *
+ * It is backed by a power-of-2-sized array for index lookups and a columnar batch that stores the
+ * key-value pairs. The index lookups in the array rely on linear probing (with a small number of
+ * maximum tries) and use an inexpensive hash function which makes it really efficient for a
+ * majority of lookups. However, using linear probing and an inexpensive hash function also makes it
+ * less robust as compared to the `BytesToBytesMap` (especially for a large number of keys or even
+ * for certain distribution of keys) and requires us to fall back on the latter for correctness.
  */
-public class VectorizedHashMap {
+public class AggregateHashMap {
   public ColumnarBatch batch;
   public int[] buckets;
+
   private int numBuckets;
   private int numRows = 0;
   private int maxSteps = 3;
 
-  public VectorizedHashMap(int capacity, double loadFactor, int maxSteps) {
-    StructType schema = new StructType()
-        .add("key", LongType)
-        .add("value", LongType);
+  private static int DEFAULT_NUM_BUCKETS = 65536 * 4;
+  private static double DEFAULT_LOAD_FACTOR = 0.25;
+  private static int MAX_STEPS = 3;
+
+  public AggregateHashMap(StructType schema, int capacity, double loadFactor, int maxSteps) {
+
+    // We currently only support single key-value pair that are both longs
+    assert (schema.size() == 2 && schema.fields()[0].dataType() == LongType &&
+        schema.fields()[1].dataType() == LongType);
+
+    // capacity should be a power of 2
+    assert (capacity > 0 && ((capacity & (capacity - 1)) == 0));
+
     this.maxSteps = maxSteps;
     numBuckets = capacity;
     batch = ColumnarBatch.allocate(schema, MemoryMode.ON_HEAP, (int) (numBuckets * loadFactor));
     buckets = new int[numBuckets];
     Arrays.fill(buckets, -1);
+  }
+
+  public AggregateHashMap(StructType schema) {
+    this(schema, DEFAULT_NUM_BUCKETS, DEFAULT_LOAD_FACTOR, MAX_STEPS);
   }
 
   public int findOrInsert(long key) {
@@ -61,7 +84,12 @@ public class VectorizedHashMap {
     int step = 0;
     int idx = (int) h & (numBuckets - 1);
     while (step < maxSteps) {
-      if ((buckets[idx] == -1) || (buckets[idx] != -1 && equals(idx, key))) return idx;
+      // Return bucket index if it's either an empty slot or already contains the key
+      if (buckets[idx] == -1) {
+        return idx;
+      } else if (equals(idx, key)) {
+        return idx;
+      }
       idx = (idx + 1) & (numBuckets - 1);
       step++;
     }

@@ -23,9 +23,9 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.vectorized.VectorizedHashMap
+import org.apache.spark.sql.execution.vectorized.AggregateHashMap
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -464,10 +464,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       }
     }
 
-    benchmark.addCase("Vectorized Hashmap") { iter =>
+    benchmark.addCase("Aggregate HashMap") { iter =>
       var i = 0
       val numKeys = 65536
-      val map = new VectorizedHashMap(numKeys * 4, 0.25, 3)
+      val schema = new StructType()
+        .add("key", LongType)
+        .add("value", LongType)
+      val map = new AggregateHashMap(schema)
       while (i < numKeys) {
         val idx = map.findOrInsert(i.toLong)
         map.batch.column(1).putLong(map.buckets(idx),
@@ -488,15 +491,15 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     BytesToBytesMap:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    hash                                      108 /  119         96.9          10.3       1.0X
-    fast hash                                  63 /   70        166.2           6.0       1.7X
-    arrayEqual                                 70 /   73        150.8           6.6       1.6X
-    Java HashMap (Long)                       141 /  200         74.3          13.5       0.8X
-    Java HashMap (two ints)                   145 /  185         72.3          13.8       0.7X
-    Java HashMap (UnsafeRow)                  499 /  524         21.0          47.6       0.2X
-    BytesToBytesMap (off Heap)                483 /  548         21.7          46.0       0.2X
-    BytesToBytesMap (on Heap)                 485 /  562         21.6          46.2       0.2X
-    Vectorized Hashmap                         54 /   60        193.7           5.2       2.0X
+    hash                                      112 /  116         93.2          10.7       1.0X
+    fast hash                                  65 /   69        160.9           6.2       1.7X
+    arrayEqual                                 66 /   69        159.1           6.3       1.7X
+    Java HashMap (Long)                       137 /  182         76.3          13.1       0.8X
+    Java HashMap (two ints)                   182 /  230         57.8          17.3       0.6X
+    Java HashMap (UnsafeRow)                  511 /  565         20.5          48.8       0.2X
+    BytesToBytesMap (off Heap)                481 /  515         21.8          45.9       0.2X
+    BytesToBytesMap (on Heap)                 529 /  600         19.8          50.5       0.2X
+    Aggregate HashMap                          56 /   62        187.9           5.3       2.0X
       */
     benchmark.run()
   }
