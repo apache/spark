@@ -42,11 +42,10 @@ class DDLSuite extends QueryTest with SharedSQLContext {
    */
   private def withDatabase(dbNames: String*)(f: => Unit): Unit = {
     try f finally {
-      val currentDb = sqlContext.sessionState.catalog.getCurrentDatabase
       dbNames.foreach { name =>
         sqlContext.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
       }
-      sqlContext.sessionState.catalog.setCurrentDatabase(currentDb)
+      sqlContext.sessionState.catalog.setCurrentDatabase("default")
     }
   }
 
