@@ -29,8 +29,7 @@ case class TimeWindow(
     timeColumn: Expression,
     windowDuration: Long,
     slideDuration: Long,
-    startTime: Long,
-    private var outputColumnName: String = "window") extends UnaryExpression
+    startTime: Long) extends UnaryExpression
   with ImplicitCastInputTypes
   with Unevaluable
   with NonSQLExpression {
@@ -44,6 +43,10 @@ case class TimeWindow(
   // This expression is replaced in the analyzer.
   override lazy val resolved = false
 
+  /**
+   * Validate the inputs for the window duration, slide duration, and start time in addition to
+   * the input data type.
+   */
   override def checkInputDataTypes(): TypeCheckResult = {
     val dataTypeCheck = super.checkInputDataTypes()
     if (dataTypeCheck.isSuccess) {
@@ -57,42 +60,15 @@ case class TimeWindow(
         return TypeCheckFailure(s"The start time ($startTime) must be greater than or equal to 0.")
       }
       if (slideDuration > windowDuration) {
-        return TypeCheckFailure(s"The slide duration ($slideDuration) must be less than or equal to the " +
-            s"windowDuration ($windowDuration).")
+        return TypeCheckFailure(s"The slide duration ($slideDuration) must be less than or equal" +
+          s" to the windowDuration ($windowDuration).")
       }
       if (startTime >= slideDuration) {
         return TypeCheckFailure(s"The start time ($startTime) must be less than the " +
-            s"slideDuration ($slideDuration).")
+          s"slideDuration ($slideDuration).")
       }
-      return dataTypeCheck
-    } else {
-      return dataTypeCheck
     }
-  }
-  /**
-   * Validate the inputs for the window duration, slide duration, and start time.
-   *
-   * @return Some string with a useful error message for the invalid input.
-   */
-  def validate(): Option[String] = {
-    if (windowDuration <= 0) {
-      return Some(s"The window duration ($windowDuration) must be greater than 0.")
-    }
-    if (slideDuration <= 0) {
-      return Some(s"The slide duration ($slideDuration) must be greater than 0.")
-    }
-    if (startTime < 0) {
-      return Some(s"The start time ($startTime) must be greater than or equal to 0.")
-    }
-    if (slideDuration > windowDuration) {
-      return Some(s"The slide duration ($slideDuration) must be less than or equal to the " +
-        s"windowDuration ($windowDuration).")
-    }
-    if (startTime >= slideDuration) {
-      return Some(s"The start time ($startTime) must be less than the " +
-        s"slideDuration ($slideDuration).")
-    }
-    None
+    dataTypeCheck
   }
 }
 
@@ -100,7 +76,7 @@ object TimeWindow {
   /**
    * Parses the interval string for a valid time duration. CalendarInterval expects interval
    * strings to start with the string `interval`. For usability, we prepend `interval` to the string
-   * if the user ommitted it.
+   * if the user omitted it.
    *
    * @param interval The interval string
    * @return The interval duration in seconds. SparkSQL casts TimestampType to Long in seconds,

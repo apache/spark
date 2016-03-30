@@ -24,7 +24,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
 
   import testImplicits._
 
-  test("tumbling windows") {
+  test("tumbling window groupBy statement") {
     // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC, 2016-03-27 19:39:27 UTC
     val df = Seq(
       (1459103974L, 1, "a"),
@@ -34,13 +34,12 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.groupBy(window($"time", "10 seconds"))
         .agg(count("*").as("counts"))
-        .orderBy($"window.start".asc)
         .select("counts"),
       Seq(Row(1), Row(1), Row(1))
     )
   }
 
-  test("explicit tumbling window") {
+  test("tumbling window groupBy statement with startTime") {
     val df = Seq(
       ("2016-03-27 19:39:34", 1, "a"),
       ("2016-03-27 19:39:56", 2, "a"),
@@ -49,12 +48,11 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.groupBy(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"id")
         .agg(count("*").as("counts"))
-        .orderBy($"window.start".asc)
         .select("counts"),
       Seq(Row(1), Row(1), Row(1)))
   }
 
-  test("?") {
+  test("tumbling window with multi-column projection") {
     // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC, 2016-03-27 19:39:27 UTC
     val df = Seq(
       (1459103974L, 1, "a"),
@@ -62,13 +60,12 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
       (1459103967L, 4, "b")).toDF("time", "value", "id")
     checkAnswer(
       df.select(window($"time", "10 seconds"), $"value")
-        .orderBy($"window.start".asc)
         .select("value"),
       Seq(Row(4), Row(1), Row(2))
     )
   }
 
-  test("time windowing - sliding windows") {
+  test("time windowing - sliding window grouping") {
     // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC, 2016-03-27 19:39:27 UTC
     val df = Seq(
       (1459103974L, 1, "a"),
@@ -78,13 +75,21 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.groupBy(window($"time", "10 seconds", "3 seconds", "0 second"))
         .agg(count("*").as("counts"))
-        .orderBy($"window.start".asc)
         .select("counts"),
       // 2016-03-27 19:39:27 UTC -> 4 bins
       // 2016-03-27 19:39:34 UTC -> 3 bins
       // 2016-03-27 19:39:56 UTC -> 3 bins
       Seq(Row(1), Row(1), Row(1), Row(2), Row(1), Row(1), Row(1), Row(1), Row(1))
     )
+  }
+
+  test("time windowing - sliding window projection") {
+    // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC, 2016-03-27 19:39:27 UTC
+    val df = Seq(
+      (1459103974L, 1, "a"),
+      (1459103996L, 2, "a"),
+      (1459103967L, 4, "b")).toDF("time", "value", "id")
+
     checkAnswer(
       df.select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
         .orderBy($"window.start".asc, $"value".desc).select("value"),
@@ -95,7 +100,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("esoteric time windowing use cases") {
+  test("windowing combined with explode expression") {
     // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC
     val df = Seq(
       (1459103974L, 1, Seq("a", "b")),
@@ -110,39 +115,36 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
   }
 
   test("string timestamps") {
-    val df2 = Seq(
+    val df = Seq(
       ("2016-03-27 09:00:05", 1),
       ("2016-03-27 09:00:32", 2),
       (null, 3),
       (null, 4)).toDF("time", "value")
 
     checkDataset(
-      df2
-        .select(window($"time", "10 seconds"), $"value")
-        .orderBy($"window.start".asc)
+      df.select(window($"time", "10 seconds"), $"value")
         .select("value")
         .as[Int],
       1, 2) // null columns are dropped
   }
 
-  test("another test") {
-    val df2 = Seq(
+  test("time window joins") {
+    val df = Seq(
       ("2016-03-27 09:00:05", 1),
       ("2016-03-27 09:00:32", 2),
       (null, 3),
       (null, 4)).toDF("time", "value")
 
-    val df3 = Seq(
+    val df2 = Seq(
       ("2016-03-27 09:00:02", 3),
       ("2016-03-27 09:00:35", 6)).toDF("time", "othervalue")
 
-
     checkAnswer(
-      df2.select(window($"time", "10 seconds"), $"value").join(
-        df3
-            .select(window($"time", "10 seconds"), $"othervalue"), Seq("window")).groupBy("window")
-          .agg((sum("value") + sum("othervalue")).as("total"))
-          .orderBy($"window.start".asc).select("total"),
+      df.select(window($"time", "10 seconds"), $"value").join(
+        df2.select(window($"time", "10 seconds"), $"othervalue"), Seq("window"))
+        .groupBy("window")
+        .agg((sum("value") + sum("othervalue")).as("total"))
+        .orderBy($"window.start".asc).select("total"),
       Seq(Row(4), Row(8)))
   }
 
@@ -150,13 +152,20 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
     val df4 = Seq((2L, 1), (12L, 2)).toDF("time", "value")
     checkAnswer(
       df4.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
-          .orderBy($"window.start".asc).select("value"),
+        .orderBy($"window.start".asc).select("value"),
       Seq(Row(1), Row(2))
     )
   }
 
-  ignore("multiple time windows in a single operator") {
-
+  test("multiple time windows in a single operator throws nice exception") {
+    val df = Seq(
+      ("2016-03-27 09:00:02", 3),
+      ("2016-03-27 09:00:35", 6)).toDF("time", "value")
+    val e = intercept[AnalysisException] {
+      df.select(window($"time", "10 second"), window($"time", "15 second")).collect()
+    }
+    assert(e.getMessage.contains(
+      "Multiple time window expressions would result in a cartesian product"))
   }
 
   test("aliased windows") {
@@ -166,8 +175,8 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(window($"time", "10 seconds").as("time_window"), $"value")
-          .orderBy($"time_window.start".asc)
-          .select("value"),
+        .orderBy($"time_window.start".asc)
+        .select("value"),
       Seq(Row(1), Row(2))
     )
   }

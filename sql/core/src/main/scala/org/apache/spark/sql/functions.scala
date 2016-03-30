@@ -2554,8 +2554,9 @@ object functions {
   /**
    * Bucketize rows into one or more time windows given a timestamp specifying column. Window
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
-   * [12:05,12:10) but not in [12:00,12:05). The following example takes the average stock price
-   * for a one minute window every 10 seconds starting 5 seconds after the hour:
+   * [12:05,12:10) but not in [12:00,12:05).  Windows must be at least 1 second long. The following
+   * example takes the average stock price for a one minute window every 10 seconds starting 5
+   * seconds after the hour:
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
@@ -2608,7 +2609,8 @@ object functions {
   /**
    * Bucketize rows into one or more time windows given a timestamp specifying column. Window
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
-   * [12:05,12:10) but not in [12:00,12:05). The windows start beginning at 1970-01-01 00:00:00 UTC.
+   * [12:05,12:10) but not in [12:00,12:05).  Windows must be at least 1 second long.
+   * The windows start beginning at 1970-01-01 00:00:00 UTC.
    * The following example takes the average stock price for a one minute window every 10 seconds:
    *
    * {{{
@@ -2650,7 +2652,8 @@ object functions {
   /**
    * Generates tumbling time windows given a timestamp specifying column. Window
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
-   * [12:05,12:10) but not in [12:00,12:05). The windows start beginning at 1970-01-01 00:00:00 UTC.
+   * [12:05,12:10) but not in [12:00,12:05). Windows must be at least 1 second long. 
+   * The windows start beginning at 1970-01-01 00:00:00 UTC.
    * The following example takes the average stock price for a one minute tumbling window:
    *
    * {{{

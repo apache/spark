@@ -1595,6 +1595,9 @@ object ResolveUpCast extends Rule[LogicalPlan] {
 object TimeWindowing extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
+  private final val WINDOW_START = "start"
+  private final val WINDOW_END = "end"
+
   /**
    * Generates the logical plan for generating window ranges on a timestamp column. Without
    * knowing what the timestamp value is, it's non-trivial to figure out deterministically how many
@@ -1619,7 +1622,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
    *     12:00 - 12:12 +                      11:57 - 12:09 +
    *     12:05 - 12:17 +                      12:02 - 12:14 +
    *
-   * @param p The logical plan
+   * @param plan The logical plan
    * @return the logical plan that will generate the time windows using the Expand operator, with
    *         the Filter operator for correctness and Project for usability.
    */
@@ -1629,9 +1632,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
       val windowExpressions =
         p.expressions.flatMap(_.collect { case t: TimeWindow => t }).distinct.toList // Not correct.
 
-      println(s"found: $windowExpressions")
-
-      // Only support a single window expression for now?
+      // Only support a single window expression for now
       if (windowExpressions.size == 1 &&
           windowExpressions.head.timeColumn.resolved &&
           windowExpressions.head.timeColumn.dataType == TimestampType &&
@@ -1649,27 +1650,30 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
           // the 1000000 is necessary for properly casting a LongType to a TimestampType
           CreateNamedStruct(
-            Literal("start") :: windowStart * 1000000 ::
-            Literal("end") :: windowEnd * 1000000 :: Nil)
+            Literal(WINDOW_START) :: windowStart * 1000000 ::
+            Literal(WINDOW_END) :: windowEnd * 1000000 :: Nil)
         }
 
         val projections = windows.map(_ +: p.children.head.output)
 
         val filterExpr =
-          window.timeColumn >= windowAttr.getField("start")
-          window.timeColumn < windowAttr.getField("end")
+          window.timeColumn >= windowAttr.getField(WINDOW_START)
+          window.timeColumn < windowAttr.getField(WINDOW_END)
 
         val expandedPlan =
           Filter(filterExpr,
             Expand(projections, windowAttr +: child.output, child))
 
-        val substituedPlan = p transformExpressions {
+        val substitutedPlan = p transformExpressions {
           case t: TimeWindow => windowAttr
         }
 
-        substituedPlan.withNewChildren(expandedPlan :: Nil)
+        substitutedPlan.withNewChildren(expandedPlan :: Nil)
+      } else if (windowExpressions.size > 1) {
+        p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
+          "of rows, therefore they are not currently not supported.")
       } else {
-        p // Return unchanged
+        p // Return unchanged. Analyzer will throw exception later
       }
   }
 
