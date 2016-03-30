@@ -92,7 +92,7 @@ private[sql] case class AggregateExpression(
   extends Expression
   with Unevaluable {
 
-  val resultAttribute: Attribute = if (aggregateFunction.resolved) {
+  lazy val resultAttribute: Attribute = if (aggregateFunction.resolved) {
     AttributeReference(
       aggregateFunction.toString,
       aggregateFunction.dataType,
