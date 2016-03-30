@@ -41,8 +41,8 @@ import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 /**
  * Concrete parser for HiveQl statements.
  */
-case class HiveSqlParser(sessionState: HiveSessionState) extends AbstractSqlParser {
-  val astBuilder = new HiveSqlAstBuilder(sessionState)
+class HiveSqlParser(functionRegistry: FunctionRegistry) extends AbstractSqlParser {
+  val astBuilder = new HiveSqlAstBuilder(functionRegistry)
 
   override protected def nativeCommand(sqlText: String): LogicalPlan = {
     HiveNativeCommand(sqlText)
@@ -52,7 +52,7 @@ case class HiveSqlParser(sessionState: HiveSessionState) extends AbstractSqlPars
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class HiveSqlAstBuilder(sessionState: HiveSessionState) extends SparkSqlAstBuilder {
+class HiveSqlAstBuilder(functionRegistry: FunctionRegistry) extends SparkSqlAstBuilder {
   import ParserUtils._
 
   /**
@@ -281,7 +281,6 @@ class HiveSqlAstBuilder(sessionState: HiveSessionState) extends SparkSqlAstBuild
       name: String,
       expressions: Seq[Expression],
       ctx: LateralViewContext): Generator = {
-    val functionRegistry = sessionState.functionRegistry
     val func = functionRegistry.lookupFunction(name, expressions)
     func match {
       case g: Generator => g

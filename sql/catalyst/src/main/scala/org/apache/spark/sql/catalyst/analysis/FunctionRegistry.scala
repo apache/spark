@@ -53,8 +53,8 @@ trait FunctionRegistry {
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
 
-  /** Get the builder of the specified function name and class name. */
-  def getFunctionBuilderAndInfo(
+  /* Return the FunctionBuilder and ExpressionInfo for the specified function name and classname. */
+  def makeFunctionBuilderAndInfo(
     name: String,
     functionClassName: String): (ExpressionInfo, FunctionBuilder) = {
     val clazz = Utils.getContextOrSparkClassLoader.loadClass(functionClassName)

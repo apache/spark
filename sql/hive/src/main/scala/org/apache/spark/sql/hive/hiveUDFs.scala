@@ -55,20 +55,20 @@ private[hive] class HiveFunctionRegistry(
     }
   }
 
-  override def getFunctionBuilderAndInfo(
+  override def makeFunctionBuilderAndInfo(
       name: String,
       functionClassName: String): (ExpressionInfo, FunctionBuilder) = {
     val hiveUDFWrapper = new HiveFunctionWrapper(functionClassName)
     val hiveUDFClass = hiveUDFWrapper.createFunction().getClass
     val info = new ExpressionInfo(functionClassName, name)
-    val builder = genHiveUDFBuilder(name, functionClassName, hiveUDFClass, null, hiveUDFWrapper)
+    val builder = makeHiveUDFBuilder(name, functionClassName, hiveUDFClass, null, hiveUDFWrapper)
     (info, builder)
   }
 
   /**
    * Generates a Spark FunctionBuilder for a Hive UDF which is specified by a given classname.
    */
-  def genHiveUDFBuilder(
+  def makeHiveUDFBuilder(
       name: String,
       functionClassName: String,
       hiveUDFClass: Class[_],
@@ -159,9 +159,9 @@ private[hive] class HiveFunctionRegistry(
       // catch the exception and throw AnalysisException instead.
       val builder =
         if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
-          genHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass, functionInfo)
+          makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass, functionInfo)
         } else {
-          genHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass)
+          makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass)
         }
       builder(children)
     }
