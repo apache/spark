@@ -82,7 +82,7 @@ defaults = {
         'dag_concurrency': 16,
         'max_active_runs_per_dag': 16,
         'executor': 'SequentialExecutor',
-        'dags_are_paused_at_creation': False,
+        'dags_are_paused_at_creation': True,
         'sql_alchemy_pool_size': 5,
         'sql_alchemy_pool_recycle': 3600,
         'dagbag_import_timeout': 30,
@@ -184,7 +184,7 @@ parallelism = 32
 dag_concurrency = 16
 
 # Are DAGs paused by default at creation
-dags_are_paused_at_creation = False
+dags_are_paused_at_creation = True
 
 # The maximum number of active DAG runs per DAG
 max_active_runs_per_dag = 16
