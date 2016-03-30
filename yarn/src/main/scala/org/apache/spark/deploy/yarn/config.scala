@@ -91,6 +91,10 @@ package object config {
     .stringConf
     .optional
 
+  private[spark] val JARS_TO_DISTRIBUTE = ConfigBuilder("spark.yarn.dist.jars")
+    .stringConf
+    .optional
+
   private[spark] val PRESERVE_STAGING_FILES = ConfigBuilder("spark.yarn.preserve.staging.files")
     .doc("Whether to preserve temporary files created by the job in HDFS.")
     .booleanConf
@@ -248,10 +252,5 @@ package object config {
     .internal
     .stringConf
     .toSequence
-    .optional
-
-  private[spark] val JARS_TO_DISTRIBUTE = ConfigBuilder("spark.yarn.dist.jars")
-    .internal
-    .stringConf
     .optional
 }

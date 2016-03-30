@@ -91,7 +91,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |  --class CLASS_NAME   Name of your application's main class
       |  --primary-py-file    A main Python file
       |  --primary-r-file     A main R file
-      |  --args ARGS          Arguments to be passed to your application's main class.
+      |  --arg ARG            Argument to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.
       |  --properties-file FILE Path to a custom Spark properties file.
       """.stripMargin)
