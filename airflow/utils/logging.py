@@ -22,7 +22,7 @@ from builtins import object
 import logging
 
 from airflow import configuration
-
+from airflow.exceptions import AirflowException
 
 class LoggingMixin(object):
     """
@@ -86,7 +86,7 @@ class GCSLog(object):
                     if gcs_blob:
                         return gcs_blob.download_as_string().decode()
                 else:
-                    bkt, blob = remote_log_location.lstrip('gs:/').split('/', 1)
+                    bkt, blob = self.parse_gcs_url(remote_log_location)
                     return self.hook.download(bkt, blob).decode()
             except:
                 pass
@@ -124,7 +124,7 @@ class GCSLog(object):
                         replace=True)
                     return
                 else:
-                    bkt, blob = remote_log_location.lstrip('gs:/').split('/', 1)
+                    bkt, blob = self.parse_gcs_url(remote_log_location)
                     from tempfile import NamedTemporaryFile
                     with NamedTemporaryFile(mode='w+') as tmpfile:
                         tmpfile.write(log)
@@ -135,3 +135,23 @@ class GCSLog(object):
 
         # raise/return error if we get here
         logging.error('Could not write logs to {}'.format(remote_log_location))
+
+    def parse_gcs_url(self, gsurl):
+        """
+        Given a Google Cloud Storage URL (gs://<bucket>/<blob>), returns a
+        tuple containing the corresponding bucket and blob.
+        """
+        # Python 3
+        try:
+            from urllib.parse import urlparse
+        # Python 2
+        except ImportError:
+            from urlparse import urlparse
+
+        parsed_url = urlparse(gsurl)
+        if not parsed_url.netloc:
+            raise AirflowException('Please provide a bucket name')
+        else:
+            bucket = parsed_url.netloc
+            blob = parsed_url.path.strip('/')
+            return (bucket, blob)
