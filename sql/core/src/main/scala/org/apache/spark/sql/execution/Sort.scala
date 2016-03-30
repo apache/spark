@@ -43,7 +43,7 @@ case class Sort(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override def outputOrdering: Seq[SortOrder] = sortOrder.map(d => d.copy(global = global))
 
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil

@@ -254,12 +254,14 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       child.children match {
         case ShuffleExchange(childPartitioning, baseChild, _) :: Nil =>
           if (childPartitioning.guarantees(partitioning)) child else operator
-
         case _ => operator
       }
-    // Remove a sort operator if a child output has already satisfied the required order
-    case operator @ Sort(sortOrder, _, child, _) if SortOrder.satisfies(
-        child.outputOrdering, sortOrder) =>
+    // Remove a global sort operator if a child output has already satisfied this required order
+    case sort @ Sort(sortOrder, true, child, _) if sort.outputOrdering.forall { requiredOrder =>
+          child.outputOrdering.exists { case outputOrder =>
+            outputOrder == requiredOrder
+          }
+        } =>
       ensureDistributionAndOrdering(child)
     case operator: SparkPlan =>
       ensureDistributionAndOrdering(operator)

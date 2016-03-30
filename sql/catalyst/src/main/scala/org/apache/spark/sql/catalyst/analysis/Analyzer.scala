@@ -652,7 +652,7 @@ class Analyzer(
       case s @ Sort(orders, global, child)
           if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
         val newOrders = orders map {
-          case s @ SortOrder(IntegerIndex(index), direction) =>
+          case s @ SortOrder(IntegerIndex(index), direction, _) =>
             if (index > 0 && index <= child.output.size) {
               SortOrder(child.output(index - 1), direction)
             } else {
