@@ -359,7 +359,7 @@
     <dependency>
       <groupId>com.databricks</groupId>
       <artifactId>spark-csv_2.10</artifactId>
-      <version>1.3.0</version>
+      <version>1.4.0</version>
     </dependency>
   </dependencies>
   <dependencyManagement>
