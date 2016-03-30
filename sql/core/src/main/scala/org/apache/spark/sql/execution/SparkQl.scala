@@ -250,8 +250,9 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
 
         DropFunction(dbName, funcName, ifExists.isDefined, temp.isDefined)(node.source)
 
-      case Token("TOK_ALTERTABLE", alterTableArgs) =>
-        AlterTableCommandParser.parse(node)
+      case Token(fieldName, alterTableArgs)
+          if fieldName == "TOK_ALTERTABLE" || fieldName == "TOK_ALTERVIEW" =>
+        AlterTableAlterViewCommandParser.parse(node)
 
       case Token("TOK_CREATETABLEUSING", createTableArgs) =>
         val Seq(
