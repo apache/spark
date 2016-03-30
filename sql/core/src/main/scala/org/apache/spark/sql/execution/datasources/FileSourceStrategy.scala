@@ -61,7 +61,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
          files.fileFormat.toString == "ORC" ||
          files.fileFormat.isInstanceOf[json.DefaultSource] ||
          files.fileFormat.isInstanceOf[text.DefaultSource]) &&
-         files.sqlContext.conf.parquetFileScan =>
+         files.sqlContext.conf.useFileScan =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
