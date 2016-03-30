@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
@@ -179,7 +180,16 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
         }
         predictUDF(col(getFeaturesCol))
       }
-      outputData = outputData.withColumn(getPredictionCol, predUDF)
+      // determine number of classes either from metadata if provided.
+      val labelSchema = dataset.schema($(labelCol))
+      // extract label metadata from label column if present, or create a nominal attribute
+      // to output the number of labels
+      val labelAttribute = Attribute.fromStructField(labelSchema) match {
+        case _: NumericAttribute | UnresolvedAttribute =>
+          NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
+        case attr: Attribute => attr
+      }
+      outputData = outputData.withColumn(getPredictionCol, predUDF, labelAttribute.toMetadata)
       numColsOutput += 1
     }
 
