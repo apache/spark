@@ -1,9 +1,1 @@
-[ {
-  "id" : 0,
-  "name" : "0",
-  "numPartitions" : 8,
-  "numCachedPartitions" : 8,
-  "storageLevel" : "Memory Deserialized 1x Replicated",
-  "memoryUsed" : 28000128,
-  "diskUsed" : 0
-} ]
+[ ]
