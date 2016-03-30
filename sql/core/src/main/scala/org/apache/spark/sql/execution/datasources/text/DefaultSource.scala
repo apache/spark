@@ -139,11 +139,11 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val broadcastedConf =
       sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
 
-    val unsafeRow = new UnsafeRow(1)
-    val bufferHolder = new BufferHolder(unsafeRow)
-    val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
-
     file => {
+      val unsafeRow = new UnsafeRow(1)
+      val bufferHolder = new BufferHolder(unsafeRow)
+      val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
+
       new HadoopFileLinesReader(file, broadcastedConf.value.value).map { line =>
         // Writes to an UnsafeRow directly
         bufferHolder.reset()
