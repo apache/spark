@@ -77,6 +77,7 @@ private[ui] class RDDOperationCluster(val id: String, private var _name: String)
 private[ui] object RDDOperationGraph extends Logging {
 
   val STAGE_CLUSTER_PREFIX = "stage_"
+  val stageIdAttemptedMap = new mutable.HashMap[String, String]()
 
   /**
    * Construct a RDDOperationGraph for a given stage.
@@ -158,6 +159,10 @@ private[ui] object RDDOperationGraph extends Logging {
     }
 
     RDDOperationGraph(internalEdges, outgoingEdges, incomingEdges, rootCluster)
+  }
+
+  def getStageInfo(stage: StageInfo): Unit = {
+      stageIdAttemptedMap.put(stage.stageId.toString, stage.attemptId.toString)
   }
 
   /**
