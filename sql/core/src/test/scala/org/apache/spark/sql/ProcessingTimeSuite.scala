@@ -15,18 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql
+
+import java.util.concurrent.TimeUnit
+
+import scala.concurrent.duration._
 
 import org.apache.spark.SparkFunSuite
 
 class ProcessingTimeSuite extends SparkFunSuite {
 
-  test("nextBatchTime") {
-    val processingTime = ProcessingTime(100)
-    assert(processingTime.nextBatchTime(1) === 100)
-    assert(processingTime.nextBatchTime(99) === 100)
-    assert(processingTime.nextBatchTime(100) === 100)
-    assert(processingTime.nextBatchTime(101) === 200)
-    assert(processingTime.nextBatchTime(150) === 200)
+  test("create") {
+    assert(ProcessingTime(10.seconds).intervalMs === 10 * 1000)
+    assert(ProcessingTime.create(10, TimeUnit.SECONDS).intervalMs === 10 * 1000)
+    assert(ProcessingTime("1 minute").intervalMs === 60 * 1000)
+
+    intercept[IllegalArgumentException] { ProcessingTime(null: String) }
+    intercept[IllegalArgumentException] { ProcessingTime("") }
+    intercept[IllegalArgumentException] { ProcessingTime("invalid") }
+    intercept[IllegalArgumentException] { ProcessingTime("1 month") }
+    intercept[IllegalArgumentException] { ProcessingTime("1 year") }
   }
 }

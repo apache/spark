@@ -287,7 +287,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     var q = df.write
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .trigger(10.seconds)
+      .trigger(ProcessingTime(10.seconds))
       .startStream()
     q.stop()
 
@@ -296,7 +296,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     q = df.write
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .trigger(100, TimeUnit.SECONDS)
+      .trigger(ProcessingTime.create(100, TimeUnit.SECONDS))
       .startStream()
     q.stop()
 

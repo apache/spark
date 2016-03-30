@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import scala.collection.JavaConverters._
-import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
 
@@ -30,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.streaming.{ProcessingTime, StreamExecution, Trigger}
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.HadoopFsRelation
 
 /**
@@ -79,22 +78,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Set the trigger interval for the stream query.
+   * Set the trigger for the stream query.
    *
    * @since 2.0.0
    */
-  def trigger(interval: Duration): DataFrameWriter = {
-    trigger = ProcessingTime(interval.toMillis)
-    this
-  }
-
-  /**
-   * Set the trigger interval for the stream query.
-   *
-   * @since 2.0.0
-   */
-  def trigger(interval: Long, unit: TimeUnit): DataFrameWriter = {
-    trigger = ProcessingTime(unit.toMillis(interval))
+  def trigger(trigger: Trigger): DataFrameWriter = {
+    this.trigger = trigger
     this
   }
 

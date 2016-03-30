@@ -76,6 +76,11 @@ class StreamExecution(
   /** A list of unique sources in the query plan. */
   private val uniqueSources = sources.distinct
 
+  private val triggerExecutor = trigger match {
+    case t: ProcessingTime => ProcessingTimeExecutor(t)
+    case t => throw new IllegalArgumentException(s"${t.getClass} is not supported")
+  }
+
   /** Defines the internal state of execution */
   @volatile
   private var state: State = INITIALIZED
@@ -209,7 +214,7 @@ class StreamExecution(
       SQLContext.setActive(sqlContext)
       populateStartOffsets()
       logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-      trigger.execute(() => {
+      triggerExecutor.execute(() => {
         if (isActive) {
           if (dataAvailable) runBatch()
           commitAndConstructNextBatch()

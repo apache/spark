@@ -18,11 +18,9 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.ProcessingTime
 
-/**
- * A interface that indicates how to run a batch.
- */
-trait Trigger {
+trait TriggerExecutor {
 
   /**
    * Execute batches using `batchRunner`. If `batchRunner` runs `false`, terminate the execution.
@@ -31,11 +29,12 @@ trait Trigger {
 }
 
 /**
- * A trigger that runs a batch every `intervalMs` milliseconds.
+ * A trigger executor that runs a batch every `intervalMs` milliseconds.
  */
-case class ProcessingTime(intervalMs: Long) extends Trigger with Logging {
+case class ProcessingTimeExecutor(processingTime: ProcessingTime)
+  extends TriggerExecutor with Logging {
 
-  require(intervalMs >= 0, "the interval of trigger should not be negative")
+  private val intervalMs = processingTime.intervalMs
 
   override def execute(batchRunner: () => Boolean): Unit = {
     while (true) {
