@@ -132,46 +132,6 @@ class LDA private (
   def setDocConcentration(docConcentration: Vector): this.type = {
     require(docConcentration.size == 1 || docConcentration.size == k,
       s"Size of docConcentration must be 1 or ${k} but got ${docConcentration.size}")
-
-    if (docConcentration.size == 1) {
-      val first = docConcentration.toArray.head
-      if (first != -1) {
-        ldaOptimizer match {
-          case _ : EMLDAOptimizer =>
-            require(first > 1.0,
-              s"Values in docConcentration must be greater than 1 with EMLDAOptimizer" +
-                s" but got ${docConcentration}")
-
-          case _ : OnlineLDAOptimizer =>
-            require(first >= 0,
-              s"Values in docConcentration must be nonnegative with OnlineLDAOptimizer" +
-                s" but got ${docConcentration}")
-        }
-      }
-    } else {
-      ldaOptimizer match {
-        case _ : EMLDAOptimizer =>
-          val first = docConcentration.toArray.head
-          require(first > 1.0,
-            s"Values in docConcentration must be greater than 1 with EMLDAOptimizer" +
-              s" but got ${docConcentration}")
-          docConcentration.toArray.foreach {
-            value =>
-              require(value == first,
-                s"Values in docConcentration must be the same with EMLDAOptimizer" +
-                  s" but got ${docConcentration}")
-          }
-
-        case _ : OnlineLDAOptimizer =>
-          docConcentration.toArray.foreach {
-            value =>
-              require(value >= 0,
-                s"Values in docConcentration must be nonnegative with OnlineLDAOptimizer" +
-                  s" but got ${docConcentration}")
-          }
-      }
-    }
-
     this.docConcentration = docConcentration
     this
   }
@@ -245,20 +205,6 @@ class LDA private (
    */
   @Since("1.3.0")
   def setTopicConcentration(topicConcentration: Double): this.type = {
-    if (topicConcentration != -1) {
-      ldaOptimizer match {
-        case _ : EMLDAOptimizer =>
-          require(topicConcentration > 1.0,
-            s"topicConcentration must be greater than 1 with EMLDAOptimizer" +
-              s" but got ${topicConcentration}")
-
-        case _ : OnlineLDAOptimizer =>
-          require(topicConcentration >= 0,
-            s"topicConcentration must be nonnegative with OnlineLDAOptimizer" +
-              s" but got ${topicConcentration}")
-      }
-    }
-
     this.topicConcentration = topicConcentration
     this
   }
