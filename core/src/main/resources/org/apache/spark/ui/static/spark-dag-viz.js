@@ -208,6 +208,7 @@ function renderDagVizForJob(svgContainer) {
     var metadata = d3.select(this);
     var dot = metadata.select(".dot-file").text();
     var stageId = metadata.attr("stage-id");
+    var attemptId = metadata.attr("attemptId");
     var containerId = VizConstants.graphPrefix + stageId;
     var isSkipped = metadata.attr("skipped") == "true";
     var container;
@@ -219,7 +220,6 @@ function renderDagVizForJob(svgContainer) {
     } else {
       // Link each graph to the corresponding stage page (TODO: handle stage attempts)
       // Use the link from the stage table so it also works for the history server
-      var attemptId = 0
       var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
         .select("a.name-link")
         .attr("href");
