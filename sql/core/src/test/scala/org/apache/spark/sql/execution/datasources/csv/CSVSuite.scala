@@ -36,6 +36,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val carsFile = "cars.csv"
   private val carsMalformedFile = "cars-malformed.csv"
   private val carsFile8859 = "cars_iso-8859-1.csv"
+  private val carsFileUTF16 = "cars_utf-16.csv"
   private val carsTsvFile = "cars.tsv"
   private val carsAltFile = "cars-alternative.csv"
   private val carsUnbalancedQuotesFile = "cars-unbalanced-quotes.csv"
@@ -150,6 +151,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
 
     assert(exception.getMessage.contains("1-9588-osi"))
+  }
+
+  test("non-ascii compatible encoding") {
+    val cars = sqlContext
+      .read
+      .format("csv")
+      .option("charset", "utf-16")
+      .option("header", "true")
+      .load(testFile(carsFileUTF16))
+
+    verifyCars(cars, withHeader = true, checkTypes = false)
   }
 
   test("test different encoding") {
