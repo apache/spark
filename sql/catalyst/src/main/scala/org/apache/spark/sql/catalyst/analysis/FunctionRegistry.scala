@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
+import org.apache.spark.util.Utils
 
 
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
@@ -51,6 +52,17 @@ trait FunctionRegistry {
 
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
+
+  /**
+   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   *
+   * This performs reflection to decide what type of [[Expression]] to return in the builder.
+   * This is useful for creating temporary functions.
+   */
+  def makeFunctionBuilder(funcName: String, funcClassName: String): FunctionBuilder = {
+    // TODO: at least support UDAFs here
+    throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
+  }
 
 }
 
