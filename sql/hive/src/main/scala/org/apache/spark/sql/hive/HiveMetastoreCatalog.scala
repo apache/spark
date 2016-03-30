@@ -85,7 +85,18 @@ private[hive] object HiveSerDe {
         HiveSerDe(
           inputFormat = Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
           outputFormat = Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
-          serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")))
+          serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")),
+
+      "textfile" ->
+        HiveSerDe(
+          inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
+          outputFormat = Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat")),
+
+      "avro" ->
+        HiveSerDe(
+          inputFormat = Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat"),
+          outputFormat = Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat"),
+          serde = Option("org.apache.hadoop.hive.serde2.avro.AvroSerDe")))
 
     val key = source.toLowerCase match {
       case s if s.startsWith("org.apache.spark.sql.parquet") => "parquet"
@@ -102,7 +113,7 @@ private[hive] object HiveSerDe {
  * Legacy catalog for interacting with the Hive metastore.
  *
  * This is still used for things like creating data source tables, but in the future will be
- * cleaned up to integrate more nicely with [[HiveCatalog]].
+ * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
 private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveContext)
   extends Logging {
@@ -124,8 +135,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
   private def getQualifiedTableName(t: CatalogTable): QualifiedTableName = {
     QualifiedTableName(
-      t.name.database.getOrElse(getCurrentDatabase).toLowerCase,
-      t.name.table.toLowerCase)
+      t.identifier.database.getOrElse(getCurrentDatabase).toLowerCase,
+      t.identifier.table.toLowerCase)
   }
 
   /** A cache of Spark SQL data source tables that have been accessed. */
@@ -299,7 +310,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
     def newSparkSQLSpecificMetastoreTable(): CatalogTable = {
       CatalogTable(
-        name = TableIdentifier(tblName, Option(dbName)),
+        identifier = TableIdentifier(tblName, Option(dbName)),
         tableType = tableType,
         schema = Nil,
         storage = CatalogStorageFormat(
@@ -319,7 +330,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       assert(relation.partitionSchema.isEmpty)
 
       CatalogTable(
-        name = TableIdentifier(tblName, Option(dbName)),
+        identifier = TableIdentifier(tblName, Option(dbName)),
         tableType = tableType,
         storage = CatalogStorageFormat(
           locationUri = Some(relation.location.paths.map(_.toUri.toString).head),
@@ -431,7 +442,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       alias match {
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
-        case None => SubqueryAlias(table.name.table, hive.parseSql(viewText))
+        case None => SubqueryAlias(table.identifier.table, hive.parseSql(viewText))
         case Some(aliasText) => SubqueryAlias(aliasText, hive.parseSql(viewText))
       }
     } else {
@@ -611,7 +622,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
 
         execution.CreateViewAsSelect(
-          table.copy(name = TableIdentifier(tblName, Some(dbName))),
+          table.copy(identifier = TableIdentifier(tblName, Some(dbName))),
           child,
           allowExisting,
           replace)
@@ -633,7 +644,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         if (hive.convertCTAS && table.storage.serde.isEmpty) {
           // Do the conversion when spark.sql.hive.convertCTAS is true and the query
           // does not specify any storage format (file format and storage handler).
-          if (table.name.database.isDefined) {
+          if (table.identifier.database.isDefined) {
             throw new AnalysisException(
               "Cannot specify database name in a CTAS statement " +
                 "when spark.sql.hive.convertCTAS is set to true.")
@@ -641,7 +652,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
           CreateTableUsingAsSelect(
-            TableIdentifier(desc.name.table),
+            TableIdentifier(desc.identifier.table),
             conf.defaultDataSourceName,
             temporary = false,
             Array.empty[String],
@@ -662,7 +673,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
           val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
 
           execution.CreateTableAsSelect(
-            desc.copy(name = TableIdentifier(tblName, Some(dbName))),
+            desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
             child,
             allowExisting)
         }
@@ -792,7 +803,7 @@ private[hive] case class MetastoreRelation(
     // We start by constructing an API table as Hive performs several important transformations
     // internally when converting an API table to a QL table.
     val tTable = new org.apache.hadoop.hive.metastore.api.Table()
-    tTable.setTableName(table.name.table)
+    tTable.setTableName(table.identifier.table)
     tTable.setDbName(table.database)
 
     val tableParameters = new java.util.HashMap[String, String]()
