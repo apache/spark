@@ -135,7 +135,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
         case _ =>
           val maxSplitBytes = files.sqlContext.conf.filesMaxPartitionBytes
-          logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes")
+          val maxFileNumInPartition = files.sqlContext.conf.filesMaxNumInPartition
+          logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
+            s"max #files: $maxFileNumInPartition")
 
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
@@ -173,7 +175,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           // Assign files to partitions using "First Fit Decreasing" (FFD)
           // TODO: consider adding a slop factor here?
           splitFiles.foreach { file =>
-            if (currentSize + file.length > maxSplitBytes) {
+            if (currentSize + file.length > maxSplitBytes ||
+                currentFiles.length >= maxFileNumInPartition) {
               closePartition()
               addFile(file)
             } else {
