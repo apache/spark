@@ -76,7 +76,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
   private def requireDbMatches(db: String, table: CatalogTable): Unit = {
     if (table.identifier.database != Some(db)) {
       throw new AnalysisException(
-        s"Provided database $db does not much the one specified in the " +
+        s"Provided database $db does not match the one specified in the " +
         s"table definition (${table.identifier.database.getOrElse("n/a")})")
     }
   }

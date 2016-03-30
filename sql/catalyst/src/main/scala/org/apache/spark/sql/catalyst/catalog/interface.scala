@@ -39,7 +39,7 @@ abstract class ExternalCatalog {
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"Database $db does not exist")
+      throw new AnalysisException(s"Database '$db' does not exist")
     }
   }
 
@@ -291,5 +291,5 @@ case class CatalogRelation(
   override def output: Seq[Attribute] = Seq.empty
 
   require(metadata.identifier.database == Some(db),
-    "provided database does not much the one specified in the table definition")
+    "provided database does not match the one specified in the table definition")
 }

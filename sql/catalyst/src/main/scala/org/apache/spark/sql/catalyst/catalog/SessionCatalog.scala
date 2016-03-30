@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
@@ -112,6 +114,10 @@ class SessionCatalog(
       throw new AnalysisException(s"cannot set current database to non-existent '$db'")
     }
     currentDb = db
+  }
+
+  def getDefaultDBPath(db: String): String = {
+    System.getProperty("java.io.tmpdir") + File.separator + db + ".db"
   }
 
   // ----------------------------------------------------------------------------
