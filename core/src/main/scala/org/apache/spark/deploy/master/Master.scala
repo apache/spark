@@ -333,7 +333,11 @@ private[deploy] class Master(
       idToApp.get(appId) match {
         case Some(app) =>
           logInfo("Application has been re-registered: " + appId)
-          app.state = ApplicationState.WAITING
+          if (app.coresLeft > 0) {
+            app.state = ApplicationState.WAITING
+          } else {
+            app.state = ApplicationState.RUNNING
+          }
         case None =>
           logWarning("Master change ack from unknown app: " + appId)
       }
