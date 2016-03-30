@@ -322,6 +322,59 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(sparkListener.stageByOrderOfExecution(0) < sparkListener.stageByOrderOfExecution(1))
   }
 
+  /**
+   * This test ensures that DAGScheduler build stage graph correctly.
+   * Here, we submit an RDD[F] having a linage of RDDs as follows:
+   *
+   *                               <--------------------
+   *                             /                       \
+   * [A] <--(1)-- [B] <--(2)-- [C] <--(3)-- [D] <--(4)-- [E] <--(5)-- [F]
+   *                \                       /
+   *                  <--------------------
+   *
+   * then check if all stages have correct parent stages.
+   * Note: [] means an RDD, () means a shuffle dependency.
+   */
+  test("parent stages") {
+    val rddA = new MyRDD(sc, 1, Nil)
+
+    val shuffleDef1 = new ShuffleDependency(rddA, new HashPartitioner(1))
+    val rddB = new MyRDD(sc, 1, List(shuffleDef1), tracker = mapOutputTracker)
+
+    val shuffleDef2 = new ShuffleDependency(rddB, new HashPartitioner(1))
+    val rddC = new MyRDD(sc, 1, List(shuffleDef2), tracker = mapOutputTracker)
+
+    val shuffleDef3 = new ShuffleDependency(rddC, new HashPartitioner(1))
+    val rddD = new MyRDD(sc, 1, List(shuffleDef3, new OneToOneDependency(rddB)),
+      tracker = mapOutputTracker)
+
+    val shuffleDef4 = new ShuffleDependency(rddD, new HashPartitioner(1))
+    val rddE = new MyRDD(sc, 1, List(new OneToOneDependency(rddC), shuffleDef4),
+      tracker = mapOutputTracker)
+
+    val shuffleDef5 = new ShuffleDependency(rddE, new HashPartitioner(1))
+    val rddF = new MyRDD(sc, 1, List(shuffleDef5),
+      tracker = mapOutputTracker)
+    submit(rddF, Array(0))
+
+    assert(scheduler.shuffleToMapStage.size === 5)
+    assert(scheduler.activeJobs.size === 1)
+
+    val mapStage1 = scheduler.shuffleToMapStage(shuffleDef1.shuffleId)
+    val mapStage2 = scheduler.shuffleToMapStage(shuffleDef2.shuffleId)
+    val mapStage3 = scheduler.shuffleToMapStage(shuffleDef3.shuffleId)
+    val mapStage4 = scheduler.shuffleToMapStage(shuffleDef4.shuffleId)
+    val mapStage5 = scheduler.shuffleToMapStage(shuffleDef5.shuffleId)
+    val finalStage = scheduler.activeJobs.head.finalStage
+
+    assert(mapStage1.parents.isEmpty)
+    assert(mapStage2.parents === List(mapStage1))
+    assert(mapStage3.parents === List(mapStage2))
+    assert(mapStage4.parents === List(mapStage1, mapStage3))
+    assert(mapStage5.parents === List(mapStage2, mapStage4))
+    assert(finalStage.parents === List(mapStage5))
+  }
+
   test("zero split job") {
     var numResults = 0
     var failureReason: Option[Exception] = None
