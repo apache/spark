@@ -191,7 +191,7 @@ abstract class AbstractCommandBuilder {
     // propagate the test classpath appropriately. For normal invocation, look for the jars
     // directory under SPARK_HOME.
     boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
-    String jarsDir = findJarsDir(!isTesting && !isTestingSql);
+    String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
     if (jarsDir != null) {
       addToClassPath(cp, join(File.separator, jarsDir, "*"));
     }
@@ -306,27 +306,6 @@ abstract class AbstractCommandBuilder {
     }
 
     return props;
-  }
-
-  private String findJarsDir(boolean failIfNotFound) {
-    String sparkHome = getSparkHome();
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "jars");
-      checkState(!failIfNotFound || libdir.isDirectory(),
-        "Library directory '%s' does not exist.",
-        libdir.getAbsolutePath());
-    } else {
-      libdir = new File(sparkHome,
-        String.format("assembly/target/scala-%s/jars", getScalaVersion()));
-      if (!libdir.isDirectory()) {
-        checkState(!failIfNotFound,
-          "Library directory '%s' does not exist; make sure Spark is built.",
-          libdir.getAbsolutePath());
-        libdir = null;
-      }
-    }
-    return libdir != null ? libdir.getAbsolutePath() : null;
   }
 
   private String getConfDir() {

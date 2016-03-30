@@ -291,7 +291,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "compute_stats_empty_table",
     "compute_stats_long",
     "create_view_translate",
-    "show_create_table_serde",
     "show_tblproperties",
 
     // Odd changes to output
@@ -344,6 +343,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // These tests check the VIEW table definition, but Spark handles CREATE VIEW itself and
     // generates different View Expanded Text.
     "alter_view_as_select",
+
+    // We don't support show create table commands in general
+    "show_create_table_alter",
+    "show_create_table_db_table",
+    "show_create_table_delimited",
+    "show_create_table_does_not_exist",
+    "show_create_table_index",
+    "show_create_table_partitioned",
+    "show_create_table_serde",
     "show_create_table_view"
   )
 
@@ -833,13 +841,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "serde_reported_schema",
     "set_variable_sub",
     "show_columns",
-    "show_create_table_alter",
-    "show_create_table_db_table",
-    "show_create_table_delimited",
-    "show_create_table_does_not_exist",
-    "show_create_table_index",
-    "show_create_table_partitioned",
-    "show_create_table_serde",
     "show_describe_func_quotes",
     "show_functions",
     "show_partitions",
