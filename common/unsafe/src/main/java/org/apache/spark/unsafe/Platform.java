@@ -19,6 +19,7 @@ package org.apache.spark.unsafe;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 
 import sun.misc.Cleaner;
@@ -39,6 +40,33 @@ public final class Platform {
   public static final int FLOAT_ARRAY_OFFSET;
 
   public static final int DOUBLE_ARRAY_OFFSET;
+
+  private static final boolean unaligned;
+  static {
+    boolean _unaligned;
+    // use reflection to access unaligned field
+    try {
+      Class<?> bitsClass =
+        Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
+      Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
+      unalignedMethod.setAccessible(true);
+      _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
+    } catch (Throwable t) {
+      // We at least know x86 and x64 support unaligned access.
+      String arch = System.getProperty("os.arch", "");
+      //noinspection DynamicRegexReplaceableByCompiledPattern
+      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64)$");
+    }
+    unaligned = _unaligned;
+  }
+
+  /**
+   * @return true when running JVM is having sun's Unsafe package available in it and underlying
+   *         system having unaligned-access capability.
+   */
+  public static boolean unaligned() {
+    return unaligned;
+  }
 
   public static int getInt(Object object, long offset) {
     return _UNSAFE.getInt(object, offset);

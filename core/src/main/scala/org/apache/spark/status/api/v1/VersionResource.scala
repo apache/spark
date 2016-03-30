@@ -14,22 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.status.api.v1
 
-package org.apache.spark.sql.execution.debug
+import javax.ws.rs._
+import javax.ws.rs.core.MediaType
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+@Produces(Array(MediaType.APPLICATION_JSON))
+private[v1] class VersionResource(ui: UIRoot) {
 
-class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
+  @GET
+  def getVersionInfo(): VersionInfo = new VersionInfo(
+    org.apache.spark.SPARK_VERSION
+  )
 
-  test("DataFrame.debug()") {
-    testData.debug()
-  }
-
-  test("debugCodegen") {
-    val res = sqlContext.range(10).groupBy("id").count().debugCodegenString()
-    assert(res.contains("Subtree 1 / 2"))
-    assert(res.contains("Subtree 2 / 2"))
-    assert(res.contains("Object[]"))
-  }
 }
