@@ -140,16 +140,7 @@ class DbApiHook(BaseHook):
             i += 1
             l = []
             for cell in row:
-                if isinstance(cell, basestring):
-                    l.append("'" + str(cell).replace("'", "''") + "'")
-                elif cell is None:
-                    l.append('NULL')
-                elif isinstance(cell, numpy.datetime64):
-                    l.append("'" + str(cell) + "'")
-                elif isinstance(cell, datetime):
-                    l.append("'" + cell.isoformat() + "'")
-                else:
-                    l.append(str(cell))
+                l.append(self._serialize_cell(cell))
             values = tuple(l)
             sql = "INSERT INTO {0} {1} VALUES ({2});".format(
                 table,
@@ -166,6 +157,18 @@ class DbApiHook(BaseHook):
         logging.info(
             "Done loading. Loaded a total of {i} rows".format(**locals()))
 
+    @staticmethod
+    def _serialize_cell(cell):
+        if isinstance(cell, basestring):
+            return "'" + str(cell).replace("'", "''") + "'"
+        elif cell is None:
+            return 'NULL'
+        elif isinstance(cell, numpy.datetime64):
+            return "'" + str(cell) + "'"
+        elif isinstance(cell, datetime):
+            return "'" + cell.isoformat() + "'"
+        else:
+            return str(cell)
 
     def bulk_load(self, table, tmp_file):
         """
