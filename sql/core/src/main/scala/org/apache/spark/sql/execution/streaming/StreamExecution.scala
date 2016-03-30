@@ -47,7 +47,7 @@ class StreamExecution(
     val checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink,
-    triggerIntervalMs: Long) extends ContinuousQuery with Logging {
+    val trigger: Trigger) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
   private val awaitBatchLock = new Object
@@ -209,20 +209,15 @@ class StreamExecution(
       SQLContext.setActive(sqlContext)
       populateStartOffsets()
       logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-      while (isActive) {
-        val batchStartTimeMs = System.currentTimeMillis()
-        if (dataAvailable) runBatch()
-        commitAndConstructNextBatch()
-        if (triggerIntervalMs > 0) {
-          val batchElapsedTime = System.currentTimeMillis() - batchStartTimeMs
-          if (batchElapsedTime > triggerIntervalMs) {
-            logWarning("Current batch is falling behind. The trigger interval is " +
-              s"${triggerIntervalMs} milliseconds, but spent ${batchElapsedTime} milliseconds")
-          } else {
-            Thread.sleep(triggerIntervalMs - batchElapsedTime)
-          }
+      trigger.execute(() => {
+        if (isActive) {
+          if (dataAvailable) runBatch()
+          commitAndConstructNextBatch()
+          true
+        } else {
+          false
         }
-      }
+      })
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
       case NonFatal(e) =>

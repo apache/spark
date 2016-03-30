@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.{ProcessingTime, StreamExecution, Trigger}
 import org.apache.spark.sql.sources.HadoopFsRelation
 
 /**
@@ -84,7 +84,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def trigger(interval: Duration): DataFrameWriter = {
-    this.extraOptions += ("triggerInterval" -> interval.toMillis.toString)
+    trigger = ProcessingTime(interval.toMillis)
     this
   }
 
@@ -94,7 +94,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def trigger(interval: Long, unit: TimeUnit): DataFrameWriter = {
-    this.extraOptions += ("triggerInterval" -> unit.toMillis(interval).toString)
+    trigger = ProcessingTime(unit.toMillis(interval))
     this
   }
 
@@ -278,14 +278,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     val checkpointLocation = extraOptions.getOrElse("checkpointLocation", {
       new Path(df.sqlContext.conf.checkpointLocation, queryName).toUri.toString
     })
-    val triggerIntervalMs = extraOptions.getOrElse("triggerInterval", "0").toLong
-    require(triggerIntervalMs >= 0, "the interval of trigger should not be negative")
     df.sqlContext.sessionState.continuousQueryManager.startQuery(
       queryName,
       checkpointLocation,
       df,
       dataSource.createSink(),
-      triggerIntervalMs)
+      trigger)
   }
 
   /**
@@ -575,6 +573,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private var source: String = df.sqlContext.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
+
+  private var trigger: Trigger = ProcessingTime(0L)
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
