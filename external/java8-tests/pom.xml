@@ -27,7 +27,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>java8-tests_2.11</artifactId>
   <packaging>pom</packaging>
-  <name>Spark Project Java8 Tests POM</name>
+  <name>Spark Project Java 8 Tests</name>
 
   <properties>
     <sbt.project.name>java8-tests</sbt.project.name>
