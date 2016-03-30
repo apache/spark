@@ -83,7 +83,7 @@ private[hive] class HiveFunctionRegistry(
     val hiveUDFWrapper = new HiveFunctionWrapper(functionClassName)
     val hiveUDFClass = hiveUDFWrapper.createFunction().getClass
     val info = new ExpressionInfo(functionClassName, name)
-    val builder = makeHiveUDFBuilder(name, functionClassName, hiveUDFClass, null, hiveUDFWrapper)
+    val builder = makeHiveUDFBuilder(name, functionClassName, hiveUDFClass, hiveUDFWrapper)
     (info, builder)
   }
 
@@ -94,19 +94,7 @@ private[hive] class HiveFunctionRegistry(
       name: String,
       functionClassName: String,
       hiveUDFClass: Class[_],
-      functionInfo: FunctionInfo = null,
-      wrapper: HiveFunctionWrapper = null): FunctionBuilder = {
-    val hiveUDFWrapper =
-      if (wrapper == null) {
-        if (functionInfo == null) {
-          new HiveFunctionWrapper(functionClassName)
-        } else {
-          new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF)
-        }
-      } else {
-        wrapper
-      }
-
+      hiveUDFWrapper: HiveFunctionWrapper): FunctionBuilder = {
     val builder = (children: Seq[Expression]) => {
       try {
         if (classOf[GenericUDFMacro].isAssignableFrom(hiveUDFClass)) {
@@ -187,9 +175,11 @@ private[hive] class HiveFunctionRegistry(
         // etc. Here we catch the exception and throw AnalysisException instead.
         val builder =
           if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
-            makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass, functionInfo)
+            val wrapper = new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF)
+            makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass, wrapper)
           } else {
-            makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass)
+            val wrapper = new HiveFunctionWrapper(functionClassName)
+            makeHiveUDFBuilder(name, functionClassName, functionInfo.getFunctionClass, wrapper)
           }
         builder(children)
       }
