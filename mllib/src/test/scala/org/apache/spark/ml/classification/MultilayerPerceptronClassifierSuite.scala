@@ -166,7 +166,7 @@ class MultilayerPerceptronClassifierSuite
 
   test("should support all NumericType labels and not support other types") {
     val layers = Array(3, 2)
-    val mpc = new MultilayerPerceptronClassifier().setLayers(layers)
+    val mpc = new MultilayerPerceptronClassifier().setLayers(layers).setMaxIter(1)
     MLTestingUtils.checkNumericTypes[
         MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier](
       mpc, isClassification = true, sqlContext) { (expected, actual) =>

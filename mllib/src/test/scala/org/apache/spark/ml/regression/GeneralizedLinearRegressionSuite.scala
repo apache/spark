@@ -984,7 +984,7 @@ class GeneralizedLinearRegressionSuite
   }
 
   test("should support all NumericType labels and not support other types") {
-    val glr = new GeneralizedLinearRegression()
+    val glr = new GeneralizedLinearRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[
         GeneralizedLinearRegressionModel, GeneralizedLinearRegression](
       glr, isClassification = false, sqlContext) { (expected, actual) =>

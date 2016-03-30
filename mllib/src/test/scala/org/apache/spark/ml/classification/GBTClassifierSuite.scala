@@ -102,7 +102,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("should support all NumericType labels and not support other types") {
-    val gbt = new GBTClassifier()
+    val gbt = new GBTClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[GBTClassificationModel, GBTClassifier](
       gbt, isClassification = true, sqlContext) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)

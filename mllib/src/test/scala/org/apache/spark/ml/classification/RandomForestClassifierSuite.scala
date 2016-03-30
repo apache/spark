@@ -179,7 +179,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   }
 
   test("should support all NumericType labels and not support other types") {
-    val rf = new RandomForestClassifier()
+    val rf = new RandomForestClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[RandomForestClassificationModel, RandomForestClassifier](
       rf, isClassification = true, sqlContext) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)

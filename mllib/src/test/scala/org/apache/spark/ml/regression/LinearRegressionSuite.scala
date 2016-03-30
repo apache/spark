@@ -1008,7 +1008,7 @@ class LinearRegressionSuite
   }
 
   test("should support all NumericType labels and not support other types") {
-    val lr = new LinearRegression()
+    val lr = new LinearRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[LinearRegressionModel, LinearRegression](
       lr, isClassification = false, sqlContext) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
