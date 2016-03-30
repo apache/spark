@@ -97,7 +97,8 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
 
       // CREATE DATABASE [IF NOT EXISTS] database_name [COMMENT database_comment]
       // [LOCATION path] [WITH DBPROPERTIES (key1=val1, key2=val2, ...)];
-      case Token("TOK_CREATEDATABASE", Token(databaseName, Nil) :: args) =>
+      case Token("TOK_CREATEDATABASE", Token(dbName, Nil) :: args) =>
+        val databaseName = cleanIdentifier(dbName)
         val Seq(ifNotExists, dbLocation, databaseComment, dbprops) = getClauses(Seq(
           "TOK_IFNOTEXISTS",
           "TOK_DATABASELOCATION",
@@ -126,7 +127,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             extractProps(propList, "TOK_TABLEPROPERTY")
           case _ => parseFailed("Invalid CREATE DATABASE command", node)
         }.toMap
-        CreateDatabase(databaseName, ifNotExists.isDefined, location, comment, props)(node.source)
+        CreateDatabase(databaseName, ifNotExists.isDefined, location, comment, props)
 
       // DROP DATABASE [IF EXISTS] database_name [RESTRICT|CASCADE];
       case Token("TOK_DROPDATABASE", Token(dbName, Nil) :: otherArgs) =>
@@ -136,15 +137,15 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         //   :- database_name
         //   :- TOK_IFEXISTS
         //   +- TOK_RESTRICT/TOK_CASCADE
-        val databaseName = unquoteString(dbName)
+        val databaseName = cleanIdentifier(dbName)
         // The default is RESTRICT
         val Seq(ifExists, _, cascade) = getClauses(Seq(
           "TOK_IFEXISTS", "TOK_RESTRICT", "TOK_CASCADE"), otherArgs)
-        DropDatabase(databaseName, ifExists.isDefined, restrict = cascade.isEmpty)(node.source)
+        DropDatabase(databaseName, ifExists.isDefined, cascade.isDefined)
 
       // ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
       case Token("TOK_ALTERDATABASE_PROPERTIES", Token(dbName, Nil) :: args) =>
-        val databaseName = unquoteString(dbName)
+        val databaseName = cleanIdentifier(dbName)
         val dbprops = getClause("TOK_DATABASEPROPERTIES", args)
         val props = dbprops match {
           case Token("TOK_DATABASEPROPERTIES", Token("TOK_DBPROPLIST", propList) :: Nil) =>
@@ -161,13 +162,13 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             extractProps(propList, "TOK_TABLEPROPERTY")
           case _ => parseFailed("Invalid ALTER DATABASE command", node)
         }
-        AlterDatabaseProperties(databaseName, props.toMap)(node.source)
+        AlterDatabaseProperties(databaseName, props.toMap)
 
       // DESCRIBE DATABASE [EXTENDED] db_name
       case Token("TOK_DESCDATABASE", Token(dbName, Nil) :: describeArgs) =>
-        val databaseName = unquoteString(dbName)
+        val databaseName = cleanIdentifier(dbName)
         val extended = getClauseOption("EXTENDED", describeArgs)
-        DescribeDatabase(databaseName, extended.isDefined)(node.source)
+        DescribeDatabase(databaseName, extended.isDefined)
 
       // CREATE [TEMPORARY] FUNCTION [db_name.]function_name AS class_name
       // [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri'] ];
