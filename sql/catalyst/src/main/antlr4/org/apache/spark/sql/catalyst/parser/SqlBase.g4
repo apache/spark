@@ -54,7 +54,7 @@ statement
         (TBLPROPERTIES tablePropertyList)?
         (AS? query)?                                                   #createTable
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq?)                      #analyze
+        (identifier | FOR COLUMNS identifierSeq?)?                     #analyze
     | ALTER TABLE from=tableIdentifier RENAME TO to=tableIdentifier    #renameTable
     | ALTER TABLE tableIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
