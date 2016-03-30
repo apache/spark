@@ -53,7 +53,7 @@ private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
 
       // branch at this point because counter.count == 1 implies counter.sampleVariance == Nan
       // and we don't want to ever return a bound of NaN
-      if (meanVar == Double.NaN || counter.count == 1) {
+      if (meanVar.isNaN || counter.count == 1) {
         new BoundedDouble(sumEstimate, confidence, Double.NegativeInfinity, Double.PositiveInfinity)
       } else {
         val countVar = (counter.count + 1) * (1 - p) / (p * p)
@@ -63,11 +63,10 @@ private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
         val sumStdev = math.sqrt(sumVar)
         val confFactor = if (counter.count > 100) {
           new NormalDistribution().inverseCumulativeProbability(1 - (1 - confidence) / 2)
-        } else if (counter.count > 1) {
+        } else {
+          // note that if this goes to 0, TDistribution will throw an exception. Hence special casing 1 above. 
           val degreesOfFreedom = (counter.count - 1).toInt
           new TDistribution(degreesOfFreedom).inverseCumulativeProbability(1 - (1 - confidence) / 2)
-        } else {
-          throw new Exception("Counter.count <= 1; this should be impossible at this point")
         }
         
         val low = sumEstimate - confFactor * sumStdev

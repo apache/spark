@@ -35,15 +35,83 @@ class SumEvaluatorSuite extends SparkFunSuite with SharedSparkContext {
 
     //execute
     val res = evaluator.currentResult()
-    // Build version with known precisions for equality check
-    val round_res = new BoundedDouble(res.mean.round.toDouble, res.confidence, res.low, res.high)
+    // 38.0 - 7.1E-15 because that's how the maths shakes out
+    val target_mean =  38.0 - 7.1E-15
+    // Version to test everything except mean
+    val ancillary_res = new BoundedDouble(target_mean, res.confidence, res.low, res.high)
+    // mean result to test
+    val mean_diff = (res.mean - target_mean).abs
+    
 
     //Sanity check that equality works on BoundedDouble
     assert(new BoundedDouble(2.0, 0.95, 1.1, 1.2) == new BoundedDouble(2.0, 0.95, 1.1, 1.2))
     // actual test
+
+    // Use ancillary_res as the result to check everything except the mean
+    assert(ancillary_res == new BoundedDouble(target_mean, 0.950, Double.NegativeInfinity, Double.PositiveInfinity))
+
+    // check that mean is within expected tolerance of expectation
+    assert(mean_diff < Double.MinPositiveValue)
+  }
+
+  test("correct handling of count 0") {
+
+    //setup
+    val counter = new StatCounter(List())
+    // count of 10 because it's larger than 0,
+    // and 0.95 because that's the default
+    val evaluator = new SumEvaluator(10, 0.95)
+    // arbitrarily assign id 1
+    evaluator.merge(1, counter)
+
+    //execute
+    val res = evaluator.currentResult()
+    //assert
+    assert(res == new BoundedDouble(0, 0.0, Double.NegativeInfinity, Double.PositiveInfinity))
+  }
+
+  test("correct handling of NaN") {
+
+    //setup
+    val counter = new StatCounter(List(1,Double.NaN,2))
+    // count of 10 because it's larger than 0,
+    // and 0.95 because that's the default
+    val evaluator = new SumEvaluator(10, 0.95)
+    // arbitrarily assign id 1
+    evaluator.merge(1, counter)
+
+    //execute
+    val res = evaluator.currentResult()
+    //assert
+    assert(res.mean.isNaN)
+    assert(res.confidence == 0.95)
+    assert(res.low == Double.NegativeInfinity)
+    assert(res.high == Double.PositiveInfinity)
+  }
+
+  test("correct handling of > 1 values") {
+
+    //setup
+    val counter = new StatCounter(List(1,3,2))
+    // count of 10 because it's larger than 0,
+    // and 0.95 because that's the default
+    val evaluator = new SumEvaluator(10, 0.95)
+    // arbitrarily assign id 1
+    evaluator.merge(1, counter)
+
+    //execute
+    val res = evaluator.currentResult()
+
+    // These vals because that's how the maths shakes out
+    val target_mean =  78.0
+    val target_low = -117.617 + 2.732357258139473E-5
+    val target_high = 273.617 - 2.7323572624027292E-5
     
-    // 38.0 because that's how the maths shakes out
-    assert(round_res == new BoundedDouble(38.0, 0.950, Double.NegativeInfinity, Double.PositiveInfinity))
+
+    // check that values are within expected tolerance of expectation
+    assert((res.mean - target_mean).abs < Double.MinPositiveValue)
+    assert((res.low - target_low).abs < Double.MinPositiveValue)
+    assert((res.high - target_high).abs < Double.MinPositiveValue)
   }
 
 }
