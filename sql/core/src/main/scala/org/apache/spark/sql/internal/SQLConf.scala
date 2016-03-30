@@ -441,7 +441,7 @@ object SQLConf {
   val CHECKPOINT_LOCATION = SQLConfigBuilder("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for continuously executing queries.")
     .stringConf
-    .createWithDefault(null)
+    .createWithDefault("<undefined>")
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
