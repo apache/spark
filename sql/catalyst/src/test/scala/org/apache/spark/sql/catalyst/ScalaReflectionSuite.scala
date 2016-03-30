@@ -248,10 +248,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
   Seq(
     ("mirror", () => mirror),
     ("dataTypeFor", () => dataTypeFor[ComplexData]),
-    ("constructorFor", () => constructorFor[ComplexData]),
+    ("constructorFor", () => deserializerFor[ComplexData]),
     ("extractorsFor", {
       val inputObject = BoundReference(0, dataTypeForComplexData, nullable = false)
-      () => extractorsFor[ComplexData](inputObject)
+      () => serializerFor[ComplexData](inputObject)
     }),
     ("getConstructorParameters(cls)", () => getConstructorParameters(classOf[ComplexData])),
     ("getConstructorParameterNames", () => getConstructorParameterNames(classOf[ComplexData])),

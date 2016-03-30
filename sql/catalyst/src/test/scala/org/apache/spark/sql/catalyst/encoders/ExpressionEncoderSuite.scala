@@ -315,7 +315,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       val attr = AttributeReference("obj", ObjectType(encoder.clsTag.runtimeClass))()
       val inputPlan = LocalRelation(attr)
       val plan =
-        Project(Alias(encoder.fromRowExpression, "obj")() :: Nil,
+        Project(Alias(encoder.deserializer, "obj")() :: Nil,
           Project(encoder.namedExpressions,
             inputPlan))
       assertAnalysisSuccess(plan)
@@ -360,7 +360,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
              |${encoder.schema.treeString}
              |
              |fromRow Expressions:
-             |${boundEncoder.fromRowExpression.treeString}
+             |${boundEncoder.deserializer.treeString}
          """.stripMargin)
       }
     }

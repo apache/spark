@@ -90,7 +90,7 @@ abstract class QueryTest extends PlanTest {
           s"""
              |Exception collecting dataset as objects
              |${ds.resolvedTEncoder}
-             |${ds.resolvedTEncoder.fromRowExpression.treeString}
+             |${ds.resolvedTEncoder.deserializer.treeString}
              |${ds.queryExecution}
            """.stripMargin, e)
     }
@@ -109,7 +109,7 @@ abstract class QueryTest extends PlanTest {
       fail(
         s"""Decoded objects do not match expected objects:
             |$comparision
-            |${ds.resolvedTEncoder.fromRowExpression.treeString}
+            |${ds.resolvedTEncoder.deserializer.treeString}
          """.stripMargin)
     }
   }
