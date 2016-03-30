@@ -396,7 +396,7 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLR
           - Normalize importances for tree to sum to 1.
 
         Note: Feature importance for single decision trees can have high variance due to
-              correlated predictor variables. Consider using a :class:`RandomForestClassifier`
+              correlated predictor variables. Consider using a :py:class:`RandomForestClassifier`
               to determine feature importance instead.
         """
         return self._call_java("featureImportances")
@@ -505,7 +505,7 @@ class RandomForestClassificationModel(TreeEnsembleModels):
         (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
         and follows the implementation from scikit-learn.
 
-        .. seealso:: :attr:`DecisionTreeClassificationModel.featureImportances`
+        .. seealso:: :py:attr:`DecisionTreeClassificationModel.featureImportances`
         """
         return self._call_java("featureImportances")
 
@@ -622,7 +622,7 @@ class GBTClassificationModel(TreeEnsembleModels):
         (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
         and follows the implementation from scikit-learn.
 
-        .. seealso:: :attr:`DecisionTreeClassificationModel.featureImportances`
+        .. seealso:: :py:attr:`DecisionTreeClassificationModel.featureImportances`
         """
         return self._call_java("featureImportances")
 
