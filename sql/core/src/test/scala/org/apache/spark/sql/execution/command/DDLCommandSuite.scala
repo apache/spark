@@ -440,7 +440,12 @@ class DDLCommandSuite extends PlanTest {
         |(dt='2008-08-08', country='us') PARTITION
         |(dt='2009-09-09', country='uk')
       """.stripMargin
-    val sql2 = "ALTER VIEW view_name ADD PARTITION (dt='2008-08-08')"
+    // different constant types in partitioning spec
+    val sql2 =
+    """
+      |ALTER VIEW view_name ADD PARTITION
+      |(col1=NULL, cOL2='f', col3=5, COL4=true)
+    """.stripMargin
 
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
@@ -453,7 +458,7 @@ class DDLCommandSuite extends PlanTest {
       ifNotExists = true)(sql1)
     val expected2 = AlterTableAddPartition(
       TableIdentifier("view_name", None),
-      Seq((Map("dt" -> "2008-08-08"), None)),
+      Seq((Map("col1" -> "NULL", "col2" -> "f", "col3" -> "5", "col4" -> "true"), None)),
       ifNotExists = false)(sql2)
 
     comparePlans(parsed1, expected1)
