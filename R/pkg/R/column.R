@@ -44,7 +44,7 @@ setMethod("initialize", "Column", function(.Object, jc, df) {
   .Object
 })
 
-setMethod("show", signature="Column", definition=function(object) {
+setMethod("show", signature = "Column", definition = function(object) {
   MAX_ELEMENTS <- 20
   head.df <- head(object, MAX_ELEMENTS)
 
@@ -56,11 +56,11 @@ setMethod("show", signature="Column", definition=function(object) {
     show(head.df)
   }
   if (length(head.df) == MAX_ELEMENTS)  {
-    cat(paste0("\b...\nDisplaying up to ", as.character(MAX_ELEMENTS) ," elements only."))
+    cat(paste0("\b...\nDisplaying up to ", as.character(MAX_ELEMENTS), " elements only."))
   }
 })
 
-setMethod("collect", signature="Column", definition=function(x) {
+setMethod("collect", signature = "Column", definition = function(x) {
   if (is.null(x@df)) {
     character(0)
   } else {
@@ -68,7 +68,7 @@ setMethod("collect", signature="Column", definition=function(x) {
   }
 })
 
-setMethod("head", signature="Column", definition=function(x, n=6) {
+setMethod("head", signature = "Column", definition = function(x, n=6) {
   if (is.null(x@df)) {
     collect(x)
   } else {
@@ -82,7 +82,7 @@ setMethod("column",
             if (missing(df)) {
               df <- NULL
             }
-            new("Column", jc=x, df=df)
+            new("Column", jc = x, df = df)
           })
 
 operators <- list(
