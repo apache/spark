@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.parser.ParseUtils.unescapeSQLString
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 
-
 /**
  * A collection of utility methods for use during the parsing process.
  */

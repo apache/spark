@@ -42,9 +42,11 @@ class DDLSuite extends QueryTest with SharedSQLContext {
    */
   private def withDatabase(dbNames: String*)(f: => Unit): Unit = {
     try f finally {
+      val currentDb = sqlContext.sessionState.catalog.getCurrentDatabase
       dbNames.foreach { name =>
         sqlContext.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
       }
+      sqlContext.sessionState.catalog.setCurrentDatabase(currentDb)
     }
   }
 
@@ -159,4 +161,31 @@ class DDLSuite extends QueryTest with SharedSQLContext {
   }
 
   // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
+
+  test("show databases") {
+    withDatabase("showdb1A", "showdb2B") {
+      sql("CREATE DATABASE showdb1A")
+      sql("CREATE DATABASE showdb2B")
+
+      assert(
+        sql("SHOW DATABASES").count() >= 2)
+
+      checkAnswer(
+        sql("SHOW DATABASES LIKE '*db1A'"),
+        Row("showdb1A") :: Nil)
+
+      checkAnswer(
+        sql("SHOW DATABASES LIKE 'showdb1A'"),
+        Row("showdb1A") :: Nil)
+
+      checkAnswer(
+        sql("SHOW DATABASES LIKE '*db1A|*db2B'"),
+        Row("showdb1A") ::
+          Row("showdb2B") :: Nil)
+
+      checkAnswer(
+        sql("SHOW DATABASES LIKE 'non-existentdb'"),
+        Nil)
+    }
+  }
 }
