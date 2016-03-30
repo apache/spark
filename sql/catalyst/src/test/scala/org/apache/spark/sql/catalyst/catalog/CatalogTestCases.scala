@@ -433,7 +433,8 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   test("get function") {
     val catalog = newBasicCatalog()
     assert(catalog.getFunction("db2", "func1") ==
-      CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass))
+      CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
+        Seq.empty[(String, String)]))
     intercept[AnalysisException] {
       catalog.getFunction("db2", "does_not_exist")
     }
@@ -557,7 +558,7 @@ abstract class CatalogTestUtils {
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
-    CatalogFunction(FunctionIdentifier(name, database), funcClass)
+    CatalogFunction(FunctionIdentifier(name, database), funcClass, Seq.empty[(String, String)])
   }
 
   /**

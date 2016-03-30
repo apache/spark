@@ -743,7 +743,9 @@ class SessionCatalogSuite extends SparkFunSuite {
 
   test("get function") {
     val catalog = new SessionCatalog(newBasicCatalog())
-    val expected = CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass)
+    val expected =
+      CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
+      Seq.empty[(String, String)])
     assert(catalog.getFunction(FunctionIdentifier("func1", Some("db2"))) == expected)
     // Get function without explicitly specifying database
     catalog.setCurrentDatabase("db2")

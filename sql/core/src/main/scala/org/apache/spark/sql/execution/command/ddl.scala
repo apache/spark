@@ -193,7 +193,7 @@ case class CreateFunction(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val func = FunctionIdentifier(functionName, databaseName)
-    val catalogFunc = CatalogFunction(func, alias)
+    val catalogFunc = CatalogFunction(func, alias, resources)
     if (isTemp) {
       // Set `ignoreIfExists` to false, so if the temporary function already exists,
       // an exception will be thrown.
