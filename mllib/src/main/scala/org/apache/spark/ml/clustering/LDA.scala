@@ -18,7 +18,10 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -455,6 +458,31 @@ sealed abstract class LDAModel private[ml] (
 
   @Since("1.6.0")
   def describeTopics(): DataFrame = describeTopics(10)
+}
+
+object LDAModel extends MLReadable[LDAModel] {
+
+  private class LDAModelReader extends MLReader[LDAModel] {
+    override def load(path: String): LDAModel = {
+      val metadataPath = new Path(path, "metadata").toString
+      val metadata = parse(sc.textFile(metadataPath, 1).first())
+      implicit val format = DefaultFormats
+      val className = (metadata \ "class").extract[String]
+      className match {
+        case c if className == classOf[LocalLDAModel].getName =>
+          LocalLDAModel.load(path)
+        case c if className == classOf[DistributedLDAModel].getName =>
+          DistributedLDAModel.load(path)
+        case _ => throw new SparkException(s"$className in $path is not a LDAModel")
+      }
+    }
+  }
+
+  @Since("2.0.0")
+  override def read: MLReader[LDAModel] = new LDAModelReader
+
+  @Since("2.0.0")
+  override def load(path: String): LDAModel = super.load(path)
 }
 
 
