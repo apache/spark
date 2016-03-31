@@ -55,7 +55,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
-    sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
   }
 
   override def afterAll() {

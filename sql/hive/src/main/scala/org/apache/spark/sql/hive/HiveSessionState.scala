@@ -23,13 +23,13 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.execution.{python, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.execution.HiveSqlParser
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.{Resource, SessionState, SQLConf}
 
 
 /**
  * A class that holds all session-specific state in a given [[HiveContext]].
  */
-private[hive] class HiveSessionState(val ctx: HiveContext) extends SessionState(ctx) {
+private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx) {
 
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
@@ -104,4 +104,16 @@ private[hive] class HiveSessionState(val ctx: HiveContext) extends SessionState(
     }
   }
 
+  /**
+   * Loads resource to SQLContext.
+   */
+  override def loadResource(resource: Resource): Unit = {
+    resource.resourceType.toLowerCase match {
+      case "jar" =>
+        super.loadResource(resource)
+      case _ =>
+        ctx.runSqlHive(s"ADD FILE ${resource.path}")
+        super.loadResource(resource)
+    }
+  }
 }

@@ -301,8 +301,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       function,
       string(ctx.className), // TODO this is not an alias.
       resources,
-      ctx.TEMPORARY != null)(
-      command(ctx))
+      ctx.TEMPORARY != null)
   }
 
   /**
@@ -315,7 +314,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
     val (database, function) = visitFunctionName(ctx.qualifiedName)
-    DropFunction(database, function, ctx.EXISTS != null, ctx.TEMPORARY != null)(command(ctx))
+    DropFunction(database, function, ctx.EXISTS != null, ctx.TEMPORARY != null)
   }
 
   /**

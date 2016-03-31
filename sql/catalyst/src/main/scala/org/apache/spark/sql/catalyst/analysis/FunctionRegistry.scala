@@ -53,14 +53,15 @@ trait FunctionRegistry {
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
 
-  /* Return the FunctionBuilder and ExpressionInfo for the specified function name and classname. */
-  def makeFunctionBuilderAndInfo(
-    name: String,
-    functionClassName: String): (ExpressionInfo, FunctionBuilder) = {
-    val clazz = Utils.getContextOrSparkClassLoader.loadClass(functionClassName)
-    val (_, (info, builder)) =
-      FunctionRegistry.expression(name, clazz.asInstanceOf[Class[Expression]])
-    (info, builder)
+  /**
+   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   *
+   * This performs reflection to decide what type of [[Expression]] to return in the builder.
+   * This is useful for creating temporary functions.
+   */
+  def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
+    // TODO: at least support UDAFs here
+    throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
   }
 }
 

@@ -38,6 +38,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
@@ -558,10 +559,7 @@ private[hive] class HiveClientImpl(
   override def getFunctionOption(
       db: String,
       name: String): Option[CatalogFunction] = withHiveState {
-    client.getFunction(db, name)
-    Try {
-      Option(client.getFunction(db, name)).map(fromHiveFunction)
-    }.getOrElse(None)
+    Option(client.getFunction(db, name)).map(fromHiveFunction)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withHiveState {
@@ -615,8 +613,8 @@ private[hive] class HiveClientImpl(
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
-    val resourceUris = f.resources.map { resource =>
-      new ResourceUri(ResourceType.valueOf(resource._1.toUpperCase), resource._2)
+    val resourceUris = f.resources.map { case (resourceType, resourcePath) =>
+      new ResourceUri(ResourceType.valueOf(resourceType.toUpperCase), resourcePath)
     }
     new HiveFunction(
       f.identifier.funcName,
@@ -636,7 +634,7 @@ private[hive] class HiveClientImpl(
         case ResourceType.ARCHIVE => "archive"
         case ResourceType.FILE => "file"
         case ResourceType.JAR => "jar"
-        case r => throw new SparkException(s"Unknown resource type: $r")
+        case r => throw new AnalysisException(s"Unknown resource type: $r")
       }
       (resourceType, uri.getUri())
     }

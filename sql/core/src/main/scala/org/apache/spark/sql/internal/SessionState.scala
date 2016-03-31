@@ -112,4 +112,20 @@ private[sql] class SessionState(ctx: SQLContext) {
    */
   lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
 
+  /**
+   * Loads resource to SQLContext.
+   */
+  def loadResource(resource: Resource): Unit = {
+    resource.resourceType.toLowerCase match {
+      case "jar" => ctx.addJar(resource.path)
+      case _ => ctx.sparkContext.addFile(resource.path)
+    }
+  }
+
+  /**
+   * Loads resources such as JARs and Files to SQLContext.
+   */
+  def loadResources(resources: Seq[Resource]): Unit = resources.foreach(loadResource(_))
 }
+
+case class Resource(resourceType: String, path: String)

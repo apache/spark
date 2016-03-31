@@ -218,7 +218,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             }
           case _ => parseFailed("Invalid CREATE FUNCTION command", node)
         }
-        CreateFunction(dbName, funcName, alias, resources, temp.isDefined)(node.source)
+        CreateFunction(dbName, funcName, alias, resources, temp.isDefined)
 
       // DROP [TEMPORARY] FUNCTION [IF EXISTS] function_name;
       case Token("TOK_DROPFUNCTION", args) =>
@@ -248,7 +248,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         val Seq(ifExists, temp) = getClauses(Seq(
           "TOK_IFEXISTS", "TOK_TEMPORARY"), otherArgs)
 
-        DropFunction(dbName, funcName, ifExists.isDefined, temp.isDefined)(node.source)
+        DropFunction(dbName, funcName, ifExists.isDefined, temp.isDefined)
 
       case Token("TOK_ALTERTABLE", alterTableArgs) =>
         AlterTableCommandParser.parse(node)
