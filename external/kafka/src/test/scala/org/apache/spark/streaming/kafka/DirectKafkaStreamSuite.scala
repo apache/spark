@@ -36,7 +36,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
-import org.apache.spark.streaming.dstream.{WindowState, DStream}
+import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
