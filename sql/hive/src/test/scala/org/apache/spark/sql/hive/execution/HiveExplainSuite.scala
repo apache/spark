@@ -101,4 +101,19 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         "Physical Plan should not contain Subquery since it's eliminated by optimizer")
     }
   }
+
+  test("SPARK-14251: EXPLAIN CODEGEN command") {
+    checkExistence(sql("EXPLAIN CODEGEN SELECT 1"), true,
+      "== Physical Plan ==",
+      "WholeStageCodegen",
+      "Generated code:")
+
+    checkExistence(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"), true,
+      "== Parsed Logical Plan ==",
+      "== Analyzed Logical Plan ==",
+      "== Optimized Logical Plan ==",
+      "== Physical Plan ==",
+      "WholeStageCodegen",
+      "Generated code:")
+  }
 }

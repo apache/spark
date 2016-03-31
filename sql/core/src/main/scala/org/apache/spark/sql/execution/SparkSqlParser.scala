@@ -136,9 +136,10 @@ class SparkSqlAstBuilder extends AstBuilder {
     // Create the explain comment.
     val statement = plan(ctx.statement)
     if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null))
+      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
+        codegen = options.exists(_.CODEGEN != null))
     } else {
-      ExplainCommand(OneRowRelation)
+      ExplainCommand(OneRowRelation, codegen = options.exists(_.CODEGEN != null))
     }
   }
 
