@@ -20,6 +20,7 @@ import java.nio.file.Files
 
 import scala.util.Properties
 import scala.collection.JavaConverters._
+import scala.collection.mutable.Stack
 
 import sbt._
 import sbt.Classpaths.publishTask
@@ -743,8 +744,18 @@ object TestSettings {
     parallelExecution in Test := false,
     // Make sure the test temp directory exists.
     resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
-      if (!new File(testTempDir).isDirectory()) {
-        require(new File(testTempDir).mkdirs())
+      var dir = new File(testTempDir)
+      if (!dir.isDirectory()) {
+        val stack = new Stack[File]()
+        while (!dir.isDirectory()) {
+          stack.push(dir)
+          dir = dir.getParentFile()
+        }
+
+        while (stack.nonEmpty) {
+          val d = stack.pop()
+          require(d.mkdir() || d.isDirectory(), s"Failed to create directory $d")
+        }
       }
       Seq[File]()
     },
