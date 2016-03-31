@@ -19,10 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.commons.lang.StringUtils
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
-import org.apache.spark.sql.catalyst.expressions.codegen.{ExprCode, CodegenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 

@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{TimestampType, LongType, StringType}
+import org.apache.spark.sql.types.StringType
 
 class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
