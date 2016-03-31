@@ -94,10 +94,9 @@ class StreamSuite extends StreamTest with SharedSQLContext {
             .option("checkpointLocation", checkpointDir.getAbsolutePath)
             .startStream(outputDir.getAbsolutePath)
           try {
-            eventually(timeout(streamingTimeout)) {
-              val outputDf = sqlContext.read.parquet(outputDir.getAbsolutePath).as[Long]
-              checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
-            }
+            query.processAllAvailable()
+            val outputDf = sqlContext.read.parquet(outputDir.getAbsolutePath).as[Long]
+            checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
           } finally {
             query.stop()
           }
@@ -106,7 +105,6 @@ class StreamSuite extends StreamTest with SharedSQLContext {
     }
 
     val df = sqlContext.read.format(classOf[FakeDefaultSource].getName).stream()
-    assertDF(df)
     assertDF(df)
     assertDF(df)
   }
