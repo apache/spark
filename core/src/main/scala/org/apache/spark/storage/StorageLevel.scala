@@ -130,8 +130,7 @@ class StorageLevel private(
     var result = ""
     result += (if (useDisk) "Disk " else "")
     if (useMemory) {
-      if (useOffHeap) result += "Memory (off heap) "
-      else result += "Memory (heap) "
+      result += (if (useOffHeap) "Memory (off heap) " else "Memory ")
     }
     result += (if (deserialized) "Deserialized " else "Serialized ")
     result += s"${replication}x Replicated"
