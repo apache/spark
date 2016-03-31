@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.parser.ng
+package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
