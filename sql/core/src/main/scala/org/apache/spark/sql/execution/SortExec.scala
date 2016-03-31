@@ -122,6 +122,8 @@ case class SortExec(
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
 
+  override def preferUnsafeRow: Boolean = true
+
   override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort = ctx.freshName("needToSort")
     ctx.addMutableState("boolean", needToSort, s"$needToSort = true;")

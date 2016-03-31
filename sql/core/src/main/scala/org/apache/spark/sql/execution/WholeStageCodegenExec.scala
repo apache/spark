@@ -69,6 +69,11 @@ trait CodegenSupport extends SparkPlan {
   protected var parent: CodegenSupport = null
 
   /**
+    * Whether this SparkPlan prefers to accept UnsafeRow as input in doConsume
+    */
+  def preferUnsafeRow: Boolean = false
+
+  /**
    * Returns all the RDDs of InternalRow which generates the input rows.
    *
    * Note: right now we support up to two RDDs.
@@ -113,6 +118,7 @@ trait CodegenSupport extends SparkPlan {
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
     val inputVars =
       if (row != null) {
+        assert(ctx.isRow)
         ctx.currentVars = null
         ctx.INPUT_ROW = row
         output.zipWithIndex.map { case (attr, i) =>
@@ -244,12 +250,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
 
     if (ctx.isRow) {
-      val exprRows = output.zipWithIndex.map(x =>
-        new BoundReference(x._2, x._1.dataType, x._1.nullable))
       val row = ctx.freshName("row")
-      ctx.INPUT_ROW = row
-      ctx.currentVars = null
-      val columns = exprRows.map(_.gen(ctx))
     s"""
        | while ($input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
@@ -272,9 +273,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
         s"$name = batch.column((($columnarItrClz)$input).getColumnIndexes()[$i]);" }
 
       ctx.currentVars = null
-      val exprCols = (output zip colVars).map { case (attr, colVar) =>
-        new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable) }
-      val columns = exprCols.map(_.gen(ctx))
+      val columns = (output zip colVars).map { case (attr, colVar) =>
+        new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).gen(ctx) }
     s"""
        | org.apache.spark.sql.execution.columnar.CachedBatch batch =
        |   (org.apache.spark.sql.execution.columnar.CachedBatch) $batch;
@@ -286,7 +286,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
        | int $numrows = batch.numRows();
        | while ($idx < $numrows) {
        |   int $rowidx = $idx++;
-       |   ${consume(ctx, columns, col).trim}
+       |   ${consume(ctx, columns, null).trim}
        |   if (shouldStop()) return;
        | }
      """.stripMargin
