@@ -109,11 +109,24 @@ class BisectingKMeansModel private[clustering] (
   override protected def formatVersion: String = "1.0"
 }
 
+@Since("2.0.0")
 object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
 
   @Since("2.0.0")
   override def load(sc: SparkContext, path: String): BisectingKMeansModel = {
-    BisectingKMeansModel.SaveLoadV1_0.load(sc, path)
+    val (loadedClassName, formatVersion, metadata) = Loader.loadMetadata(sc, path)
+    implicit val formats = DefaultFormats
+    val rootId = (metadata \ "rootId").extract[Int]
+    val classNameV1_0 = SaveLoadV1_0.thisClassName
+    (loadedClassName, formatVersion) match {
+      case (classNameV1_0, "1.0") =>
+        val model = SaveLoadV1_0.load(sc, path, rootId)
+        model
+      case _ => throw new Exception(
+        s"BisectingKMeansModel.load did not recognize model with (className, format version):" +
+          s"($loadedClassName, $formatVersion).  Supported:\n" +
+          s"  ($classNameV1_0, 1.0)")
+    }
   }
 
   private case class Data(index: Int, size: Long, center: Vector, norm: Double, cost: Double,
@@ -153,27 +166,23 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       }
     }
 
-    def load(sc: SparkContext, path: String): BisectingKMeansModel = {
-      implicit val formats = DefaultFormats
+    def load(sc: SparkContext, path: String, rootId: Int): BisectingKMeansModel = {
       val sqlContext = SQLContext.getOrCreate(sc)
-      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
-      require(className == thisClassName)
-      require(formatVersion == thisFormatVersion)
-      val rootId = (metadata \ "rootId").extract[Int]
       val rows = sqlContext.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Data](rows.schema)
-      val data = rows.rdd.map(Data.apply).collect().map(d => (d.index, d)).toMap
-      val rootNode = buildTree(rootId, data)
+      val data = rows.select("index", "size", "center", "norm", "cost", "height", "children")
+      val nodes = data.rdd.map(Data.apply).collect().map(d => (d.index, d)).toMap
+      val rootNode = buildTree(rootId, nodes)
       new BisectingKMeansModel(rootNode)
     }
 
-    private def buildTree(rootId: Int, data: Map[Int, Data]): ClusteringTreeNode = {
-      val root = data.get(rootId).get
+    private def buildTree(rootId: Int, nodes: Map[Int, Data]): ClusteringTreeNode = {
+      val root = nodes.get(rootId).get
       if (root.children.isEmpty) {
         new ClusteringTreeNode(root.index, root.size, new VectorWithNorm(root.center, root.norm),
           root.cost, root.height, new Array[ClusteringTreeNode](0))
       } else {
-        val children = root.children.map(c => buildTree(c, data))
+        val children = root.children.map(c => buildTree(c, nodes))
         new ClusteringTreeNode(root.index, root.size, new VectorWithNorm(root.center, root.norm),
           root.cost, root.height, children.toArray)
       }

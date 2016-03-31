@@ -191,7 +191,7 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     try {
       model.save(sc, path)
       val sameModel = BisectingKMeansModel.load(sc, path)
-      assert(model.k == sameModel.k)
+      assert(model.k === sameModel.k)
       model.clusterCenters.zip(sameModel.clusterCenters).foreach(c => c._1 === c._2)
     } finally {
       Utils.deleteRecursively(tempDir)

@@ -101,6 +101,7 @@ object BisectingKMeansSuite {
   val allParamSettings: Map[String, Any] = Map(
     "k" -> 3,
     "maxIter" -> 2,
+    "seed" -> -1L,
     "minDivisibleClusterSize" -> 2.0
   )
 }
