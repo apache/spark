@@ -430,11 +430,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
    * @param numReducers total number of reducers in the shuffle
    *
    */
-  def getLocationsWithGlobalMode(
-                                  shuffleId: Int,
-                                  numReducers: Int
-                                  )
-  : Option[Array[BlockManagerId]] = {
+  def getLocationsWithGlobalMode(shuffleId: Int, numReducers: Int): Option[Array[BlockManagerId]] = {
     val statuses = mapStatuses.get(shuffleId).orNull
     assert(statuses != null)
     val splitsByLocation = new HashMap[BlockManagerId, Array[Long]]
