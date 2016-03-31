@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -269,7 +270,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       } else {
         if (requestedSchema.getColumns().get(i).getMaxDefinitionLevel() == 0) {
           // Column is missing in data but the required data is non-nullable. This file is invalid.
-          throw new IOException("Required column is missing in data file. Col: " + colPath);
+          throw new IOException("Required column is missing in data file. Col: " +
+            Arrays.toString(colPath));
         }
         missingColumns[i] = true;
       }
