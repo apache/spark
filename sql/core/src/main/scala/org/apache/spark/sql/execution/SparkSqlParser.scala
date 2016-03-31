@@ -340,8 +340,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRename(
       visitTableIdentifier(ctx.from),
-      visitTableIdentifier(ctx.to))(
-      command(ctx))
+      visitTableIdentifier(ctx.to))
   }
 
   /**

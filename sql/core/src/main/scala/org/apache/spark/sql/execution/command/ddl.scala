@@ -195,10 +195,18 @@ case class DropFunction(
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * Alter table (rename): Changes the name of a table to a different name.
+ */
 case class AlterTableRename(
     oldName: TableIdentifier,
-    newName: TableIdentifier)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    newName: TableIdentifier) extends RunnableCommand {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    catalog.renameTable(oldName, newName)
+    Seq.empty[Row]
+  }
+}
 
 case class AlterTableSetProperties(
     tableName: TableIdentifier,

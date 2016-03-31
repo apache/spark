@@ -140,7 +140,7 @@ object AlterTableCommandParser {
       case Token("TOK_ALTERTABLE_RENAME", renameArgs) :: _ =>
         val tableNameClause = getClause("TOK_TABNAME", renameArgs)
         val newTableIdent = extractTableIdent(tableNameClause)
-        AlterTableRename(tableIdent, newTableIdent)(node.source)
+        AlterTableRename(tableIdent, newTableIdent)
 
       // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
       case Token("TOK_ALTERTABLE_PROPERTIES", args) :: _ =>
