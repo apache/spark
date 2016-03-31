@@ -70,8 +70,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
   protected def create(columnTypes: Seq[DataType]): ColumnarIterator = {
     val ctx = newCodeGenContext()
     val numFields = columnTypes.size
-    val accessorClasses = new mutable.HashMap[String, String]
-    val accessorStructClasses = new mutable.HashMap[(String, String), (String, String)]
     val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
       val accessorName = ctx.freshName("accessor")
       val accessorCls = dt match {
@@ -94,21 +92,17 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       }
       ctx.addMutableState(accessorCls, accessorName, "")
 
-      val createCode = {
-        val shortCls = accessorCls.substring(accessorCls.lastIndexOf(".") + 1)
-        dt match {
-          case t if ctx.isPrimitiveType(dt) =>
-            s"$accessorName = get${accessorClasses.getOrElseUpdate(accessorCls, shortCls)}($index);"
-          case NullType | StringType | BinaryType =>
-            s"$accessorName = get${accessorClasses.getOrElseUpdate(accessorCls, shortCls)}($index);"
-          case other =>
-            val dtCls = dt.getClass.getName
-            val shortDTCls = dt.getClass.getName.substring(dtCls.lastIndexOf(".") + 1)
-            accessorStructClasses.getOrElseUpdate((accessorCls, dtCls), (shortCls, shortDTCls))
-            s"$accessorName = get${shortCls}_${shortDTCls}($index);"
-        }
-      }
 
+      val createCode = dt match {
+        case t if ctx.isPrimitiveType(dt) =>
+	  s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
+	case NullType | StringType | BinaryType =>
+	  s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
+	case other =>
+	  s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
+        (${dt.getClass.getName}) columnTypes[$index]);"""
+      }
+		   
       val extract = s"$accessorName.extractTo(mutableRow, $index);"
       val patch = dt match {
         case DecimalType.Fixed(p, s) if p > Decimal.MAX_LONG_DIGITS =>
@@ -123,31 +117,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       (createCode, extract + patch)
     }.unzip
 
-    val accessorCode = accessorClasses.map { case (accessorCls, shortAccCls) =>
-      s"""
-         private $accessorCls get${shortAccCls}(int idx) {
-           byte[] buffer = batch.buffers()[columnIndexes[idx]];
-           return new $accessorCls(ByteBuffer.wrap(buffer).order(nativeOrder));
-         }
-      """
-    }
-    val accessorStructCode = accessorStructClasses.map {
-      case ((accessorCls, dtCls), (shortAccCls, shortDTCls)) =>
-        s"""
-           private $accessorCls get${shortAccCls}_${shortDTCls}(int idx) {
-             byte[] buffer = batch.buffers()[columnIndexes[idx]];
-             return new $accessorCls(ByteBuffer.wrap(buffer).order(nativeOrder),
-               (${dtCls}) columnTypes[idx]);
-           }
-        """
-    }
-
     /*
-     * 500 = 7500 bytes / 15 (up to 15 bytes per one call))
+     * 200 = 6000 bytes / 30 (up to 25 bytes per one call))
      * the maximum byte code size to be compiled for HotSpot is 8000.
      * We should keep less than 8000
      */
-    val numberOfStatementsThreshold = 500
+    val numberOfStatementsThreshold = 200
     val (initializerAccessorFuncs, initializerAccessorCalls, extractorFuncs, extractorCalls) =
       if (initializeAccessors.length <= numberOfStatementsThreshold) {
         ("", initializeAccessors.mkString("\n"), "", extractors.mkString("\n"))
@@ -194,6 +169,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       class SpecificColumnarIterator extends ${classOf[ColumnarIterator].getName} {
 
         private ByteOrder nativeOrder = null;
+        private byte[][] buffers = null;
         private UnsafeRow unsafeRow = new UnsafeRow();
         private BufferHolder bufferHolder = new BufferHolder();
         private UnsafeRowWriter rowWriter = new UnsafeRowWriter();
@@ -205,12 +181,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private scala.collection.Iterator input = null;
         private DataType[] columnTypes = null;
         private int[] columnIndexes = null;
-        ${classOf[CachedBatch].getName} batch = null;
 
         ${declareMutableStates(ctx)}
 
         public SpecificColumnarIterator() {
           this.nativeOrder = ByteOrder.nativeOrder();
+          this.buffers = new byte[${columnTypes.length}][];
           this.mutableRow = new MutableUnsafeRow(rowWriter);
         }
 
@@ -220,8 +196,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.columnIndexes = columnIndexes;
         }
 
-        ${accessorCode.mkString("\n")}
-        ${accessorStructCode.mkString("\n")}
+        ${declareAddedFunctions(ctx)}
 
         ${initializerAccessorFuncs}
         ${extractorFuncs}
@@ -234,9 +209,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
             return false;
           }
 
-          batch = (${classOf[CachedBatch].getName}) input.next();
+          ${classOf[CachedBatch].getName} batch = (${classOf[CachedBatch].getName}) input.next();
           currentRow = 0;
           numRowsInBatch = batch.numRows();
+          for (int i = 0; i < columnIndexes.length; i ++) {
+            buffers[i] = batch.buffers()[columnIndexes[i]];
+          }
           ${initializerAccessorCalls}
 
           return hasNext();
