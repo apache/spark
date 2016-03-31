@@ -250,7 +250,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
 
         DropFunction(dbName, funcName, ifExists.isDefined, temp.isDefined)(node.source)
 
-      case Token("TOK_ALTERTABLE" | "TOK_ALTERVIEW", alterTableArgs) =>
+      case Token("TOK_ALTERTABLE", alterTableArgs) =>
         AlterTableCommandParser.parse(node)
 
       case Token("TOK_CREATETABLEUSING", createTableArgs) =>
