@@ -427,11 +427,9 @@ private[spark] class BlockManager(
                 diskBytes.toInputStream(dispose = true))(info.classTag)
               maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
             } else {
-              val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes).map {
-                _.toInputStream(dispose = false)
-              }.getOrElse {
-                diskBytes.toInputStream(dispose = true)
-              }
+              val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes)
+                .map {_.toInputStream(dispose = false)}
+                .getOrElse { diskBytes.toInputStream(dispose = true) }
               serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
             }
           }
