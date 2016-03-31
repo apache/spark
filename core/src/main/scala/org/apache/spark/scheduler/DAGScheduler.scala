@@ -1250,9 +1250,8 @@ class DAGScheduler(
                     markMapStageJobAsFinished(job, stats)
                   }
                 }
+                submitWaitingChildStages(shuffleStage)
               }
-
-              submitWaitingChildStages(shuffleStage)
             }
         }
 
