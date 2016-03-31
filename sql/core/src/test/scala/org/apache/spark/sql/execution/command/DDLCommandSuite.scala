@@ -195,33 +195,60 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed4, expected4)
   }
 
-  test("alter table: rename table") {
-    val sql = "ALTER TABLE table_name RENAME TO new_table_name"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRename(
+  // ALTER TABLE table_name RENAME TO new_table_name;
+  // ALTER VIEW view_name RENAME TO new_view_name;
+  test("alter table/view: rename table/view") {
+    val sql_table = "ALTER TABLE table_name RENAME TO new_table_name"
+    val sql_view = sql_table.replace("TABLE", "VIEW")
+    val parsed_table = parser.parsePlan(sql_table)
+    val parsed_view = parser.parsePlan(sql_view)
+    val expected_table = AlterTableRename(
       TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None))(sql)
-    comparePlans(parsed, expected)
+      TableIdentifier("new_table_name", None))(sql_table)
+    val expected_view = AlterTableRename(
+      TableIdentifier("table_name", None),
+      TableIdentifier("new_table_name", None))(sql_view)
+    comparePlans(parsed_table, expected_table)
+    comparePlans(parsed_view, expected_view)
   }
 
-  test("alter table: alter table properties") {
-    val sql1 = "ALTER TABLE table_name SET TBLPROPERTIES ('test' = 'test', " +
+  // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
+  // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
+  test("alter table/view: alter table/view properties") {
+    val sql1_table = "ALTER TABLE table_name SET TBLPROPERTIES ('test' = 'test', " +
       "'comment' = 'new_comment')"
-    val sql2 = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
-    val sql3 = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
+    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+    val sql1_view = sql1_table.replace("TABLE", "VIEW")
+    val sql2_view = sql2_table.replace("TABLE", "VIEW")
+    val sql3_view = sql3_table.replace("TABLE", "VIEW")
+
+    val parsed1_table = parser.parsePlan(sql1_table)
+    val parsed2_table = parser.parsePlan(sql2_table)
+    val parsed3_table = parser.parsePlan(sql3_table)
+    val parsed1_view = parser.parsePlan(sql1_view)
+    val parsed2_view = parser.parsePlan(sql2_view)
+    val parsed3_view = parser.parsePlan(sql3_view)
+
     val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableSetProperties(
-      tableIdent, Map("test" -> "test", "comment" -> "new_comment"))(sql1)
-    val expected2 = AlterTableUnsetProperties(
-      tableIdent, Map("comment" -> null, "test" -> null), ifExists = false)(sql2)
-    val expected3 = AlterTableUnsetProperties(
-      tableIdent, Map("comment" -> null, "test" -> null), ifExists = true)(sql3)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
+    val expected1_table = AlterTableSetProperties(
+      tableIdent, Map("test" -> "test", "comment" -> "new_comment"))(sql1_table)
+    val expected2_table = AlterTableUnsetProperties(
+      tableIdent, Map("comment" -> null, "test" -> null), ifExists = false)(sql2_table)
+    val expected3_table = AlterTableUnsetProperties(
+      tableIdent, Map("comment" -> null, "test" -> null), ifExists = true)(sql3_table)
+    val expected1_view = expected1_table.copy()(sql = sql1_view)
+    val expected2_view = expected2_table.copy()(sql = sql2_view)
+    val expected3_view = expected3_table.copy()(sql = sql3_view)
+
+    comparePlans(parsed1_table, expected1_table)
+    comparePlans(parsed2_table, expected2_table)
+    comparePlans(parsed3_table, expected3_table)
+    comparePlans(parsed1_view, expected1_view)
+    comparePlans(parsed2_view, expected2_view)
+    comparePlans(parsed3_view, expected3_view)
   }
 
   test("alter table: SerDe properties") {
@@ -376,21 +403,66 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
+  // ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION partition_spec
+  // [LOCATION 'location1'] partition_spec [LOCATION 'location2'] ...;
   test("alter table: add partition") {
-    val sql =
+    val sql1 =
       """
        |ALTER TABLE table_name ADD IF NOT EXISTS PARTITION
        |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
        |(dt='2009-09-09', country='uk')
       """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableAddPartition(
+    val sql2 = "ALTER TABLE table_name ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+
+    val expected1 = AlterTableAddPartition(
       TableIdentifier("table_name", None),
       Seq(
         (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
         (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)(sql)
-    comparePlans(parsed, expected)
+      ifNotExists = true)(sql1)
+    val expected2 = AlterTableAddPartition(
+      TableIdentifier("table_name", None),
+      Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
+      ifNotExists = false)(sql2)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  // ALTER VIEW view_name ADD [IF NOT EXISTS] PARTITION partition_spec PARTITION partition_spec ...;
+  test("alter view: add partition") {
+    val sql1 =
+      """
+        |ALTER VIEW view_name ADD IF NOT EXISTS PARTITION
+        |(dt='2008-08-08', country='us') PARTITION
+        |(dt='2009-09-09', country='uk')
+      """.stripMargin
+    // different constant types in partitioning spec
+    val sql2 =
+    """
+      |ALTER VIEW view_name ADD PARTITION
+      |(col1=NULL, cOL2='f', col3=5, COL4=true)
+    """.stripMargin
+
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+
+    val expected1 = AlterTableAddPartition(
+      TableIdentifier("view_name", None),
+      Seq(
+        (Map("dt" -> "2008-08-08", "country" -> "us"), None),
+        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
+      ifNotExists = true)(sql1)
+    val expected2 = AlterTableAddPartition(
+      TableIdentifier("view_name", None),
+      Seq((Map("col1" -> "NULL", "col2" -> "f", "col3" -> "5", "col4" -> "true"), None)),
+      ifNotExists = false)(sql2)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
   }
 
   test("alter table: rename partition") {
@@ -421,36 +493,63 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed, expected)
   }
 
-  test("alter table: drop partitions") {
-    val sql1 =
+  // ALTER TABLE table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE]
+  // ALTER VIEW table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...]
+  test("alter table/view: drop partitions") {
+    val sql1_table =
       """
        |ALTER TABLE table_name DROP IF EXISTS PARTITION
        |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')
       """.stripMargin
-    val sql2 =
+    val sql2_table =
       """
        |ALTER TABLE table_name DROP PARTITION
        |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk') PURGE
       """.stripMargin
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
+    val sql1_view = sql1_table.replace("TABLE", "VIEW")
+    // Note: ALTER VIEW DROP PARTITION does not support PURGE
+    val sql2_view = sql2_table.replace("TABLE", "VIEW").replace("PURGE", "")
+
+    val parsed1_table = parser.parsePlan(sql1_table)
+    val parsed2_table = parser.parsePlan(sql2_table)
+    val parsed1_view = parser.parsePlan(sql1_view)
+    val parsed2_view = parser.parsePlan(sql2_view)
+
     val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableDropPartition(
+    val expected1_table = AlterTableDropPartition(
       tableIdent,
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
       ifExists = true,
-      purge = false)(sql1)
-    val expected2 = AlterTableDropPartition(
+      purge = false)(sql1_table)
+    val expected2_table = AlterTableDropPartition(
       tableIdent,
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
       ifExists = false,
-      purge = true)(sql2)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
+      purge = true)(sql2_table)
+
+    val expected1_view = AlterTableDropPartition(
+      tableIdent,
+      Seq(
+        Map("dt" -> "2008-08-08", "country" -> "us"),
+        Map("dt" -> "2009-09-09", "country" -> "uk")),
+      ifExists = true,
+      purge = false)(sql1_view)
+    val expected2_view = AlterTableDropPartition(
+      tableIdent,
+      Seq(
+        Map("dt" -> "2008-08-08", "country" -> "us"),
+        Map("dt" -> "2009-09-09", "country" -> "uk")),
+      ifExists = false,
+      purge = false)(sql2_table)
+
+    comparePlans(parsed1_table, expected1_table)
+    comparePlans(parsed2_table, expected2_table)
+    comparePlans(parsed1_view, expected1_view)
+    comparePlans(parsed2_view, expected2_view)
   }
 
   test("alter table: archive partition") {

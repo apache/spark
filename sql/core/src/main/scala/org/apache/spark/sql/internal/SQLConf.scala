@@ -28,7 +28,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -390,21 +389,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PARSER_SUPPORT_QUOTEDID = SQLConfigBuilder("spark.sql.parser.supportQuotedIdentifiers")
-    .internal()
-    .doc("Whether to use quoted identifier.\n  false: default(past) behavior. Implies only" +
-      "alphaNumeric and underscore are valid characters in identifiers.\n" +
-      "  true: implies column names can contain any character.")
-    .booleanConf
-    .createWithDefault(true)
-
-  val PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS =
-    SQLConfigBuilder("spark.sql.parser.supportSQL11ReservedKeywords")
-      .internal()
-      .doc("This flag should be set to true to enable support for SQL2011 reserved keywords.")
-      .booleanConf
-      .createWithDefault(false)
-
   val WHOLESTAGE_CODEGEN_ENABLED = SQLConfigBuilder("spark.sql.codegen.wholeStage")
     .internal()
     .doc("When true, the whole stage (of multiple operators) will be compiled into single java" +
@@ -469,7 +453,7 @@ object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf with Logging {
+private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -569,10 +553,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
-
-  def supportQuotedId: Boolean = getConf(PARSER_SUPPORT_QUOTEDID)
-
-  def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
