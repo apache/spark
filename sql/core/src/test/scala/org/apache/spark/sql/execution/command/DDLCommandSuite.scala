@@ -403,7 +403,8 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
-  // ALTER TABLE view_name ADD [IF NOT EXISTS] PARTITION spec1[, PARTITION spec2, ...]
+  // ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION partition_spec
+  // [LOCATION 'location1'] partition_spec [LOCATION 'location2'] ...;
   test("alter table: add partition") {
     val sql1 =
       """
@@ -431,8 +432,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
-  // ALTER VIEW view_name ADD [IF NOT EXISTS] PARTITION spec1[, PARTITION spec2, ...]
-  // Location clause is not allowed.
+  // ALTER VIEW view_name ADD [IF NOT EXISTS] PARTITION partition_spec PARTITION partition_spec ...;
   test("alter view: add partition") {
     val sql1 =
       """
@@ -531,18 +531,20 @@ class DDLCommandSuite extends PlanTest {
       ifExists = false,
       purge = true)(sql2_table)
 
-    val expected1_view = AlterViewDropPartition(
+    val expected1_view = AlterTableDropPartition(
       tableIdent,
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = true)(sql1_view)
-    val expected2_view = AlterViewDropPartition(
+      ifExists = true,
+      purge = false)(sql1_view)
+    val expected2_view = AlterTableDropPartition(
       tableIdent,
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = false)(sql2_table)
+      ifExists = false,
+      purge = false)(sql2_table)
 
     comparePlans(parsed1_table, expected1_table)
     comparePlans(parsed2_table, expected2_table)

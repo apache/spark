@@ -55,10 +55,11 @@ statement
         (AS? query)?                                                   #createTable
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq?)                      #analyze
-    | ALTER TABLE from=tableIdentifier RENAME TO to=tableIdentifier    #renameTable
-    | ALTER TABLE tableIdentifier
+    | ALTER (TABLE | VIEW) from=tableIdentifier
+        RENAME TO to=tableIdentifier                                   #renameTable
+    | ALTER (TABLE | VIEW) tableIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
-    | ALTER TABLE tableIdentifier
+    | ALTER (TABLE | VIEW) tableIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
@@ -74,12 +75,16 @@ statement
         SET SKEWED LOCATION skewedLocationList                         #setTableSkewLocations
     | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
+    | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
+        partitionSpec+                                                 #addViewPartition
     | ALTER TABLE tableIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER TABLE from=tableIdentifier
         EXCHANGE partitionSpec WITH TABLE to=tableIdentifier           #exchangeTablePartition
     | ALTER TABLE tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
+    | ALTER VIEW tableIdentifier
+        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE tableIdentifier ARCHIVE partitionSpec                #archiveTablePartition
     | ALTER TABLE tableIdentifier UNARCHIVE partitionSpec              #unarchiveTablePartition
     | ALTER TABLE tableIdentifier partitionSpec?
@@ -102,15 +107,6 @@ statement
         (PARTITIONED ON identifierList)?
         (TBLPROPERTIES tablePropertyList)? AS query                    #createView
     | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
-    | ALTER VIEW from=tableIdentifier AS? RENAME TO to=tableIdentifier #renameView
-    | ALTER VIEW from=tableIdentifier AS?
-        SET TBLPROPERTIES tablePropertyList                            #setViewProperties
-    | ALTER VIEW from=tableIdentifier AS?
-        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetViewProperties
-    | ALTER VIEW from=tableIdentifier AS?
-        ADD (IF NOT EXISTS)? partitionSpec+                            #addViewPartition
-    | ALTER VIEW from=tableIdentifier AS?
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropViewPartitions
     | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction

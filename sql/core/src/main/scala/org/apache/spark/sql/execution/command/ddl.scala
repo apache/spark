@@ -281,27 +281,18 @@ case class AlterTableExchangePartition(
   extends NativeDDLCommand(sql) with Logging
 
 /**
- * Drop Partition in ALTER TABLE: to drop a particular partition for a table.
+ * Drop Partition in ALTER TABLE/VIEW: to drop a particular partition for a table/view.
  * This removes the data and metadata for this partition.
  * The data is actually moved to the .Trash/Current directory if Trash is configured,
  * unless 'purge' is true, but the metadata is completely lost.
  * An error message will be issued if the partition does not exist, unless 'ifExists' is false.
+ * Note: purge is always false when the target is a view.
  */
 case class AlterTableDropPartition(
     tableName: TableIdentifier,
     specs: Seq[TablePartitionSpec],
     ifExists: Boolean,
     purge: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-/**
- * Drop Partition in ALTER VIEW: drop the related partition metadata for a view.
- * An error message will be issued if the partition does not exist, unless 'ifExists' is false.
- */
-case class AlterViewDropPartition(
-    viewName: TableIdentifier,
-    specs: Seq[TablePartitionSpec],
-    ifExists: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
 case class AlterTableArchivePartition(

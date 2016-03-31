@@ -29,26 +29,22 @@ import org.apache.spark.sql.types.StructType
 
 
 /**
- * Helper object to parse alter table or alter view commands.
+ * Helper object to parse alter table commands.
  */
 object AlterTableCommandParser {
   import ParserUtils._
 
   /**
-   * Parse the given node assuming it is an alter table/view command.
+   * Parse the given node assuming it is an alter table command.
    */
   def parse(node: ASTNode): LogicalPlan = {
-    assert(node.token.getText == "TOK_ALTERTABLE" || node.token.getText == "TOK_ALTERVIEW")
     node.children match {
       case (tabName @ Token("TOK_TABNAME", _)) :: otherNodes =>
         val tableIdent = extractTableIdent(tabName)
         val partSpec = getClauseOption("TOK_PARTSPEC", node.children).map(parsePartitionSpec)
-        if (partSpec.isDefined && node.token.getText == "TOK_ALTERVIEW") {
-          parseFailed("Could not parse ALTER VIEW command", node)
-        }
         matchAlterTableCommands(node, otherNodes, tableIdent, partSpec)
       case _ =>
-        parseFailed("Could not parse ALTER TABLE/VIEW command", node)
+        parseFailed("Could not parse ALTER TABLE command", node)
     }
   }
 
@@ -125,9 +121,8 @@ object AlterTableCommandParser {
   }
 
   /**
-   * Parse an alter table/view command from a [[ASTNode]] into a [[LogicalPlan]].
-   * This follows https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
-   * and https://cwiki.apache.org/confluence/display/Hive/PartitionedViews.
+   * Parse an alter table command from a [[ASTNode]] into a [[LogicalPlan]].
+   * This follows https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL.
    *
    * @param node the original [[ASTNode]] to parse.
    * @param otherNodes the other [[ASTNode]]s after the first one containing the table name.
@@ -142,25 +137,18 @@ object AlterTableCommandParser {
       partition: Option[TablePartitionSpec]): LogicalPlan = {
     otherNodes match {
       // ALTER TABLE table_name RENAME TO new_table_name;
-      // ALTER VIEW view_name RENAME TO new_view_name;
-      case Token(fieldName, renameArgs) :: _
-          if fieldName == "TOK_ALTERTABLE_RENAME" || fieldName == "TOK_ALTERVIEW_RENAME" =>
+      case Token("TOK_ALTERTABLE_RENAME", renameArgs) :: _ =>
         val tableNameClause = getClause("TOK_TABNAME", renameArgs)
         val newTableIdent = extractTableIdent(tableNameClause)
         AlterTableRename(tableIdent, newTableIdent)(node.source)
 
       // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
-      // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
-      case Token(fieldName, args) :: _
-          if fieldName == "TOK_ALTERTABLE_PROPERTIES" || fieldName == "TOK_ALTERVIEW_PROPERTIES" =>
+      case Token("TOK_ALTERTABLE_PROPERTIES", args) :: _ =>
         val properties = extractTableProps(args.head)
         AlterTableSetProperties(tableIdent, properties)(node.source)
 
-      // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
-      // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
-      case Token(fieldName, args) :: _
-          if fieldName == "TOK_ALTERTABLE_DROPPROPERTIES" ||
-            fieldName == "TOK_ALTERVIEW_DROPPROPERTIES" =>
+      // ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'key');
+      case Token("TOK_ALTERTABLE_DROPPROPERTIES", args) :: _ =>
         val properties = extractTableProps(args.head)
         val ifExists = getClauseOption("TOK_IFEXISTS", args).isDefined
         AlterTableUnsetProperties(tableIdent, properties, ifExists)(node.source)
@@ -302,11 +290,9 @@ object AlterTableCommandParser {
         }.toMap
         AlterTableSkewedLocation(tableIdent, skewedMaps)(node.source)
 
-      // ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION spec1
-      // [LOCATION 'location1'] PARTITION spec2 [LOCATION 'location2'] ...
-      // ALTER VIEW view_name ADD [IF NOT EXISTS] PARTITION spec1[, PARTITION spec2, ...]
-      case Token(fieldName, args) :: _
-          if fieldName == "TOK_ALTERTABLE_ADDPARTS" || fieldName == "TOK_ALTERVIEW_ADDPARTS" =>
+      // ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
+      // spec [LOCATION 'loc2'] ...;
+      case Token("TOK_ALTERTABLE_ADDPARTS", args) :: _ =>
         val (ifNotExists, parts) = args.head match {
           case Token("TOK_IFNOTEXISTS", Nil) => (true, args.tail)
           case _ => (false, args)
@@ -319,16 +305,12 @@ object AlterTableCommandParser {
             parsedParts += ((parsePartitionSpec(t), None))
           case Token("TOK_PARTITIONLOCATION", loc :: Nil) =>
             // Update the location of the last partition we just added
-            if (fieldName == "TOK_ALTERVIEW_ADDPARTS") {
-              // Location clause is not allowed in ALTER VIEW
-              parseFailed("Invalid ALTER VIEW command", node)
-            }
-            else if (parsedParts.nonEmpty) {
+            if (parsedParts.nonEmpty) {
               val (spec, _) = parsedParts.remove(parsedParts.length - 1)
               parsedParts += ((spec, Some(unquoteString(loc.text))))
             }
           case _ =>
-            parseFailed("Invalid ALTER TABLE/VIEW command", node)
+            parseFailed("Invalid ALTER TABLE command", node)
         }
         AlterTableAddPartition(tableIdent, parsedParts, ifNotExists)(node.source)
 
@@ -347,17 +329,11 @@ object AlterTableCommandParser {
         AlterTableExchangePartition(tableIdent, newTableIdent, parsedSpec)(node.source)
 
       // ALTER TABLE table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
-      // ALTER VIEW view_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
-      case Token(fieldName, args) :: _
-          if fieldName == "TOK_ALTERTABLE_DROPPARTS" || fieldName == "TOK_ALTERVIEW_DROPPARTS" =>
+      case Token("TOK_ALTERTABLE_DROPPARTS", args) :: _ =>
         val parts = args.collect { case p @ Token("TOK_PARTSPEC", _) => parsePartitionSpec(p) }
         val ifExists = getClauseOption("TOK_IFEXISTS", args).isDefined
-        if (fieldName == "TOK_ALTERTABLE_DROPPARTS") {
-          val purge = getClauseOption("PURGE", args).isDefined
-          AlterTableDropPartition(tableIdent, parts, ifExists, purge)(node.source)
-        } else {
-          AlterViewDropPartition(tableIdent, parts, ifExists)(node.source)
-        }
+        val purge = getClauseOption("PURGE", args).isDefined
+        AlterTableDropPartition(tableIdent, parts, ifExists, purge)(node.source)
 
       // ALTER TABLE table_name ARCHIVE PARTITION spec;
       case Token("TOK_ALTERTABLE_ARCHIVE", spec :: Nil) :: _ =>
@@ -448,7 +424,7 @@ object AlterTableCommandParser {
         AlterTableReplaceCol(tableIdent, partition, columns, restrict, cascade)(node.source)
 
       case _ =>
-        parseFailed("Unsupported ALTER TABLE/VIEW command", node)
+        parseFailed("Unsupported ALTER TABLE command", node)
     }
   }
 
