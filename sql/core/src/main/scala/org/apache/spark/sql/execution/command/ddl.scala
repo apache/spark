@@ -310,11 +310,38 @@ case class AlterTableSetFileFormat(
     genericFormat: Option[String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * A command that sets the location of a table or a partition.
+ *
+ * The syntax of this command is:
+ * {{{
+ *    ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION "loc";
+ * }}}
+ */
 case class AlterTableSetLocation(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
-    location: String)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    location: String)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    if (partitionSpec.isEmpty) {
+      // No partition spec is specified, so we set the location for the table itself
+      val table = catalog.getTable(tableName)
+      val newTable = table.withNewStorage(locationUri = Some(location))
+      catalog.alterTable(newTable)
+    } else {
+      // Partition spec is specified, so we set the location only for this partition
+      val spec = partitionSpec.get
+      val part = catalog.getPartition(tableName, spec)
+      val newPart = part.copy(storage = part.storage.copy(locationUri = Some(location)))
+      catalog.alterPartitions(tableName, Seq(newPart))
+    }
+    Seq.empty[Row]
+  }
+
+}
 
 case class AlterTableTouch(
     tableName: TableIdentifier,

@@ -655,8 +655,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableSetLocation(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      visitLocationSpec(ctx.locationSpec))(
-      command(ctx))
+      visitLocationSpec(ctx.locationSpec))
   }
 
   /**

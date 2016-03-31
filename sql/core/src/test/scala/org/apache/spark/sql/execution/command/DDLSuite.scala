@@ -22,8 +22,10 @@ import java.io.File
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogTablePartition}
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.parser.ParserUtils._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -36,6 +38,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     } finally {
       super.afterEach()
     }
+  }
+
+  private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
+    catalog.createDatabase(CatalogDatabase("dbx", "", "", Map()), ignoreIfExists = false)
+  }
+
+  private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
+    catalog.createTable(CatalogTable(
+      identifier = name,
+      tableType = CatalogTableType.EXTERNAL_TABLE,
+      storage = CatalogStorageFormat(None, None, None, None, Map()),
+      schema = Seq()), ignoreIfExists = false)
+  }
+
+  private def createTablePartition(
+      catalog: SessionCatalog,
+      spec: TablePartitionSpec,
+      tableName: TableIdentifier): Unit = {
+    val part = CatalogTablePartition(spec, CatalogStorageFormat(None, None, None, None, Map()))
+    catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
   test("Create/Drop Database") {
@@ -156,21 +178,19 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   // TODO: test drop database in restrict mode
 
-  test("rename table") {
+  test("alter table: rename") {
     val catalog = sqlContext.sessionState.catalog
-    catalog.createDatabase(CatalogDatabase("dbx", "", "", Map()), ignoreIfExists = false)
-    catalog.createTable(CatalogTable(
-      identifier = TableIdentifier("tab1", Some("dbx")),
-      tableType = CatalogTableType.EXTERNAL_TABLE,
-      storage = CatalogStorageFormat(None, None, None, None, Map()),
-      schema = Seq()), ignoreIfExists = false)
-    assert(catalog.listTables("dbx") == Seq(TableIdentifier("tab1", Some("dbx"))))
+    val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
+    val tableIdent2 = TableIdentifier("tab2", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent1)
+    assert(catalog.listTables("dbx") == Seq(tableIdent1))
     sql("ALTER TABLE dbx.tab1 RENAME TO dbx.tab2")
-    assert(catalog.listTables("dbx") == Seq(TableIdentifier("tab2", Some("dbx"))))
+    assert(catalog.listTables("dbx") == Seq(tableIdent2))
     catalog.setCurrentDatabase("dbx")
     // rename without explicitly specifying database
     sql("ALTER TABLE tab2 RENAME TO tab1")
-    assert(catalog.listTables("dbx") == Seq(TableIdentifier("tab1", Some("dbx"))))
+    assert(catalog.listTables("dbx") == Seq(tableIdent1))
     // table to rename does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE dbx.does_not_exist RENAME TO dbx.tab2")
@@ -178,6 +198,36 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     // destination database is different
     intercept[AnalysisException] {
       sql("ALTER TABLE dbx.tab1 RENAME TO dby.tab2")
+    }
+  }
+
+  test("alter table: set location") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val partSpec = Map("a" -> "1")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, partSpec, tableIdent)
+    assert(catalog.getTable(tableIdent).storage.locationUri.isEmpty)
+    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isEmpty)
+    // set table location
+    sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
+    assert(catalog.getTable(tableIdent).storage.locationUri ===
+      Some("/path/to/your/lovely/heart"))
+    // set table partition location
+    sql("ALTER TABLE dbx.tab1 PARTITION (a='1') SET LOCATION '/path/to/part/ways'")
+    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri ===
+      Some("/path/to/part/ways"))
+    // set table location without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
+    assert(catalog.getTable(tableIdent).storage.locationUri === Some("/swanky/steak/place"))
+    // set table partition location
+    sql("ALTER TABLE tab1 PARTITION (a='1') SET LOCATION 'vienna'")
+    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri === Some("vienna"))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
     }
   }
 

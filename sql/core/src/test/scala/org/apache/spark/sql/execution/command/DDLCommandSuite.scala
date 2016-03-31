@@ -515,11 +515,11 @@ class DDLCommandSuite extends PlanTest {
     val expected1 = AlterTableSetLocation(
       tableIdent,
       None,
-      "new location")(sql1)
+      "new location")
     val expected2 = AlterTableSetLocation(
       tableIdent,
       Some(Map("dt" -> "2008-08-08", "country" -> "us")),
-      "new location")(sql2)
+      "new location")
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
   }

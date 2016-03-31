@@ -358,7 +358,7 @@ object AlterTableCommandParser {
 
       // ALTER TABLE table_name [PARTITION spec] SET LOCATION "loc";
       case Token("TOK_ALTERTABLE_LOCATION", Token(loc, Nil) :: Nil) :: _ =>
-        AlterTableSetLocation(tableIdent, partition, cleanAndUnquoteString(loc))(node.source)
+        AlterTableSetLocation(tableIdent, partition, cleanAndUnquoteString(loc))
 
       // ALTER TABLE table_name TOUCH [PARTITION spec];
       case Token("TOK_ALTERTABLE_TOUCH", args) :: _ =>
