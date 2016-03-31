@@ -124,8 +124,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def buildReader(
       sqlContext: SQLContext,
-      partitionSchema: StructType,
       dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
     val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
@@ -136,7 +137,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
       .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
 
-    val fullSchema = dataSchema.toAttributes ++ partitionSchema.toAttributes
+    val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
     val joinedRow = new JoinedRow()
 
     file => {
@@ -144,7 +145,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
       val rows = JacksonParser.parseJson(
         lines,
-        dataSchema,
+        requiredSchema,
         columnNameOfCorruptRecord,
         parsedOptions)
 

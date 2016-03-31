@@ -376,14 +376,15 @@ class TestFileFormat extends FileFormat {
 
   override def buildReader(
       sqlContext: SQLContext,
-      partitionSchema: StructType,
       dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
 
     // Record the arguments so they can be checked in the test case.
     LastArguments.partitionSchema = partitionSchema
-    LastArguments.dataSchema = dataSchema
+    LastArguments.dataSchema = requiredSchema
     LastArguments.filters = filters
     LastArguments.options = options
 

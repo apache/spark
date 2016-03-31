@@ -385,9 +385,9 @@ abstract class OutputWriter {
  *
  * @param location A [[FileCatalog]] that can enumerate the locations of all the files that comprise
  *                 this relation.
- * @param partitionSchema The schmea of the columns (if any) that are used to partition the relation
+ * @param partitionSchema The schema of the columns (if any) that are used to partition the relation
  * @param dataSchema The schema of any remaining columns.  Note that if any partition columns are
- *                   present in the actual data files as well, they are removed.
+ *                   present in the actual data files as well, they are preserved.
  * @param bucketSpec Describes the bucketing (hash-partitioning of the files by some column values).
  * @param fileFormat A file format that can be used to read and write the data in files.
  * @param options Configuration used when reading / writing data.
@@ -462,20 +462,24 @@ trait FileFormat {
   /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
    *
+   * @param dataSchema The global data schema. It can be either specified by the user, or
+   *                   reconciled/merged from all underlying data files. If any partition columns
+   *                   are contained in the files, they are preserved in this schema.
    * @param partitionSchema The schema of the partition column row that will be present in each
-   *                        PartitionedFile.  These columns should be prepended to the rows that
+   *                        PartitionedFile. These columns should be appended to the rows that
    *                        are produced by the iterator.
-   * @param dataSchema The schema of the data that should be output for each row.  This may be a
-   *                   subset of the columns that are present in the file if  column pruning has
-   *                   occurred.
+   * @param requiredSchema The schema of the data that should be output for each row.  This may be a
+   *                       subset of the columns that are present in the file if column pruning has
+   *                       occurred.
    * @param filters A set of filters than can optionally be used to reduce the number of rows output
    * @param options A set of string -> string configuration options.
    * @return
    */
   def buildReader(
       sqlContext: SQLContext,
-      partitionSchema: StructType,
       dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
     // TODO: Remove this default implementation when the other formats have been ported

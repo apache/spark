@@ -59,8 +59,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       if (files.fileFormat.toString == "TestFileFormat" ||
          files.fileFormat.isInstanceOf[parquet.DefaultSource] ||
          files.fileFormat.toString == "ORC" ||
-         files.fileFormat.isInstanceOf[json.DefaultSource] ||
-         files.fileFormat.isInstanceOf[text.DefaultSource]) &&
+         files.fileFormat.isInstanceOf[csv.DefaultSource] ||
+         files.fileFormat.isInstanceOf[text.DefaultSource] ||
+         files.fileFormat.isInstanceOf[json.DefaultSource]) &&
          files.sqlContext.conf.useFileScan =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
@@ -79,14 +80,6 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val dataColumns =
         l.resolve(files.dataSchema, files.sqlContext.sessionState.analyzer.resolver)
-
-      val bucketColumns =
-        AttributeSet(
-          files.bucketSpec
-            .map(_.bucketColumnNames)
-            .getOrElse(Nil)
-            .map(l.resolveQuoted(_, files.sqlContext.conf.resolver)
-              .getOrElse(sys.error(""))))
 
       // Partition keys are not available in the statistics of the files.
       val dataFilters = filters.filter(_.references.intersect(partitionSet).isEmpty)
@@ -113,8 +106,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val readFile = files.fileFormat.buildReader(
         sqlContext = files.sqlContext,
+        dataSchema = files.dataSchema,
         partitionSchema = files.partitionSchema,
-        dataSchema = prunedDataSchema,
+        requiredSchema = prunedDataSchema,
         filters = pushedDownFilters,
         options = files.options)
 
