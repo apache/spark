@@ -270,8 +270,8 @@ class LDA private (
    */
   @Since("1.3.0")
   def setCheckpointInterval(checkpointInterval: Int): this.type = {
-    require(checkpointInterval > 0,
-      s"Period between checkpoints must be positive but got ${checkpointInterval}")
+    require(checkpointInterval == -1 || checkpointInterval > 0,
+      s"Period between checkpoints must be -1 or positive but got ${checkpointInterval}")
     this.checkpointInterval = checkpointInterval
     this
   }
