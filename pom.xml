@@ -1920,6 +1920,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
+              <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
@@ -1935,6 +1936,14 @@
             <failIfNoTests>false</failIfNoTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
           </configuration>
+          <executions>
+            <execution>
+              <id>test</id>
+              <goals>
+                <goal>test</goal>
+              </goals>
+            </execution>
+          </executions>
         </plugin>
         <!-- Scalatest runs all Scala tests -->
         <plugin>
@@ -1959,6 +1968,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
+              <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
@@ -2343,27 +2353,12 @@
 
     <profile>
       <id>java8-tests</id>
-      <build>
-        <plugins>
-          <!-- Needed for publishing test jars as it is needed by java8-tests -->
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-jar-plugin</artifactId>
-            <executions>
-              <execution>
-                <goals>
-                  <goal>test-jar</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-
+      <activation>
+        <jdk>[1.8,)</jdk>
+      </activation>
       <modules>
         <module>external/java8-tests</module>
       </modules>
-
     </profile>
 
     <profile>
