@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
-
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.parser.ParserUtils._
@@ -51,7 +49,29 @@ class DDLSuite extends QueryTest with SharedSQLContext {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+          System.getProperty("java.io.tmpdir") + s"$dbNameWithoutBackTicks.db",
+          Map.empty))
+        sql(s"DROP DATABASE $dbName CASCADE")
+        assert(!catalog.databaseExists(dbNameWithoutBackTicks))
+      }
+    }
+  }
+
+  test("Create/Drop Database - location") {
+    val catalog = sqlContext.sessionState.catalog
+
+    val databaseNames = Seq("db1", "`database`")
+
+    databaseNames.foreach { dbName =>
+      withDatabase(dbName) {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+
+        sql(s"CREATE DATABASE $dbName Location '${System.getProperty("java.io.tmpdir")}'")
+        val db1 = catalog.getDatabase(dbNameWithoutBackTicks)
+        assert(db1 == CatalogDatabase(
+          dbNameWithoutBackTicks,
+          "",
+          System.getProperty("java.io.tmpdir") + s"$dbNameWithoutBackTicks.db",
           Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))
@@ -71,7 +91,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+          System.getProperty("java.io.tmpdir") + s"$dbNameWithoutBackTicks.db",
           Map.empty))
 
         val message = intercept[AnalysisException] {
@@ -90,7 +110,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
       withDatabase(dbName) {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         val location =
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
+          System.getProperty("java.io.tmpdir") + s"$dbNameWithoutBackTicks.db"
         sql(s"CREATE DATABASE $dbName")
 
         checkAnswer(

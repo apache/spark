@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -63,13 +65,18 @@ case class CreateDatabase(
     props: Map[String, String])
   extends RunnableCommand {
 
+  private def getDBPath(path: String, dbName: String) =
+    new Path(new Path(path), dbName + ".db").toString
+
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
+    val databasePath = path.map(getDBPath(_, databaseName))
+      .getOrElse(catalog.getDefaultDBPath(databaseName))
     catalog.createDatabase(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        path.getOrElse(catalog.getDefaultDBPath(databaseName)),
+        databasePath,
         props),
       ifNotExists)
     Seq.empty[Row]

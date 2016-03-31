@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import java.io.File
-
 import scala.collection.mutable
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
@@ -117,7 +117,7 @@ class SessionCatalog(
   }
 
   def getDefaultDBPath(db: String): String = {
-    System.getProperty("java.io.tmpdir") + File.separator + db + ".db"
+    new Path(new Path(System.getProperty("java.io.tmpdir")), db + ".db").toString
   }
 
   // ----------------------------------------------------------------------------
