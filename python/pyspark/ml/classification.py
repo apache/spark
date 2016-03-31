@@ -17,7 +17,10 @@
 
 import warnings
 
+import operator
+
 from pyspark import since
+from pyspark.ml import Estimator, Model
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param import TypeConverters
@@ -25,7 +28,9 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.regression import (
     RandomForestParams, TreeEnsembleParams, DecisionTreeModel, TreeEnsembleModels)
 from pyspark.mllib.common import inherit_doc
-
+from pyspark.sql.functions import udf, when
+from pyspark.sql.types import MapType, IntegerType, DoubleType
+from pyspark.storagelevel import StorageLevel
 
 __all__ = ['LogisticRegression', 'LogisticRegressionModel',
            'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
@@ -903,6 +908,204 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLR
         vector of initial weights for the model that consists of the weights of layers.
         """
         return self._call_java("weights")
+
+
+@inherit_doc
+class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
+    """
+    Reduction of Multiclass Classification to Binary Classification.
+    Performs reduction using one against all strategy.
+    For a multiclass classification with k classes, train k models (one per class).
+    Each example is scored against all k models and the model with highest score
+    is picked to label the example.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sc.parallelize([
+    ...     Row(label=1.0, features=Vectors.dense(1.0)),
+    ...     Row(label=0.0, features=Vectors.sparse(1, [], []))]).toDF()
+    >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
+    >>> ovr = OneVsRest(classifier=lr).setPredictionCol("indexed")
+    >>> model = ovr.fit(df)
+    >>> model.models[0].weights
+    >>> model.models[0].coefficients
+    >>> model.models[0].intercept
+    # >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    # >>> model.transform(test0).head().indexed
+    # 0.0
+    # >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
+    # >>> model.transform(test1).head().indexed
+    # 1.0
+
+    .. versionadded:: 2.0.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    classifier = Param(Params._dummy(), "classifier", "base binary classifier")
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 classifier=None):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 classifier=None)
+        """
+        super(OneVsRest, self).__init__()
+        kwargs = self.__init__._input_kwargs
+        self._set(**kwargs)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
+        """
+        setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
+        Sets params for OneVsRest.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setClassifier(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        self._paramMap[self.classifier] = value
+        return self
+
+    @since("2.0.0")
+    def getClassifier(self):
+        """
+        Gets the value of classifier or its default value.
+        """
+        return self.getOrDefault(self.classifier)
+
+    def _fit(self, dataset):
+
+        labelCol = self.getLabelCol()
+        featureCol = self.getFeaturesCol()
+        numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"])
+        multiclassLabeled = dataset.select(labelCol, featureCol)
+
+        # persist if underlying dataset is not persistent.
+        handlePersistence =\
+            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        if handlePersistence:
+            multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
+
+        models = []
+
+        for index in range(0, numClasses):
+            # newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
+            labelColName = "mc2b$" + str(index)
+            trainingDataset = multiclassLabeled.withColumn(
+                labelColName,
+                when(dataset[self.getLabelCol()] == float(index), 1.0).otherwise(0.0))
+            classifier = self.getClassifier()
+            paramMap = dict([(classifier.labelCol, labelColName),
+                            (classifier.featuresCol, self.getFeaturesCol()),
+                            (classifier.predictionCol, self.getPredictionCol())])
+            models.append(classifier.fit(trainingDataset, paramMap))
+
+        if handlePersistence:
+            multiclassLabeled.unpersist()
+
+        return OneVsRestModel(models=models)
+
+    # @since("2.0.0")
+    # def copy(self, extra=None):
+    #     """
+    #     Creates a copy of this instance with a randomly generated uid
+    #     and some extra params. This copies creates a deep copy of
+    #     the embedded paramMap, and copies the embedded and extra parameters over.
+
+    #     :param extra: Extra parameters to copy to the new instance
+    #     :return: Copy of this instance
+    #     """
+    #     if extra is None:
+    #         extra = dict()
+    #     newCV = Params.copy(self, extra)
+    #     if self.isSet(self.estimator):
+    #         newCV.setEstimator(self.getEstimator().copy(extra))
+    #     # estimatorParamMaps remain the same
+    #     if self.isSet(self.evaluator):
+    #         newCV.setEvaluator(self.getEvaluator().copy(extra))
+    #     return newCV
+
+
+class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
+    """
+    Model produced by [[OneVsRest]].
+    This stores the models resulting from training k binary classifiers: one for each class.
+    Each example is scored against all k models, and the model with the highest score
+    is picked to label the example.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __init__(self, models):
+        super(OneVsRestModel, self).__init__()
+        #: best model from cross validation
+        self.models = models
+
+    def _transform(self, dataset):
+        # determine the input columns: these need to be passed through
+        origCols = dataset.columns
+
+        # add an accumulator column to store predictions of all the models
+        accColName = "mbc$acc" + str(uuid.uuid4())
+        initUDF = udf(lambda x: {}, MapType(IntegerType(), DoubleType()))
+        newDataset = dataset.withColumn(accColName, initUDF())
+
+        # persist if underlying dataset is not persistent.
+        handlePersistence =\
+            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        if handlePersistence:
+            newDataset.persist(StorageLevel.MEMORY_AND_DISK)
+
+        # update the accumulator column with the result of prediction of models
+        updatedDataset = newDataset
+        for index, model in enumerate(self.models):
+            rawPredictionCol = model._call_java("getRawPredictionCol")
+            columns = origCols + [rawPredictionCol, accColName]
+
+            # add temporary column to store intermediate scores and update
+            tmpColName = "mbc$tmp" + str(uuid.uuid4())
+            updateUDF = \
+                udf(lambda predictions, prediction: predictions.update({index: prediction(1)}))
+            transformedDataset = model.transform(newDataset).select(*columns)
+            updatedDataset = transformedDataset.withColumn(
+                tmpColName,
+                updateUDF(transformedDataset[accColName], transformedDataset[rawPredictionCol]))
+            newColumns = origCols + [tmpColName]
+
+            # switch out the intermediate column with the accumulator column
+            updatedDataset.select(*newColumns).withColumnRenamed(tmpColName, accColName)
+
+        if handlePersistence:
+            newDataset.unpersist()
+
+        # output the index of the classifier with highest confidence as prediction
+        labelUDF = udf(
+            lambda predictions: float(max(predictions.iteritems(), key=operator.itemgetter(1))[0]))
+
+        # output label and label metadata as prediction
+        return updatedDataset.withColumn(
+            self.getPredictionCol(), labelUDF(accColName)).drop(accColName)
+
+    # @since("1.4.0")
+    # def copy(self, extra=None):
+    #     """
+    #     Creates a copy of this instance with a randomly generated uid
+    #     and some extra params. This copies the underlying bestModel,
+    #     creates a deep copy of the embedded paramMap, and
+    #     copies the embedded and extra parameters over.
+
+    #     :param extra: Extra parameters to copy to the new instance
+    #     :return: Copy of this instance
+    #     """
+    #     if extra is None:
+    #         extra = dict()
+    #     return OneVsRestModel(self.models.copy(extra))
 
 
 if __name__ == "__main__":
