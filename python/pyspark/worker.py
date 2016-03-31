@@ -63,8 +63,11 @@ def chain(f, g):
 
 
 def wrap_udf(f, return_type):
-    toInternal = return_type.toInternal
-    return lambda *a: toInternal(f(*a))
+    if return_type.needConversion():
+        toInternal = return_type.toInternal
+        return lambda *a: toInternal(f(*a))
+    else:
+        return lambda *a: f(*a)
 
 
 def read_single_udf(pickleSer, infile):
