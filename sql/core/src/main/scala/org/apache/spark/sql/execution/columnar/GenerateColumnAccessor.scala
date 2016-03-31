@@ -95,14 +95,14 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>
-	  s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
-	case NullType | StringType | BinaryType =>
-	  s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
-	case other =>
-	  s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
+          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
+        case NullType | StringType | BinaryType =>
+          s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
+        case other =>
+          s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
         (${dt.getClass.getName}) columnTypes[$index]);"""
       }
-		   
+
       val extract = s"$accessorName.extractTo(mutableRow, $index);"
       val patch = dt match {
         case DecimalType.Fixed(p, s) if p > Decimal.MAX_LONG_DIGITS =>
