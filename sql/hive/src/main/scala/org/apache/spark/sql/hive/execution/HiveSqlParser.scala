@@ -161,18 +161,10 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       }
 
       // Create the schema.
-      val schema = Option(ctx.colTypeList).toSeq.flatMap(_.colType.asScala).map { col =>
-        CatalogColumn(
-          col.identifier.getText,
-          col.dataType.getText.toLowerCase, // TODO validate this?
-          nullable = true,
-          Option(col.STRING).map(string))
-      }
+      val schema = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns(_, _.toLowerCase))
 
       // Get the column by which the table is partitioned.
-      val partitionCols = Option(ctx.identifierList).toSeq.flatMap(visitIdentifierList).map {
-        CatalogColumn(_, null, nullable = true, None)
-      }
+      val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns(_))
 
       // Create the storage.
       def format(fmt: ParserRuleContext): CatalogStorageFormat = {
@@ -438,5 +430,20 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
         serdeConstants.LINE_DELIM -> value
       }
     EmptyStorageFormat.copy(serdeProperties = entries.toMap)
+  }
+
+  /**
+   * Create a sequence of [[CatalogColumn]]s from a column list
+   */
+  private def visitCatalogColumns(
+      ctx: ColTypeListContext,
+      formatter: String => String = identity): Seq[CatalogColumn] = withOrigin(ctx) {
+    ctx.colType.asScala.map { col =>
+      CatalogColumn(
+        formatter(col.identifier.getText),
+        col.dataType.getText.toLowerCase, // TODO validate this?
+        nullable = true,
+        Option(col.STRING).map(string))
+    }
   }
 }

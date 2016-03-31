@@ -1360,21 +1360,29 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
     import ctx._
     val s = value.getText
-    val interval = (unit.getText.toLowerCase, Option(to).map(_.getText.toLowerCase)) match {
-      case (u, None) if u.endsWith("s") =>
-        // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
-        CalendarInterval.fromSingleUnitString(u.substring(0, u.length - 1), s)
-      case (u, None) =>
-        CalendarInterval.fromSingleUnitString(u, s)
-      case ("year", Some("month")) =>
-        CalendarInterval.fromYearMonthString(s)
-      case ("day", Some("second")) =>
-        CalendarInterval.fromDayTimeString(s)
-      case (from, Some(t)) =>
-        throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
+    try {
+      val interval = (unit.getText.toLowerCase, Option(to).map(_.getText.toLowerCase)) match {
+        case (u, None) if u.endsWith("s") =>
+          // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
+          CalendarInterval.fromSingleUnitString(u.substring(0, u.length - 1), s)
+        case (u, None) =>
+          CalendarInterval.fromSingleUnitString(u, s)
+        case ("year", Some("month")) =>
+          CalendarInterval.fromYearMonthString(s)
+        case ("day", Some("second")) =>
+          CalendarInterval.fromDayTimeString(s)
+        case (from, Some(t)) =>
+          throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
+      }
+      assert(interval != null, "No interval can be constructed", ctx)
+      interval
+    } catch {
+      // Handle Exceptions thrown by CalendarInterval
+      case e: IllegalArgumentException =>
+        val pe = new ParseException(e.getMessage, ctx)
+        pe.setStackTrace(e.getStackTrace)
+        throw pe
     }
-    assert(interval != null, "No interval can be constructed", ctx)
-    interval
   }
 
   /* ********************************************************************************************
