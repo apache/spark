@@ -18,16 +18,17 @@
 package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{PythonFunction, PythonRunner}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonFunction, PythonRunner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 
 /**
@@ -45,15 +46,15 @@ case class BatchPythonEvaluation(udfs: Seq[PythonUDF], output: Seq[Attribute], c
 
   def children: Seq[SparkPlan] = child :: Nil
 
-  private def collectFunctions(udf: PythonUDF): (Seq[PythonFunction], Seq[Expression]) = {
+  private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
     udf.children match {
       case Seq(u: PythonUDF) =>
-        val (fs, children) = collectFunctions(u)
-        (fs ++ Seq(udf.func), children)
+        val (chained, children) = collectFunctions(u)
+        (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
       case children =>
         // There should not be any other UDFs, or the children can't be evaluated directly.
         assert(children.forall(_.find(_.isInstanceOf[PythonUDF]).isEmpty))
-        (Seq(udf.func), udf.children)
+        (ChainedPythonFunctions(Seq(udf.func)), udf.children)
     }
   }
 
@@ -69,22 +70,40 @@ case class BatchPythonEvaluation(udfs: Seq[PythonUDF], output: Seq[Attribute], c
       // combine input with output from Python.
       val queue = new java.util.concurrent.ConcurrentLinkedQueue[InternalRow]()
 
-      val (pyFuncs, children) = udfs.map(collectFunctions).unzip
-      val numArgs = children.map(_.length)
+      val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
 
-      val pickle = new Pickler
+      // Most of the inputs are primitives, do not use memo for better performance
+      val pickle = new Pickler(false)
       // flatten all the arguments
-      val allChildren = children.flatMap(x => x)
-      val currentRow = newMutableProjection(allChildren, child.output)()
-      val fields = allChildren.map(_.dataType)
-      val schema = new StructType(fields.map(t => new StructField("", t, true)).toArray)
+      val allInputs = new ArrayBuffer[Expression]
+      val dataTypes = new ArrayBuffer[DataType]
+      val argOffsets = inputs.map { input =>
+        input.map { e =>
+          if (allInputs.exists(_.semanticEquals(e))) {
+            allInputs.indexWhere(_.semanticEquals(e))
+          } else {
+            allInputs += e
+            dataTypes += e.dataType
+            allInputs.length - 1
+          }
+        }
+      }
+      val projection = newMutableProjection(allInputs, child.output)()
 
       // Input iterator to Python: input rows are grouped so we send them in batches to Python.
       // For each row, add it to the queue.
-      val inputIterator = iter.grouped(100).map { inputRows =>
-        val toBePickled = inputRows.map { row =>
-          queue.add(row)
-          EvaluatePython.toJava(currentRow(row), schema)
+      val inputIterator = iter.grouped(1024).map { inputRows =>
+        val toBePickled = inputRows.map { inputRow =>
+          queue.add(inputRow)
+          val row = projection(inputRow)
+          val fields = new Array[Any](row.numFields)
+          var i = 0
+          while (i < row.numFields) {
+            val dt = dataTypes(i)
+            fields(i) = EvaluatePython.toJava(row.get(i, dt), dt)
+            i += 1
+          }
+          fields
         }.toArray
         pickle.dumps(toBePickled)
       }
@@ -92,7 +111,7 @@ case class BatchPythonEvaluation(udfs: Seq[PythonUDF], output: Seq[Attribute], c
       val context = TaskContext.get()
 
       // Output iterator for results from Python.
-      val outputIterator = new PythonRunner(pyFuncs, bufferSize, reuseWorker, true, numArgs)
+      val outputIterator = new PythonRunner(pyFuncs, bufferSize, reuseWorker, true, argOffsets)
         .compute(inputIterator, context.partitionId(), context)
 
       val unpickle = new Unpickler

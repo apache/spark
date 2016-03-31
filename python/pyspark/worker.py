@@ -63,11 +63,13 @@ def chain(f, g):
 
 
 def wrap_udf(f, return_type):
-    return lambda *a: return_type.toInternal(f(*a))
+    toInternal = return_type.toInternal
+    return lambda *a: toInternal(f(*a))
 
 
 def read_single_udf(pickleSer, infile):
     num_arg = read_int(infile)
+    arg_offsets = [read_int(infile) for i in range(num_arg)]
     row_func = None
     for i in range(read_int(infile)):
         f, return_type = read_command(pickleSer, infile)
@@ -76,27 +78,27 @@ def read_single_udf(pickleSer, infile):
         else:
             row_func = chain(row_func, f)
     # the last returnType will be the return type of UDF
-    return num_arg, wrap_udf(row_func, return_type)
+    return arg_offsets, wrap_udf(row_func, return_type)
 
 
 def read_udfs(pickleSer, infile):
     num_udfs = read_int(infile)
-    udfs = []
-    offset = 0
-    for i in range(num_udfs):
-        num_arg, udf = read_single_udf(pickleSer, infile)
-        udfs.append((offset, offset + num_arg, udf))
-        offset += num_arg
-
     if num_udfs == 1:
-        udf = udfs[0][2]
-
         # fast path for single UDF
-        def mapper(args):
-            return udf(*args)
+        _, udf = read_single_udf(pickleSer, infile)
+        mapper = lambda a: udf(*a)
     else:
-        def mapper(args):
-            return tuple(udf(*args[start:end]) for start, end, udf in udfs)
+        udfs = {}
+        call_udf = []
+        for i in range(num_udfs):
+            arg_offsets, udf = read_single_udf(pickleSer, infile)
+            udfs['f%d' % i] = udf
+            args = ["a[%d]" % o for o in arg_offsets]
+            call_udf.append("f%d(%s)" % (i, ", ".join(args)))
+        # Create function like this:
+        #   lambda a: (f0(a0), f1(a1, a2), f2(a3))
+        mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
+        mapper = eval(mapper_str, udfs)
 
     func = lambda _, it: map(mapper, it)
     ser = AutoBatchedSerializer(PickleSerializer())
@@ -149,8 +151,8 @@ def main(infile, outfile):
                 _broadcastRegistry.pop(bid)
 
         _accumulatorRegistry.clear()
-        is_udf = read_int(infile)
-        if is_udf:
+        is_sql_udf = read_int(infile)
+        if is_sql_udf:
             func, profiler, deserializer, serializer = read_udfs(pickleSer, infile)
         else:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)

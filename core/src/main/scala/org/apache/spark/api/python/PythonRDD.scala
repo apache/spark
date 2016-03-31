@@ -77,30 +77,42 @@ private[spark] case class PythonFunction(
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]])
 
+/**
+ * A wrapper for chained Python functions (from bottom to top).
+ * @param funcs
+ */
+private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 
-object PythonRunner {
+private[spark] object PythonRunner {
   def apply(func: PythonFunction, bufferSize: Int, reuse_worker: Boolean): PythonRunner = {
-    new PythonRunner(Seq(Seq(func)), bufferSize, reuse_worker, false, Seq(1))
+    new PythonRunner(
+      Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuse_worker, false, Seq(Seq(0)))
   }
 }
 
 /**
  * A helper class to run Python mapPartition/UDFs in Spark.
+ *
+ * funcs is a list of independent Python functions, each one of them is a list of chained Python
+ * functions (from bottom to top).
  */
 private[spark] class PythonRunner(
-    funcs: Seq[Seq[PythonFunction]],
+    funcs: Seq[ChainedPythonFunctions],
     bufferSize: Int,
     reuse_worker: Boolean,
     isUDF: Boolean,
-    numArgs: Seq[Int])
+    argOffsets: Seq[Seq[Int]])
   extends Logging {
 
-  // All the Python functions should have the same exec, version and envvars.
-  private val envVars = funcs.head.head.envVars
-  private val pythonExec = funcs.head.head.pythonExec
-  private val pythonVer = funcs.head.head.pythonVer
+  require(funcs.length == argOffsets.length, "numArgs should have the same length as funcs")
 
-  private val accumulator = funcs.head.head.accumulator // TODO: support accumulator in multiple UDF
+  // All the Python functions should have the same exec, version and envvars.
+  private val envVars = funcs.head.funcs.head.envVars
+  private val pythonExec = funcs.head.funcs.head.pythonExec
+  private val pythonVer = funcs.head.funcs.head.pythonVer
+
+  // TODO: support accumulator in multiple UDF
+  private val accumulator = funcs.head.funcs.head.accumulator
 
   def compute(
       inputIterator: Iterator[_],
@@ -240,8 +252,8 @@ private[spark] class PythonRunner(
 
     @volatile private var _exception: Exception = null
 
-    private val pythonIncludes = funcs.flatMap(_.flatMap(_.pythonIncludes.asScala)).toSet
-    private val broadcastVars = funcs.flatMap(_.flatMap(_.broadcastVars.asScala))
+    private val pythonIncludes = funcs.flatMap(_.funcs.flatMap(_.pythonIncludes.asScala)).toSet
+    private val broadcastVars = funcs.flatMap(_.funcs.flatMap(_.broadcastVars.asScala))
 
     setDaemon(true)
 
@@ -295,17 +307,20 @@ private[spark] class PythonRunner(
         if (isUDF) {
           dataOut.writeInt(1)
           dataOut.writeInt(funcs.length)
-          funcs.zip(numArgs).foreach { case (fs, numArg) =>
-            dataOut.writeInt(numArg)
-            dataOut.writeInt(fs.length)
-            fs.foreach { f =>
+          funcs.zip(argOffsets).foreach { case (chained, offsets) =>
+            dataOut.writeInt(offsets.length)
+            offsets.foreach { offset =>
+              dataOut.writeInt(offset)
+            }
+            dataOut.writeInt(chained.funcs.length)
+            chained.funcs.foreach { f =>
               dataOut.writeInt(f.command.length)
               dataOut.write(f.command)
             }
           }
         } else {
           dataOut.writeInt(0)
-          val command = funcs.head.head.command
+          val command = funcs.head.funcs.head.command
           dataOut.writeInt(command.length)
           dataOut.write(command)
         }
