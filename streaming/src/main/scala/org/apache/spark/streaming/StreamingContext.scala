@@ -246,7 +246,9 @@ class StreamingContext private[streaming] (
     checkpointDir != null
   }
 
-  private[streaming] def initialCheckpoint: Checkpoint = _cp
+  private[streaming] def initialCheckpoint: Checkpoint = {
+    if (isCheckpointPresent) _cp else null
+  }
 
   private[streaming] def getNewInputStreamId() = nextInputStreamId.getAndIncrement()
 
