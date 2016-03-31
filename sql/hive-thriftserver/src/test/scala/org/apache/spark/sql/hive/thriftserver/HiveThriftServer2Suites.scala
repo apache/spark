@@ -552,24 +552,24 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
     "--conf spark.sql.hive.thriftServer.singleSession=true" :: Nil
 
   test("test single session") {
-    try {
-      withMultipleConnectionJdbcStatement(
-        { statement =>
-          val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-          val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+    withMultipleConnectionJdbcStatement(
+      { statement =>
+        val jarPath = "../hive/src/test/resources/TestUDTF.jar"
+        val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
-          // Configurations and temporary functions added in this session should be visible to all
-          // the other sessions.
-          Seq(
-            "SET foo=bar",
-            s"ADD JAR $jarURL",
-            s"""CREATE TEMPORARY FUNCTION udtf_count2
-                |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-             """.stripMargin
-          ).foreach(statement.execute)
-        },
+        // Configurations and temporary functions added in this session should be visible to all
+        // the other sessions.
+        Seq(
+          "SET foo=bar",
+          s"ADD JAR $jarURL",
+          s"""CREATE TEMPORARY FUNCTION udtf_count2
+              |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+           """.stripMargin
+        ).foreach(statement.execute)
+      },
 
-        { statement =>
+      { statement =>
+        try {
           val rs1 = statement.executeQuery("SET foo")
 
           assert(rs1.next())
@@ -588,11 +588,11 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
 
           assert(rs2.next())
           assert(rs2.getString(1) === "Usage: To be added.")
+        } finally {
+          statement.executeQuery("DROP TEMPORARY FUNCTION udtf_count2")
         }
-      )
-    } finally {
-      statement.executeQuery("DROP TEMPORARY FUNCTION udtf_count2")
-    }
+      }
+    )
   }
 }
 
