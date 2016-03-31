@@ -149,7 +149,7 @@ hiveNativeCommands
     | ROLLBACK WORK?
     | SHOW PARTITIONS tableIdentifier partitionSpec?
     | DFS .*?
-    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | LOCK | UNLOCK | MSCK | LOAD) .*?
+    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | MSCK | LOAD) .*?
     ;
 
 unsupportedHiveNativeCommands
@@ -171,9 +171,11 @@ unsupportedHiveNativeCommands
     | kw1=SHOW kw2=LOCKS
     | kw1=CREATE kw2=INDEX
     | kw1=DROP kw2=INDEX
-    | kw1=LOCK kw2=TABLE
-    | kw1=UNLOCK kw2=TABLE
     | kw1=ALTER kw2=INDEX
+    | kw1=LOCK kw2=TABLE
+    | kw1=LOCK kw2=DATABASE
+    | kw1=UNLOCK kw2=TABLE
+    | kw1=UNLOCK kw2=DATABASE
     ;
 
 createTableHeader
@@ -648,7 +650,7 @@ nonReserved
     | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
     | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
-    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEXES | LOCKS | OPTION
+    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION
     ;
 
 SELECT: 'SELECT';

@@ -1280,9 +1280,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertUnsupportedFeature { sql("SHOW LOCKS my_table") }
   }
 
-  test("lock/unlock table commands are not supported") {
+  test("lock/unlock table and database commands are not supported") {
     assertUnsupportedFeature { sql("LOCK TABLE my_table SHARED") }
     assertUnsupportedFeature { sql("UNLOCK TABLE my_table") }
+    assertUnsupportedFeature { sql("LOCK DATABASE my_db SHARED") }
+    assertUnsupportedFeature { sql("UNLOCK DATABASE my_db") }
   }
 
   test("create/drop/alter index commands are not supported") {
