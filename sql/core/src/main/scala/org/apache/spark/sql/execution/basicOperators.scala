@@ -199,8 +199,6 @@ case class Sample(
     child.asInstanceOf[CodegenSupport].upstreams()
   }
 
-  private var rowBuffer: String = _
-
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
@@ -210,31 +208,22 @@ case class Sample(
 
     if (withReplacement) {
       val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
-      val classTag = ctx.freshName("classTag")
-      val classTagClass = "scala.reflect.ClassTag<UnsafeRow>"
-      ctx.addMutableState(classTagClass, classTag,
-        s"$classTag = ($classTagClass)scala.reflect.ClassTag$$.MODULE$$.apply(UnsafeRow.class);")
-
       val initSampler = ctx.freshName("initSampler")
       ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
         s"$initSampler();")
 
-      val random = ctx.freshName("random")
-      val randomSeed = ctx.freshName("randomSeed")
-      val loopCount = ctx.freshName("loopCount")
-
       ctx.addNewFunction(initSampler,
         s"""
           | private void $initSampler() {
-          |   $sampler = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false, $classTag);
-          |   java.util.Random $random = new java.util.Random(${seed}L);
-          |   long $randomSeed = $random.nextLong();
-          |   int $loopCount = 0;
-          |   while ($loopCount < partitionIndex) {
-          |     $randomSeed = $random.nextLong();
-          |     $loopCount += 1;
+          |   $sampler = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
+          |   java.util.Random random = new java.util.Random(${seed}L);
+          |   long randomSeed = random.nextLong();
+          |   int loopCount = 0;
+          |   while (loopCount < partitionIndex) {
+          |     randomSeed = random.nextLong();
+          |     loopCount += 1;
           |   }
-          |   $sampler.setSeed($randomSeed);
+          |   $sampler.setSeed(randomSeed);
           | }
          """.stripMargin.trim)
 
@@ -340,11 +329,7 @@ case class Range(
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
-      |   if (partitionIndex != -1) {
-      |     initRange(partitionIndex);
-      |   } else {
-      |     return;
-      |   }
+      |   initRange(partitionIndex);
       | }
       |
       | while (!$overflow && $checkEnd) {
