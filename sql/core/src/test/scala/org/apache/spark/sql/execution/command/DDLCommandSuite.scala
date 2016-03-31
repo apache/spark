@@ -18,14 +18,13 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.execution.SparkQl
+import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
 class DDLCommandSuite extends PlanTest {
-  private val parser = new SparkQl
+  private val parser = SparkSqlParser
 
   test("create database") {
     val sql =
@@ -40,7 +39,7 @@ class DDLCommandSuite extends PlanTest {
       ifNotExists = true,
       Some("/home/user/db"),
       Some("database_comment"),
-      Map("a" -> "a", "b" -> "b", "c" -> "c"))(sql)
+      Map("a" -> "a", "b" -> "b", "c" -> "c"))
     comparePlans(parsed, expected)
   }
 
@@ -66,39 +65,27 @@ class DDLCommandSuite extends PlanTest {
     val expected1 = DropDatabase(
       "database_name",
       ifExists = true,
-      restrict = true)(sql1)
+      cascade = false)
     val expected2 = DropDatabase(
       "database_name",
       ifExists = true,
-      restrict = false)(sql2)
+      cascade = true)
     val expected3 = DropDatabase(
       "database_name",
-      ifExists = true,
-      restrict = true)(sql3)
+      ifExists = false,
+      cascade = false)
     val expected4 = DropDatabase(
       "database_name",
-      ifExists = true,
-      restrict = false)(sql4)
-    val expected5 = DropDatabase(
-      "database_name",
-      ifExists = true,
-      restrict = true)(sql5)
-    val expected6 = DropDatabase(
-      "database_name",
       ifExists = false,
-      restrict = true)(sql6)
-    val expected7 = DropDatabase(
-      "database_name",
-      ifExists = false,
-      restrict = false)(sql7)
+      cascade = true)
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-    comparePlans(parsed5, expected5)
-    comparePlans(parsed6, expected6)
-    comparePlans(parsed7, expected7)
+    comparePlans(parsed3, expected1)
+    comparePlans(parsed4, expected2)
+    comparePlans(parsed5, expected1)
+    comparePlans(parsed6, expected3)
+    comparePlans(parsed7, expected4)
   }
 
   test("alter database set dbproperties") {
@@ -111,10 +98,10 @@ class DDLCommandSuite extends PlanTest {
 
     val expected1 = AlterDatabaseProperties(
       "database_name",
-      Map("a" -> "a", "b" -> "b", "c" -> "c"))(sql1)
+      Map("a" -> "a", "b" -> "b", "c" -> "c"))
     val expected2 = AlterDatabaseProperties(
       "database_name",
-      Map("a" -> "a"))(sql2)
+      Map("a" -> "a"))
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
@@ -130,10 +117,10 @@ class DDLCommandSuite extends PlanTest {
 
     val expected1 = DescribeDatabase(
       "db_name",
-      extended = true)(sql1)
+      extended = true)
     val expected2 = DescribeDatabase(
       "db_name",
-      extended = false)(sql2)
+      extended = false)
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)

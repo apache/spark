@@ -288,9 +288,9 @@ object SQLConf {
     defaultValue = Some(true),
     doc = "Whether the query analyzer should be case sensitive or not.")
 
-  val PARQUET_FILE_SCAN = booleanConf("spark.sql.parquet.fileScan",
+  val USE_FILE_SCAN = booleanConf("spark.sql.sources.fileScan",
     defaultValue = Some(true),
-    doc = "Use the new FileScanRDD path for reading parquet data.",
+    doc = "Use the new FileScanRDD path for reading HDSF based data sources.",
     isPublic = false)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = booleanConf("spark.sql.parquet.mergeSchema",
@@ -524,6 +524,11 @@ object SQLConf {
     doc = "The maximum number of bytes to pack into a single partition when reading files.",
     isPublic = true)
 
+  val FILES_MAX_NUM_IN_PARTITION = longConf("spark.sql.files.maxNumInPartition",
+    defaultValue = Some(32),
+    doc = "The maximum number of files to pack into a single partition when reading files.",
+    isPublic = true)
+
   val EXCHANGE_REUSE_ENABLED = booleanConf("spark.sql.exchange.reuse",
     defaultValue = Some(true),
     doc = "When true, the planner will try to find out duplicated exchanges and re-use them.",
@@ -581,11 +586,13 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
+  def filesMaxNumInPartition: Long = getConf(FILES_MAX_NUM_IN_PARTITION)
+
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
-  def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+  def useFileScan: Boolean = getConf(USE_FILE_SCAN)
 
-  def parquetFileScan: Boolean = getConf(PARQUET_FILE_SCAN)
+  def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 

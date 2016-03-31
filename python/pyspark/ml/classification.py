@@ -762,7 +762,7 @@ class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed):
+                                     HasMaxIter, HasTol, HasSeed, JavaMLWritable, JavaMLReadable):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -792,6 +792,18 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     |[0.0,0.0]|       0.0|
     +---------+----------+
     ...
+    >>> mlp_path = temp_path + "/mlp"
+    >>> mlp.save(mlp_path)
+    >>> mlp2 = MultilayerPerceptronClassifier.load(mlp_path)
+    >>> mlp2.getBlockSize()
+    1
+    >>> model_path = temp_path + "/mlp_model"
+    >>> model.save(model_path)
+    >>> model2 = MultilayerPerceptronClassificationModel.load(model_path)
+    >>> model.layers == model2.layers
+    True
+    >>> model.weights == model2.weights
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -869,7 +881,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel):
+class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
