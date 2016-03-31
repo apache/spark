@@ -195,16 +195,19 @@ case class DropFunction(
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/** Rename in ALTER TABLE/VIEW: change the name of a table/view to a different name. */
 case class AlterTableRename(
     oldName: TableIdentifier,
     newName: TableIdentifier)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/** Set Properties in ALTER TABLE/VIEW: add metadata to a table/view. */
 case class AlterTableSetProperties(
     tableName: TableIdentifier,
     properties: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/** Unset Properties in ALTER TABLE/VIEW: remove metadata from a table/view. */
 case class AlterTableUnsetProperties(
     tableName: TableIdentifier,
     properties: Map[String, String],
@@ -253,6 +256,12 @@ case class AlterTableSkewedLocation(
     skewedMap: Map[String, String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * Add Partition in ALTER TABLE/VIEW: add the table/view partitions.
+ * 'partitionSpecsAndLocs': the syntax of ALTER VIEW is identical to ALTER TABLE,
+ * EXCEPT that it is ILLEGAL to specify a LOCATION clause.
+ * An error message will be issued if the partition exists, unless 'ifNotExists' is true.
+ */
 case class AlterTableAddPartition(
     tableName: TableIdentifier,
     partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
@@ -271,6 +280,14 @@ case class AlterTableExchangePartition(
     spec: TablePartitionSpec)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * Drop Partition in ALTER TABLE/VIEW: to drop a particular partition for a table/view.
+ * This removes the data and metadata for this partition.
+ * The data is actually moved to the .Trash/Current directory if Trash is configured,
+ * unless 'purge' is true, but the metadata is completely lost.
+ * An error message will be issued if the partition does not exist, unless 'ifExists' is true.
+ * Note: purge is always false when the target is a view.
+ */
 case class AlterTableDropPartition(
     tableName: TableIdentifier,
     specs: Seq[TablePartitionSpec],
