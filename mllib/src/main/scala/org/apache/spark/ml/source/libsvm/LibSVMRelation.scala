@@ -141,17 +141,24 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       files: Seq[FileStatus]): Map[String, String] = {
     def computeNumFeatures(): Int = {
       val dataFiles = files.filterNot(_.getPath.getName startsWith "_")
-      val path = if (dataFiles.length == 1) dataFiles.head.getPath.toUri.toString
-      else if (dataFiles.isEmpty) throw new IOException("No input path specified for libsvm data")
-      else throw new IOException("Multiple input paths are not supported for libsvm data.")
+      val path = if (dataFiles.length == 1) {
+        dataFiles.head.getPath.toUri.toString
+      } else if (dataFiles.isEmpty) {
+        throw new IOException("No input path specified for libsvm data")
+      } else {
+        throw new IOException("Multiple input paths are not supported for libsvm data.")
+      }
 
       val sc = sqlContext.sparkContext
       val parsed = MLUtils.parseLibSVMFile(sc, path, sc.defaultParallelism)
       MLUtils.computeNumFeatures(parsed)
     }
 
-    val numFeatures = options.getOrElse("numFeatures", computeNumFeatures().toString)
-    new CaseInsensitiveMap(options + ("numFeatures" -> numFeatures))
+    val numFeatures = options.get("numFeatures").filter(_.toInt > 0).getOrElse {
+      computeNumFeatures()
+    }
+
+    new CaseInsensitiveMap(options + ("numFeatures" -> numFeatures.toString))
   }
 
   override def prepareWrite(
