@@ -288,4 +288,38 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(catalog.getTable(tableIdent).properties.isEmpty)
   }
 
+  test("alter table: set serde") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    assert(catalog.getTable(tableIdent).storage.serde.isEmpty)
+    assert(catalog.getTable(tableIdent).storage.serdeProperties.isEmpty)
+    // set table serde
+    sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.jadoop'")
+    assert(catalog.getTable(tableIdent).storage.serde == Some("org.apache.jadoop"))
+    assert(catalog.getTable(tableIdent).storage.serdeProperties.isEmpty)
+    // set table serde and properties
+    sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.madoop' " +
+      "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+    assert(catalog.getTable(tableIdent).storage.serde == Some("org.apache.madoop"))
+    assert(catalog.getTable(tableIdent).storage.serdeProperties ==
+      Map("k" -> "v", "kay" -> "vee"))
+    // set serde properties only
+    sql("ALTER TABLE dbx.tab1 SET SERDEPROPERTIES ('k' = 'vvv')")
+    assert(catalog.getTable(tableIdent).storage.serde == Some("org.apache.madoop"))
+    assert(catalog.getTable(tableIdent).storage.serdeProperties ==
+      Map("k" -> "vvv", "kay" -> "vee"))
+    catalog.setCurrentDatabase("dbx")
+    // set things without explicitly specifying database
+    sql("ALTER TABLE tab1 SET SERDE 'com.yahoot' WITH SERDEPROPERTIES ('kay' = 'veee')")
+    assert(catalog.getTable(tableIdent).storage.serde == Some("com.yahoot"))
+    assert(catalog.getTable(tableIdent).storage.serdeProperties ==
+      Map("k" -> "vvv", "kay" -> "veee"))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist SET SERDE 'whatever' WITH SERDEPROPERTIES ('x' = 'y')")
+    }
+  }
+
 }

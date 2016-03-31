@@ -365,8 +365,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    *
    * For example:
    * {{{
-   *   ALTER TABLE table UNSET TBLPROPERTIES IF EXISTS ('comment', 'key');
-   *   ALTER VIEW view UNSET TBLPROPERTIES IF EXISTS ('comment', 'key');
+   *   ALTER TABLE table UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
+   *   ALTER VIEW view UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
    * }}}
    */
   override def visitUnsetTableProperties(
@@ -392,8 +392,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       Option(ctx.STRING).map(string),
       Option(ctx.tablePropertyList).map(visitTablePropertyList),
       // TODO a partition spec is allowed to have optional values. This is currently violated.
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
-      command(ctx))
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
   /**

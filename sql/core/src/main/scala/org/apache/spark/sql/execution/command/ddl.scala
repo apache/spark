@@ -274,12 +274,37 @@ case class AlterTableUnsetProperties(
 
 }
 
+/**
+ * A command that sets the serde class and/or serde properties of a table/view.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table [PARTITION spec] SET SERDE serde_name [WITH SERDEPROPERTIES props];
+ *   ALTER TABLE table [PARTITION spec] SET SERDEPROPERTIES serde_properties;
+ * }}}
+ */
 case class AlterTableSerDeProperties(
     tableName: TableIdentifier,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
-    partition: Option[Map[String, String]])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    partition: Option[Map[String, String]])
+  extends RunnableCommand {
+
+  // should never happen if we parsed things correctly
+  require(serdeClassName.isDefined || serdeProperties.isDefined,
+    "alter table attempted to set neither serde class name nor serde properties")
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTable(tableName)
+    val newTable = table.withNewStorage(
+      serde = serdeClassName.orElse(table.storage.serde),
+      serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
+    catalog.alterTable(newTable)
+    Seq.empty[Row]
+  }
+
+}
 
 case class AlterTableStorageProperties(
     tableName: TableIdentifier,
