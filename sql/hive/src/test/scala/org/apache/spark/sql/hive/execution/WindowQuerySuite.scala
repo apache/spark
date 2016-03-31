@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SQLTestUtils
  * numerical differences or due semantic differences between Hive and Spark.
  */
 class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-/*
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql("DROP TABLE IF EXISTS part")
@@ -49,7 +49,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
          |LOAD DATA LOCAL INPATH '$testData1' overwrite into table part
       """.stripMargin)
   }
-*/
+
   override def afterAll(): Unit = {
     try {
       sql("DROP TABLE IF EXISTS part")
@@ -887,7 +887,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       )
 
       checkAnswer(sql("select col1, col2, col3, MAX(col2) over " +
-        " (partition by col1 order by col3 exclude current row) " +
+        " (partition by col1 order by col3 range between unbounded preceding and " +
+        " current row exclude current row) " +
         " from table1 where col1 = 6"),
         Seq(
            Row(6,  10,   1,   null),
@@ -903,7 +904,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       )
 
       checkAnswer(sql("select col1, col2, col3, MAX(col2) over " +
-        " (partition by col1 order by col3 exclude group) " +
+        " (partition by col1 order by col3 range between unbounded preceding and " +
+        " current row exclude group) " +
         " from table1 where col1 = 6"),
         Seq(
            Row(6,  10,   1,   null),
@@ -940,7 +942,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("insert into table2 select 7, 7, 8")
 
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
-        " (partition by col1 order by col3 exclude current row )" +
+        " (partition by col1 order by col3 range between unbounded preceding and " +
+        " current row exclude current row )" +
         " from table2 where col1 < 20 order by col1"),
         Seq(
            Row(6,  10,   1, null),
@@ -980,7 +983,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       try {
         sql("select col1, cume_dist() over " +
-          "(partition by col1 order by col3 exclude current row) " +
+          "(partition by col1 order by col3 range between unbounded preceding and " +
+          " current row exclude current row) " +
           "from table1 ")
       } catch {
         case ae: AnalysisException =>
@@ -989,7 +993,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       try {
         sql("select col1, rank() over " +
-          "(partition by col1 order by col3 exclude current row) " +
+          "(partition by col1 order by col3 range between unbounded preceding and " +
+          " current row exclude current row) " +
           "from table1 ")
       } catch {
         case ae: AnalysisException =>
@@ -998,7 +1003,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       try {
         sql("select col1, lead(2) over " +
-          "(partition by col1 order by col3 exclude current row) " +
+          "(partition by col1 order by col3 range between unbounded preceding and " +
+          " current row exclude current row) " +
           "from table1 ")
       } catch {
         case ae: AnalysisException =>

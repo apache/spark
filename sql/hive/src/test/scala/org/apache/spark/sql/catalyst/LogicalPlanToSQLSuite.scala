@@ -776,7 +776,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl(
       """
         |SELECT key, value,
-        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key exclude current row) AS max
+        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key
+        |range between unbounded preceding and current row exclude current row) AS max
         |FROM parquet_t1 GROUP BY key, value
       """.stripMargin)
   }
@@ -785,7 +786,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl(
       """
         |SELECT key, value,
-        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key exclude group) AS max
+        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key
+        |range between unbounded preceding and current row exclude group) AS max
         |FROM parquet_t1 GROUP BY key, value
       """.stripMargin)
   }
@@ -794,7 +796,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl(
       """
         |SELECT key, value,
-        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key exclude ties) AS max
+        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key
+        |range between unbounded preceding and current row exclude ties) AS max
         |FROM parquet_t1 GROUP BY key, value
       """.stripMargin)
   }
@@ -803,16 +806,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl(
       """
         |SELECT key, value,
-        |MAX(value) OVER (PARTITION BY key % 5 exclude current row) AS max
-        |FROM parquet_t1 GROUP BY key, value
-      """.stripMargin)
-  }
-
-  test("window with exclude clause - no partition by  ") {
-    checkHiveQl(
-      """
-        |SELECT key, value,
-        |MAX(value) OVER (exclude current row) AS max
+        |MAX(value) OVER (PARTITION BY key % 5
+        |range between unbounded preceding and current row exclude current row) AS max
         |FROM parquet_t1 GROUP BY key, value
       """.stripMargin)
   }
