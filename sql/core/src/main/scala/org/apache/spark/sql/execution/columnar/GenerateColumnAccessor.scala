@@ -92,7 +92,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       }
       ctx.addMutableState(accessorCls, accessorName, "")
 
-
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
@@ -123,34 +122,37 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
      * We should keep less than 8000
      */
     val numberOfStatementsThreshold = 200
-    val (initializerAccessorFuncs, initializerAccessorCalls, extractorFuncs, extractorCalls) =
+    val (initializerAccessorCalls, extractorCalls) =
       if (initializeAccessors.length <= numberOfStatementsThreshold) {
-        ("", initializeAccessors.mkString("\n"), "", extractors.mkString("\n"))
+        (initializeAccessors.mkString("\n"), extractors.mkString("\n"))
       } else {
         val groupedAccessorsItr = initializeAccessors.grouped(numberOfStatementsThreshold)
-        var groupedAccessorsLength = 0
         val groupedExtractorsItr = extractors.grouped(numberOfStatementsThreshold)
-        var groupedExtractorsLength = 0
-        (
-          groupedAccessorsItr.zipWithIndex.map { case (body, i) =>
-            groupedAccessorsLength += 1
-            s"""
-               |private void accessors$i() {
-               |  ${body.mkString("\n")}
-               |}
-             """.stripMargin
-          }.mkString(""),
-          (0 to groupedAccessorsLength - 1).map { i => s"accessors$i();" }.mkString("\n"),
-          groupedExtractorsItr.zipWithIndex.map { case (body, i) =>
-            groupedExtractorsLength += 1
-            s"""
-               |private void extractors$i() {
-               |  ${body.mkString("\n")}
-               |}
-             """.stripMargin
-          }.mkString(""),
-          (0 to groupedExtractorsLength - 1).map { i => s"extractors$i();" }.mkString("\n")
-        )
+        var groupedAccessorsLength = 0
+        groupedAccessorsItr.zipWithIndex.map { case (body, i) =>
+          groupedAccessorsLength += 1
+          val funcName = s"accessors$i"
+          val funcCode = s"""
+             |private void $funcName() {
+             |  ${body.mkString("\n")}
+             |}
+           """.stripMargin
+	  ctx.addNewFunction(funcName, funcCode)
+        }
+        groupedExtractorsItr.zipWithIndex.map { case (body, i) =>
+          val funcName = s"extractors$i"
+          val funcCode = s"""
+             |private void $funcName() {
+             |  ${body.mkString("\n")}
+             |}
+           """.stripMargin
+	  ctx.addNewFunction(funcName, funcCode)
+        }
+        ((0 to groupedAccessorsLength - 1).map { i => s"accessors$i();" }.mkString("\n"),
+         (0 to groupedAccessorsLength - 1).map { i => s"extractors$i();" }.mkString("\n"))
+        //(0 to groupedAccessorsLength - 1).map { i =>
+        //  (s"accessors$i();", s"extractors$i();")
+	//}.unzip
       }
 
     val code = s"""
@@ -197,9 +199,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         }
 
         ${declareAddedFunctions(ctx)}
-
-        ${initializerAccessorFuncs}
-        ${extractorFuncs}
 
         public boolean hasNext() {
           if (currentRow < numRowsInBatch) {
