@@ -31,13 +31,13 @@ import org.apache.spark.unsafe.types.CalendarInterval
 sealed trait Trigger {}
 
 /**
- * A trigger that runs a batch periodically based on the procesing time.
+ * A trigger that runs a query periodically based on the processing time. If `intervalMs` is 0,
+ * the query will run as fast as possible.
  *
  * Scala Example:
  * {{{
  *   def.writer.trigger(ProcessingTime(10.seconds))
  *   def.writer.trigger(ProcessingTime("10 seconds"))
- *
  * }}}
  *
  * Java Example:
@@ -45,7 +45,6 @@ sealed trait Trigger {}
  * {{{
  *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
  *   def.writer.trigger(ProcessingTime.create("10 seconds"))
- *
  * }}}
  */
 case class ProcessingTime(intervalMs: Long) extends Trigger {

@@ -29,6 +29,7 @@ class ProcessingTimeSuite extends SparkFunSuite {
     assert(ProcessingTime(10.seconds).intervalMs === 10 * 1000)
     assert(ProcessingTime.create(10, TimeUnit.SECONDS).intervalMs === 10 * 1000)
     assert(ProcessingTime("1 minute").intervalMs === 60 * 1000)
+    assert(ProcessingTime("interval 1 minute").intervalMs === 60 * 1000)
 
     intercept[IllegalArgumentException] { ProcessingTime(null: String) }
     intercept[IllegalArgumentException] { ProcessingTime("") }

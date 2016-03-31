@@ -78,7 +78,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Set the trigger for the stream query.
+   * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will run
+   * the query as fast as possible.
    *
    * @since 2.0.0
    */
