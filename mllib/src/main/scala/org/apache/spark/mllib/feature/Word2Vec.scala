@@ -84,6 +84,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("2.0.0")
   def setMaxSentenceLength(maxSentenceLength: Int): this.type = {
+    require(maxSentenceLength > 0,
+      s"Maximum length of sentences must be positive but got ${maxSentenceLength}")
     this.maxSentenceLength = maxSentenceLength
     this
   }
@@ -93,6 +95,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setVectorSize(vectorSize: Int): this.type = {
+    require(vectorSize > 0,
+      s"vector size must be positive but got ${vectorSize}")
     this.vectorSize = vectorSize
     this
   }
@@ -102,6 +106,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setLearningRate(learningRate: Double): this.type = {
+    require(learningRate > 0,
+      s"Initial learning rate must be positive but got ${learningRate}")
     this.learningRate = learningRate
     this
   }
@@ -111,7 +117,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setNumPartitions(numPartitions: Int): this.type = {
-    require(numPartitions > 0, s"numPartitions must be greater than 0 but got $numPartitions")
+    require(numPartitions > 0,
+      s"Number of partitions must be positive but got ${numPartitions}")
     this.numPartitions = numPartitions
     this
   }
@@ -122,6 +129,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setNumIterations(numIterations: Int): this.type = {
+    require(numIterations >= 0,
+      s"Number of iterations must be nonnegative but got ${numIterations}")
     this.numIterations = numIterations
     this
   }
@@ -140,6 +149,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.6.0")
   def setWindowSize(window: Int): this.type = {
+    require(window > 0,
+      s"Window of words must be positive but got ${window}")
     this.window = window
     this
   }
@@ -150,6 +161,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.3.0")
   def setMinCount(minCount: Int): this.type = {
+    require(minCount >= 0,
+      s"Minimum number of times must be nonnegative but got ${minCount}")
     this.minCount = minCount
     this
   }

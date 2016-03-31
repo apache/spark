@@ -39,14 +39,21 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   }
 
   /**
-   * Infers a set of `isNotNull` constraints from a given set of equality/comparison expressions.
-   * For e.g., if an expression is of the form (`a > 5`), this returns a constraint of the form
-   * `isNotNull(a)`
+   * Infers a set of `isNotNull` constraints from a given set of equality/comparison expressions as
+   * well as non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this
+   * returns a constraint of the form `isNotNull(a)`
    */
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
-    // Currently we only propagate constraints if the condition consists of equality
-    // and ranges. For all other cases, we return an empty set of constraints
-    constraints.flatMap(scanNullIntolerantExpr).map(IsNotNull(_))
+    // First, we propagate constraints from the null intolerant expressions.
+    var isNotNullConstraints: Set[Expression] =
+      constraints.flatMap(scanNullIntolerantExpr).map(IsNotNull(_))
+
+    // Second, we infer additional constraints from non-nullable attributes that are part of the
+    // operator's output
+    val nonNullableAttributes = output.filterNot(_.nullable)
+    isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull).toSet
+
+    isNotNullConstraints -- constraints
   }
 
   /**

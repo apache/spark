@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.{DoubleType, LongType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType}
 
 class ConstraintPropagationSuite extends SparkFunSuite {
 
@@ -110,14 +110,14 @@ class ConstraintPropagationSuite extends SparkFunSuite {
 
     assert(tr1
       .where('a.attr > 10)
-      .unionAll(tr2.where('e.attr > 10)
-      .unionAll(tr3.where('i.attr > 10)))
+      .union(tr2.where('e.attr > 10)
+      .union(tr3.where('i.attr > 10)))
       .analyze.constraints.isEmpty)
 
     verifyConstraints(tr1
       .where('a.attr > 10)
-      .unionAll(tr2.where('d.attr > 10)
-      .unionAll(tr3.where('g.attr > 10)))
+      .union(tr2.where('d.attr > 10)
+      .union(tr3.where('g.attr > 10)))
       .analyze.constraints,
       ExpressionSet(Seq(resolveColumn(tr1, "a") > 10,
         IsNotNull(resolveColumn(tr1, "a")))))
@@ -300,5 +300,13 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         IsNotNull(IsNotNull(resolveColumn(tr, "b"))),
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "c")))))
+  }
+
+  test("infer IsNotNull constraints from non-nullable attributes") {
+    val tr = LocalRelation('a.int, AttributeReference("b", IntegerType, nullable = false)(),
+      AttributeReference("c", StringType, nullable = false)())
+
+    verifyConstraints(tr.analyze.constraints,
+      ExpressionSet(Seq(IsNotNull(resolveColumn(tr, "b")), IsNotNull(resolveColumn(tr, "c")))))
   }
 }
