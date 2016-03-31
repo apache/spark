@@ -108,32 +108,20 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
   }
 
   /**
-   * Returns a list of all known executors, represented by string with format: "host:port"
+   * Returns information of all known executors, including host, port, cacheSize, numRunningTasks.
    */
-  def getExecutorList(): Array[String] = {
-    sc.getExecutorStorageStatus.map { status =>
-      status.blockManagerId.hostPort
-    }
-  }
-
-  /**
-   * Returns a map contains executor id(host+port) and its cache size(memory used by caching RDDs).
-   */
-  def getCacheSizeByExecutors(): Map[String, Long] = {
-    sc.getExecutorStorageStatus.map { status =>
-      status.blockManagerId.hostPort -> status.cacheSize
-    }.toMap
-  }
-
-  /**
-   * Returns a map contains executor id(host+port) and its number of running tasks.
-   */
-  def getRunningTasksByExecutors(): Map[String, Int] = {
+  def getExecutorInfos: Array[SparkExecutorInfo] = {
     val executorIdToRunningTasks: Map[String, Int] =
       sc.taskScheduler.asInstanceOf[TaskSchedulerImpl].runningTasksByExecutors()
+
     sc.getExecutorStorageStatus.map { status =>
       val bmId = status.blockManagerId
-      bmId.hostPort -> executorIdToRunningTasks.getOrElse(bmId.executorId, 0)
-    }.toMap
+      new SparkExecutorInfoImpl(
+        bmId.host,
+        bmId.port,
+        status.cacheSize,
+        executorIdToRunningTasks.getOrElse(bmId.executorId, 0)
+      )
+    }
   }
 }
