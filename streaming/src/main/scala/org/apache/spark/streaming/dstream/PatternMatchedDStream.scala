@@ -48,21 +48,20 @@ case class WindowMetric(first: Any, prev: Any) {}
 
 private[streaming]
 class PatternMatchedDStream[T: ClassTag](
-                                      parent: DStream[T],
-                                      pattern: scala.util.matching.Regex,
-                                      predicates: Map[String, (T, WindowMetric) => Boolean],
-                                      _windowDuration: Duration,
-                                      _slideDuration: Duration,
-                                      partitioner: Partitioner
-                                      ) extends DStream[List[T]](parent.ssc) {
+    parent: DStream[T],
+    pattern: scala.util.matching.Regex,
+    predicates: Map[String, (T, WindowMetric) => Boolean],
+    _windowDuration: Duration,
+    _slideDuration: Duration
+    ) extends DStream[List[T]](parent.ssc) {
 
   require(_windowDuration.isMultipleOf(parent.slideDuration),
-    "The window duration of ReducedWindowedDStream (" + _windowDuration + ") " +
+    "The window duration of PatternMatchedDStream (" + _windowDuration + ") " +
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
   require(_slideDuration.isMultipleOf(parent.slideDuration),
-    "The slide duration of ReducedWindowedDStream (" + _slideDuration + ") " +
+    "The slide duration of PatternMatchedDStream (" + _slideDuration + ") " +
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
@@ -145,10 +144,8 @@ class PatternMatchedDStream[T: ClassTag](
         one.split(" ").map(sub => {
           val id = y._2.get(it.start + len)
           list += id.get._2
-          println("matched " + tracker.toString)
           if (tracker.toString.toLong < id.get._1) {
             tracker.setValue(id.get._1)
-            println("set it")
           }
           len += sub.length + 1
         })
@@ -192,8 +189,8 @@ class PatternMatchedDStream[T: ClassTag](
     if (!windowRDD.isEmpty()) {
 
       // we dont want to report old matched patterns in current window if any
+      // so skip to the ID maintained in tracker
       val tracker = PatternMatchedDStream.getInstance(this.ssc.sparkContext)
-      println("init " + tracker.toString)
       val shift = if (tracker.toString.toLong > 0L) {
         val copy = tracker.toString.toLong
         tracker.setValue(0L)
@@ -219,7 +216,6 @@ class PatternMatchedDStream[T: ClassTag](
               }
             }
           }
-          //println("broadcast " + brdcst.value)
           isMatch = predicate._2(x._2._1, WindowMetric(first._2._1, x._2._2.getOrElse(prev)))
           if (isMatch) {
             matchName = predicate._1
