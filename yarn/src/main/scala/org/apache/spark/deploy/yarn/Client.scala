@@ -525,7 +525,7 @@ private[spark] class Client(
       distribute(f, targetDir = targetDir)
     }
 
-    // Distribute an archive with Hadoop and Spark configuration for the AM.
+    // Distribute an archive with Hadoop and Spark configuration for the AM and executors.
     val (_, confLocalizedPath) = distribute(createConfArchive().toURI().getPath(),
       resType = LocalResourceType.ARCHIVE,
       destName = Some(LOCALIZED_CONF_DIR))
@@ -537,10 +537,10 @@ private[spark] class Client(
   /**
    * Create an archive with the config files for distribution.
    *
-   * These are only used by the AM, since executors will use the configuration object broadcast by
-   * the driver. The files are zipped and added to the job as an archive, so that YARN will explode
-   * it when distributing to the AM. This directory is then added to the classpath of the AM
-   * process, just to make sure that everybody is using the same default config.
+   * These will be used by AM and executors. The files are zipped and added to the job as an
+   * archive, so that YARN will explode it when distributing to AM and executors. This directory
+   * is then added to the classpath of AM and executor process, just to make sure that everybody
+   * is using the same default config.
    *
    * This follows the order of precedence set by the startup scripts, in which HADOOP_CONF_DIR
    * shows up in the classpath before YARN_CONF_DIR.
