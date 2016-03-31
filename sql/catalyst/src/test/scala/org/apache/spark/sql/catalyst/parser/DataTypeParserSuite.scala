@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.parser.ng.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.types._
 
 abstract class AbstractDataTypeParserSuite extends SparkFunSuite {

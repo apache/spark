@@ -48,13 +48,15 @@ statement
         (OPTIONS tablePropertyList)?                                   #createTableUsing
     | createTableHeader tableProvider
         (OPTIONS tablePropertyList)? AS? query                         #createTableUsing
-    | createTableHeader ('(' colTypeList ')')? (COMMENT STRING)?
-        (PARTITIONED BY identifierList)? bucketSpec? skewSpec?
+    | createTableHeader ('(' columns=colTypeList ')')?
+        (COMMENT STRING)?
+        (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
+        bucketSpec? skewSpec?
         rowFormat?  createFileFormat? locationSpec?
         (TBLPROPERTIES tablePropertyList)?
         (AS? query)?                                                   #createTable
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq?)                      #analyze
+        (identifier | FOR COLUMNS identifierSeq?)?                     #analyze
     | ALTER TABLE from=tableIdentifier RENAME TO to=tableIdentifier    #renameTable
     | ALTER TABLE tableIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
