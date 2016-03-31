@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.Utils
 
 class DDLSuite extends QueryTest with SharedSQLContext {
 
@@ -155,6 +156,23 @@ class DDLSuite extends QueryTest with SharedSQLContext {
       assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
 
       sql(s"DROP DATABASE IF EXISTS $dbName")
+    }
+  }
+
+  test("SPARK-14129: alter table - rename") {
+    import testImplicits._
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df =
+        sparkContext.parallelize(1 to 10).toDF("num")
+      df.write.format("parquet").save(path)
+      // create the temporary table
+      sql(s"CREATE TEMPORARY TABLE test1 USING parquet OPTIONS (path '$path')")
+      assert(sql("SHOW TABLES").collect().count(_ == Row("test1", true)) == 1)
+      // rename the table
+      sql("ALTER TABLE test1 RENAME TO test2")
+      assert(sql("SHOW TABLES").collect().count(_ == Row("test2", true)) == 1)
     }
   }
 
