@@ -46,29 +46,9 @@ private[spark] class StaticMemoryManager(
       numCores)
   }
 
-  // The StaticMemoryManager does not support off-heap storage memory:
-  offHeapExecutionMemoryPool.incrementPoolSize(offHeapStorageMemoryPool.poolSize)
-  offHeapStorageMemoryPool.decrementPoolSize(offHeapStorageMemoryPool.poolSize)
-
   // Max number of bytes worth of blocks to evict when unrolling
   private val maxUnrollMemory: Long = {
     (maxOnHeapStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
-  }
-
-  override def acquireStorageMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
-    require(memoryMode != MemoryMode.OFF_HEAP,
-      "StaticMemoryManager does not support off-heap storage memory")
-    if (numBytes > maxOnHeapStorageMemory) {
-      // Fail fast if the block simply won't fit
-      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
-        s"memory limit ($maxOnHeapStorageMemory bytes)")
-      false
-    } else {
-      onHeapStorageMemoryPool.acquireMemory(blockId, numBytes)
-    }
   }
 
   override def acquireUnrollMemory(
@@ -89,16 +69,6 @@ private[spark] class StaticMemoryManager(
     onHeapStorageMemoryPool.acquireMemory(blockId, numBytes, numBytesToFree)
   }
 
-  private[memory]
-  override def acquireExecutionMemory(
-      numBytes: Long,
-      taskAttemptId: Long,
-      memoryMode: MemoryMode): Long = synchronized {
-    memoryMode match {
-      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
-      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
-    }
-  }
 }
 
 
