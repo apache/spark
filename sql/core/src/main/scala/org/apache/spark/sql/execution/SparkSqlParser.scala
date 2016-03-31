@@ -519,16 +519,16 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitAddTablePartition(
       ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     // Create partition spec to location mapping.
-    val specsAndLocs = if (ctx.partitionSpecLocation.isEmpty) {
-      // Alter View: the location clauses are not allowed.
-      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec(_) -> None)
-    } else {
+    val specsAndLocs = if (ctx.partitionSpec.isEmpty) {
       ctx.partitionSpecLocation.asScala.map {
         splCtx =>
           val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
           val location = Option(splCtx.locationSpec).map(visitLocationSpec)
           spec -> location
       }
+    } else {
+      // Alter View: the location clauses are not allowed.
+      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec(_) -> None)
     }
     AlterTableAddPartition(
       visitTableIdentifier(ctx.tableIdentifier),
