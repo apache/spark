@@ -337,7 +337,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
 
     // try to compile, helpful for debug
     val cleanedSource = CodeFormatter.stripExtraNewLines(source)
-    logDebug(s"${CodeFormatter.format(cleanedSource)}")
+    logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
     (ctx, cleanedSource)
   }

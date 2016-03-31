@@ -26,7 +26,6 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -500,19 +499,6 @@ object SQLConf {
     doc = "When true, we could use `datasource`.`path` as table in SQL query."
   )
 
-  val PARSER_SUPPORT_QUOTEDID = booleanConf("spark.sql.parser.supportQuotedIdentifiers",
-    defaultValue = Some(true),
-    isPublic = false,
-    doc = "Whether to use quoted identifier.\n  false: default(past) behavior. Implies only" +
-      "alphaNumeric and underscore are valid characters in identifiers.\n" +
-      "  true: implies column names can contain any character.")
-
-  val PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS = booleanConf(
-    "spark.sql.parser.supportSQL11ReservedKeywords",
-    defaultValue = Some(false),
-    isPublic = false,
-    doc = "This flag should be set to true to enable support for SQL2011 reserved keywords.")
-
   val WHOLESTAGE_CODEGEN_ENABLED = booleanConf("spark.sql.codegen.wholeStage",
     defaultValue = Some(true),
     doc = "When true, the whole stage (of multiple operators) will be compiled into single java" +
@@ -522,6 +508,11 @@ object SQLConf {
   val FILES_MAX_PARTITION_BYTES = longConf("spark.sql.files.maxPartitionBytes",
     defaultValue = Some(128 * 1024 * 1024), // parquet.block.size
     doc = "The maximum number of bytes to pack into a single partition when reading files.",
+    isPublic = true)
+
+  val FILES_MAX_NUM_IN_PARTITION = longConf("spark.sql.files.maxNumInPartition",
+    defaultValue = Some(32),
+    doc = "The maximum number of files to pack into a single partition when reading files.",
     isPublic = true)
 
   val EXCHANGE_REUSE_ENABLED = booleanConf("spark.sql.exchange.reuse",
@@ -568,7 +559,7 @@ object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-class SQLConf extends Serializable with CatalystConf with ParserConf with Logging {
+class SQLConf extends Serializable with CatalystConf with Logging {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -580,6 +571,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
+
+  def filesMaxNumInPartition: Long = getConf(FILES_MAX_NUM_IN_PARTITION)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
@@ -666,10 +659,6 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
-
-  def supportQuotedId: Boolean = getConf(PARSER_SUPPORT_QUOTEDID)
-
-  def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 

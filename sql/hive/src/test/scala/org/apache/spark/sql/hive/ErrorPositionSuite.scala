@@ -22,8 +22,8 @@ import scala.util.Try
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.parser.ParseDriver
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.hive.execution.HiveSqlParser
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterEach {
@@ -131,7 +131,7 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
    * @param token a unique token in the string that should be indicated by the exception
    */
   def positionTest(name: String, query: String, token: String): Unit = {
-    def ast = ParseDriver.parsePlan(query, hiveContext.conf)
+    def ast = HiveSqlParser.parsePlan(query)
     def parseTree = Try(quietly(ast.treeString)).getOrElse("<failed to parse>")
 
     test(name) {
