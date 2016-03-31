@@ -1594,9 +1594,9 @@ class HashingTFTest(MLlibTestCase):
         expected = Vectors.sparse(n, {hashingTF.indexOf("a"): 1.0,
                                       hashingTF.indexOf("b"): 1.0,
                                       hashingTF.indexOf("c"): 1.0}).toArray()
-        for i in range(0,n):
-            self.assertAlmostEqual(output[i], expected[i], 14, "Error at "+str(i)+": expected "+
-                                   str(expected[i])+", got "+str(output[i]))
+        for i in range(0, n):
+            self.assertAlmostEqual(output[i], expected[i], 14, "Error at " + str(i) +
+                                   ": expected " + str(expected[i]) + ", got " + str(output[i]))
 
 
 if __name__ == "__main__":

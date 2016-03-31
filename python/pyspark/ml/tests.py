@@ -842,12 +842,12 @@ class HashingTFTest(PySparkTestCase):
         hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
         output = hashingTF.transform(df)
         features = output.select("features").first().features.toArray()
-        expected = Vectors.sparse(100, {ord("a")%n: 1.0,
-                                        ord("b")%n: 1.0,
-                                        ord("c")%n: 1.0}).toArray()
-        for i in range(0,n):
-            self.assertAlmostEqual(features[i], expected[i], 14, "Error at "+str(i)+": expected "+
-                                   str(expected[i])+", got "+str(features[i]))
+        expected = Vectors.sparse(100, {(ord("a") % n): 1.0,
+                                        (ord("b") % n): 1.0,
+                                        (ord("c") % n): 1.0}).toArray()
+        for i in range(0, n):
+            self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
+                                   ": expected " + str(expected[i]) + ", got " + str(features[i]))
 
 
 if __name__ == "__main__":
