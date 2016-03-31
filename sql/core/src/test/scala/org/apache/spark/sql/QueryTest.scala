@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.streaming.MemoryPlan
 
 abstract class QueryTest extends PlanTest {
 
@@ -203,6 +204,7 @@ abstract class QueryTest extends PlanTest {
       case _: AppendColumns => return
       case _: CoGroup => return
       case _: LogicalRelation => return
+      case _: MemoryPlan => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
     }
