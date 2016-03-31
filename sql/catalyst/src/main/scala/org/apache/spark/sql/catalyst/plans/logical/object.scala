@@ -91,6 +91,32 @@ case class MapPartitions(
   override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
 }
 
+object MapElements {
+  def apply[T : Encoder, U : Encoder](
+      func: T => U,
+      child: LogicalPlan): MapElements = {
+    MapElements(
+      func.asInstanceOf[Any => Any],
+      encoderFor[T].deserializer,
+      encoderFor[U].namedExpressions,
+      child)
+  }
+}
+
+/**
+ * A relation produced by applying `func` to each element of the `child`.
+ *
+ * @param deserializer used to extract the input to `func` from an input row.
+ * @param serializer use to serialize the output of `func`.
+ */
+case class MapElements(
+    func: Any => Any,
+    deserializer: Expression,
+    serializer: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode with ObjectOperator {
+  override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
+}
+
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
   def apply[T : Encoder, U : Encoder](

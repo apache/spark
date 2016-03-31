@@ -1882,7 +1882,12 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def map[U : Encoder](func: T => U): Dataset[U] = mapPartitions(_.map(func))
+  def map[U : Encoder](func: T => U): Dataset[U] = {
+    new Dataset[U](
+      sqlContext,
+      MapElements[T, U](func, logicalPlan),
+      implicitly[Encoder[U]])
+  }
 
   /**
    * :: Experimental ::

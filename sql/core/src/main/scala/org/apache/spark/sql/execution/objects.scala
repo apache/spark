@@ -68,6 +68,27 @@ case class MapPartitions(
 }
 
 /**
+ * Applies the given function to each input row and encodes the result.
+ */
+case class MapElements(
+    func: Any => Any,
+    deserializer: Expression,
+    serializer: Seq[NamedExpression],
+    child: SparkPlan) extends UnaryNode with ObjectOperator {
+  override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val getObject = generateToObject(deserializer, child.output)
+      val outputObject = generateToRow(serializer)
+      iter.map(getObject).map(func).map(outputObject)
+    }
+  }
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+}
+
+/**
  * Applies the given function to each input row, appending the encoded result at the end of the row.
  */
 case class AppendColumns(

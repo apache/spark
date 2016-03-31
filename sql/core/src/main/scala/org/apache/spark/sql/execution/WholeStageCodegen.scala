@@ -169,7 +169,7 @@ trait CodegenSupport extends SparkPlan {
 
   /**
     * Returns source code to evaluate the variables for required attributes, and clear the code
-    * of evaluated variables, to prevent them to be evaluated twice..
+    * of evaluated variables, to prevent them to be evaluated twice.
     */
   protected def evaluateRequiredVariables(
       attributes: Seq[Attribute],
