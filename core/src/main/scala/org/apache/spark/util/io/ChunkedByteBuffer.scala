@@ -122,8 +122,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    */
   def copy(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     val copiedChunks = getChunks().map { chunk =>
-      // TODO: accept an allocator in this copy method to integrate with mem. accounting systems
-      val newChunk = ByteBuffer.allocate(chunk.limit())
+      val newChunk = allocator(chunk.limit())
       newChunk.put(chunk)
       newChunk.flip()
       newChunk
