@@ -118,7 +118,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
     }.unzip
 
     /*
-     * 200 = 6000 bytes / 30 (up to 25 bytes per one call))
+     * 200 = 6000 bytes / 30 (up to 30 bytes per one call))
      * the maximum byte code size to be compiled for HotSpot is 8000.
      * We should keep less than 8000
      */
