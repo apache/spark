@@ -517,17 +517,15 @@ private[spark] class Client(
      */
     val cachedSecondaryJarLinks = ListBuffer.empty[String]
     List(
-      (sparkConf.get(JARS_TO_DISTRIBUTE).orNull, LocalResourceType.FILE, true),
-      (sparkConf.get(FILES_TO_DISTRIBUTE).orNull, LocalResourceType.FILE, false),
-      (sparkConf.get(ARCHIVES_TO_DISTRIBUTE).orNull, LocalResourceType.ARCHIVE, false)
+      (sparkConf.get(JARS_TO_DISTRIBUTE), LocalResourceType.FILE, true),
+      (sparkConf.get(FILES_TO_DISTRIBUTE), LocalResourceType.FILE, false),
+      (sparkConf.get(ARCHIVES_TO_DISTRIBUTE), LocalResourceType.ARCHIVE, false)
     ).foreach { case (flist, resType, addToClasspath) =>
-      if (flist != null && !flist.isEmpty()) {
-        flist.split(',').foreach { file =>
-          val (_, localizedPath) = distribute(file, resType = resType)
-          require(localizedPath != null)
-          if (addToClasspath) {
-            cachedSecondaryJarLinks += localizedPath
-          }
+      flist.foreach { file =>
+        val (_, localizedPath) = distribute(file, resType = resType)
+        require(localizedPath != null)
+        if (addToClasspath) {
+          cachedSecondaryJarLinks += localizedPath
         }
       }
     }
@@ -1264,7 +1262,7 @@ private object Client extends Logging {
 
       val secondaryJars =
         if (args != null) {
-          getSecondaryJarUris(sparkConf.get(JARS_TO_DISTRIBUTE).map(_.split(",").toSeq))
+          getSecondaryJarUris(Option(sparkConf.get(JARS_TO_DISTRIBUTE)))
         } else {
           getSecondaryJarUris(sparkConf.get(SECONDARY_JARS))
         }

@@ -85,15 +85,18 @@ package object config {
 
   private[spark] val ARCHIVES_TO_DISTRIBUTE = ConfigBuilder("spark.yarn.dist.archives")
     .stringConf
-    .optional
+    .toSequence
+    .withDefault(Nil)
 
   private[spark] val FILES_TO_DISTRIBUTE = ConfigBuilder("spark.yarn.dist.files")
     .stringConf
-    .optional
+    .toSequence
+    .withDefault(Nil)
 
   private[spark] val JARS_TO_DISTRIBUTE = ConfigBuilder("spark.yarn.dist.jars")
     .stringConf
-    .optional
+    .toSequence
+    .withDefault(Nil)
 
   private[spark] val PRESERVE_STAGING_FILES = ConfigBuilder("spark.yarn.preserve.staging.files")
     .doc("Whether to preserve temporary files created by the job in HDFS.")
