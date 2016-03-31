@@ -886,17 +886,18 @@ private[execution] object AggregateProcessor {
     val evaluateExpressions = mutable.Buffer.fill[Expression](ordinal)(NoOp)
     val imperatives = mutable.Buffer.empty[ImperativeAggregate]
 
-    // SPARK-14244: `SizeBasedWindowFunction`s created on driver side and serialized to executor
-    // side contains global window partition size attribute reference (`SizeBasedWindowFunction.n`),
-    // and must be rewritten using the one instantiated on executor side. Otherwise, attribute
-    // binding fails because of different expression ID.
-    functions.foreach(rewriteWindowPartitionSize)
+    // SPARK-14244: `SizeBasedWindowFunction`s are firstly created on driver side and then
+    // serialized to executor side. These functions all reference a global singleton window
+    // partition size attribute reference, i.e., `SizeBasedWindowFunction.n`. Here we must collect
+    // the singleton instance created on driver side instead of using executor side
+    // `SizeBasedWindowFunction.n` to avoid binding failure caused by mismatching expression ID.
+    val partitionSize = windowPartitionSizeAttribute(functions)
 
     // Check if there are any SizeBasedWindowFunctions. If there are, we add the partition size to
     // the aggregation buffer. Note that the ordinal of the partition size value will always be 0.
     val trackPartitionSize = functions.exists(_.isInstanceOf[SizeBasedWindowFunction])
     if (trackPartitionSize) {
-      aggBufferAttributes += SizeBasedWindowFunction.n
+      aggBufferAttributes += partitionSize
       initialValues += NoOp
       updateExpressions += NoOp
     }
@@ -927,7 +928,7 @@ private[execution] object AggregateProcessor {
     // Create the projections.
     val initialProjection = newMutableProjection(
       initialValues,
-      Seq(SizeBasedWindowFunction.n))()
+      Seq(partitionSize))()
     val updateProjection = newMutableProjection(
       updateExpressions,
       aggBufferAttributes ++ inputAttributes)()
@@ -945,13 +946,10 @@ private[execution] object AggregateProcessor {
       trackPartitionSize)
   }
 
-  // Rewrites the window partition size attribute in all `SizeBasedWindowFunction`s using executor
-  // side `SizeBasedWindowFunction.n`.
-  def rewriteWindowPartitionSize(expression: Expression): Unit = {
-    expression.foreach {
-      case f: SizeBasedWindowFunction => f.replacePartitionSize()
-      case _ =>
-    }
+  // SPARK-14244: When binding
+  def windowPartitionSizeAttribute(expressions: Array[Expression]): AttributeReference = {
+    val aggs = expressions.flatMap(_.collectFirst { case f: SizeBasedWindowFunction => f })
+    aggs.headOption.map(_.n).getOrElse(SizeBasedWindowFunction.n)
   }
 }
 

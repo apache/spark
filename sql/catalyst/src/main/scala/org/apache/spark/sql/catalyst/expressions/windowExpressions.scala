@@ -451,14 +451,7 @@ abstract class RowNumberLike extends AggregateWindowFunction {
  * A [[SizeBasedWindowFunction]] needs the size of the current window for its calculation.
  */
 trait SizeBasedWindowFunction extends AggregateWindowFunction {
-  protected var n: AttributeReference = SizeBasedWindowFunction.n
-
-  // SPARK-14244: `n` is firstly initialized with singleton value `SizeBasedWindowFunction.n`
-  // created on driver side, since a window function is always firstly created on driver side.
-  // After being serialized and sent to executor side, we need to replace `n` with the corresponding
-  // singleton value instantiated on executor side so that attribute binding won't fail because of
-  // wrong expression ID.
-  def replacePartitionSize(): Unit = this.n = SizeBasedWindowFunction.n
+  val n: AttributeReference = SizeBasedWindowFunction.n
 }
 
 object SizeBasedWindowFunction {
@@ -492,7 +485,6 @@ case class RowNumber() extends RowNumberLike {
   """_FUNC_() - The CUME_DIST() function computes the position of a value relative to
      a all values in the partition.""")
 case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
-
   override def dataType: DataType = DoubleType
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
   // return the same value for equal values in the partition.
@@ -526,7 +518,6 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   """_FUNC_(x) - The NTILE(n) function divides the rows for each window partition
      into 'n' buckets ranging from 1 to at most 'n'.""")
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
-
   def this() = this(Literal(1))
 
   override def children: Seq[Expression] = Seq(buckets)
@@ -697,7 +688,6 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
   """_FUNC_() - PERCENT_RANK() The PercentRank function computes the percentage
      ranking of a value in a group of values.""")
 case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBasedWindowFunction {
-
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)
   override def dataType: DataType = DoubleType
