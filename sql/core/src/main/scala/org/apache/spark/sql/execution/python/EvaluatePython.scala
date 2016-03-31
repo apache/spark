@@ -70,6 +70,16 @@ object EvaluatePython {
     }
   }
 
+  def needConversionInPython(dt: DataType): Boolean = dt match {
+    case DateType | TimestampType => true
+    case _: StructType => true
+    case _: UserDefinedType[_] => true
+    case ArrayType(elementType, _) => needConversionInPython(elementType)
+    case MapType(keyType, valueType, _) =>
+      needConversionInPython(keyType) || needConversionInPython(valueType)
+    case _ => false
+  }
+
   /**
    * Helper for converting from Catalyst type to java type suitable for Pyrolite.
    */
