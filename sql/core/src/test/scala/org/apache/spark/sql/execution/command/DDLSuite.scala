@@ -21,11 +21,22 @@ import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
-import org.apache.spark.sql.catalyst.parser.ParserUtils._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 class DDLSuite extends QueryTest with SharedSQLContext {
+
+  private val escapedIdentifier = "`(.+)`".r
+
+  /**
+   * Strip backticks, if any, from the string.
+   */
+  def cleanIdentifier(ident: String): String = {
+    ident match {
+      case escapedIdentifier(i) => i
+      case plainIdent => plainIdent
+    }
+  }
 
   /**
    * Drops database `databaseName` after calling `f`.
