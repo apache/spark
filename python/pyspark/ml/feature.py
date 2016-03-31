@@ -512,6 +512,16 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     .. versionadded:: 1.3.0
     """
 
+    """
+    Binary toggle to control term frequency counts.
+    If true, all non-zero counts are set to 1.  This is useful for discrete probabilistic
+    models that model binary events rather than integer counts.
+    (default = False)
+    """
+    binary = Param(Params._dummy(), "binary",
+                   "Binary toggle to control term frequency counts",
+                   typeConverter=TypeConverters.toBoolean)
+
     @keyword_only
     def __init__(self, numFeatures=1 << 18, inputCol=None, outputCol=None):
         """
@@ -520,6 +530,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         super(HashingTF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.HashingTF", self.uid)
         self._setDefault(numFeatures=1 << 18)
+        self._setDefault(binary=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -532,6 +543,21 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setBinary(self, value):
+        """
+        Sets the value of :py:attr:`binary`.
+        """
+        self._paramMap[self.binary] = value
+        return self
+
+    @since("2.0.0")
+    def getBinary(self):
+        """
+        Gets the value of binary or its default value.
+        """
+        return self.getOrDefault(self.binary)
 
 
 @inherit_doc
