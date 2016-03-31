@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
+import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -212,6 +212,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
     val numFeatures = options("numFeatures").toInt
+    assert(numFeatures > 0)
+
     val sparse = options.getOrElse("vectorType", "sparse") == "sparse"
 
     val broadcastedConf = sqlContext.sparkContext.broadcast(
