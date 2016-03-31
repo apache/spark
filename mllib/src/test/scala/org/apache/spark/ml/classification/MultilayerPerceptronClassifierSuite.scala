@@ -43,6 +43,23 @@ class MultilayerPerceptronClassifierSuite
     ).toDF("features", "label")
   }
 
+  test("Input Validation") {
+    val mlpc = new MultilayerPerceptronClassifier()
+    intercept[IllegalArgumentException] {
+      mlpc.setLayers(Array[Int]())
+    }
+    intercept[IllegalArgumentException] {
+      mlpc.setLayers(Array[Int](1))
+    }
+    intercept[IllegalArgumentException] {
+      mlpc.setLayers(Array[Int](0, 1))
+    }
+    intercept[IllegalArgumentException] {
+      mlpc.setLayers(Array[Int](1, 0))
+    }
+    mlpc.setLayers(Array[Int](1, 1))
+  }
+
   test("XOR function learning as binary classification problem with two outputs.") {
     val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronClassifier()
