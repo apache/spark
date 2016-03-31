@@ -598,9 +598,10 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasSeed, MLReadable, MLWr
 
         estimator, epms, evaluator = super(TrainValidationSplit, cls)._from_java(java_stage)
         trainRatio = java_stage.getTrainRatio()
+        seed = java_stage.getSeed()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
-                       trainRatio=trainRatio)
+                       trainRatio=trainRatio, seed=seed)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -619,6 +620,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasSeed, MLReadable, MLWr
         _java_obj.setEvaluator(evaluator)
         _java_obj.setEstimator(estimator)
         _java_obj.setTrainRatio(self.getTrainRatio())
+        _java_obj.setSeed(self.getSeed())
 
         return _java_obj
 
