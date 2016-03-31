@@ -241,4 +241,51 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("alter table: set properties") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    assert(catalog.getTable(tableIdent).properties.isEmpty)
+    // set table properties
+    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
+    assert(catalog.getTable(tableIdent).properties == Map("andrew" -> "or14", "kor" -> "bel"))
+    // set table properties without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
+    assert(catalog.getTable(tableIdent).properties ==
+      Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
+    }
+  }
+
+  test("alter table: unset properties") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    // unset table properties
+    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan')")
+    sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
+    assert(catalog.getTable(tableIdent).properties == Map("p" -> "an", "c" -> "lan"))
+    // unset table properties without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
+    assert(catalog.getTable(tableIdent).properties == Map("c" -> "lan"))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')")
+    }
+    // property to unset does not exist
+    val e = intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
+    }
+    assert(e.getMessage.contains("xyz"))
+    // property to unset does not exist, but "IF EXISTS" is specified
+    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
+    assert(catalog.getTable(tableIdent).properties.isEmpty)
+  }
+
 }

@@ -357,8 +357,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterTableSetProperties(
       visitTableIdentifier(ctx.tableIdentifier),
-      visitTablePropertyList(ctx.tablePropertyList))(
-      command(ctx))
+      visitTablePropertyList(ctx.tablePropertyList))
   }
 
   /**
@@ -374,9 +373,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterTableUnsetProperties(
       visitTableIdentifier(ctx.tableIdentifier),
-      visitTablePropertyList(ctx.tablePropertyList),
-      ctx.EXISTS != null)(
-      command(ctx))
+      visitTablePropertyList(ctx.tablePropertyList).keys.toSeq,
+      ctx.EXISTS != null)
   }
 
   /**

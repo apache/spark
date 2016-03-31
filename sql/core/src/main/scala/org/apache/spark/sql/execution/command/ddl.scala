@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
@@ -216,18 +216,63 @@ case class AlterTableRename(
 
 }
 
-/** Set Properties in ALTER TABLE/VIEW: add metadata to a table/view. */
+/**
+ * A command that sets table/view properties.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table1 SET TBLPROPERTIES ('key1' = 'val1', 'key2' = 'val2', ...);
+ *   ALTER VIEW view1 SET TBLPROPERTIES ('key1' = 'val1', 'key2' = 'val2', ...);
+ * }}}
+ */
 case class AlterTableSetProperties(
     tableName: TableIdentifier,
-    properties: Map[String, String])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    properties: Map[String, String])
+  extends RunnableCommand {
 
-/** Unset Properties in ALTER TABLE/VIEW: remove metadata from a table/view. */
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTable(tableName)
+    val newTable = table.copy(properties = table.properties ++ properties)
+    catalog.alterTable(newTable)
+    Seq.empty[Row]
+  }
+
+}
+
+/**
+ * A command that unsets table/view properties.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table1 UNSET TBLPROPERTIES [IF EXISTS] ('key1', 'key2', ...);
+ *   ALTER VIEW view1 UNSET TBLPROPERTIES [IF EXISTS] ('key1', 'key2', ...);
+ * }}}
+ */
 case class AlterTableUnsetProperties(
     tableName: TableIdentifier,
-    properties: Map[String, String],
-    ifExists: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    propKeys: Seq[String],
+    ifExists: Boolean)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTable(tableName)
+    if (!ifExists) {
+      propKeys.foreach { k =>
+        if (!table.properties.contains(k)) {
+          throw new AnalysisException(
+            s"attempted to unset non-existent property '$k' in table '$tableName'")
+        }
+      }
+    }
+    val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
+    val newTable = table.copy(properties = newProperties)
+    catalog.alterTable(newTable)
+    Seq.empty[Row]
+  }
+
+}
 
 case class AlterTableSerDeProperties(
     tableName: TableIdentifier,

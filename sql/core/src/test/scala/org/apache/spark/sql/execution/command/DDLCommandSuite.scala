@@ -234,14 +234,14 @@ class DDLCommandSuite extends PlanTest {
 
     val tableIdent = TableIdentifier("table_name", None)
     val expected1_table = AlterTableSetProperties(
-      tableIdent, Map("test" -> "test", "comment" -> "new_comment"))(sql1_table)
+      tableIdent, Map("test" -> "test", "comment" -> "new_comment"))
     val expected2_table = AlterTableUnsetProperties(
-      tableIdent, Map("comment" -> null, "test" -> null), ifExists = false)(sql2_table)
+      tableIdent, Seq("comment", "test"), ifExists = false)
     val expected3_table = AlterTableUnsetProperties(
-      tableIdent, Map("comment" -> null, "test" -> null), ifExists = true)(sql3_table)
-    val expected1_view = expected1_table.copy()(sql = sql1_view)
-    val expected2_view = expected2_table.copy()(sql = sql2_view)
-    val expected3_view = expected3_table.copy()(sql = sql3_view)
+      tableIdent, Seq("comment", "test"), ifExists = true)
+    val expected1_view = expected1_table
+    val expected2_view = expected2_table
+    val expected3_view = expected3_table
 
     comparePlans(parsed1_table, expected1_table)
     comparePlans(parsed2_table, expected2_table)
