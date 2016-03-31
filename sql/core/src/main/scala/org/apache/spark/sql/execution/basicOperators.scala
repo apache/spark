@@ -181,6 +181,9 @@ case class Sample(
     child: SparkPlan) extends UnaryNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   protected override def doExecute(): RDD[InternalRow] = {
     if (withReplacement) {
       // Disable gap sampling since the gap sampling method buffers two rows internally,
@@ -204,6 +207,7 @@ case class Sample(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val numOutput = metricTerm(ctx, "numOutputRows")
     val sampler = ctx.freshName("sampler")
 
     if (withReplacement) {
@@ -231,6 +235,7 @@ case class Sample(
       s"""
          | int $samplingCount = $sampler.sample();
          | while ($samplingCount-- > 0) {
+         |   $numOutput.add(1);
          |   ${consume(ctx, input)}
          | }
        """.stripMargin.trim
@@ -244,6 +249,7 @@ case class Sample(
 
       s"""
          | if ($sampler.sample() == 0) continue;
+         | $numOutput.add(1);
          | ${consume(ctx, input)}
        """.stripMargin.trim
     }
