@@ -29,7 +29,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
-import org.apache.spark.ml.classification.OneVsRestParams
+import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
@@ -381,10 +381,8 @@ private[ml] object MetaAlgorithmReadWrite {
       case p: Pipeline => p.getStages.asInstanceOf[Array[Params]]
       case pm: PipelineModel => pm.stages.asInstanceOf[Array[Params]]
       case v: ValidatorParams => Array(v.getEstimator, v.getEvaluator)
-      case ovr: OneVsRestParams =>
-        // TODO: SPARK-11892: This case may require special handling.
-        throw new UnsupportedOperationException(s"${instance.getClass.getName} write will fail" +
-          s" because it cannot yet handle an estimator containing type: ${ovr.getClass.getName}.")
+      case ovr: OneVsRest => Array(ovr.getClassifier)
+      case ovrModel: OneVsRestModel => Array(ovrModel.getClassifier) ++ ovrModel.models
       case rformModel: RFormulaModel => Array(rformModel.pipelineModel)
       case _: Params => Array()
     }

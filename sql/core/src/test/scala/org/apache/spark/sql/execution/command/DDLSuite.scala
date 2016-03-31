@@ -22,21 +22,31 @@ import java.io.File
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogTablePartition}
-import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
-import org.apache.spark.sql.catalyst.parser.ParserUtils._
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
+import org.apache.spark.sql.test.SharedSQLContext
 
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
+  private val escapedIdentifier = "`(.+)`".r
 
   override def afterEach(): Unit = {
     try {
       sqlContext.sessionState.catalog.reset()
     } finally {
       super.afterEach()
+    }
+  }
+
+  /**
+   * Strip backticks, if any, from the string.
+   */
+  private def cleanIdentifier(ident: String): String = {
+    ident match {
+      case escapedIdentifier(i) => i
+      case plainIdent => plainIdent
     }
   }
 
