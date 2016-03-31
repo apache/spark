@@ -149,7 +149,8 @@ public final class Platform {
 
   /**
    * Uses internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
-   * MaxDirectMemorySize limit.
+   * MaxDirectMemorySize limit (the default limit is too low and we do not want to require users
+   * to increase it).
    */
   @SuppressWarnings("unchecked")
   public static ByteBuffer allocateDirectBuffer(int size) {
