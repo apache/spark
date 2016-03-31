@@ -31,6 +31,12 @@ object TestRelations {
     AttributeReference("d", DecimalType(10, 2))(),
     AttributeReference("e", ShortType)())
 
+  val testRelation3 = LocalRelation(
+    AttributeReference("e", ShortType)(),
+    AttributeReference("f", StringType)(),
+    AttributeReference("g", DoubleType)(),
+    AttributeReference("h", DecimalType(10, 2))())
+
   val nestedRelation = LocalRelation(
     AttributeReference("top", StructType(
       StructField("duplicateField", StringType) ::
@@ -48,4 +54,7 @@ object TestRelations {
 
   val listRelation = LocalRelation(
     AttributeReference("list", ArrayType(IntegerType))())
+
+  val mapRelation = LocalRelation(
+    AttributeReference("map", MapType(IntegerType, IntegerType))())
 }

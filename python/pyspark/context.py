@@ -24,6 +24,7 @@ import sys
 import tarfile
 import tempfile
 import uuid
+import threading
 from threading import RLock
 from tempfile import NamedTemporaryFile
 
@@ -224,8 +225,11 @@ class SparkContext(object):
         # create a signal handler which would be invoked on receiving SIGINT
         def signal_handler(signal, frame):
             self.cancelAllJobs()
+            raise KeyboardInterrupt()
 
-        signal.signal(signal.SIGINT, signal_handler)
+        # see http://stackoverflow.com/questions/23206787/
+        if isinstance(threading.current_thread(), threading._MainThread):
+            signal.signal(signal.SIGINT, signal_handler)
 
     def _initialize_context(self, jconf):
         """

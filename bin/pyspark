@@ -17,9 +17,11 @@
 # limitations under the License.
 #
 
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-source "$SPARK_HOME"/bin/load-spark-env.sh
+source "${SPARK_HOME}"/bin/load-spark-env.sh
 export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]"
 
 # In Spark <= 1.1, setting IPYTHON=1 would cause the driver to be launched using the `ipython`
@@ -47,7 +49,11 @@ if [[ -n "$IPYTHON_OPTS" || "$IPYTHON" == "1" ]]; then
   # If IPython options are specified, assume user wants to run IPython
   # (for backwards-compatibility)
   PYSPARK_DRIVER_PYTHON_OPTS="$PYSPARK_DRIVER_PYTHON_OPTS $IPYTHON_OPTS"
-  PYSPARK_DRIVER_PYTHON="ipython"
+  if [ -x "$(command -v jupyter)" ]; then
+    PYSPARK_DRIVER_PYTHON="jupyter"
+  else
+    PYSPARK_DRIVER_PYTHON="ipython"
+  fi
 elif [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
   PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"$DEFAULT_PYTHON"}"
 fi
@@ -64,12 +70,12 @@ fi
 export PYSPARK_PYTHON
 
 # Add the PySpark classes to the Python path:
-export PYTHONPATH="$SPARK_HOME/python/:$PYTHONPATH"
-export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.9-src.zip:$PYTHONPATH"
+export PYTHONPATH="${SPARK_HOME}/python/:$PYTHONPATH"
+export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.9.2-src.zip:$PYTHONPATH"
 
 # Load the PySpark shell.py script when ./pyspark is used interactively:
 export OLD_PYTHONSTARTUP="$PYTHONSTARTUP"
-export PYTHONSTARTUP="$SPARK_HOME/python/pyspark/shell.py"
+export PYTHONSTARTUP="${SPARK_HOME}/python/pyspark/shell.py"
 
 # For pyspark tests
 if [[ -n "$SPARK_TESTING" ]]; then
@@ -82,4 +88,4 @@ fi
 
 export PYSPARK_DRIVER_PYTHON
 export PYSPARK_DRIVER_PYTHON_OPTS
-exec "$SPARK_HOME"/bin/spark-submit pyspark-shell-main --name "PySparkShell" "$@"
+exec "${SPARK_HOME}"/bin/spark-submit pyspark-shell-main --name "PySparkShell" "$@"

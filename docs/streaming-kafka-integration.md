@@ -5,7 +5,7 @@ title: Spark Streaming + Kafka Integration Guide
 [Apache Kafka](http://kafka.apache.org/) is publish-subscribe messaging rethought as a distributed, partitioned, replicated commit log service. Here we explain how to configure Spark Streaming to receive data from Kafka. There are two approaches to this - the old approach using Receivers and Kafka's high-level API, and a new experimental approach (introduced in Spark 1.3) without using Receivers. They have different programming models, performance characteristics, and semantics guarantees, so read on for more details.
 
 ## Approach 1: Receiver-based Approach
-This approach uses a Receiver to receive the data. The Received is implemented using the Kafka high-level consumer API. As with all receivers, the data received from Kafka through a Receiver is stored in Spark executors, and then jobs launched by Spark Streaming processes the data. 
+This approach uses a Receiver to receive the data. The Receiver is implemented using the Kafka high-level consumer API. As with all receivers, the data received from Kafka through a Receiver is stored in Spark executors, and then jobs launched by Spark Streaming processes the data. 
 
 However, under default configuration, this approach can lose data under failures (see [receiver reliability](streaming-programming-guide.html#receiver-reliability). To ensure zero-data loss, you have to additionally enable Write Ahead Logs in Spark Streaming (introduced in Spark 1.2). This synchronously saves all the received Kafka data into write ahead logs on a distributed file system (e.g HDFS), so that all the data can be recovered on failure. See [Deploying section](streaming-programming-guide.html#deploying-applications) in the streaming programming guide for more details on Write Ahead Logs.
 
@@ -71,10 +71,10 @@ Next, we discuss how to use this approach in your streaming application.
 	    ./bin/spark-submit --packages org.apache.spark:spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} ...
 
 	Alternatively, you can also download the JAR of the Maven artifact `spark-streaming-kafka-assembly` from the 
-	[Maven repository](http://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kafka-assembly_2.10%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22) and add it to `spark-submit` with `--jars`.
+	[Maven repository](http://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kafka-assembly_{{site.SCALA_BINARY_VERSION}}%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22) and add it to `spark-submit` with `--jars`.
 
 ## Approach 2: Direct Approach (No Receivers)
-This new receiver-less "direct" approach has been introduced in Spark 1.3 to ensure stronger end-to-end guarantees. Instead of using receivers to receive data, this approach periodically queries Kafka for the latest offsets in each topic+partition, and accordingly defines the offset ranges to process in each batch. When the jobs to process the data are launched, Kafka's simple consumer API is used to read the defined ranges of offsets from Kafka (similar to read files from a file system). Note that this is an experimental feature introduced in Spark 1.3 for the Scala and Java API. Spark 1.4 added a Python API, but it is not yet at full feature parity.
+This new receiver-less "direct" approach has been introduced in Spark 1.3 to ensure stronger end-to-end guarantees. Instead of using receivers to receive data, this approach periodically queries Kafka for the latest offsets in each topic+partition, and accordingly defines the offset ranges to process in each batch. When the jobs to process the data are launched, Kafka's simple consumer API is used to read the defined ranges of offsets from Kafka (similar to read files from a file system). Note that this is an experimental feature introduced in Spark 1.3 for the Scala and Java API, in Spark 1.4 for the Python API.
 
 This approach has the following advantages over the receiver-based approach (i.e. Approach 1).
 
@@ -104,6 +104,7 @@ Next, we discuss how to use this approach in your streaming application.
 			[key class], [value class], [key decoder class], [value decoder class] ](
 			streamingContext, [map of Kafka parameters], [set of topics to consume])
 
+	You can also pass a `messageHandler` to `createDirectStream` to access `MessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
 	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$)
 	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/DirectKafkaWordCount.scala).
 	</div>
@@ -115,6 +116,7 @@ Next, we discuss how to use this approach in your streaming application.
 				[key class], [value class], [key decoder class], [value decoder class],
 				[map of Kafka parameters], [set of topics to consume]);
 
+	You can also pass a `messageHandler` to `createDirectStream` to access `MessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
 	See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html)
 	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaDirectKafkaWordCount.java).
 
@@ -123,6 +125,7 @@ Next, we discuss how to use this approach in your streaming application.
 		from pyspark.streaming.kafka import KafkaUtils
 		directKafkaStream = KafkaUtils.createDirectStream(ssc, [topic], {"metadata.broker.list": brokers})
 
+	You can also pass a `messageHandler` to `createDirectStream` to access `KafkaMessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
 	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)
 	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/direct_kafka_wordcount.py).
 	</div>
@@ -181,7 +184,20 @@ Next, we discuss how to use this approach in your streaming application.
 		);
 	</div>
 	<div data-lang="python" markdown="1">
-		Not supported yet
+		offsetRanges = []
+
+		def storeOffsetRanges(rdd):
+		    global offsetRanges
+		    offsetRanges = rdd.offsetRanges()
+		    return rdd
+
+		def printOffsetRanges(rdd):
+		    for o in offsetRanges:
+		        print "%s %s %s %s" % (o.topic, o.partition, o.fromOffset, o.untilOffset)
+
+		directKafkaStream\
+		    .transform(storeOffsetRanges)\
+		    .foreachRDD(printOffsetRanges)
 	</div>
    	</div>
 
@@ -191,4 +207,4 @@ Next, we discuss how to use this approach in your streaming application.
 
 	Another thing to note is that since this approach does not use Receivers, the standard receiver-related (that is, [configurations](configuration.html) of the form `spark.streaming.receiver.*` ) will not apply to the input DStreams created by this approach (will apply to other input DStreams though). Instead, use the [configurations](configuration.html) `spark.streaming.kafka.*`. An important one is `spark.streaming.kafka.maxRatePerPartition` which is the maximum rate (in messages per second) at which each Kafka partition will be read by this direct API.
 
-3. **Deploying:** This is same as the first approach, for Scala, Java and Python.
+3. **Deploying:** This is same as the first approach.

@@ -19,10 +19,11 @@ package org.apache.spark.mllib.linalg.distributed
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
 
-import org.apache.spark.{Logging, Partitioner, SparkException}
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.{Partitioner, SparkException}
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -115,8 +116,6 @@ private[mllib] object GridPartitioner {
 }
 
 /**
- * :: Experimental ::
- *
  * Represents a distributed matrix in blocks of local matrices.
  *
  * @param blocks The RDD of sub-matrix blocks ((blockRowIndex, blockColIndex), sub-matrix) that
@@ -132,7 +131,6 @@ private[mllib] object GridPartitioner {
  *              zero, the number of columns will be calculated when `numCols` is invoked.
  */
 @Since("1.3.0")
-@Experimental
 class BlockMatrix @Since("1.3.0") (
     @Since("1.3.0") val blocks: RDD[((Int, Int), Matrix)],
     @Since("1.3.0") val rowsPerBlock: Int,
@@ -179,7 +177,7 @@ class BlockMatrix @Since("1.3.0") (
   val numColBlocks = math.ceil(numCols() * 1.0 / colsPerBlock).toInt
 
   private[mllib] def createPartitioner(): GridPartitioner =
-    GridPartitioner(numRowBlocks, numColBlocks, suggestedNumPartitions = blocks.partitions.size)
+    GridPartitioner(numRowBlocks, numColBlocks, suggestedNumPartitions = blocks.partitions.length)
 
   private lazy val blockInfo = blocks.mapValues(block => (block.numRows, block.numCols)).cache()
 
@@ -320,39 +318,71 @@ class BlockMatrix @Since("1.3.0") (
   }
 
   /**
-   * Adds two block matrices together. The matrices must have the same size and matching
-   * `rowsPerBlock` and `colsPerBlock` values. If one of the blocks that are being added are
-   * instances of [[SparseMatrix]], the resulting sub matrix will also be a [[SparseMatrix]], even
-   * if it is being added to a [[DenseMatrix]]. If two dense matrices are added, the output will
-   * also be a [[DenseMatrix]].
+   * For given matrices `this` and `other` of compatible dimensions and compatible block dimensions,
+   * it applies a binary function on their corresponding blocks.
+   *
+   * @param other The second BlockMatrix argument for the operator specified by `binMap`
+   * @param binMap A function taking two breeze matrices and returning a breeze matrix
+   * @return A [[BlockMatrix]] whose blocks are the results of a specified binary map on blocks
+   *         of `this` and `other`.
+   * Note: `blockMap` ONLY works for `add` and `subtract` methods and it does not support
+   * operators such as (a, b) => -a + b
+   * TODO: Make the use of zero matrices more storage efficient.
    */
-  @Since("1.3.0")
-  def add(other: BlockMatrix): BlockMatrix = {
+  private[mllib] def blockMap(
+      other: BlockMatrix,
+      binMap: (BM[Double], BM[Double]) => BM[Double]): BlockMatrix = {
     require(numRows() == other.numRows(), "Both matrices must have the same number of rows. " +
       s"A.numRows: ${numRows()}, B.numRows: ${other.numRows()}")
     require(numCols() == other.numCols(), "Both matrices must have the same number of columns. " +
       s"A.numCols: ${numCols()}, B.numCols: ${other.numCols()}")
     if (rowsPerBlock == other.rowsPerBlock && colsPerBlock == other.colsPerBlock) {
-      val addedBlocks = blocks.cogroup(other.blocks, createPartitioner())
+      val newBlocks = blocks.cogroup(other.blocks, createPartitioner())
         .map { case ((blockRowIndex, blockColIndex), (a, b)) =>
           if (a.size > 1 || b.size > 1) {
             throw new SparkException("There are multiple MatrixBlocks with indices: " +
               s"($blockRowIndex, $blockColIndex). Please remove them.")
           }
           if (a.isEmpty) {
-            new MatrixBlock((blockRowIndex, blockColIndex), b.head)
+            val zeroBlock = BM.zeros[Double](b.head.numRows, b.head.numCols)
+            val result = binMap(zeroBlock, b.head.toBreeze)
+            new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
           } else if (b.isEmpty) {
             new MatrixBlock((blockRowIndex, blockColIndex), a.head)
           } else {
-            val result = a.head.toBreeze + b.head.toBreeze
+            val result = binMap(a.head.toBreeze, b.head.toBreeze)
             new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
           }
       }
-      new BlockMatrix(addedBlocks, rowsPerBlock, colsPerBlock, numRows(), numCols())
+      new BlockMatrix(newBlocks, rowsPerBlock, colsPerBlock, numRows(), numCols())
     } else {
-      throw new SparkException("Cannot add matrices with different block dimensions")
+      throw new SparkException("Cannot perform on matrices with different block dimensions")
     }
   }
+
+  /**
+   * Adds the given block matrix `other` to `this` block matrix: `this + other`.
+   * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock`
+   * values. If one of the blocks that are being added are instances of [[SparseMatrix]],
+   * the resulting sub matrix will also be a [[SparseMatrix]], even if it is being added
+   * to a [[DenseMatrix]]. If two dense matrices are added, the output will also be a
+   * [[DenseMatrix]].
+   */
+  @Since("1.3.0")
+  def add(other: BlockMatrix): BlockMatrix =
+    blockMap(other, (x: BM[Double], y: BM[Double]) => x + y)
+
+  /**
+   * Subtracts the given block matrix `other` from `this` block matrix: `this - other`.
+   * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock`
+   * values. If one of the blocks that are being subtracted are instances of [[SparseMatrix]],
+   * the resulting sub matrix will also be a [[SparseMatrix]], even if it is being subtracted
+   * from a [[DenseMatrix]]. If two dense matrices are subtracted, the output will also be a
+   * [[DenseMatrix]].
+   */
+  @Since("2.0.0")
+  def subtract(other: BlockMatrix): BlockMatrix =
+    blockMap(other, (x: BM[Double], y: BM[Double]) => x - y)
 
   /** Block (i,j) --> Set of destination partitions */
   private type BlockDestinations = Map[(Int, Int), Set[Int]]

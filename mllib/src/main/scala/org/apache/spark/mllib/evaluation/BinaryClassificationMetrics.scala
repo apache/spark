@@ -17,15 +17,13 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: Experimental ::
  * Evaluator for binary classification.
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
@@ -43,7 +41,6 @@ import org.apache.spark.sql.DataFrame
  *                partition boundaries.
  */
 @Since("1.0.0")
-@Experimental
 class BinaryClassificationMetrics @Since("1.3.0") (
     @Since("1.3.0") val scoreAndLabels: RDD[(Double, Double)],
     @Since("1.3.0") val numBins: Int) extends Logging {
@@ -61,7 +58,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * @param scoreAndLabels a DataFrame with two double columns: score and label
    */
   private[mllib] def this(scoreAndLabels: DataFrame) =
-    this(scoreAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(scoreAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
    * Unpersist intermediate RDDs used in the computation.

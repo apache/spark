@@ -26,6 +26,7 @@ import scala.collection.mutable.{HashMap, HashSet}
 import org.apache.mesos.{Scheduler => MScheduler, _}
 import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.protobuf.ByteString
+
 import org.apache.spark.{SparkContext, SparkException, TaskState}
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler._
@@ -63,6 +64,10 @@ private[spark] class MesosSchedulerBackend(
   private[this] val slaveOfferConstraints =
     parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
+  // reject offers with mismatched constraints in seconds
+  private val rejectOfferDurationForUnmetConstraints =
+    getRejectOfferDurationForUnmetConstraints(sc)
+
   @volatile var appId: String = _
 
   override def start() {
@@ -73,7 +78,8 @@ private[spark] class MesosSchedulerBackend(
       sc.sparkUser,
       sc.appName,
       sc.conf,
-      sc.ui.map(_.appUIAddress))
+      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress))
+    )
     startScheduler(driver)
   }
 
@@ -120,7 +126,7 @@ private[spark] class MesosSchedulerBackend(
 
     val executorBackendName = classOf[MesosExecutorBackend].getName
     if (uri.isEmpty) {
-      val executorPath = new File(executorSparkHome, "/bin/spark-class").getCanonicalPath
+      val executorPath = new File(executorSparkHome, "/bin/spark-class").getPath
       command.setValue(s"$prefixEnv $executorPath $executorBackendName")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
@@ -133,7 +139,7 @@ private[spark] class MesosSchedulerBackend(
     val (resourcesAfterCpu, usedCpuResources) =
       partitionResources(availableResources, "cpus", mesosExecutorCores)
     val (resourcesAfterMem, usedMemResources) =
-      partitionResources(resourcesAfterCpu.asJava, "mem", calculateTotalMemory(sc))
+      partitionResources(resourcesAfterCpu.asJava, "mem", executorMemory(sc))
 
     builder.addAllResources(usedCpuResources.asJava)
     builder.addAllResources(usedMemResources.asJava)
@@ -212,29 +218,47 @@ private[spark] class MesosSchedulerBackend(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     inClassLoader() {
-      // Fail-fast on offers we know will be rejected
-      val (usableOffers, unUsableOffers) = offers.asScala.partition { o =>
+      // Fail first on offers with unmet constraints
+      val (offersMatchingConstraints, offersNotMatchingConstraints) =
+        offers.asScala.partition { o =>
+          val offerAttributes = toAttributeMap(o.getAttributesList)
+          val meetsConstraints =
+            matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+
+          // add some debug messaging
+          if (!meetsConstraints) {
+            val id = o.getId.getValue
+            logDebug(s"Declining offer: $id with attributes: $offerAttributes")
+          }
+
+          meetsConstraints
+        }
+
+      // These offers do not meet constraints. We don't need to see them again.
+      // Decline the offer for a long period of time.
+      offersNotMatchingConstraints.foreach { o =>
+        d.declineOffer(o.getId, Filters.newBuilder()
+          .setRefuseSeconds(rejectOfferDurationForUnmetConstraints).build())
+      }
+
+      // Of the matching constraints, see which ones give us enough memory and cores
+      val (usableOffers, unUsableOffers) = offersMatchingConstraints.partition { o =>
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue
         val offerAttributes = toAttributeMap(o.getAttributesList)
 
-        // check if all constraints are satisfield
-        //  1. Attribute constraints
-        //  2. Memory requirements
-        //  3. CPU requirements - need at least 1 for executor, 1 for task
-        val meetsConstraints = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
-        val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
+        // check offers for
+        //  1. Memory requirements
+        //  2. CPU requirements - need at least 1 for executor, 1 for task
+        val meetsMemoryRequirements = mem >= executorMemory(sc)
         val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
-
         val meetsRequirements =
-          (meetsConstraints && meetsMemoryRequirements && meetsCPURequirements) ||
+          (meetsMemoryRequirements && meetsCPURequirements) ||
           (slaveIdToExecutorInfo.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
-
-        // add some debug messaging
         val debugstr = if (meetsRequirements) "Accepting" else "Declining"
-        val id = o.getId.getValue
-        logDebug(s"$debugstr offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
+        logDebug(s"$debugstr offer: ${o.getId.getValue} with attributes: "
+          + s"$offerAttributes mem: $mem cpu: $cpus")
 
         meetsRequirements
       }
@@ -352,6 +376,7 @@ private[spark] class MesosSchedulerBackend(
   override def error(d: SchedulerDriver, message: String) {
     inClassLoader() {
       logError("Mesos error: " + message)
+      markErr()
       scheduler.error(message)
     }
   }
@@ -394,7 +419,7 @@ private[spark] class MesosSchedulerBackend(
                             slaveId: SlaveID, status: Int) {
     logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
                                                                  slaveId.getValue))
-    recordSlaveLost(d, slaveId, ExecutorExited(status, isNormalExit = false))
+    recordSlaveLost(d, slaveId, ExecutorExited(status, exitCausedByApp = true))
   }
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {

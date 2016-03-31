@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, PrintStream, OutputStream}
+import java.io.{File, OutputStream, PrintStream}
 
 import scala.collection.mutable.ArrayBuffer
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, FileSystemResolver, IBiblioResolver}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
@@ -171,7 +171,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("neglects Spark and Spark's dependencies") {
-    val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
+    val components = Seq("catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 
     val coordinates =

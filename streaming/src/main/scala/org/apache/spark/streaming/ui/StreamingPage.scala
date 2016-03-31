@@ -17,15 +17,13 @@
 
 package org.apache.spark.streaming.ui
 
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.ArrayBuffer
 import scala.xml.{Node, Unparsed}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
@@ -392,8 +390,15 @@ private[ui] class StreamingPage(parent: StreamingTab)
       maxX: Long,
       minY: Double,
       maxY: Double): Seq[Node] = {
-    val content = listener.receivedEventRateWithBatchTime.map { case (streamId, eventRates) =>
-      generateInputDStreamRow(jsCollector, streamId, eventRates, minX, maxX, minY, maxY)
+    val maxYCalculated = listener.receivedEventRateWithBatchTime.values
+      .flatMap { case streamAndRates => streamAndRates.map { case (_, eventRate) => eventRate } }
+      .reduceOption[Double](math.max)
+      .map(_.ceil.toLong)
+      .getOrElse(0L)
+
+    val content = listener.receivedEventRateWithBatchTime.toList.sortBy(_._1).map {
+      case (streamId, eventRates) =>
+        generateInputDStreamRow(jsCollector, streamId, eventRates, minX, maxX, minY, maxYCalculated)
     }.foldLeft[Seq[Node]](Nil)(_ ++ _)
 
     // scalastyle:off
@@ -402,7 +407,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <th style="width: 151px;"></th>
           <th style="width: 167px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Status</div></th>
-          <th style="width: 167px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Location</div></th>
+          <th style="width: 167px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Executor ID / Host</div></th>
           <th style="width: 166px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Last Error Time</div></th>
           <th>Last Error Message</th>
         </tr>
@@ -430,10 +435,14 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val receiverActive = receiverInfo.map { info =>
       if (info.active) "ACTIVE" else "INACTIVE"
     }.getOrElse(emptyCell)
-    val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
+    val receiverLocation = receiverInfo.map { info =>
+      val executorId = if (info.executorId.isEmpty) emptyCell else info.executorId
+      val location = if (info.location.isEmpty) emptyCell else info.location
+      s"$executorId / $location"
+    }.getOrElse(emptyCell)
     val receiverLastError = receiverInfo.map { info =>
       val msg = s"${info.lastErrorMessage} - ${info.lastError}"
-      if (msg.size > 100) msg.take(97) + "..." else msg
+      if (msg.length > 100) msg.take(97) + "..." else msg
     }.getOrElse(emptyCell)
     val receiverLastErrorTime = receiverInfo.map {
       r => if (r.lastErrorTime < 0) "-" else SparkUIUtils.formatDate(r.lastErrorTime)
@@ -455,7 +464,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     <tr>
       <td rowspan="2" style="vertical-align: middle; width: 151px;">
         <div style="width: 151px;">
-          <div><strong>{receiverName}</strong></div>
+          <div style="word-wrap: break-word;"><strong>{receiverName}</strong></div>
           <div>Avg: {receivedRecords.formattedAvg} events/sec</div>
         </div>
       </td>
@@ -549,7 +558,7 @@ private[ui] class JsCollector {
   def toHtml: Seq[Node] = {
     val js =
       s"""
-         |$$(document).ready(function(){
+         |$$(document).ready(function() {
          |    ${preparedStatements.mkString("\n")}
          |    ${statements.mkString("\n")}
          |});""".stripMargin

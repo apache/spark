@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{Row, QueryTest}
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 /**
  * A set of tests that validates commands can also be queried by like a table

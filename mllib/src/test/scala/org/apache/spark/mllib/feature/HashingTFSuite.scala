@@ -20,6 +20,7 @@ package org.apache.spark.mllib.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
 class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -47,5 +48,16 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
       "c b a c b a a".split(" "))
     val docs = sc.parallelize(localDocs, 2)
     assert(hashingTF.transform(docs).collect().toSet === localDocs.map(hashingTF.transform).toSet)
+  }
+
+  test("applying binary term freqs") {
+    val hashingTF = new HashingTF(100).setBinary(true)
+    val doc = "a a b c c c".split(" ")
+    val n = hashingTF.numFeatures
+    val expected = Vectors.sparse(n, Seq(
+      (hashingTF.indexOf("a"), 1.0),
+      (hashingTF.indexOf("b"), 1.0),
+      (hashingTF.indexOf("c"), 1.0)))
+    assert(hashingTF.transform(doc) ~== expected absTol 1e-14)
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 
 /**

@@ -24,22 +24,27 @@ import java.util.{ArrayList => JArrayList, List => JList}
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
-import py4j.GatewayServer
-
+import org.apache.spark.SparkException
 import org.apache.spark.api.java._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Interval, Duration, Time}
-import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.{Duration, Interval, Time}
 import org.apache.spark.streaming.api.java._
+import org.apache.spark.streaming.dstream._
 import org.apache.spark.util.Utils
-
 
 /**
  * Interface for Python callback function which is used to transform RDDs
  */
 private[python] trait PythonTransformFunction {
   def call(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]]
+
+  /**
+   * Get the failure, if any, in the last call to `call`.
+   *
+   * @return the failure message if there was a failure, or `null` if there was no failure.
+   */
+  def getLastFailure: String
 }
 
 /**
@@ -48,6 +53,13 @@ private[python] trait PythonTransformFunction {
 private[python] trait PythonTransformFunctionSerializer {
   def dumps(id: String): Array[Byte]
   def loads(bytes: Array[Byte]): PythonTransformFunction
+
+  /**
+   * Get the failure, if any, in the last call to `dumps` or `loads`.
+   *
+   * @return the failure message if there was a failure, or `null` if there was no failure.
+   */
+  def getLastFailure: String
 }
 
 /**
@@ -59,18 +71,27 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
   extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] {
 
   def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
-    Option(pfunc.call(time.milliseconds, List(rdd.map(JavaRDD.fromRDD(_)).orNull).asJava))
-      .map(_.rdd)
+    val rdds = List(rdd.map(JavaRDD.fromRDD(_)).orNull).asJava
+    Option(callPythonTransformFunction(time.milliseconds, rdds)).map(_.rdd)
   }
 
   def apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
     val rdds = List(rdd.map(JavaRDD.fromRDD(_)).orNull, rdd2.map(JavaRDD.fromRDD(_)).orNull).asJava
-    Option(pfunc.call(time.milliseconds, rdds)).map(_.rdd)
+    Option(callPythonTransformFunction(time.milliseconds, rdds)).map(_.rdd)
   }
 
   // for function.Function2
   def call(rdds: JList[JavaRDD[_]], time: Time): JavaRDD[Array[Byte]] = {
-    pfunc.call(time.milliseconds, rdds)
+    callPythonTransformFunction(time.milliseconds, rdds)
+  }
+
+  private def callPythonTransformFunction(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]] = {
+    val resultRDD = pfunc.call(time, rdds)
+    val failure = pfunc.getLastFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    resultRDD
   }
 
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
@@ -103,23 +124,33 @@ private[python] object PythonTransformFunctionSerializer {
   /*
    * Register a serializer from Python, should be called during initialization
    */
-  def register(ser: PythonTransformFunctionSerializer): Unit = {
+  def register(ser: PythonTransformFunctionSerializer): Unit = synchronized {
     serializer = ser
   }
 
-  def serialize(func: PythonTransformFunction): Array[Byte] = {
+  def serialize(func: PythonTransformFunction): Array[Byte] = synchronized {
     require(serializer != null, "Serializer has not been registered!")
     // get the id of PythonTransformFunction in py4j
     val h = Proxy.getInvocationHandler(func.asInstanceOf[Proxy])
     val f = h.getClass().getDeclaredField("id")
     f.setAccessible(true)
     val id = f.get(h).asInstanceOf[String]
-    serializer.dumps(id)
+    val results = serializer.dumps(id)
+    val failure = serializer.getLastFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    results
   }
 
-  def deserialize(bytes: Array[Byte]): PythonTransformFunction = {
+  def deserialize(bytes: Array[Byte]): PythonTransformFunction = synchronized {
     require(serializer != null, "Serializer has not been registered!")
-    serializer.loads(bytes)
+    val pfunc = serializer.loads(bytes)
+    val failure = serializer.getLastFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    pfunc
   }
 }
 
@@ -134,16 +165,6 @@ private[python] object PythonDStream {
    */
   def registerSerializer(ser: PythonTransformFunctionSerializer): Unit = {
     PythonTransformFunctionSerializer.register(ser)
-  }
-
-  /**
-   * Update the port of callback client to `port`
-   */
-  def updatePythonGatewayPort(gws: GatewayServer, port: Int): Unit = {
-    val cl = gws.getCallbackClient
-    val f = cl.getClass.getDeclaredField("port")
-    f.setAccessible(true)
-    f.setInt(cl, port)
   }
 
   /**
@@ -230,8 +251,18 @@ private[python] class PythonTransformed2DStream(
  */
 private[python] class PythonStateDStream(
     parent: DStream[Array[Byte]],
-    reduceFunc: PythonTransformFunction)
+    reduceFunc: PythonTransformFunction,
+    initialRDD: Option[RDD[Array[Byte]]])
   extends PythonDStream(parent, reduceFunc) {
+
+  def this(
+    parent: DStream[Array[Byte]],
+    reduceFunc: PythonTransformFunction) = this(parent, reduceFunc, None)
+
+  def this(
+    parent: DStream[Array[Byte]],
+    reduceFunc: PythonTransformFunction,
+    initialRDD: JavaRDD[Array[Byte]]) = this(parent, reduceFunc, Some(initialRDD.rdd))
 
   super.persist(StorageLevel.MEMORY_ONLY)
   override val mustCheckpoint = true
@@ -240,7 +271,7 @@ private[python] class PythonStateDStream(
     val lastState = getOrCompute(validTime - slideDuration)
     val rdd = parent.getOrCompute(validTime)
     if (rdd.isDefined) {
-      func(lastState, rdd, validTime)
+      func(lastState.orElse(initialRDD), rdd, validTime)
     } else {
       lastState
     }

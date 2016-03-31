@@ -21,7 +21,7 @@ import java.net.{InetAddress, Socket}
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.launcher.LauncherProtocol._
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A class that can be used to talk to a launcher server. Users should extend this class to
@@ -88,12 +88,20 @@ private[spark] abstract class LauncherBackend {
    */
   protected def onDisconnected() : Unit = { }
 
+  private def fireStopRequest(): Unit = {
+    val thread = LauncherBackend.threadFactory.newThread(new Runnable() {
+      override def run(): Unit = Utils.tryLogNonFatalError {
+        onStopRequest()
+      }
+    })
+    thread.start()
+  }
 
   private class BackendConnection(s: Socket) extends LauncherConnection(s) {
 
     override protected def handle(m: Message): Unit = m match {
       case _: Stop =>
-        onStopRequest()
+        fireStopRequest()
 
       case _ =>
         throw new IllegalArgumentException(s"Unexpected message type: ${m.getClass().getName()}")

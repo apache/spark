@@ -31,6 +31,10 @@ protected class AttributeEquals(val a: Attribute) {
 }
 
 object AttributeSet {
+  /** Returns an empty [[AttributeSet]]. */
+  val empty = apply(Iterable.empty)
+
+  /** Constructs a new [[AttributeSet]] that contains a single [[Attribute]]. */
   def apply(a: Attribute): AttributeSet = new AttributeSet(Set(new AttributeEquals(a)))
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
@@ -49,7 +53,7 @@ object AttributeSet {
  * cosmetically (e.g., the names have different capitalizations).
  *
  * Note that we do not override equality for Attribute references as it is really weird when
- * `AttributeReference("a"...) == AttrributeReference("b", ...)`. This tactic leads to broken tests,
+ * `AttributeReference("a"...) == AttributeReference("b", ...)`. This tactic leads to broken tests,
  * and also makes doing transformations hard (we always try keep older trees instead of new ones
  * when the transformation was a no-op).
  */

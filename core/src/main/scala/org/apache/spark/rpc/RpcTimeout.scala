@@ -19,12 +19,11 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.{Awaitable, Await}
+import scala.concurrent.{Await, Awaitable}
 import scala.concurrent.duration._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
-
 
 /**
  * An exception thrown if RpcTimeout modifies a [[TimeoutException]].
@@ -120,7 +119,7 @@ private[spark] object RpcTimeout {
     // Find the first set property or use the default value with the first property
     val itr = timeoutPropList.iterator
     var foundProp: Option[(String, String)] = None
-    while (itr.hasNext && foundProp.isEmpty){
+    while (itr.hasNext && foundProp.isEmpty) {
       val propKey = itr.next()
       conf.getOption(propKey).foreach { prop => foundProp = Some(propKey, prop) }
     }

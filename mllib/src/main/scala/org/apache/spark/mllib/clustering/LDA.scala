@@ -19,17 +19,15 @@ package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 /**
- * :: Experimental ::
- *
  * Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
  *
  * Terminology:
@@ -45,7 +43,6 @@ import org.apache.spark.util.Utils
  *       (Wikipedia)]]
  */
 @Since("1.3.0")
-@Experimental
 class LDA private (
     private var k: Int,
     private var maxIterations: Int,
@@ -64,14 +61,13 @@ class LDA private (
     ldaOptimizer = new EMLDAOptimizer)
 
   /**
-   * Number of topics to infer.  I.e., the number of soft cluster centers.
-   *
+   * Number of topics to infer, i.e., the number of soft cluster centers.
    */
   @Since("1.3.0")
   def getK: Int = k
 
   /**
-   * Number of topics to infer.  I.e., the number of soft cluster centers.
+   * Set the number of topics to infer, i.e., the number of soft cluster centers.
    * (default = 10)
    */
   @Since("1.3.0")
@@ -225,29 +221,31 @@ class LDA private (
   def setBeta(beta: Double): this.type = setTopicConcentration(beta)
 
   /**
-   * Maximum number of iterations for learning.
+   * Maximum number of iterations allowed.
    */
   @Since("1.3.0")
   def getMaxIterations: Int = maxIterations
 
   /**
-   * Maximum number of iterations for learning.
+   * Set the maximum number of iterations allowed.
    * (default = 20)
    */
   @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
+    require(maxIterations >= 0,
+      s"Maximum of iterations must be nonnegative but got ${maxIterations}")
     this.maxIterations = maxIterations
     this
   }
 
   /**
-   * Random seed
+   * Random seed for cluster initialization.
    */
   @Since("1.3.0")
   def getSeed: Long = seed
 
   /**
-   * Random seed
+   * Set the random seed for cluster initialization.
    */
   @Since("1.3.0")
   def setSeed(seed: Long): this.type = {

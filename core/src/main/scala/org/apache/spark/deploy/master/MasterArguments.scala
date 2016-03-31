@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.master
 
+import scala.annotation.tailrec
+
 import org.apache.spark.SparkConf
 import org.apache.spark.util.{IntParam, Utils}
 
@@ -49,6 +51,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
     webUiPort = conf.get("spark.master.ui.port").toInt
   }
 
+  @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
       Utils.checkHost(value, "ip no longer supported, please use hostname " + value)

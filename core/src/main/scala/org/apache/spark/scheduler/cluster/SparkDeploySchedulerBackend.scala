@@ -19,11 +19,12 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
-import org.apache.spark.rpc.RpcAddress
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
+import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -54,9 +55,10 @@ private[spark] class SparkDeploySchedulerBackend(
     launcherBackend.connect()
 
     // The endpoint for executors to talk to us
-    val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
-      RpcAddress(sc.conf.get("spark.driver.host"), sc.conf.get("spark.driver.port").toInt),
-      CoarseGrainedSchedulerBackend.ENDPOINT_NAME)
+    val driverUrl = RpcEndpointAddress(
+      sc.conf.get("spark.driver.host"),
+      sc.conf.get("spark.driver.port").toInt,
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     val args = Seq(
       "--driver-url", driverUrl,
       "--executor-id", "{{EXECUTOR_ID}}",
@@ -88,8 +90,16 @@ private[spark] class SparkDeploySchedulerBackend(
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
-    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
-      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
+    // If we're using dynamic allocation, set our initial executor limit to 0 for now.
+    // ExecutorAllocationManager will send the real initial limit to the Master later.
+    val initialExecutorLimit =
+      if (Utils.isDynamicAllocationEnabled(conf)) {
+        Some(0)
+      } else {
+        None
+      }
+    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
+      appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
     client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
@@ -137,7 +147,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def executorRemoved(fullId: String, message: String, exitStatus: Option[Int]) {
     val reason: ExecutorLossReason = exitStatus match {
-      case Some(code) => ExecutorExited(code, isNormalExit = true, message)
+      case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
       case None => SlaveLost(message)
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
@@ -191,17 +201,19 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   private def stop(finalState: SparkAppHandle.State): Unit = synchronized {
-    stopping = true
+    try {
+      stopping = true
 
-    launcherBackend.setState(finalState)
-    launcherBackend.close()
+      super.stop()
+      client.stop()
 
-    super.stop()
-    client.stop()
-
-    val callback = shutdownCallback
-    if (callback != null) {
-      callback(this)
+      val callback = shutdownCallback
+      if (callback != null) {
+        callback(this)
+      }
+    } finally {
+      launcherBackend.setState(finalState)
+      launcherBackend.close()
     }
   }
 

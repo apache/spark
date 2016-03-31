@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.charset.StandardCharsets
+
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types._
@@ -120,7 +122,6 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private def checkNaNWithoutCodegen(
     expression: Expression,
-    expected: Any,
     inputRow: InternalRow = EmptyRow): Unit = {
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
@@ -440,10 +441,10 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Hex(Literal(100800200404L)), "177828FED4")
     checkEvaluation(Hex(Literal(-100800200404L)), "FFFFFFE887D7012C")
     checkEvaluation(Hex(Literal.create(null, BinaryType)), null)
-    checkEvaluation(Hex(Literal("helloHex".getBytes())), "68656C6C6F486578")
+    checkEvaluation(Hex(Literal("helloHex".getBytes(StandardCharsets.UTF_8))), "68656C6C6F486578")
     // scalastyle:off
     // Turn off scala style for non-ascii chars
-    checkEvaluation(Hex(Literal("三重的".getBytes("UTF8"))), "E4B889E9878DE79A84")
+    checkEvaluation(Hex(Literal("三重的".getBytes(StandardCharsets.UTF_8))), "E4B889E9878DE79A84")
     // scalastyle:on
     Seq(LongType, BinaryType, StringType).foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Hex.apply _, dt)
@@ -452,14 +453,14 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("unhex") {
     checkEvaluation(Unhex(Literal.create(null, StringType)), null)
-    checkEvaluation(Unhex(Literal("737472696E67")), "string".getBytes)
+    checkEvaluation(Unhex(Literal("737472696E67")), "string".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Unhex(Literal("")), new Array[Byte](0))
     checkEvaluation(Unhex(Literal("F")), Array[Byte](15))
     checkEvaluation(Unhex(Literal("ff")), Array[Byte](-1))
     checkEvaluation(Unhex(Literal("GG")), null)
     // scalastyle:off
     // Turn off scala style for non-ascii chars
-    checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes("UTF-8"))
+    checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Unhex(Literal("三重的")), null)
     // scalastyle:on
     checkConsistencyBetweenInterpretedAndCodegen(Unhex, StringType)
@@ -552,5 +553,9 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Round(Literal.create(null, dataType),
         Literal.create(null, IntegerType)), null)
     }
+
+    checkEvaluation(Round(-3.5, 0), -4.0)
+    checkEvaluation(Round(-0.35, 1), -0.4)
+    checkEvaluation(Round(-35, -1), -40)
   }
 }

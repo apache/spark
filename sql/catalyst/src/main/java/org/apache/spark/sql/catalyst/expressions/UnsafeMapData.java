@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import java.nio.ByteBuffer;
 
-import org.apache.spark.sql.types.MapData;
+import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.Platform;
 
 /**

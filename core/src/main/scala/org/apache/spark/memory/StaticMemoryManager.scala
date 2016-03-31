@@ -17,11 +17,8 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockId, BlockStatus}
-
+import org.apache.spark.storage.BlockId
 
 /**
  * A [[MemoryManager]] that statically partitions the heap space into disjoint regions.
@@ -32,92 +29,76 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  */
 private[spark] class StaticMemoryManager(
     conf: SparkConf,
-    override val maxExecutionMemory: Long,
-    override val maxStorageMemory: Long)
-  extends MemoryManager {
+    maxOnHeapExecutionMemory: Long,
+    override val maxOnHeapStorageMemory: Long,
+    numCores: Int)
+  extends MemoryManager(
+    conf,
+    numCores,
+    maxOnHeapStorageMemory,
+    maxOnHeapExecutionMemory) {
 
-  def this(conf: SparkConf) {
+  def this(conf: SparkConf, numCores: Int) {
     this(
       conf,
       StaticMemoryManager.getMaxExecutionMemory(conf),
-      StaticMemoryManager.getMaxStorageMemory(conf))
+      StaticMemoryManager.getMaxStorageMemory(conf),
+      numCores)
   }
+
+  // The StaticMemoryManager does not support off-heap storage memory:
+  offHeapExecutionMemoryPool.incrementPoolSize(offHeapStorageMemoryPool.poolSize)
+  offHeapStorageMemoryPool.decrementPoolSize(offHeapStorageMemoryPool.poolSize)
 
   // Max number of bytes worth of blocks to evict when unrolling
-  private val maxMemoryToEvictForUnroll: Long = {
-    (maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
+  private val maxUnrollMemory: Long = {
+    (maxOnHeapStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
-  /**
-   * Acquire N bytes of memory for execution.
-   * @return number of bytes successfully granted (<= N).
-   */
-  override def acquireExecutionMemory(
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
-    assert(numBytes >= 0)
-    assert(_executionMemoryUsed <= maxExecutionMemory)
-    val bytesToGrant = math.min(numBytes, maxExecutionMemory - _executionMemoryUsed)
-    _executionMemoryUsed += bytesToGrant
-    bytesToGrant
-  }
-
-  /**
-   * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
-   * @return whether all N bytes were successfully granted.
-   */
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    acquireStorageMemory(blockId, numBytes, numBytes, evictedBlocks)
+      memoryMode: MemoryMode): Boolean = synchronized {
+    require(memoryMode != MemoryMode.OFF_HEAP,
+      "StaticMemoryManager does not support off-heap storage memory")
+    if (numBytes > maxOnHeapStorageMemory) {
+      // Fail fast if the block simply won't fit
+      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
+        s"memory limit ($maxOnHeapStorageMemory bytes)")
+      false
+    } else {
+      onHeapStorageMemoryPool.acquireMemory(blockId, numBytes)
+    }
   }
 
-  /**
-   * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
-   *
-   * This evicts at most M bytes worth of existing blocks, where M is a fraction of the storage
-   * space specified by `spark.storage.unrollFraction`. Blocks evicted in the process, if any,
-   * are added to `evictedBlocks`.
-   *
-   * @return whether all N bytes were successfully granted.
-   */
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    val currentUnrollMemory = memoryStore.currentUnrollMemory
-    val maxNumBytesToFree = math.max(0, maxMemoryToEvictForUnroll - currentUnrollMemory)
-    val numBytesToFree = math.min(numBytes, maxNumBytesToFree)
-    acquireStorageMemory(blockId, numBytes, numBytesToFree, evictedBlocks)
+      memoryMode: MemoryMode): Boolean = synchronized {
+    require(memoryMode != MemoryMode.OFF_HEAP,
+      "StaticMemoryManager does not support off-heap unroll memory")
+    val currentUnrollMemory = onHeapStorageMemoryPool.memoryStore.currentUnrollMemory
+    val freeMemory = onHeapStorageMemoryPool.memoryFree
+    // When unrolling, we will use all of the existing free memory, and, if necessary,
+    // some extra space freed from evicting cached blocks. We must place a cap on the
+    // amount of memory to be evicted by unrolling, however, otherwise unrolling one
+    // big block can blow away the entire cache.
+    val maxNumBytesToFree = math.max(0, maxUnrollMemory - currentUnrollMemory - freeMemory)
+    // Keep it within the range 0 <= X <= maxNumBytesToFree
+    val numBytesToFree = math.max(0, math.min(maxNumBytesToFree, numBytes - freeMemory))
+    onHeapStorageMemoryPool.acquireMemory(blockId, numBytes, numBytesToFree)
   }
 
-  /**
-   * Acquire N bytes of storage memory for the given block, evicting existing ones if necessary.
-   *
-   * @param blockId the ID of the block we are acquiring storage memory for
-   * @param numBytesToAcquire the size of this block
-   * @param numBytesToFree the size of space to be freed through evicting blocks
-   * @param evictedBlocks a holder for blocks evicted in the process
-   * @return whether all N bytes were successfully granted.
-   */
-  private def acquireStorageMemory(
-      blockId: BlockId,
-      numBytesToAcquire: Long,
-      numBytesToFree: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    assert(numBytesToAcquire >= 0)
-    assert(numBytesToFree >= 0)
-    memoryStore.ensureFreeSpace(blockId, numBytesToFree, evictedBlocks)
-    assert(_storageMemoryUsed <= maxStorageMemory)
-    val enoughMemory = _storageMemoryUsed + numBytesToAcquire <= maxStorageMemory
-    if (enoughMemory) {
-      _storageMemoryUsed += numBytesToAcquire
+  private[memory]
+  override def acquireExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = synchronized {
+    memoryMode match {
+      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
     }
-    enoughMemory
   }
-
 }
 
 
@@ -132,7 +113,6 @@ private[spark] object StaticMemoryManager {
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
     (systemMaxMemory * memoryFraction * safetyFraction).toLong
   }
-
 
   /**
    * Return the total amount of memory available for the execution region, in bytes.

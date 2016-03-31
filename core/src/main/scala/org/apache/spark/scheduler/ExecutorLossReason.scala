@@ -28,14 +28,28 @@ class ExecutorLossReason(val message: String) extends Serializable {
 }
 
 private[spark]
-case class ExecutorExited(exitCode: Int, isNormalExit: Boolean, reason: String)
+case class ExecutorExited(exitCode: Int, exitCausedByApp: Boolean, reason: String)
   extends ExecutorLossReason(reason)
 
 private[spark] object ExecutorExited {
-  def apply(exitCode: Int, isNormalExit: Boolean): ExecutorExited = {
-    ExecutorExited(exitCode, isNormalExit, ExecutorExitCode.explainExitCode(exitCode))
+  def apply(exitCode: Int, exitCausedByApp: Boolean): ExecutorExited = {
+    ExecutorExited(
+      exitCode,
+      exitCausedByApp,
+      ExecutorExitCode.explainExitCode(exitCode))
   }
 }
+
+private[spark] object ExecutorKilled extends ExecutorLossReason("Executor killed by driver.")
+
+/**
+ * A loss reason that means we don't yet know why the executor exited.
+ *
+ * This is used by the task scheduler to remove state associated with the executor, but
+ * not yet fail any tasks that were running in the executor before the real loss reason
+ * is known.
+ */
+private [spark] object LossReasonPending extends ExecutorLossReason("Pending loss reason.")
 
 private[spark]
 case class SlaveLost(_message: String = "Slave lost")

@@ -34,8 +34,6 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 
   test("send rate update to receivers") {
     withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
-      ssc.scheduler.listenerBus.start(ssc.sc)
-
       val newRateLimit = 100L
       val inputDStream = new RateTestInputDStream(ssc)
       val tracker = new ReceiverTracker(ssc)
@@ -99,16 +97,16 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       output.register()
       ssc.start()
       eventually(timeout(10 seconds), interval(10 millis)) {
-        // If preferredLocations is set correctly, receiverTaskLocality should be NODE_LOCAL
-        assert(receiverTaskLocality === TaskLocality.NODE_LOCAL)
+        // If preferredLocations is set correctly, receiverTaskLocality should be PROCESS_LOCAL
+        assert(receiverTaskLocality === TaskLocality.PROCESS_LOCAL)
       }
     }
   }
 }
 
 /** An input DStream with for testing rate controlling */
-private[streaming] class RateTestInputDStream(@transient ssc_ : StreamingContext)
-  extends ReceiverInputDStream[Int](ssc_) {
+private[streaming] class RateTestInputDStream(_ssc: StreamingContext)
+  extends ReceiverInputDStream[Int](_ssc) {
 
   override def getReceiver(): Receiver[Int] = new RateTestReceiver(id)
 
