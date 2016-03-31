@@ -33,6 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
@@ -481,6 +482,17 @@ trait FileFormat {
     // TODO: Remove this default implementation when the other formats have been ported
     // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
     throw new UnsupportedOperationException(s"buildReader is not supported for $this")
+  }
+}
+
+private[sql] object FileFormat {
+  def appendPartitionValues(
+      rows: Iterator[InternalRow],
+      output: Seq[Attribute],
+      partitionValues: InternalRow): Iterator[InternalRow] = {
+    val joinedRow = new JoinedRow()
+    val appendPartitionColumns = GenerateUnsafeProjection.generate(output, output)
+    rows.map { row => appendPartitionColumns(joinedRow(row, partitionValues)) }
   }
 }
 
