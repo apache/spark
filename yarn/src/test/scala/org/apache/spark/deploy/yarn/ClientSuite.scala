@@ -121,7 +121,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
-    populateClasspath(args, conf, sparkConf, env, true)
+    populateClasspath(args, conf, sparkConf, env)
 
     val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
@@ -178,8 +178,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       "/remotePath/1:/remotePath/2")
 
     val env = new MutableHashMap[String, String]()
-    populateClasspath(null, conf, sparkConf, env, false,
-      extraClassPath = Some("/localPath/my1.jar"))
+    populateClasspath(null, conf, sparkConf, env, extraClassPath = Some("/localPath/my1.jar"))
     val cp = classpath(env)
     cp should contain ("/remotePath/spark.jar")
     cp should contain ("/remotePath/my1.jar")
@@ -356,7 +355,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   private def classpath(client: Client): Array[String] = {
     val env = new MutableHashMap[String, String]()
-    populateClasspath(null, client.hadoopConf, client.sparkConf, env, false)
+    populateClasspath(null, client.hadoopConf, client.sparkConf, env)
     classpath(env)
   }
 
