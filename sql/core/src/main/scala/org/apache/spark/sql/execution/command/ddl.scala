@@ -260,7 +260,7 @@ case class AlterTableSkewedLocation(
  * Add Partition in ALTER TABLE/VIEW: add the table/view partitions.
  * 'partitionSpecsAndLocs': the syntax of ALTER VIEW is identical to ALTER TABLE,
  * EXCEPT that it is ILLEGAL to specify a LOCATION clause.
- * An error message will be issued if the partition exists, unless 'ifNotExists' is false.
+ * An error message will be issued if the partition exists, unless 'ifNotExists' is true.
  */
 case class AlterTableAddPartition(
     tableName: TableIdentifier,
@@ -285,7 +285,7 @@ case class AlterTableExchangePartition(
  * This removes the data and metadata for this partition.
  * The data is actually moved to the .Trash/Current directory if Trash is configured,
  * unless 'purge' is true, but the metadata is completely lost.
- * An error message will be issued if the partition does not exist, unless 'ifExists' is false.
+ * An error message will be issued if the partition does not exist, unless 'ifExists' is true.
  * Note: purge is always false when the target is a view.
  */
 case class AlterTableDropPartition(
