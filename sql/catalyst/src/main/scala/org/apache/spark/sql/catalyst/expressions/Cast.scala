@@ -759,7 +759,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
       (c, evPrim, evNull) => s"$evPrim = (int) $c;"
   }
 
-  protected def castToLongCode(from: DataType): CastFunction = from match {
+  private[this] def castToLongCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
         s"""
