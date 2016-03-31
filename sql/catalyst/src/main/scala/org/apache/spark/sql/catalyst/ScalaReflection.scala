@@ -110,8 +110,8 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * Returns an expression that can be used to construct an object of type `T` given an input
-   * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
+   * Returns an expression that can be used to deserialize an input row to an object of type `T`
+   * with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
    * of the same name as the constructor arguments.  Nested classes will have their fields accessed
    * using UnresolvedExtractValue.
    *
@@ -119,14 +119,14 @@ object ScalaReflection extends ScalaReflection {
    * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
    * calling resolve/bind with a new schema.
    */
-  def constructorFor[T : TypeTag]: Expression = {
+  def deserializerFor[T : TypeTag]: Expression = {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "${clsName}"""" :: Nil
-    constructorFor(tpe, None, walkedTypePath)
+    deserializerFor(tpe, None, walkedTypePath)
   }
 
-  private def constructorFor(
+  private def deserializerFor(
       tpe: `Type`,
       path: Option[Expression],
       walkedTypePath: Seq[String]): Expression = ScalaReflectionLock.synchronized {
@@ -161,7 +161,7 @@ object ScalaReflection extends ScalaReflection {
     }
 
     /**
-     * When we build the `fromRowExpression` for an encoder, we set up a lot of "unresolved" stuff
+     * When we build the `deserializer` for an encoder, we set up a lot of "unresolved" stuff
      * and lost the required data type, which may lead to runtime error if the real type doesn't
      * match the encoder's schema.
      * For example, we build an encoder for `case class Data(a: Int, b: String)` and the real type
@@ -188,7 +188,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(optType)) = t
         val className = getClassNameFromType(optType)
         val newTypePath = s"""- option value class: "$className"""" +: walkedTypePath
-        WrapOption(constructorFor(optType, path, newTypePath), dataTypeFor(optType))
+        WrapOption(deserializerFor(optType, path, newTypePath), dataTypeFor(optType))
 
       case t if t <:< localTypeOf[java.lang.Integer] =>
         val boxedType = classOf[java.lang.Integer]
@@ -272,7 +272,7 @@ object ScalaReflection extends ScalaReflection {
           val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
           Invoke(
             MapObjects(
-              p => constructorFor(elementType, Some(p), newTypePath),
+              p => deserializerFor(elementType, Some(p), newTypePath),
               getPath,
               schemaFor(elementType).dataType),
             "array",
@@ -286,7 +286,7 @@ object ScalaReflection extends ScalaReflection {
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
 
         val mapFunction: Expression => Expression = p => {
-          val converter = constructorFor(elementType, Some(p), newTypePath)
+          val converter = deserializerFor(elementType, Some(p), newTypePath)
           if (nullable) {
             converter
           } else {
@@ -312,7 +312,7 @@ object ScalaReflection extends ScalaReflection {
         val keyData =
           Invoke(
             MapObjects(
-              p => constructorFor(keyType, Some(p), walkedTypePath),
+              p => deserializerFor(keyType, Some(p), walkedTypePath),
               Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType)),
               schemaFor(keyType).dataType),
             "array",
@@ -321,7 +321,7 @@ object ScalaReflection extends ScalaReflection {
         val valueData =
           Invoke(
             MapObjects(
-              p => constructorFor(valueType, Some(p), walkedTypePath),
+              p => deserializerFor(valueType, Some(p), walkedTypePath),
               Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
               schemaFor(valueType).dataType),
             "array",
@@ -344,12 +344,12 @@ object ScalaReflection extends ScalaReflection {
           val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           // For tuples, we based grab the inner fields by ordinal instead of name.
           if (cls.getName startsWith "scala.Tuple") {
-            constructorFor(
+            deserializerFor(
               fieldType,
               Some(addToPathOrdinal(i, dataType, newTypePath)),
               newTypePath)
           } else {
-            val constructor = constructorFor(
+            val constructor = deserializerFor(
               fieldType,
               Some(addToPath(fieldName, dataType, newTypePath)),
               newTypePath)
@@ -387,7 +387,7 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * Returns expressions for extracting all the fields from the given type.
+   * Returns an expression for serializing an object of type T to an internal row.
    *
    * If the given type is not supported, i.e. there is no encoder can be built for this type,
    * an [[UnsupportedOperationException]] will be thrown with detailed error message to explain
@@ -398,18 +398,18 @@ object ScalaReflection extends ScalaReflection {
    *  * the element type of [[Array]] or [[Seq]]: `array element class: "abc.xyz.MyClass"`
    *  * the field of [[Product]]: `field (class: "abc.xyz.MyClass", name: "myField")`
    */
-  def extractorsFor[T : TypeTag](inputObject: Expression): CreateNamedStruct = {
+  def serializerFor[T : TypeTag](inputObject: Expression): CreateNamedStruct = {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "${clsName}"""" :: Nil
-    extractorFor(inputObject, tpe, walkedTypePath) match {
+    serializerFor(inputObject, tpe, walkedTypePath) match {
       case expressions.If(_, _, s: CreateNamedStruct) if tpe <:< localTypeOf[Product] => s
       case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
     }
   }
 
   /** Helper for extracting internal fields from a case class. */
-  private def extractorFor(
+  private def serializerFor(
       inputObject: Expression,
       tpe: `Type`,
       walkedTypePath: Seq[String]): Expression = ScalaReflectionLock.synchronized {
@@ -425,7 +425,7 @@ object ScalaReflection extends ScalaReflection {
       } else {
         val clsName = getClassNameFromType(elementType)
         val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
-        MapObjects(extractorFor(_, elementType, newPath), input, externalDataType)
+        MapObjects(serializerFor(_, elementType, newPath), input, externalDataType)
       }
     }
 
@@ -491,7 +491,7 @@ object ScalaReflection extends ScalaReflection {
               expressions.If(
                 IsNull(unwrapped),
                 expressions.Literal.create(null, silentSchemaFor(optType).dataType),
-                extractorFor(unwrapped, optType, newPath))
+                serializerFor(unwrapped, optType, newPath))
           }
 
         case t if t <:< localTypeOf[Product] =>
@@ -500,7 +500,7 @@ object ScalaReflection extends ScalaReflection {
             val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
             val clsName = getClassNameFromType(fieldType)
             val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
-            expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType, newPath) :: Nil
+            expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType, newPath) :: Nil
           })
           val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
           expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)

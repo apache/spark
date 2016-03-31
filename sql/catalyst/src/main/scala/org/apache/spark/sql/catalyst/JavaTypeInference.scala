@@ -155,16 +155,16 @@ object JavaTypeInference {
   }
 
   /**
-   * Returns an expression that can be used to construct an object of java bean `T` given an input
-   * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
+   * Returns an expression that can be used to deserialize an internal row to an object of java bean
+   * `T` with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
    * of the same name as the constructor arguments.  Nested classes will have their fields accessed
    * using UnresolvedExtractValue.
    */
-  def constructorFor(beanClass: Class[_]): Expression = {
-    constructorFor(TypeToken.of(beanClass), None)
+  def deserializerFor(beanClass: Class[_]): Expression = {
+    deserializerFor(TypeToken.of(beanClass), None)
   }
 
-  private def constructorFor(typeToken: TypeToken[_], path: Option[Expression]): Expression = {
+  private def deserializerFor(typeToken: TypeToken[_], path: Option[Expression]): Expression = {
     /** Returns the current path with a sub-field extracted. */
     def addToPath(part: String): Expression = path
       .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
@@ -231,7 +231,7 @@ object JavaTypeInference {
         }.getOrElse {
           Invoke(
             MapObjects(
-              p => constructorFor(typeToken.getComponentType, Some(p)),
+              p => deserializerFor(typeToken.getComponentType, Some(p)),
               getPath,
               inferDataType(elementType)._1),
             "array",
@@ -243,7 +243,7 @@ object JavaTypeInference {
         val array =
           Invoke(
             MapObjects(
-              p => constructorFor(et, Some(p)),
+              p => deserializerFor(et, Some(p)),
               getPath,
               inferDataType(et)._1),
             "array",
@@ -259,7 +259,7 @@ object JavaTypeInference {
         val keyData =
           Invoke(
             MapObjects(
-              p => constructorFor(keyType, Some(p)),
+              p => deserializerFor(keyType, Some(p)),
               Invoke(getPath, "keyArray", ArrayType(keyDataType)),
               keyDataType),
             "array",
@@ -268,7 +268,7 @@ object JavaTypeInference {
         val valueData =
           Invoke(
             MapObjects(
-              p => constructorFor(valueType, Some(p)),
+              p => deserializerFor(valueType, Some(p)),
               Invoke(getPath, "valueArray", ArrayType(valueDataType)),
               valueDataType),
             "array",
@@ -288,7 +288,7 @@ object JavaTypeInference {
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
           val (_, nullable) = inferDataType(fieldType)
-          val constructor = constructorFor(fieldType, Some(addToPath(fieldName)))
+          val constructor = deserializerFor(fieldType, Some(addToPath(fieldName)))
           val setter = if (nullable) {
             constructor
           } else {
@@ -313,14 +313,14 @@ object JavaTypeInference {
   }
 
   /**
-   * Returns expressions for extracting all the fields from the given type.
+   * Returns an expression for serializing an object of the given type to an internal row.
    */
-  def extractorsFor(beanClass: Class[_]): CreateNamedStruct = {
+  def serializerFor(beanClass: Class[_]): CreateNamedStruct = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
-    extractorFor(inputObject, TypeToken.of(beanClass)).asInstanceOf[CreateNamedStruct]
+    serializerFor(inputObject, TypeToken.of(beanClass)).asInstanceOf[CreateNamedStruct]
   }
 
-  private def extractorFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
+  private def serializerFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
 
     def toCatalystArray(input: Expression, elementType: TypeToken[_]): Expression = {
       val (dataType, nullable) = inferDataType(elementType)
@@ -330,7 +330,7 @@ object JavaTypeInference {
           input :: Nil,
           dataType = ArrayType(dataType, nullable))
       } else {
-        MapObjects(extractorFor(_, elementType), input, ObjectType(elementType.getRawType))
+        MapObjects(serializerFor(_, elementType), input, ObjectType(elementType.getRawType))
       }
     }
 
@@ -403,7 +403,7 @@ object JavaTypeInference {
                 inputObject,
                 p.getReadMethod.getName,
                 inferExternalType(fieldType.getRawType))
-              expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType) :: Nil
+              expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType) :: Nil
             })
           } else {
             throw new UnsupportedOperationException(
