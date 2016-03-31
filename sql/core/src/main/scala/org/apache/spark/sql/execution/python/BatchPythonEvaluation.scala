@@ -86,13 +86,13 @@ case class BatchPythonEvaluation(udfs: Seq[PythonUDF], output: Seq[Attribute], c
             dataTypes += e.dataType
             allInputs.length - 1
           }
-        }
-      }
+        }.toArray
+      }.toArray
       val projection = newMutableProjection(allInputs, child.output)()
 
       // Input iterator to Python: input rows are grouped so we send them in batches to Python.
       // For each row, add it to the queue.
-      val inputIterator = iter.grouped(1024).map { inputRows =>
+      val inputIterator = iter.grouped(100).map { inputRows =>
         val toBePickled = inputRows.map { inputRow =>
           queue.add(inputRow)
           val row = projection(inputRow)

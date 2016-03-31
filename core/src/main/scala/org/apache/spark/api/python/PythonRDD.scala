@@ -86,7 +86,7 @@ private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 private[spark] object PythonRunner {
   def apply(func: PythonFunction, bufferSize: Int, reuse_worker: Boolean): PythonRunner = {
     new PythonRunner(
-      Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuse_worker, false, Seq(Seq(0)))
+      Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuse_worker, false, Array(Array(0)))
   }
 }
 
@@ -101,7 +101,7 @@ private[spark] class PythonRunner(
     bufferSize: Int,
     reuse_worker: Boolean,
     isUDF: Boolean,
-    argOffsets: Seq[Seq[Int]])
+    argOffsets: Array[Array[Int]])
   extends Logging {
 
   require(funcs.length == argOffsets.length, "numArgs should have the same length as funcs")
