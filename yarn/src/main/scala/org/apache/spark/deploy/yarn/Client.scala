@@ -1444,7 +1444,7 @@ object Client extends Logging {
     uri.startsWith(s"$LOCAL_SCHEME:")
   }
 
-  /** 
+  /**
    *  Returns the app staging dir.
    */
   private def getAppStagingDirPath(
