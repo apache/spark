@@ -305,7 +305,7 @@ class SQLTests(ReusedPySparkTestCase):
         [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
-    def test_chained_python_udf(self):
+    def test_chained_udf(self):
         self.sqlCtx.registerFunction("double", lambda x: x + x, IntegerType())
         [row] = self.sqlCtx.sql("SELECT double(1)").collect()
         self.assertEqual(row[0], 2)
@@ -313,6 +313,16 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row[0], 4)
         [row] = self.sqlCtx.sql("SELECT double(double(1) + 1)").collect()
         self.assertEqual(row[0], 6)
+
+    def test_multiple_udfs(self):
+        self.sqlCtx.registerFunction("double", lambda x: x * 2, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT double(1), double(2)").collect()
+        self.assertEqual(tuple(row), (2, 4))
+        [row] = self.sqlCtx.sql("SELECT double(double(1)), double(double(2) + 2)").collect()
+        self.assertEqual(tuple(row), (4, 12))
+        self.sqlCtx.registerFunction("add", lambda x, y: x + y, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT double(add(1, 2)), add(double(2), 1)").collect()
+        self.assertEqual(tuple(row), (6, 5))
 
     def test_udf_with_array_type(self):
         d = [Row(l=list(range(3)), d={"key": list(range(5))})]
