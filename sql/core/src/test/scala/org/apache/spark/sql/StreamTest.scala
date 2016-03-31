@@ -265,7 +265,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }
 
     val testThread = Thread.currentThread()
-    val metadataRoot = Utils.createTempDir("streaming.metadata").getCanonicalPath
+    val metadataRoot = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
     try {
       startedTest.foreach { action =>
