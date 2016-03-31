@@ -93,7 +93,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
     checkDataset(
       ds.groupByKey(_._1).agg(typed.sum(_._2)),
-      ("a", 30), ("b", 3), ("c", 1))
+      ("a", 30.0), ("b", 3.0), ("c", 1.0))
   }
 
   test("typed aggregation: TypedAggregator, expr, expr") {
@@ -104,7 +104,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         typed.sum(_._2),
         expr("sum(_2)").as[Long],
         count("*")),
-      ("a", 30, 30L, 2L), ("b", 3, 3L, 2L), ("c", 1, 1L, 1L))
+      ("a", 30.0, 30L, 2L), ("b", 3.0, 3L, 2L), ("c", 1.0, 1L, 1L))
   }
 
   test("typed aggregation: complex result type") {
@@ -122,10 +122,10 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
     checkDataset(
       ds.select(typed.sum((i: Int) => i)),
-      11)
+      11.0)
     checkDataset(
       ds.select(typed.sum((i: Int) => i), typed.sum((i: Int) => i * 2)),
-      11 -> 22)
+      11.0 -> 22.0)
   }
 
   test("typed aggregation: class input") {
