@@ -15,28 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark;
 
-private class SparkJobInfoImpl (
-    val jobId: Int,
-    val stageIds: Array[Int],
-    val status: JobExecutionStatus)
-  extends SparkJobInfo
+import java.io.Serializable;
 
-private class SparkStageInfoImpl(
-    val stageId: Int,
-    val currentAttemptId: Int,
-    val submissionTime: Long,
-    val name: String,
-    val numTasks: Int,
-    val numActiveTasks: Int,
-    val numCompletedTasks: Int,
-    val numFailedTasks: Int)
-  extends SparkStageInfo
-
-private class SparkExecutorInfoImpl(
-    val host: String,
-    val port: Int,
-    val cacheSize: Long,
-    val numRunningTasks: Int)
-  extends SparkExecutorInfo
+/**
+ * Exposes information about Spark Executors.
+ *
+ * This interface is not designed to be implemented outside of Spark.  We may add additional methods
+ * which may break binary compatibility with outside implementations.
+ */
+public interface SparkExecutorInfo extends Serializable {
+  String host();
+  int port();
+  long cacheSize();
+  int numRunningTasks();
+}
