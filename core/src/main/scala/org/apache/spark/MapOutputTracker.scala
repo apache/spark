@@ -356,8 +356,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       : Seq[String] = {
     if (shuffleLocalityEnabled && dep.rdd.partitions.length < SHUFFLE_PREF_MAP_THRESHOLD &&
         dep.partitioner.numPartitions < SHUFFLE_PREF_REDUCE_THRESHOLD) {
-      val blockManagerIds = getLocationsWithLargestOutputs(dep.shuffleId, partitionId,
-        dep.partitioner.numPartitions, REDUCER_PREF_LOCS_FRACTION)
+      // replace getLocationsWithLargestOutputs with getLocationsWithOverAllSituation
+      val blockManagerIds = getLocationsWithGlobalMode(dep.shuffleId,
+        dep.partitioner.numPartitions)
       if (blockManagerIds.nonEmpty) {
         blockManagerIds.get.map(_.host)
       } else {
@@ -420,6 +421,139 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
     None
   }
+
+  /**
+   * Return a list of locations that each have fraction of map output according to load balancing
+   * and achieve  fetching least data.
+   *
+   * @param shuffleId   id of the shuffle
+   * @param numReducers total number of reducers in the shuffle
+   *
+   */
+  def getLocationsWithGlobalMode(
+                                  shuffleId: Int,
+                                  numReducers: Int
+                                  )
+  : Option[Array[BlockManagerId]] = {
+    val statuses = mapStatuses.get(shuffleId).orNull
+    assert(statuses != null)
+    val splitsByLocation = new HashMap[BlockManagerId, Array[Long]]
+    var sumOfAllBytes: Long = 0
+    statuses.foreach {
+      status =>
+        if (status == null) {
+          throw new MetadataFetchFailedException(
+            shuffleId, -1, "Missing an output location for shuffle " + shuffleId)
+        } else {
+          val location = status.location
+          if (!splitsByLocation.contains(location)) {
+            splitsByLocation(location) = new Array[Long](numReducers)
+          }
+          var i = 0
+          while (i < numReducers) {
+            val byteSize = status.getSizeForBlock(i)
+            splitsByLocation(location)(i) += byteSize
+            sumOfAllBytes += byteSize
+            i += 1
+          }
+        }
+    }
+    if (splitsByLocation.nonEmpty) {
+      val numOfLocations = splitsByLocation.size
+      val preferredLocationsOfReduces = new Array[BlockManagerId](numReducers)
+      val bytesOfReduces = new Array[Long](numReducers)
+      val blockManagerIdMaps = new HashMap[Int, BlockManagerId]
+      val splitIndexOfLocation = new Array[HashSet[Int]](numOfLocations)
+      var i = 0
+      var j = 0
+      //caclulate the bytesize of each reducer
+      splitsByLocation.toSeq.map(
+        s => {
+          val (blockManagerId, byteSize) = s
+          blockManagerIdMaps(i) = blockManagerId
+          splitIndexOfLocation(i) = new HashSet[Int]
+          j = 0
+          byteSize.map(
+            b => {
+              bytesOfReduces(j) += b
+              j += 1
+            })
+          i += 1
+        })
+
+      val indexOfBytesOfReduces = new HashMap[Int, Long]
+      for ((size, index) <- bytesOfReduces.zipWithIndex) {
+        indexOfBytesOfReduces.getOrElseUpdate(index, size)
+      }
+      val sortedIndexOfBytesOfReducer = indexOfBytesOfReduces.toSeq.sortWith(_._2 > _._2)
+      val splitSumOfByteSizeOfLocation = new Array[Long](numOfLocations)
+
+      //Divide the tasks into n groups according to the number of nodes and data size,
+      // ensuring that the data size for each group is nearly equal to achieve load balancing.
+      for (i <- sortedIndexOfBytesOfReducer.indices) {
+        var minIndex = 0
+        for (j <- 1 until numOfLocations) {
+          if (splitSumOfByteSizeOfLocation(j) < splitSumOfByteSizeOfLocation(minIndex)) {
+            minIndex = j
+          }
+        }
+        val (index, byteSize) = sortedIndexOfBytesOfReducer(i)
+        splitSumOfByteSizeOfLocation(minIndex) += byteSize
+        splitIndexOfLocation(minIndex).add(index)
+      }
+
+      // Determine the amount of local data if the tasks of every group are executed on every node.
+      // Thus, a n × n matrix is created.
+      val splitBytesOfLocationsAndGroup = new Array[Array[Long]](numOfLocations)
+      for (i <- splitBytesOfLocationsAndGroup.indices) {
+        splitBytesOfLocationsAndGroup(i) = new Array[Long](numOfLocations)
+      }
+      for (i <- splitIndexOfLocation.indices) {
+        val iter: Iterator[Int] = splitIndexOfLocation(i).iterator
+        while (iter.hasNext) {
+          val index = iter.next()
+          val bytesOfLocations: Seq[(BlockManagerId, Long)] = splitsByLocation.toSeq.map(s => (s._1, s._2(index)))
+          for (j <- bytesOfLocations.indices) {
+            splitBytesOfLocationsAndGroup(i)(j) += bytesOfLocations(j)._2
+          }
+        }
+      }
+      //Choose the largest value in the matrix to identify which group is allocated to which node.
+      // Mark the row and column at which the selected group is located to ensure that the group
+      // is not chosen next time. Goto Step 4 until no group is available.
+      for (i <- 0 until numOfLocations) {
+        var maxCol = 0
+        var maxRow = 0
+        var maxValue = splitBytesOfLocationsAndGroup(maxRow)(maxCol)
+        for (j <- splitBytesOfLocationsAndGroup.indices) {
+          for (k <- splitBytesOfLocationsAndGroup(j).indices) {
+            if (splitBytesOfLocationsAndGroup(j)(k) > maxValue) {
+              maxRow = j
+              maxCol = k
+              maxValue = splitBytesOfLocationsAndGroup(j)(k)
+            }
+          }
+        }
+        val iter: Iterator[Int] = splitIndexOfLocation(maxRow).iterator
+        while (iter.hasNext) {
+          val index = iter.next()
+          preferredLocationsOfReduces(index) = blockManagerIdMaps(maxCol)
+        }
+        for (j <- splitBytesOfLocationsAndGroup.indices) {
+          splitBytesOfLocationsAndGroup(j)(maxCol) = -1
+        }
+        for (k <- splitBytesOfLocationsAndGroup.indices) {
+          splitBytesOfLocationsAndGroup(maxRow)(k) = -1
+        }
+      }
+      Some(preferredLocationsOfReduces)
+    }
+    else
+      None
+  }
+
+
+
 
   def incrementEpoch() {
     epochLock.synchronized {
