@@ -23,6 +23,7 @@ import org.apache.commons.lang.NotImplementedException;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
+import org.apache.spark.sql.catalyst.expressions.MutableRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
@@ -91,7 +92,7 @@ public final class ColumnarBatch {
    * Adapter class to interop with existing components that expect internal row. A lot of
    * performance is lost with this translation.
    */
-  public static final class Row extends InternalRow {
+  public static final class Row extends MutableRow {
     protected int rowId;
     private final ColumnarBatch parent;
     private final int fixedLenRowSize;
@@ -230,6 +231,56 @@ public final class ColumnarBatch {
 
     @Override
     public Object get(int ordinal, DataType dataType) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public void setNullAt(int ordinal) {
+      columns[ordinal].putNull(rowId);
+    }
+
+    @Override
+    public void update(int ordinal, Object value) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public void setBoolean(int ordinal, boolean value) {
+      columns[ordinal].putBoolean(rowId, value);
+    }
+
+    @Override
+    public void setByte(int ordinal, byte value) {
+      columns[ordinal].putByte(rowId, value);
+    }
+
+    @Override
+    public void setShort(int ordinal, short value) {
+      columns[ordinal].putShort(rowId, value);
+    }
+
+    @Override
+    public void setInt(int ordinal, int value) {
+      columns[ordinal].putInt(rowId, value);
+    }
+
+    @Override
+    public void setLong(int ordinal, long value) {
+      columns[ordinal].putLong(rowId, value);
+    }
+
+    @Override
+    public void setFloat(int ordinal, float value) {
+      columns[ordinal].putFloat(rowId, value);
+    }
+
+    @Override
+    public void setDouble(int ordinal, double value) {
+      columns[ordinal].putDouble(rowId, value);
+    }
+
+    @Override
+    public void setDecimal(int ordinal, Decimal value, int precision) {
       throw new NotImplementedException();
     }
   }
