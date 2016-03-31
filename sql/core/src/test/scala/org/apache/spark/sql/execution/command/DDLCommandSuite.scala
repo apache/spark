@@ -200,7 +200,7 @@ class DDLCommandSuite extends PlanTest {
     val parsed = parser.parsePlan(sql)
     val expected = AlterTableRename(
       TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None))(sql)
+      TableIdentifier("new_table_name", None))
     comparePlans(parsed, expected)
   }
 

@@ -151,6 +151,11 @@ private[hive] class HiveFunctionRegistry(
     underlying.dropFunction(name)
   }
 
+  // Note: This does not clear functions stored in the metastore
+  override def clear(): Unit = {
+    underlying.clear()
+  }
+
 }
 
 private[hive] case class HiveSimpleUDF(

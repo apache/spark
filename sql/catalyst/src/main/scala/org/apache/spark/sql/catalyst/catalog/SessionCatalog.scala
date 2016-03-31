@@ -528,6 +528,11 @@ class SessionCatalog(
   }
 
   /**
+   * List all functions in the specified database, including temporary functions.
+   */
+  def listFunctions(db: String): Seq[FunctionIdentifier] = listFunctions(db, "*")
+
+  /**
    * List all matching functions in the specified database, including temporary functions.
    */
   def listFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
@@ -545,6 +550,25 @@ class SessionCatalog(
    */
   private[catalog] def getTempFunction(name: String): Option[FunctionBuilder] = {
     functionRegistry.lookupFunctionBuilder(name)
+  }
+
+
+  // -----------------
+  // | Other methods |
+  // -----------------
+
+  /**
+   * Drop all existing databases (except "default") along with all associated tables,
+   * partitions and functions, and set the current database to "default".
+   */
+  def reset(): Unit = {
+    val default = "default"
+    listDatabases().filter(_ != default).foreach { db =>
+      dropDatabase(db, ignoreIfNotExists = false, cascade = true)
+    }
+    tempTables.clear()
+    functionRegistry.clear()
+    setCurrentDatabase(default)
   }
 
 }

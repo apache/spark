@@ -19,21 +19,22 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.parser.ParserUtils._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.catalyst.TableIdentifier
 
-class DDLSuite extends QueryTest with SharedSQLContext {
+class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
-  /**
-   * Drops database `databaseName` after calling `f`.
-   */
-  private def withDatabase(dbNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      dbNames.foreach { name =>
-        sqlContext.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
-      }
+  override def afterEach(): Unit = {
+    try {
+      sqlContext.sessionState.catalog.reset()
+    } finally {
+      super.afterEach()
     }
   }
 
@@ -43,7 +44,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
-      withDatabase(dbName) {
+      try {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
 
         sql(s"CREATE DATABASE $dbName")
@@ -55,6 +56,8 @@ class DDLSuite extends QueryTest with SharedSQLContext {
           Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))
+      } finally {
+        catalog.reset()
       }
     }
   }
@@ -64,8 +67,8 @@ class DDLSuite extends QueryTest with SharedSQLContext {
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
-      val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-      withDatabase(dbName) {
+      try {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabase(dbNameWithoutBackTicks)
         assert(db1 == CatalogDatabase(
@@ -78,6 +81,8 @@ class DDLSuite extends QueryTest with SharedSQLContext {
           sql(s"CREATE DATABASE $dbName")
         }.getMessage
         assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
+      } finally {
+        catalog.reset()
       }
     }
   }
@@ -87,7 +92,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
-      withDatabase(dbName) {
+      try {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         val location =
           System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
@@ -117,6 +122,8 @@ class DDLSuite extends QueryTest with SharedSQLContext {
             Row("Description", "") ::
             Row("Location", location) ::
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
+      } finally {
+        catalog.reset()
       }
     }
   }
@@ -147,5 +154,31 @@ class DDLSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
+  // TODO: test drop database in restrict mode
+
+  test("rename table") {
+    val catalog = sqlContext.sessionState.catalog
+    catalog.createDatabase(CatalogDatabase("dbx", "", "", Map()), ignoreIfExists = false)
+    catalog.createTable(CatalogTable(
+      identifier = TableIdentifier("tab1", Some("dbx")),
+      tableType = CatalogTableType.EXTERNAL_TABLE,
+      storage = CatalogStorageFormat(None, None, None, None, Map()),
+      schema = Seq()), ignoreIfExists = false)
+    assert(catalog.listTables("dbx") == Seq(TableIdentifier("tab1", Some("dbx"))))
+    sql("ALTER TABLE dbx.tab1 RENAME TO dbx.tab2")
+    assert(catalog.listTables("dbx") == Seq(TableIdentifier("tab2", Some("dbx"))))
+    catalog.setCurrentDatabase("dbx")
+    // rename without explicitly specifying database
+    sql("ALTER TABLE tab2 RENAME TO tab1")
+    assert(catalog.listTables("dbx") == Seq(TableIdentifier("tab1", Some("dbx"))))
+    // table to rename does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.does_not_exist RENAME TO dbx.tab2")
+    }
+    // destination database is different
+    intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.tab1 RENAME TO dby.tab2")
+    }
+  }
+
 }

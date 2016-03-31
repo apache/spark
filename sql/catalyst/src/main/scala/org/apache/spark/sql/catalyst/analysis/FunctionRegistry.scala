@@ -52,6 +52,9 @@ trait FunctionRegistry {
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
 
+  /** Clear all registered functions. */
+  def clear(): Unit
+
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -91,6 +94,10 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.remove(name).isDefined
   }
 
+  override def clear(): Unit = {
+    functionBuilders.clear()
+  }
+
   def copy(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
@@ -127,6 +134,10 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   }
 
   override def dropFunction(name: String): Boolean = {
+    throw new UnsupportedOperationException
+  }
+
+  override def clear(): Unit = {
     throw new UnsupportedOperationException
   }
 
