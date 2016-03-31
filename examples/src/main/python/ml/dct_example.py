@@ -29,11 +29,10 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-    df = sqlContext\
-        .createDataFrame([(Vectors.dense([0.0, 1.0, -2.0, 3.0]),),
-                          (Vectors.dense([-1.0, 2.0, 4.0, -7.0]),),
-                          (Vectors.dense([14.0, -2.0, -5.0, 1.0]),)],
-                         ["features"])
+    df = sqlContext.createDataFrame([
+        (Vectors.dense([0.0, 1.0, -2.0, 3.0]),),
+        (Vectors.dense([-1.0, 2.0, 4.0, -7.0]),),
+        (Vectors.dense([14.0, -2.0, -5.0, 1.0]),)], ["features"])
 
     dct = DCT(inverse=False, inputCol="features", outputCol="featuresDCT")
 
