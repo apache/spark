@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.ObjectType
 
@@ -74,8 +74,37 @@ case class MapElements(
     func: Any => Any,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan) extends UnaryNode with ObjectOperator with CodegenSupport {
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  // Mark this as empty. We'll always deserialize the input row and apply the given function at the
+  // beginning.
+  override def usedInputs: AttributeSet = AttributeSet.empty
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val bound = ExpressionCanonicalizer.execute(
+      BindReferences.bindReference(deserializer, child.output))
+    ctx.currentVars = input
+    val evaluated = bound.gen(ctx)
+
+    val resultObj = LambdaVariable(evaluated.value, evaluated.isNull, bound.dataType)
+    val outputFields = serializer.map(_ transform {
+      case _: BoundReference => resultObj
+    })
+    val resultVars = outputFields.map(_.gen(ctx))
+    s"""
+      ${evaluateRequiredVariables(output, Seq(evaluated), bound.references)}
+      ${consume(ctx, resultVars)}
+    """
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
