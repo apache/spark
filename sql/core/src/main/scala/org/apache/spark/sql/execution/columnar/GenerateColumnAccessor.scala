@@ -137,7 +137,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
              |  ${body.mkString("\n")}
              |}
            """.stripMargin
-	  ctx.addNewFunction(funcName, funcCode)
+          ctx.addNewFunction(funcName, funcCode)
         }
         groupedExtractorsItr.zipWithIndex.map { case (body, i) =>
           val funcName = s"extractors$i"
@@ -146,13 +146,10 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
              |  ${body.mkString("\n")}
              |}
            """.stripMargin
-	  ctx.addNewFunction(funcName, funcCode)
+          ctx.addNewFunction(funcName, funcCode)
         }
         ((0 to groupedAccessorsLength - 1).map { i => s"accessors$i();" }.mkString("\n"),
          (0 to groupedAccessorsLength - 1).map { i => s"extractors$i();" }.mkString("\n"))
-        //(0 to groupedAccessorsLength - 1).map { i =>
-        //  (s"accessors$i();", s"extractors$i();")
-	//}.unzip
       }
 
     val code = s"""
