@@ -35,6 +35,10 @@ class DDLSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  private def appendTrailingSlash(path: String): String = {
+    if (!path.endsWith("/")) path + "/" else path
+  }
+
   test("Create/Drop Database") {
     val catalog = sqlContext.sessionState.catalog
 
@@ -49,7 +53,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          System.getProperty("java.io.tmpdir") + s"$dbNameWithoutBackTicks.db",
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db",
           Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))
@@ -71,7 +75,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          System.getProperty("java.io.tmpdir") + s"$dbNameWithoutBackTicks.db",
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db",
           Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))
@@ -91,7 +95,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          System.getProperty("java.io.tmpdir") + s"$dbNameWithoutBackTicks.db",
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db",
           Map.empty))
 
         val message = intercept[AnalysisException] {
@@ -110,7 +114,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
       withDatabase(dbName) {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         val location =
-          System.getProperty("java.io.tmpdir") + s"$dbNameWithoutBackTicks.db"
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db"
         sql(s"CREATE DATABASE $dbName")
 
         checkAnswer(
