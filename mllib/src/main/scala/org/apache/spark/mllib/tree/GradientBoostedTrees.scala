@@ -165,7 +165,7 @@ object GradientBoostedTrees extends Logging {
 
   /**
    * Internal method for performing regression using trees as base learners.
- *
+   *
    * @param input Training dataset.
    * @param validationInput Validation dataset, ignored if validate is set to false.
    * @param boostingStrategy Boosting parameters.
