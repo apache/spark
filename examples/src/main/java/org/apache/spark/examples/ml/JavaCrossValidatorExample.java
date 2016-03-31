@@ -41,10 +41,6 @@ import org.apache.spark.sql.SQLContext;
  * A simple example demonstrating model selection using CrossValidator.
  * This example also demonstrates how Pipelines are Estimators.
  *
- * This example uses the Java bean classes {@link org.apache.spark.examples.ml.LabeledDocument} and
- * {@link org.apache.spark.examples.ml.Document} defined in the Scala example
- * {@link org.apache.spark.examples.ml.SimpleTextClassificationPipeline}.
- *
  * Run with
  * <pre>
  * bin/run-example ml.JavaCrossValidatorExample
@@ -58,21 +54,21 @@ public class JavaCrossValidatorExample {
     SQLContext jsql = new SQLContext(jsc);
 
     // Prepare training documents, which are labeled.
-    List<LabeledDocument> localTraining = Lists.newArrayList(
-      new LabeledDocument(0L, "a b c d e spark", 1.0),
-      new LabeledDocument(1L, "b d", 0.0),
-      new LabeledDocument(2L, "spark f g h", 1.0),
-      new LabeledDocument(3L, "hadoop mapreduce", 0.0),
-      new LabeledDocument(4L, "b spark who", 1.0),
-      new LabeledDocument(5L, "g d a y", 0.0),
-      new LabeledDocument(6L, "spark fly", 1.0),
-      new LabeledDocument(7L, "was mapreduce", 0.0),
-      new LabeledDocument(8L, "e spark program", 1.0),
-      new LabeledDocument(9L, "a e c l", 0.0),
-      new LabeledDocument(10L, "spark compile", 1.0),
-      new LabeledDocument(11L, "hadoop software", 0.0));
+    List<JavaLabeledDocument> localTraining = Lists.newArrayList(
+      new JavaLabeledDocument(0L, "a b c d e spark", 1.0),
+      new JavaLabeledDocument(1L, "b d", 0.0),
+      new JavaLabeledDocument(2L, "spark f g h", 1.0),
+      new JavaLabeledDocument(3L, "hadoop mapreduce", 0.0),
+      new JavaLabeledDocument(4L, "b spark who", 1.0),
+      new JavaLabeledDocument(5L, "g d a y", 0.0),
+      new JavaLabeledDocument(6L, "spark fly", 1.0),
+      new JavaLabeledDocument(7L, "was mapreduce", 0.0),
+      new JavaLabeledDocument(8L, "e spark program", 1.0),
+      new JavaLabeledDocument(9L, "a e c l", 0.0),
+      new JavaLabeledDocument(10L, "spark compile", 1.0),
+      new JavaLabeledDocument(11L, "hadoop software", 0.0));
     Dataset<Row> training = jsql.createDataFrame(
-        jsc.parallelize(localTraining), LabeledDocument.class);
+        jsc.parallelize(localTraining), JavaLabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     Tokenizer tokenizer = new Tokenizer()
@@ -108,12 +104,12 @@ public class JavaCrossValidatorExample {
     CrossValidatorModel cvModel = crossval.fit(training);
 
     // Prepare test documents, which are unlabeled.
-    List<Document> localTest = Lists.newArrayList(
-      new Document(4L, "spark i j k"),
-      new Document(5L, "l m n"),
-      new Document(6L, "mapreduce spark"),
-      new Document(7L, "apache hadoop"));
-    Dataset<Row> test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
+    List<JavaDocument> localTest = Lists.newArrayList(
+      new JavaDocument(4L, "spark i j k"),
+      new JavaDocument(5L, "l m n"),
+      new JavaDocument(6L, "mapreduce spark"),
+      new JavaDocument(7L, "apache hadoop"));
+    Dataset<Row> test = jsql.createDataFrame(jsc.parallelize(localTest), JavaDocument.class);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     Dataset<Row> predictions = cvModel.transform(test);
