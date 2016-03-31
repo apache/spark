@@ -114,8 +114,7 @@ class ColumnPruningSuite extends PlanTest {
             Seq('a, 'b, 'c, Literal.create(null, StringType), 1),
             Seq('a, 'b, 'c, 'a, 2)),
           Seq('a, 'b, 'c, 'aa.int, 'gid.int),
-          input,
-          Seq('a))).analyze
+          input)).analyze
     val optimized = Optimize.execute(query)
     val expected =
       Aggregate(
@@ -127,7 +126,7 @@ class ColumnPruningSuite extends PlanTest {
             Seq('c, 'a, 2)),
           Seq('c, 'aa.int, 'gid.int),
           Project(Seq('a, 'c),
-            input), Seq('a))).analyze
+            input))).analyze
 
     comparePlans(optimized, expected)
   }

@@ -110,10 +110,9 @@ class ConstraintPropagationSuite extends SparkFunSuite {
             Seq('c, 'a, 2)),
           Seq('c, 'a, 'gid.int),
           Project(Seq('a, 'c),
-            notNullRelation), Seq('a))
+            notNullRelation))
     verifyConstraints(expand.analyze.constraints,
-      ExpressionSet(Seq(resolveColumn(expand.analyze, "c") > 10,
-        IsNotNull(resolveColumn(expand.analyze, "c")))))
+      ExpressionSet(Seq.empty[Expression]))
   }
 
   test("propagating constraints in aliases") {

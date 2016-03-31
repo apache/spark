@@ -327,7 +327,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, a: Aggregate) if (a.outputSet -- p.references).nonEmpty =>
       p.copy(
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
-    case a @ Project(_, e @ Expand(_, _, grandChild, groupByAttrs))
+    case a @ Project(_, e @ Expand(_, _, grandChild))
         if (e.outputSet -- a.references).nonEmpty =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
@@ -335,7 +335,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
           newOutput.contains(a)
         }.unzip._1
       }
-      a.copy(child = Expand(newProjects, newOutput, grandChild, groupByAttrs))
+      a.copy(child = Expand(newProjects, newOutput, grandChild))
 
     // Prunes the unused columns from child of MapPartitions
     case mp @ MapPartitions(_, _, _, child) if (child.outputSet -- mp.references).nonEmpty =>
@@ -344,7 +344,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Prunes the unused columns from child of Aggregate/Expand/Generate
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = prunedChild(child, a.references))
-    case e @ Expand(_, _, child, _) if (child.outputSet -- e.references).nonEmpty =>
+    case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
     case g: Generate if !g.join && (g.child.outputSet -- g.references).nonEmpty =>
       g.copy(child = prunedChild(g.child, g.references))

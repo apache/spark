@@ -225,8 +225,7 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
       val expand = Expand(
         regularAggProjection ++ distinctAggProjections,
         groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.map(_._2),
-        a.child,
-        groupByAttrs)
+        a.child)
 
       // Construct the first aggregate operator. This de-duplicates the all the children of
       // distinct operators, and applies the regular aggregate operators.
