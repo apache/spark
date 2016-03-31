@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.impl
+package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.tree.impl.BaggedPoint
 import org.apache.spark.mllib.tree.EnsembleTestHelper
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
