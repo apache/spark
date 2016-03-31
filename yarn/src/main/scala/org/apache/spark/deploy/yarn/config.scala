@@ -104,7 +104,7 @@ package object config {
   /* Cluster-mode launcher configuration. */
 
   private[spark] val WAIT_FOR_APP_COMPLETION = ConfigBuilder("spark.yarn.submit.waitAppCompletion")
-    .doc("In cluster mode, whether to wait for the application to finishe before exiting the " +
+    .doc("In cluster mode, whether to wait for the application to finish before exiting the " +
       "launcher process.")
     .booleanConf
     .withDefault(true)

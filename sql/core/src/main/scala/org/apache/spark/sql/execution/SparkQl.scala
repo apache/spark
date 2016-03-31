@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.command._
@@ -98,7 +97,8 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
 
       // CREATE DATABASE [IF NOT EXISTS] database_name [COMMENT database_comment]
       // [LOCATION path] [WITH DBPROPERTIES (key1=val1, key2=val2, ...)];
-      case Token("TOK_CREATEDATABASE", Token(databaseName, Nil) :: args) =>
+      case Token("TOK_CREATEDATABASE", Token(dbName, Nil) :: args) =>
+        val databaseName = cleanIdentifier(dbName)
         val Seq(ifNotExists, dbLocation, databaseComment, dbprops) = getClauses(Seq(
           "TOK_IFNOTEXISTS",
           "TOK_DATABASELOCATION",
@@ -127,7 +127,48 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             extractProps(propList, "TOK_TABLEPROPERTY")
           case _ => parseFailed("Invalid CREATE DATABASE command", node)
         }.toMap
-        CreateDatabase(databaseName, ifNotExists.isDefined, location, comment, props)(node.source)
+        CreateDatabase(databaseName, ifNotExists.isDefined, location, comment, props)
+
+      // DROP DATABASE [IF EXISTS] database_name [RESTRICT|CASCADE];
+      case Token("TOK_DROPDATABASE", Token(dbName, Nil) :: otherArgs) =>
+        // Example format:
+        //
+        //   TOK_DROPDATABASE
+        //   :- database_name
+        //   :- TOK_IFEXISTS
+        //   +- TOK_RESTRICT/TOK_CASCADE
+        val databaseName = cleanIdentifier(dbName)
+        // The default is RESTRICT
+        val Seq(ifExists, _, cascade) = getClauses(Seq(
+          "TOK_IFEXISTS", "TOK_RESTRICT", "TOK_CASCADE"), otherArgs)
+        DropDatabase(databaseName, ifExists.isDefined, cascade.isDefined)
+
+      // ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
+      case Token("TOK_ALTERDATABASE_PROPERTIES", Token(dbName, Nil) :: args) =>
+        val databaseName = cleanIdentifier(dbName)
+        val dbprops = getClause("TOK_DATABASEPROPERTIES", args)
+        val props = dbprops match {
+          case Token("TOK_DATABASEPROPERTIES", Token("TOK_DBPROPLIST", propList) :: Nil) =>
+            // Example format:
+            //
+            //   TOK_DATABASEPROPERTIES
+            //   +- TOK_DBPROPLIST
+            //      :- TOK_TABLEPROPERTY
+            //      :  :- 'k1'
+            //      :  +- 'v1'
+            //      :- TOK_TABLEPROPERTY
+            //         :- 'k2'
+            //         +- 'v2'
+            extractProps(propList, "TOK_TABLEPROPERTY")
+          case _ => parseFailed("Invalid ALTER DATABASE command", node)
+        }
+        AlterDatabaseProperties(databaseName, props.toMap)
+
+      // DESCRIBE DATABASE [EXTENDED] db_name
+      case Token("TOK_DESCDATABASE", Token(dbName, Nil) :: describeArgs) =>
+        val databaseName = cleanIdentifier(dbName)
+        val extended = getClauseOption("EXTENDED", describeArgs)
+        DescribeDatabase(databaseName, extended.isDefined)
 
       // CREATE [TEMPORARY] FUNCTION [db_name.]function_name AS class_name
       // [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri'] ];
@@ -152,11 +193,11 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           case _ => parseFailed("Invalid CREATE FUNCTION command", node)
         }
         // If database name is specified, there are 3 tokens, otherwise 2.
-        val (funcName, alias) = funcNameArgs match {
+        val (dbName, funcName, alias) = funcNameArgs match {
           case Token(dbName, Nil) :: Token(fname, Nil) :: Token(aname, Nil) :: Nil =>
-            (unquoteString(dbName) + "." + unquoteString(fname), unquoteString(aname))
+            (Some(unquoteString(dbName)), unquoteString(fname), unquoteString(aname))
           case Token(fname, Nil) :: Token(aname, Nil) :: Nil =>
-            (unquoteString(fname), unquoteString(aname))
+            (None, unquoteString(fname), unquoteString(aname))
           case _ =>
             parseFailed("Invalid CREATE FUNCTION command", node)
         }
@@ -177,7 +218,37 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             }
           case _ => parseFailed("Invalid CREATE FUNCTION command", node)
         }
-        CreateFunction(funcName, alias, resources, temp.isDefined)(node.source)
+        CreateFunction(dbName, funcName, alias, resources, temp.isDefined)(node.source)
+
+      // DROP [TEMPORARY] FUNCTION [IF EXISTS] function_name;
+      case Token("TOK_DROPFUNCTION", args) =>
+        // Example format:
+        //
+        //   TOK_DROPFUNCTION
+        //   :- db_name
+        //   :- func_name
+        //   :- TOK_IFEXISTS
+        //   +- TOK_TEMPORARY
+        val (funcNameArgs, otherArgs) = args.partition {
+          case Token("TOK_IFEXISTS", _) => false
+          case Token("TOK_TEMPORARY", _) => false
+          case Token(_, Nil) => true
+          case _ => parseFailed("Invalid DROP FUNCTION command", node)
+        }
+        // If database name is specified, there are 2 tokens, otherwise 1.
+        val (dbName, funcName) = funcNameArgs match {
+          case Token(dbName, Nil) :: Token(fname, Nil) :: Nil =>
+            (Some(unquoteString(dbName)), unquoteString(fname))
+          case Token(fname, Nil) :: Nil =>
+            (None, unquoteString(fname))
+          case _ =>
+            parseFailed("Invalid DROP FUNCTION command", node)
+        }
+
+        val Seq(ifExists, temp) = getClauses(Seq(
+          "TOK_IFEXISTS", "TOK_TEMPORARY"), otherArgs)
+
+        DropFunction(dbName, funcName, ifExists.isDefined, temp.isDefined)(node.source)
 
       case Token("TOK_ALTERTABLE", alterTableArgs) =>
         AlterTableCommandParser.parse(node)

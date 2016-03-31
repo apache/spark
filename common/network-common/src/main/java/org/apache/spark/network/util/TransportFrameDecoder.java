@@ -205,7 +205,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     return interceptor != null;
   }
 
-  public static interface Interceptor {
+  public interface Interceptor {
 
     /**
      * Handles data received from the remote end.

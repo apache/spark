@@ -79,7 +79,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("Read/write all types with non-primitive type") {
-    val data = (0 to 255).map { i =>
+    val data: Seq[AllDataTypesWithNonPrimitiveType] = (0 to 255).map { i =>
       AllDataTypesWithNonPrimitiveType(
         s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0,
         0 until i,
@@ -222,7 +222,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
   }
 
   test("overwriting") {
@@ -232,7 +232,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
   }
 
   test("self-join") {

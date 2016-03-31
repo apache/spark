@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -251,8 +253,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         options = extraOptions.toMap,
         partitionColumns = normalizedParCols.getOrElse(Nil))
 
+    val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
+    val checkpointLocation = extraOptions.getOrElse("checkpointLocation", {
+      new Path(df.sqlContext.conf.checkpointLocation, queryName).toUri.toString
+    })
     df.sqlContext.sessionState.continuousQueryManager.startQuery(
-      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, dataSource.createSink())
+      queryName,
+      checkpointLocation,
+      df,
+      dataSource.createSink())
   }
 
   /**

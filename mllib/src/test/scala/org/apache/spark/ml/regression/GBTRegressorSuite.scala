@@ -65,6 +65,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
             .setLossType(loss)
             .setMaxIter(maxIter)
             .setStepSize(learningRate)
+            .setSeed(123)
           compareAPIs(data, None, gbt, categoricalFeatures)
       }
     }
@@ -104,6 +105,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMaxIter(5)
       .setStepSize(0.1)
       .setCheckpointInterval(2)
+      .setSeed(123)
     val model = gbt.fit(df)
 
     sc.checkpointDir = None
@@ -128,6 +130,29 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
   */
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests of feature importance
+  /////////////////////////////////////////////////////////////////////////////
+  test("Feature importance with toy data") {
+    val gbt = new GBTRegressor()
+      .setMaxDepth(3)
+      .setMaxIter(5)
+      .setSubsamplingRate(1.0)
+      .setStepSize(0.5)
+      .setSeed(123)
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
+
+    val importances = gbt.fit(df).featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
+    assert(importances.toArray.sum === 1.0)
+    assert(importances.toArray.forall(_ >= 0.0))
+  }
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
@@ -169,7 +194,7 @@ private object GBTRegressorSuite extends SparkFunSuite {
       categoricalFeatures: Map[Int, Int]): Unit = {
     val numFeatures = data.first().features.size
     val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
-    val oldGBT = new OldGBT(oldBoostingStrategy)
+    val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = gbt.fit(newData)

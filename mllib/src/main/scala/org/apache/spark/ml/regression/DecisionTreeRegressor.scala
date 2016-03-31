@@ -97,7 +97,7 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeRegressionModel = {
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 0L, parentUID = Some(uid))
+      seed = $(seed), parentUID = Some(uid))
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
@@ -203,10 +203,10 @@ final class DecisionTreeRegressionModel private[ml] (
    *       to determine feature importance instead.
    */
   @Since("2.0.0")
-  lazy val featureImportances: Vector = RandomForest.featureImportances(this, numFeatures)
+  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(this, numFeatures)
 
-  /** Convert to a model in the old API */
-  private[ml] def toOld: OldDecisionTreeModel = {
+  /** Convert to spark.mllib DecisionTreeModel (losing some infomation) */
+  override private[spark] def toOld: OldDecisionTreeModel = {
     new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.Regression)
   }
 

@@ -24,6 +24,7 @@ import java.util.List;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.slf4j.Logger;
@@ -118,7 +119,7 @@ public class YarnShuffleService extends AuxiliaryService {
     // an application was stopped while the NM was down, we expect yarn to call stopApplication()
     // when it comes back
     registeredExecutorFile =
-      findRegisteredExecutorFile(conf.getStrings("yarn.nodemanager.local-dirs"));
+      findRegisteredExecutorFile(conf.getTrimmedStrings("yarn.nodemanager.local-dirs"));
 
     TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
@@ -191,12 +192,12 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private File findRegisteredExecutorFile(String[] localDirs) {
     for (String dir: localDirs) {
-      File f = new File(dir, "registeredExecutors.ldb");
+      File f = new File(new Path(dir).toUri().getPath(), "registeredExecutors.ldb");
       if (f.exists()) {
         return f;
       }
     }
-    return new File(localDirs[0], "registeredExecutors.ldb");
+    return new File(new Path(localDirs[0]).toUri().getPath(), "registeredExecutors.ldb");
   }
 
   /**

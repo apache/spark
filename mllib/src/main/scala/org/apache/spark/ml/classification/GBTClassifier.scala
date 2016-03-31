@@ -96,10 +96,7 @@ final class GBTClassifier @Since("1.4.0") (
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
   @Since("1.4.0")
-  override def setSeed(value: Long): this.type = {
-    logWarning("The 'seed' parameter is currently ignored by Gradient Boosting.")
-    super.setSeed(value)
-  }
+  override def setSeed(value: Long): this.type = super.setSeed(value)
 
   // Parameters from GBTParams:
 
@@ -158,7 +155,8 @@ final class GBTClassifier @Since("1.4.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
-    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy)
+    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
+      $(seed))
     new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 
@@ -239,6 +237,19 @@ final class GBTClassificationModel private[ml](
   override def toString: String = {
     s"GBTClassificationModel (uid=$uid) with $numTrees trees"
   }
+
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * Each feature's importance is the average of its importance across all trees in the ensemble
+   * The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+   * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+   * and follows the implementation from scikit-learn.
+   *
+   * @see [[DecisionTreeClassificationModel.featureImportances]]
+   */
+  @Since("2.0.0")
+  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {

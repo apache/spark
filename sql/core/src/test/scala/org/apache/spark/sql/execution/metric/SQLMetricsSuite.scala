@@ -309,7 +309,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
       // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
       // However, we still can check the value.
-      assert(metricValues.values.toSeq === Seq("2"))
+      assert(metricValues.values.toSeq.exists(_ === "2"))
     }
   }
 

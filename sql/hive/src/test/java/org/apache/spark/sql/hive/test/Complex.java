@@ -39,7 +39,7 @@ import java.util.BitSet;
  * does not contain union fields that are not supported by Spark SQL.
  */
 
-@SuppressWarnings({"ALL", "unchecked"})
+@SuppressWarnings("all")
 public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields>, java.io.Serializable, Cloneable {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("Complex");
 

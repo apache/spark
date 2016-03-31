@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.CompressionCodecs
+import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
 
 private[sql] class CSVOptions(
     @transient private val parameters: Map[String, String])
@@ -62,7 +62,7 @@ private[sql] class CSVOptions(
 
   val delimiter = CSVTypeCast.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
-  val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val charset = parameters.getOrElse("encoding",
     parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 
@@ -100,27 +100,4 @@ private[sql] class CSVOptions(
   val isCommentSet = this.comment != '\u0000'
 
   val rowSeparator = "\n"
-}
-
-private[csv] object ParseModes {
-  val PERMISSIVE_MODE = "PERMISSIVE"
-  val DROP_MALFORMED_MODE = "DROPMALFORMED"
-  val FAIL_FAST_MODE = "FAILFAST"
-
-  val DEFAULT = PERMISSIVE_MODE
-
-  def isValidMode(mode: String): Boolean = {
-    mode.toUpperCase match {
-      case PERMISSIVE_MODE | DROP_MALFORMED_MODE | FAIL_FAST_MODE => true
-      case _ => false
-    }
-  }
-
-  def isDropMalformedMode(mode: String): Boolean = mode.toUpperCase == DROP_MALFORMED_MODE
-  def isFailFastMode(mode: String): Boolean = mode.toUpperCase == FAIL_FAST_MODE
-  def isPermissiveMode(mode: String): Boolean = if (isValidMode(mode))  {
-    mode.toUpperCase == PERMISSIVE_MODE
-  } else {
-    true // We default to permissive is the mode string is not valid
-  }
 }

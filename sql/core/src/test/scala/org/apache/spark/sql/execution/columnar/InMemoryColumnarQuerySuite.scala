@@ -126,7 +126,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("decimal type") {
     // Casting is required here because ScalaReflection can't capture decimal precision information.
     val df = (1 to 10)
-      .map(i => Tuple1(Decimal(i, 15, 10)))
+      .map(i => Tuple1(Decimal(i, 15, 10).toJavaBigDecimal))
       .toDF("dec")
       .select($"dec" cast DecimalType(15, 10))
 
