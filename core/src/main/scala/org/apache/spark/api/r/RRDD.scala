@@ -392,17 +392,22 @@ private[r] object RRDD {
   }
 
   private def createRProcess(port: Int, script: String): BufferedStreamThread = {
-    val rCommand = SparkEnv.get.conf.get("spark.sparkr.r.command", "Rscript")
+    // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
+    // but kept here for backward compatibility.
+    val sparkConf = SparkEnv.get.conf
+    var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
+    rCommand = sparkConf.get("spark.r.command", rCommand)
+
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
-    val rExecScript = rLibDir + "/SparkR/worker/" + script
+    val rExecScript = rLibDir(0) + "/SparkR/worker/" + script
     val pb = new ProcessBuilder(Arrays.asList(rCommand, rOptions, rExecScript))
     // Unset the R_TESTS environment variable for workers.
     // This is set by R CMD check as startup.Rs
     // (http://svn.r-project.org/R/trunk/src/library/tools/R/testing.R)
     // and confuses worker script which tries to load a non-existent file
     pb.environment().put("R_TESTS", "")
-    pb.environment().put("SPARKR_RLIBDIR", rLibDir)
+    pb.environment().put("SPARKR_RLIBDIR", rLibDir.mkString(","))
     pb.environment().put("SPARKR_WORKER_PORT", port.toString)
     pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()

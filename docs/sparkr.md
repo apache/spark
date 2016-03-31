@@ -29,13 +29,65 @@ All of the examples on this page use sample data included in R or the Spark dist
 The entry point into SparkR is the `SparkContext` which connects your R program to a Spark cluster.
 You can create a `SparkContext` using `sparkR.init` and pass in options such as the application name
 , any spark packages depended on, etc. Further, to work with DataFrames we will need a `SQLContext`,
-which can be created from the  SparkContext. If you are working from the SparkR shell, the
-`SQLContext` and `SparkContext` should already be created for you.
+which can be created from the  SparkContext. If you are working from the `sparkR` shell, the
+`SQLContext` and `SparkContext` should already be created for you, and you would not need to call
+`sparkR.init`.
 
+<div data-lang="r" markdown="1">
 {% highlight r %}
 sc <- sparkR.init()
 sqlContext <- sparkRSQL.init(sc)
 {% endhighlight %}
+</div>
+
+## Starting Up from RStudio
+
+You can also start SparkR from RStudio. You can connect your R program to a Spark cluster from
+RStudio, R shell, Rscript or other R IDEs. To start, make sure SPARK_HOME is set in environment
+(you can check [Sys.getenv](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Sys.getenv.html)),
+load the SparkR package, and call `sparkR.init` as below. In addition to calling `sparkR.init`, you
+could also specify certain Spark driver properties. Normally these
+[Application properties](configuration.html#application-properties) and
+[Runtime Environment](configuration.html#runtime-environment) cannot be set programmatically, as the
+driver JVM process would have been started, in this case SparkR takes care of this for you. To set
+them, pass them as you would other configuration properties in the `sparkEnvir` argument to
+`sparkR.init()`.
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+if (nchar(Sys.getenv("SPARK_HOME")) < 1) {
+  Sys.setenv(SPARK_HOME = "/home/spark")
+}
+library(SparkR, lib.loc = c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib")))
+sc <- sparkR.init(master = "local[*]", sparkEnvir = list(spark.driver.memory="2g"))
+{% endhighlight %}
+</div>
+
+The following options can be set in `sparkEnvir` with `sparkR.init` from RStudio:
+
+<table class="table">
+  <tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr>
+  <tr>
+    <td><code>spark.driver.memory</code></td>
+    <td>Application Properties</td>
+    <td><code>--driver-memory</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.driver.extraClassPath</code></td>
+    <td>Runtime Environment</td>
+    <td><code>--driver-class-path</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.driver.extraJavaOptions</code></td>
+    <td>Runtime Environment</td>
+    <td><code>--driver-java-options</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.driver.extraLibraryPath</code></td>
+    <td>Runtime Environment</td>
+    <td><code>--driver-library-path</code></td>
+  </tr>
+</table>
 
 </div>
 
@@ -43,11 +95,11 @@ sqlContext <- sparkRSQL.init(sc)
 With a `SQLContext`, applications can create `DataFrame`s from a local R data frame, from a [Hive table](sql-programming-guide.html#hive-tables), or from other [data sources](sql-programming-guide.html#data-sources).
 
 ### From local data frames
-The simplest way to create a data frame is to convert a local R data frame into a SparkR DataFrame. Specifically we can use `createDataFrame` and pass in the local R data frame to create a SparkR DataFrame. As an example, the following creates a `DataFrame` based using the `faithful` dataset from R. 
+The simplest way to create a data frame is to convert a local R data frame into a SparkR DataFrame. Specifically we can use `createDataFrame` and pass in the local R data frame to create a SparkR DataFrame. As an example, the following creates a `DataFrame` based using the `faithful` dataset from R.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
-df <- createDataFrame(sqlContext, faithful) 
+df <- createDataFrame(sqlContext, faithful)
 
 # Displays the content of the DataFrame to stdout
 head(df)
@@ -96,7 +148,7 @@ printSchema(people)
 </div>
 
 The data sources API can also be used to save out DataFrames into multiple file formats. For example we can save the DataFrame from the previous example
-to a Parquet file using `write.df` 
+to a Parquet file using `write.df` (Until Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.7 to `error` to match the Scala API)
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -139,7 +191,7 @@ Here we include some basic examples and a complete list can be found in the [API
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 # Create the DataFrame
-df <- createDataFrame(sqlContext, faithful) 
+df <- createDataFrame(sqlContext, faithful)
 
 # Get basic information about the DataFrame
 df
@@ -152,7 +204,7 @@ head(select(df, df$eruptions))
 ##2     1.800
 ##3     3.333
 
-# You can also pass in column name as strings 
+# You can also pass in column name as strings
 head(select(df, "eruptions"))
 
 # Filter the DataFrame to only retain rows with wait times shorter than 50 mins
@@ -166,7 +218,7 @@ head(filter(df, df$waiting < 50))
 
 </div>
 
-### Grouping, Aggregation 
+### Grouping, Aggregation
 
 SparkR data frames support a number of commonly used functions to aggregate data after grouping. For example we can compute a histogram of the `waiting` time in the `faithful` dataset as shown below
 
@@ -194,7 +246,7 @@ head(arrange(waiting_counts, desc(waiting_counts$count)))
 
 ### Operating on Columns
 
-SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions. 
+SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -234,24 +286,37 @@ head(teenagers)
 
 # Machine Learning
 
-SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', '+', and '-'. The example below shows the use of building a gaussian GLM model using SparkR.
+SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'.
+
+The [summary()](api/R/summary.html) function gives the summary of a model produced by [glm()](api/R/glm.html).
+
+* For gaussian GLM model, it returns a list with 'devianceResiduals' and 'coefficients' components. The 'devianceResiduals' gives the min/max deviance residuals of the estimation; the 'coefficients' gives the estimated coefficients and their estimated standard errors, t values and p-values. (It only available when model fitted by normal solver.)
+* For binomial GLM model, it returns a list with 'coefficients' component which gives the estimated coefficients.
+
+The examples below show the use of building gaussian GLM model and binomial GLM model using SparkR.
+
+## Gaussian GLM model
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 # Create the DataFrame
 df <- createDataFrame(sqlContext, iris)
 
-# Fit a linear model over the dataset.
+# Fit a gaussian GLM model over the dataset.
 model <- glm(Sepal_Length ~ Sepal_Width + Species, data = df, family = "gaussian")
 
-# Model coefficients are returned in a similar format to R's native glm().
+# Model summary are returned in a similar format to R's native glm().
 summary(model)
+##$devianceResiduals
+## Min       Max     
+## -1.307112 1.412532
+##
 ##$coefficients
-##                    Estimate
-##(Intercept)        2.2513930
-##Sepal_Width        0.8035609
-##Species_versicolor 1.4587432
-##Species_virginica  1.9468169
+##                   Estimate  Std. Error t value  Pr(>|t|)    
+##(Intercept)        2.251393  0.3697543  6.08889  9.568102e-09
+##Sepal_Width        0.8035609 0.106339   7.556598 4.187317e-12
+##Species_versicolor 1.458743  0.1121079  13.01195 0           
+##Species_virginica  1.946817  0.100015   19.46525 0           
 
 # Make predictions based on the model.
 predictions <- predict(model, newData = df)
@@ -265,3 +330,67 @@ head(select(predictions, "Sepal_Length", "prediction"))
 ##6          5.4   5.385281
 {% endhighlight %}
 </div>
+
+## Binomial GLM model
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+# Create the DataFrame
+df <- createDataFrame(sqlContext, iris)
+training <- filter(df, df$Species != "setosa")
+
+# Fit a binomial GLM model over the dataset.
+model <- glm(Species ~ Sepal_Length + Sepal_Width, data = training, family = "binomial")
+
+# Model coefficients are returned in a similar format to R's native glm().
+summary(model)
+##$coefficients
+##               Estimate
+##(Intercept)  -13.046005
+##Sepal_Length   1.902373
+##Sepal_Width    0.404655
+{% endhighlight %}
+</div>
+
+# R Function Name Conflicts
+
+When loading and attaching a new package in R, it is possible to have a name [conflict](https://stat.ethz.ch/R-manual/R-devel/library/base/html/library.html), where a
+function is masking another function.
+
+The following functions are masked by the SparkR package:
+
+<table class="table">
+  <tr><th>Masked function</th><th>How to Access</th></tr>
+  <tr>
+    <td><code>cov</code> in <code>package:stats</code></td>
+    <td><code><pre>stats::cov(x, y = NULL, use = "everything",
+           method = c("pearson", "kendall", "spearman"))</pre></code></td>
+  </tr>
+  <tr>
+    <td><code>filter</code> in <code>package:stats</code></td>
+    <td><code><pre>stats::filter(x, filter, method = c("convolution", "recursive"),
+              sides = 2, circular = FALSE, init)</pre></code></td>
+  </tr>
+  <tr>
+    <td><code>sample</code> in <code>package:base</code></td>
+    <td><code>base::sample(x, size, replace = FALSE, prob = NULL)</code></td>
+  </tr>
+  <tr>
+    <td><code>table</code> in <code>package:base</code></td>
+    <td><code><pre>base::table(...,
+            exclude = if (useNA == "no") c(NA, NaN),
+            useNA = c("no", "ifany", "always"),
+            dnn = list.names(...), deparse.level = 1)</pre></code></td>
+  </tr>
+</table>
+
+Since part of SparkR is modeled on the `dplyr` package, certain functions in SparkR share the same names with those in `dplyr`. Depending on the load order of the two packages, some functions from the package loaded first are masked by those in the package loaded after. In such case, prefix such calls with the package name, for instance, `SparkR::cume_dist(x)` or `dplyr::cume_dist(x)`.
+
+You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/search.html)
+
+
+# Migration Guide
+
+## Upgrading From SparkR 1.5.x to 1.6
+
+ - Before Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.6.0 to `error` to match the Scala API.

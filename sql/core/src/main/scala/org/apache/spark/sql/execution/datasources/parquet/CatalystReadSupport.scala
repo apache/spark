@@ -25,36 +25,65 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.io.api.RecordMaterializer
-import org.apache.parquet.schema.MessageType
+import org.apache.parquet.schema.Type.Repetition
+import org.apache.parquet.schema._
 
 import org.apache.spark.Logging
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
+/**
+ * A Parquet [[ReadSupport]] implementation for reading Parquet records as Catalyst
+ * [[InternalRow]]s.
+ *
+ * The API interface of [[ReadSupport]] is a little bit over complicated because of historical
+ * reasons.  In older versions of parquet-mr (say 1.6.0rc3 and prior), [[ReadSupport]] need to be
+ * instantiated and initialized twice on both driver side and executor side.  The [[init()]] method
+ * is for driver side initialization, while [[prepareForRead()]] is for executor side.  However,
+ * starting from parquet-mr 1.6.0, it's no longer the case, and [[ReadSupport]] is only instantiated
+ * and initialized on executor side.  So, theoretically, now it's totally fine to combine these two
+ * methods into a single initialization method.  The only reason (I could think of) to still have
+ * them here is for parquet-mr API backwards-compatibility.
+ *
+ * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
+ * to [[prepareForRead()]], but use a private `var` for simplicity.
+ */
 private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with Logging {
-  // Called after `init()` when initializing Parquet record reader.
+  private var catalystRequestedSchema: StructType = _
+
+  /**
+   * Called on executor side before [[prepareForRead()]] and instantiating actual Parquet record
+   * readers.  Responsible for figuring out Parquet requested schema used for column pruning.
+   */
+  override def init(context: InitContext): ReadContext = {
+    catalystRequestedSchema = {
+      // scalastyle:off jobcontext
+      val conf = context.getConfiguration
+      // scalastyle:on jobcontext
+      val schemaString = conf.get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
+      assert(schemaString != null, "Parquet requested schema not set.")
+      StructType.fromString(schemaString)
+    }
+
+    val parquetRequestedSchema =
+      CatalystReadSupport.clipParquetSchema(context.getFileSchema, catalystRequestedSchema)
+
+    new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
+  }
+
+  /**
+   * Called on executor side after [[init()]], before instantiating actual Parquet record readers.
+   * Responsible for instantiating [[RecordMaterializer]], which is used for converting Parquet
+   * records to Catalyst [[InternalRow]]s.
+   */
   override def prepareForRead(
       conf: Configuration,
       keyValueMetaData: JMap[String, String],
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[InternalRow] = {
     log.debug(s"Preparing for read Parquet file with message type: $fileSchema")
-
-    val toCatalyst = new CatalystSchemaConverter(conf)
     val parquetRequestedSchema = readContext.getRequestedSchema
-
-    val catalystRequestedSchema =
-      Option(readContext.getReadSupportMetadata).map(_.asScala).flatMap { metadata =>
-        metadata
-          // First tries to read requested schema, which may result from projections
-          .get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
-          // If not available, tries to read Catalyst schema from file metadata.  It's only
-          // available if the target file is written by Spark SQL.
-          .orElse(metadata.get(CatalystReadSupport.SPARK_METADATA_KEY))
-      }.map(StructType.fromString).getOrElse {
-        logInfo("Catalyst schema not available, falling back to Parquet schema")
-        toCatalyst.convert(parquetRequestedSchema)
-      }
 
     logInfo {
       s"""Going to read the following fields from the Parquet file:
@@ -66,93 +95,9 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
        """.stripMargin
     }
 
-    new CatalystRecordMaterializer(parquetRequestedSchema, catalystRequestedSchema)
-  }
-
-  // Called before `prepareForRead()` when initializing Parquet record reader.
-  override def init(context: InitContext): ReadContext = {
-    val conf = context.getConfiguration
-
-    // If the target file was written by Spark SQL, we should be able to find a serialized Catalyst
-    // schema of this file from its metadata.
-    val maybeRowSchema = Option(conf.get(RowWriteSupport.SPARK_ROW_SCHEMA))
-
-    // Optional schema of requested columns, in the form of a string serialized from a Catalyst
-    // `StructType` containing all requested columns.
-    val maybeRequestedSchema = Option(conf.get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
-
-    // Below we construct a Parquet schema containing all requested columns.  This schema tells
-    // Parquet which columns to read.
-    //
-    // If `maybeRequestedSchema` is defined, we assemble an equivalent Parquet schema.  Otherwise,
-    // we have to fallback to the full file schema which contains all columns in the file.
-    // Obviously this may waste IO bandwidth since it may read more columns than requested.
-    //
-    // Two things to note:
-    //
-    // 1. It's possible that some requested columns don't exist in the target Parquet file.  For
-    //    example, in the case of schema merging, the globally merged schema may contain extra
-    //    columns gathered from other Parquet files.  These columns will be simply filled with nulls
-    //    when actually reading the target Parquet file.
-    //
-    // 2. When `maybeRequestedSchema` is available, we can't simply convert the Catalyst schema to
-    //    Parquet schema using `CatalystSchemaConverter`, because the mapping is not unique due to
-    //    non-standard behaviors of some Parquet libraries/tools.  For example, a Parquet file
-    //    containing a single integer array field `f1` may have the following legacy 2-level
-    //    structure:
-    //
-    //      message root {
-    //        optional group f1 (LIST) {
-    //          required INT32 element;
-    //        }
-    //      }
-    //
-    //    while `CatalystSchemaConverter` may generate a standard 3-level structure:
-    //
-    //      message root {
-    //        optional group f1 (LIST) {
-    //          repeated group list {
-    //            required INT32 element;
-    //          }
-    //        }
-    //      }
-    //
-    //    Apparently, we can't use the 2nd schema to read the target Parquet file as they have
-    //    different physical structures.
-    val parquetRequestedSchema =
-      maybeRequestedSchema.fold(context.getFileSchema) { schemaString =>
-        val toParquet = new CatalystSchemaConverter(conf)
-        val fileSchema = context.getFileSchema.asGroupType()
-        val fileFieldNames = fileSchema.getFields.asScala.map(_.getName).toSet
-
-        StructType
-          // Deserializes the Catalyst schema of requested columns
-          .fromString(schemaString)
-          .map { field =>
-            if (fileFieldNames.contains(field.name)) {
-              // If the field exists in the target Parquet file, extracts the field type from the
-              // full file schema and makes a single-field Parquet schema
-              new MessageType("root", fileSchema.getType(field.name))
-            } else {
-              // Otherwise, just resorts to `CatalystSchemaConverter`
-              toParquet.convert(StructType(Array(field)))
-            }
-          }
-          // Merges all single-field Parquet schemas to form a complete schema for all requested
-          // columns.  Note that it's possible that no columns are requested at all (e.g., count
-          // some partition column of a partitioned Parquet table). That's why `fold` is used here
-          // and always fallback to an empty Parquet schema.
-          .fold(new MessageType("root")) {
-            _ union _
-          }
-      }
-
-    val metadata =
-      Map.empty[String, String] ++
-        maybeRequestedSchema.map(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA -> _) ++
-        maybeRowSchema.map(RowWriteSupport.SPARK_ROW_SCHEMA -> _)
-
-    new ReadContext(parquetRequestedSchema, metadata.asJava)
+    new CatalystRecordMaterializer(
+      parquetRequestedSchema,
+      CatalystReadSupport.expandUDT(catalystRequestedSchema))
   }
 }
 
@@ -160,4 +105,201 @@ private[parquet] object CatalystReadSupport {
   val SPARK_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
 
   val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"
+
+  /**
+   * Tailors `parquetSchema` according to `catalystSchema` by removing column paths don't exist
+   * in `catalystSchema`, and adding those only exist in `catalystSchema`.
+   */
+  def clipParquetSchema(parquetSchema: MessageType, catalystSchema: StructType): MessageType = {
+    val clippedParquetFields = clipParquetGroupFields(parquetSchema.asGroupType(), catalystSchema)
+    Types
+      .buildMessage()
+      .addFields(clippedParquetFields: _*)
+      .named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
+  }
+
+  private def clipParquetType(parquetType: Type, catalystType: DataType): Type = {
+    catalystType match {
+      case t: ArrayType if !isPrimitiveCatalystType(t.elementType) =>
+        // Only clips array types with nested type as element type.
+        clipParquetListType(parquetType.asGroupType(), t.elementType)
+
+      case t: MapType
+        if !isPrimitiveCatalystType(t.keyType) ||
+           !isPrimitiveCatalystType(t.valueType) =>
+        // Only clips map types with nested key type or value type
+        clipParquetMapType(parquetType.asGroupType(), t.keyType, t.valueType)
+
+      case t: StructType =>
+        clipParquetGroup(parquetType.asGroupType(), t)
+
+      case _ =>
+        // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
+        // to be mapped to desired user-space types.  So UDTs shouldn't participate schema merging.
+        parquetType
+    }
+  }
+
+  /**
+   * Whether a Catalyst [[DataType]] is primitive.  Primitive [[DataType]] is not equivalent to
+   * [[AtomicType]].  For example, [[CalendarIntervalType]] is primitive, but it's not an
+   * [[AtomicType]].
+   */
+  private def isPrimitiveCatalystType(dataType: DataType): Boolean = {
+    dataType match {
+      case _: ArrayType | _: MapType | _: StructType => false
+      case _ => true
+    }
+  }
+
+  /**
+   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[ArrayType]].  The element type
+   * of the [[ArrayType]] should also be a nested type, namely an [[ArrayType]], a [[MapType]], or a
+   * [[StructType]].
+   */
+  private def clipParquetListType(parquetList: GroupType, elementType: DataType): Type = {
+    // Precondition of this method, should only be called for lists with nested element types.
+    assert(!isPrimitiveCatalystType(elementType))
+
+    // Unannotated repeated group should be interpreted as required list of required element, so
+    // list element type is just the group itself.  Clip it.
+    if (parquetList.getOriginalType == null && parquetList.isRepetition(Repetition.REPEATED)) {
+      clipParquetType(parquetList, elementType)
+    } else {
+      assert(
+        parquetList.getOriginalType == OriginalType.LIST,
+        "Invalid Parquet schema. " +
+          "Original type of annotated Parquet lists must be LIST: " +
+          parquetList.toString)
+
+      assert(
+        parquetList.getFieldCount == 1 && parquetList.getType(0).isRepetition(Repetition.REPEATED),
+        "Invalid Parquet schema. " +
+          "LIST-annotated group should only have exactly one repeated field: " +
+          parquetList)
+
+      // Precondition of this method, should only be called for lists with nested element types.
+      assert(!parquetList.getType(0).isPrimitive)
+
+      val repeatedGroup = parquetList.getType(0).asGroupType()
+
+      // If the repeated field is a group with multiple fields, or the repeated field is a group
+      // with one field and is named either "array" or uses the LIST-annotated group's name with
+      // "_tuple" appended then the repeated type is the element type and elements are required.
+      // Build a new LIST-annotated group with clipped `repeatedGroup` as element type and the
+      // only field.
+      if (
+        repeatedGroup.getFieldCount > 1 ||
+        repeatedGroup.getName == "array" ||
+        repeatedGroup.getName == parquetList.getName + "_tuple"
+      ) {
+        Types
+          .buildGroup(parquetList.getRepetition)
+          .as(OriginalType.LIST)
+          .addField(clipParquetType(repeatedGroup, elementType))
+          .named(parquetList.getName)
+      } else {
+        // Otherwise, the repeated field's type is the element type with the repeated field's
+        // repetition.
+        Types
+          .buildGroup(parquetList.getRepetition)
+          .as(OriginalType.LIST)
+          .addField(
+            Types
+              .repeatedGroup()
+              .addField(clipParquetType(repeatedGroup.getType(0), elementType))
+              .named(repeatedGroup.getName))
+          .named(parquetList.getName)
+      }
+    }
+  }
+
+  /**
+   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[MapType]].  Either key type or
+   * value type of the [[MapType]] must be a nested type, namely an [[ArrayType]], a [[MapType]], or
+   * a [[StructType]].
+   */
+  private def clipParquetMapType(
+      parquetMap: GroupType, keyType: DataType, valueType: DataType): GroupType = {
+    // Precondition of this method, only handles maps with nested key types or value types.
+    assert(!isPrimitiveCatalystType(keyType) || !isPrimitiveCatalystType(valueType))
+
+    val repeatedGroup = parquetMap.getType(0).asGroupType()
+    val parquetKeyType = repeatedGroup.getType(0)
+    val parquetValueType = repeatedGroup.getType(1)
+
+    val clippedRepeatedGroup =
+      Types
+        .repeatedGroup()
+        .as(repeatedGroup.getOriginalType)
+        .addField(clipParquetType(parquetKeyType, keyType))
+        .addField(clipParquetType(parquetValueType, valueType))
+        .named(repeatedGroup.getName)
+
+    Types
+      .buildGroup(parquetMap.getRepetition)
+      .as(parquetMap.getOriginalType)
+      .addField(clippedRepeatedGroup)
+      .named(parquetMap.getName)
+  }
+
+  /**
+   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[StructType]].
+   *
+   * @return A clipped [[GroupType]], which has at least one field.
+   * @note Parquet doesn't allow creating empty [[GroupType]] instances except for empty
+   *       [[MessageType]].  Because it's legal to construct an empty requested schema for column
+   *       pruning.
+   */
+  private def clipParquetGroup(parquetRecord: GroupType, structType: StructType): GroupType = {
+    val clippedParquetFields = clipParquetGroupFields(parquetRecord, structType)
+    Types
+      .buildGroup(parquetRecord.getRepetition)
+      .as(parquetRecord.getOriginalType)
+      .addFields(clippedParquetFields: _*)
+      .named(parquetRecord.getName)
+  }
+
+  /**
+   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[StructType]].
+   *
+   * @return A list of clipped [[GroupType]] fields, which can be empty.
+   */
+  private def clipParquetGroupFields(
+      parquetRecord: GroupType, structType: StructType): Seq[Type] = {
+    val parquetFieldMap = parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
+    val toParquet = new CatalystSchemaConverter(writeLegacyParquetFormat = false)
+    structType.map { f =>
+      parquetFieldMap
+        .get(f.name)
+        .map(clipParquetType(_, f.dataType))
+        .getOrElse(toParquet.convertField(f))
+    }
+  }
+
+  def expandUDT(schema: StructType): StructType = {
+    def expand(dataType: DataType): DataType = {
+      dataType match {
+        case t: ArrayType =>
+          t.copy(elementType = expand(t.elementType))
+
+        case t: MapType =>
+          t.copy(
+            keyType = expand(t.keyType),
+            valueType = expand(t.valueType))
+
+        case t: StructType =>
+          val expandedFields = t.fields.map(f => f.copy(dataType = expand(f.dataType)))
+          t.copy(fields = expandedFields)
+
+        case t: UserDefinedType[_] =>
+          t.sqlType
+
+        case t =>
+          t
+      }
+    }
+
+    expand(schema).asInstanceOf[StructType]
+  }
 }

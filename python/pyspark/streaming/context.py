@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import os
 import sys
+from threading import RLock, Timer
 
 from py4j.java_gateway import java_import, JavaObject
 
@@ -32,46 +33,61 @@ from pyspark.streaming.util import TransformFunction, TransformFunctionSerialize
 __all__ = ["StreamingContext"]
 
 
-def _daemonize_callback_server():
-    """
-    Hack Py4J to daemonize callback server
+class Py4jCallbackConnectionCleaner(object):
 
-    The thread of callback server has daemon=False, it will block the driver
-    from exiting if it's not shutdown. The following code replace `start()`
-    of CallbackServer with a new version, which set daemon=True for this
-    thread.
-
-    Also, it will update the port number (0) with real port
     """
-    # TODO: create a patch for Py4J
-    import socket
-    import py4j.java_gateway
-    logger = py4j.java_gateway.logger
-    from py4j.java_gateway import Py4JNetworkError
-    from threading import Thread
+    A cleaner to clean up callback connections that are not closed by Py4j. See SPARK-12617.
+    It will scan all callback connections every 30 seconds and close the dead connections.
+    """
+
+    def __init__(self, gateway):
+        self._gateway = gateway
+        self._stopped = False
+        self._timer = None
+        self._lock = RLock()
 
     def start(self):
-        """Starts the CallbackServer. This method should be called by the
-        client instead of run()."""
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,
-                                      1)
-        try:
-            self.server_socket.bind((self.address, self.port))
-            if not self.port:
-                # update port with real port
-                self.port = self.server_socket.getsockname()[1]
-        except Exception as e:
-            msg = 'An error occurred while trying to start the callback server: %s' % e
-            logger.exception(msg)
-            raise Py4JNetworkError(msg)
+        if self._stopped:
+            return
 
-        # Maybe thread needs to be cleanup up?
-        self.thread = Thread(target=self.run)
-        self.thread.daemon = True
-        self.thread.start()
+        def clean_closed_connections():
+            from py4j.java_gateway import quiet_close, quiet_shutdown
 
-    py4j.java_gateway.CallbackServer.start = start
+            callback_server = self._gateway._callback_server
+            if callback_server:
+                with callback_server.lock:
+                    try:
+                        closed_connections = []
+                        for connection in callback_server.connections:
+                            if not connection.isAlive():
+                                quiet_close(connection.input)
+                                quiet_shutdown(connection.socket)
+                                quiet_close(connection.socket)
+                                closed_connections.append(connection)
+
+                        for closed_connection in closed_connections:
+                            callback_server.connections.remove(closed_connection)
+                    except Exception:
+                        import traceback
+                        traceback.print_exc()
+
+            self._start_timer(clean_closed_connections)
+
+        self._start_timer(clean_closed_connections)
+
+    def _start_timer(self, f):
+        with self._lock:
+            if not self._stopped:
+                self._timer = Timer(30.0, f)
+                self._timer.daemon = True
+                self._timer.start()
+
+    def stop(self):
+        with self._lock:
+            self._stopped = True
+            if self._timer:
+                self._timer.cancel()
+                self._timer = None
 
 
 class StreamingContext(object):
@@ -88,6 +104,9 @@ class StreamingContext(object):
 
     # Reference to a currently active StreamingContext
     _activeContext = None
+
+    # A cleaner to clean leak sockets of callback server every 30 seconds
+    _py4j_cleaner = None
 
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
         """
@@ -123,21 +142,47 @@ class StreamingContext(object):
 
         # start callback server
         # getattr will fallback to JVM, so we cannot test by hasattr()
-        if "_callback_server" not in gw.__dict__:
-            _daemonize_callback_server()
-            # use random port
-            gw._start_callback_server(0)
+        if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
+            gw.callback_server_parameters.eager_load = True
+            gw.callback_server_parameters.daemonize = True
+            gw.callback_server_parameters.daemonize_connections = True
+            gw.callback_server_parameters.port = 0
+            gw.start_callback_server(gw.callback_server_parameters)
+            cbport = gw._callback_server.server_socket.getsockname()[1]
+            gw._callback_server.port = cbport
             # gateway with real port
             gw._python_proxy_port = gw._callback_server.port
             # get the GatewayServer object in JVM by ID
             jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
             # update the port of CallbackClient with real port
             gw.jvm.PythonDStream.updatePythonGatewayPort(jgws, gw._python_proxy_port)
+            _py4j_cleaner = Py4jCallbackConnectionCleaner(gw)
+            _py4j_cleaner.start()
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
-        cls._transformerSerializer = TransformFunctionSerializer(
-            SparkContext._active_spark_context, CloudPickleSerializer(), gw)
+        if cls._transformerSerializer is None:
+            transformer_serializer = TransformFunctionSerializer()
+            transformer_serializer.init(
+                SparkContext._active_spark_context, CloudPickleSerializer(), gw)
+            # SPARK-12511 streaming driver with checkpointing unable to finalize leading to OOM
+            # There is an issue that Py4J's PythonProxyHandler.finalize blocks forever.
+            # (https://github.com/bartdag/py4j/pull/184)
+            #
+            # Py4j will create a PythonProxyHandler in Java for "transformer_serializer" when
+            # calling "registerSerializer". If we call "registerSerializer" twice, the second
+            # PythonProxyHandler will override the first one, then the first one will be GCed and
+            # trigger "PythonProxyHandler.finalize". To avoid that, we should not call
+            # "registerSerializer" more than once, so that "PythonProxyHandler" in Java side won't
+            # be GCed.
+            #
+            # TODO Once Py4J fixes this issue, we should upgrade Py4j to the latest version.
+            transformer_serializer.gateway.jvm.PythonDStream.registerSerializer(
+                transformer_serializer)
+            cls._transformerSerializer = transformer_serializer
+        else:
+            cls._transformerSerializer.init(
+                SparkContext._active_spark_context, CloudPickleSerializer(), gw)
 
     @classmethod
     def getOrCreate(cls, checkpointPath, setupFunc):
@@ -154,16 +199,13 @@ class StreamingContext(object):
         gw = SparkContext._gateway
 
         # Check whether valid checkpoint information exists in the given path
-        if gw.jvm.CheckpointReader.read(checkpointPath).isEmpty():
+        ssc_option = gw.jvm.StreamingContextPythonHelper().tryRecoverFromCheckpoint(checkpointPath)
+        if ssc_option.isEmpty():
             ssc = setupFunc()
             ssc.checkpoint(checkpointPath)
             return ssc
 
-        try:
-            jssc = gw.jvm.JavaStreamingContext(checkpointPath)
-        except Exception:
-            print("failed to load StreamingContext from checkpoint", file=sys.stderr)
-            raise
+        jssc = gw.jvm.JavaStreamingContext(ssc_option.get())
 
         # If there is already an active instance of Python SparkContext use it, or create a new one
         if not SparkContext._active_spark_context:
@@ -240,6 +282,7 @@ class StreamingContext(object):
     def awaitTermination(self, timeout=None):
         """
         Wait for the execution to stop.
+
         @param timeout: time to wait in seconds
         """
         if timeout is None:
@@ -252,9 +295,10 @@ class StreamingContext(object):
         Wait for the execution to stop. Return `true` if it's stopped; or
         throw the reported error during the execution; or `false` if the
         waiting time elapsed before returning from the method.
+
         @param timeout: time to wait in seconds
         """
-        self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
+        return self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
 
     def stop(self, stopSparkContext=True, stopGraceFully=False):
         """
@@ -399,3 +443,11 @@ class StreamingContext(object):
         first = dstreams[0]
         jrest = [d._jdstream for d in dstreams[1:]]
         return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
+
+    def addStreamingListener(self, streamingListener):
+        """
+        Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+        receiving system events related to streaming.
+        """
+        self._jssc.addStreamingListener(self._jvm.JavaStreamingListenerWrapper(
+            self._jvm.PythonStreamingListenerWrapper(streamingListener)))

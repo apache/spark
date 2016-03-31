@@ -251,6 +251,29 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Nil))
   }
 
+  test("greatest/least cast") {
+    for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
+      ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+        operator(Literal(1.0)
+          :: Literal(1)
+          :: Literal.create(1.0, FloatType)
+          :: Nil),
+        operator(Cast(Literal(1.0), DoubleType)
+          :: Cast(Literal(1), DoubleType)
+          :: Cast(Literal.create(1.0, FloatType), DoubleType)
+          :: Nil))
+      ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+        operator(Literal(1L)
+          :: Literal(1)
+          :: Literal(new java.math.BigDecimal("1000000000000000000000"))
+          :: Nil),
+        operator(Cast(Literal(1L), DecimalType(22, 0))
+          :: Cast(Literal(1), DecimalType(22, 0))
+          :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
+          :: Nil))
+    }
+  }
+
   test("nanvl casts") {
     ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0, FloatType), Literal.create(1.0, DoubleType)),
@@ -273,6 +296,20 @@ class HiveTypeCoercionSuite extends PlanTest {
     ruleTest(rule,
       If(Literal.create(null, NullType), Literal(1), Literal(1)),
       If(Literal.create(null, BooleanType), Literal(1), Literal(1))
+    )
+  }
+
+  test("test for SPARK-13772") {
+    val rule = HiveTypeCoercion.IfCoercion
+    ruleTest(rule,
+      If(Literal(true), Literal(1.0), Cast(Literal(1.0), DecimalType(19, 0))),
+      If(Literal(true), Literal(1.0), Cast(Cast(Literal(1.0), DecimalType(19, 0)), DoubleType))
+    )
+
+    ruleTest(rule,
+      If(Literal(true), Literal(Decimal(1)), Cast(Literal(1.0), DecimalType(19, 9))),
+      If(Literal(true), Cast(Literal(Decimal(1)), DecimalType(19, 9)),
+        Cast(Literal(1.0), DecimalType(19, 9)))
     )
   }
 
@@ -470,7 +507,8 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
     ruleTest(inConversion,
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
-      In(Literal("a"), Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
+      In(Cast(Literal("a"), StringType),
+        Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
   }
 }

@@ -23,6 +23,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import com.google.common.io.Closeables;
 import com.google.common.io.Files;
 
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
@@ -60,21 +61,28 @@ public class TestShuffleDataContext {
   public void insertSortShuffleData(int shuffleId, int mapId, byte[][] blocks) throws IOException {
     String blockId = "shuffle_" + shuffleId + "_" + mapId + "_0";
 
-    OutputStream dataStream = new FileOutputStream(
-      ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
-    DataOutputStream indexStream = new DataOutputStream(new FileOutputStream(
-      ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+    OutputStream dataStream = null;
+    DataOutputStream indexStream = null;
+    boolean suppressExceptionsDuringClose = true;
 
-    long offset = 0;
-    indexStream.writeLong(offset);
-    for (byte[] block : blocks) {
-      offset += block.length;
-      dataStream.write(block);
+    try {
+      dataStream = new FileOutputStream(
+        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
+      indexStream = new DataOutputStream(new FileOutputStream(
+        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+
+      long offset = 0;
       indexStream.writeLong(offset);
+      for (byte[] block : blocks) {
+        offset += block.length;
+        dataStream.write(block);
+        indexStream.writeLong(offset);
+      }
+      suppressExceptionsDuringClose = false;
+    } finally {
+      Closeables.close(dataStream, suppressExceptionsDuringClose);
+      Closeables.close(indexStream, suppressExceptionsDuringClose);
     }
-
-    dataStream.close();
-    indexStream.close();
   }
 
   /** Creates reducer blocks in a hash-based data format within our local dirs. */

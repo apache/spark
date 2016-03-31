@@ -90,8 +90,9 @@ class JavaWrapper(Params):
         for param in self.params:
             if self._java_obj.hasParam(param.name):
                 java_param = self._java_obj.getParam(param.name)
-                value = _java2py(sc, self._java_obj.getOrDefault(java_param))
-                self._paramMap[param] = value
+                if self._java_obj.isDefined(java_param):
+                    value = _java2py(sc, self._java_obj.getOrDefault(java_param))
+                    self._paramMap[param] = value
 
     @staticmethod
     def _empty_java_param_map():
@@ -119,6 +120,7 @@ class JavaEstimator(Estimator, JavaWrapper):
     def _fit_java(self, dataset):
         """
         Fits a Java model to the input dataset.
+
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
         :param params: additional params (overwriting embedded values)
@@ -136,7 +138,8 @@ class JavaEstimator(Estimator, JavaWrapper):
 class JavaTransformer(Transformer, JavaWrapper):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
-    implementations.
+    implementations. Subclasses should ensure they have the transformer Java object
+    available as _java_obj.
     """
 
     __metaclass__ = ABCMeta
@@ -172,6 +175,7 @@ class JavaModel(Model, JavaTransformer):
         extra params. This implementation first calls Params.copy and
         then make a copy of the companion Java model with extra params.
         So both the Python wrapper and the Java model get copied.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """

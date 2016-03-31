@@ -66,7 +66,7 @@ public final class JavaKafkaWordCount {
 
     StreamingExamples.setStreamingLogLevels();
     SparkConf sparkConf = new SparkConf().setAppName("JavaKafkaWordCount");
-    // Create the context with a 1 second batch size
+    // Create the context with 2 seconds batch size
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, new Duration(2000));
 
     int numThreads = Integer.parseInt(args[3]);

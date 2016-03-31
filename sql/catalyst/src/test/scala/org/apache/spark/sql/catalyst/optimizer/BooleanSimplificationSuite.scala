@@ -89,6 +89,22 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       ('a === 'b || 'b > 3 && 'a > 3 && 'a < 5))
   }
 
+  test("a && (!a || b)") {
+    checkCondition(('a && (!('a) || 'b )), ('a && 'b))
+
+    checkCondition(('a && ('b || !('a) )), ('a && 'b))
+
+    checkCondition(((!('a) || 'b ) && 'a), ('b && 'a))
+
+    checkCondition((('b || !('a) ) && 'a), ('b && 'a))
+  }
+
+  test("!(a && b) , !(a || b)") {
+    checkCondition((!('a && 'b)), (!('a) || !('b)))
+
+    checkCondition(!('a || 'b), (!('a) && !('b)))
+  }
+
   private val caseInsensitiveAnalyzer =
     new Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(false))
 

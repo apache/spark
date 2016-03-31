@@ -37,7 +37,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("GeneralHashedRelation") {
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
-    val numDataRows = SQLMetrics.createLongMetric(ctx.sparkContext, "data")
+    val numDataRows = SQLMetrics.createLongMetric(sparkContext, "data")
     val hashed = HashedRelation(data.iterator, numDataRows, keyProjection)
     assert(hashed.isInstanceOf[GeneralHashedRelation])
 
@@ -53,7 +53,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("UniqueKeyHashedRelation") {
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2))
-    val numDataRows = SQLMetrics.createLongMetric(ctx.sparkContext, "data")
+    val numDataRows = SQLMetrics.createLongMetric(sparkContext, "data")
     val hashed = HashedRelation(data.iterator, numDataRows, keyProjection)
     assert(hashed.isInstanceOf[UniqueKeyHashedRelation])
 
@@ -73,7 +73,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
   test("UnsafeHashedRelation") {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
-    val numDataRows = SQLMetrics.createLongMetric(ctx.sparkContext, "data")
+    val numDataRows = SQLMetrics.createLongMetric(sparkContext, "data")
     val toUnsafe = UnsafeProjection.create(schema)
     val unsafeData = data.map(toUnsafe(_).copy()).toArray
 

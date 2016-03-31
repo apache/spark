@@ -38,7 +38,7 @@ import org.apache.spark.streaming.{StreamingContext, Time}
  * @param ssc_ Streaming context that will execute this input stream
  * @tparam T Class type of the object of this stream
  */
-abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
+abstract class ReceiverInputDStream[T: ClassTag](ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
   /**

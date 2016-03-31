@@ -1,0 +1,10 @@
+- text: "Overview: estimators, transformers and pipelines"
+  url: ml-guide.html
+- text: Extracting, transforming and selecting features
+  url: ml-features.html
+- text: Classification and Regression
+  url: ml-classification-regression.html
+- text: Clustering
+  url: ml-clustering.html
+- text: Advanced topics
+  url: ml-advanced.html

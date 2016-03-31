@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -83,7 +84,7 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Test
   public void applySchema() {
-    List<Person> personList = new ArrayList<Person>(2);
+    List<Person> personList = new ArrayList<>(2);
     Person person1 = new Person();
     person1.setName("Michael");
     person1.setAge(29);
@@ -95,12 +96,13 @@ public class JavaApplySchemaSuite implements Serializable {
 
     JavaRDD<Row> rowRDD = javaCtx.parallelize(personList).map(
       new Function<Person, Row>() {
+        @Override
         public Row call(Person person) throws Exception {
           return RowFactory.create(person.getName(), person.getAge());
         }
       });
 
-    List<StructField> fields = new ArrayList<StructField>(2);
+    List<StructField> fields = new ArrayList<>(2);
     fields.add(DataTypes.createStructField("name", DataTypes.StringType, false));
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
@@ -118,7 +120,7 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Test
   public void dataFrameRDDOperations() {
-    List<Person> personList = new ArrayList<Person>(2);
+    List<Person> personList = new ArrayList<>(2);
     Person person1 = new Person();
     person1.setName("Michael");
     person1.setAge(29);
@@ -129,27 +131,28 @@ public class JavaApplySchemaSuite implements Serializable {
     personList.add(person2);
 
     JavaRDD<Row> rowRDD = javaCtx.parallelize(personList).map(
-            new Function<Person, Row>() {
-              public Row call(Person person) throws Exception {
-                return RowFactory.create(person.getName(), person.getAge());
-              }
-            });
+        new Function<Person, Row>() {
+          @Override
+          public Row call(Person person) {
+            return RowFactory.create(person.getName(), person.getAge());
+          }
+        });
 
-    List<StructField> fields = new ArrayList<StructField>(2);
-    fields.add(DataTypes.createStructField("name", DataTypes.StringType, false));
+    List<StructField> fields = new ArrayList<>(2);
+    fields.add(DataTypes.createStructField("", DataTypes.StringType, false));
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
     DataFrame df = sqlContext.applySchema(rowRDD, schema);
     df.registerTempTable("people");
     List<String> actual = sqlContext.sql("SELECT * FROM people").toJavaRDD().map(new Function<Row, String>() {
-
+      @Override
       public String call(Row row) {
-        return row.getString(0) + "_" + row.get(1).toString();
+        return row.getString(0) + "_" + row.get(1);
       }
     }).collect();
 
-    List<String> expected = new ArrayList<String>(2);
+    List<String> expected = new ArrayList<>(2);
     expected.add("Michael_29");
     expected.add("Yin_28");
 
@@ -165,7 +168,7 @@ public class JavaApplySchemaSuite implements Serializable {
       "{\"string\":\"this is another simple string.\", \"integer\":11, \"long\":21474836469, " +
         "\"bigInteger\":92233720368547758069, \"double\":1.7976931348623157E305, " +
         "\"boolean\":false, \"null\":null}"));
-    List<StructField> fields = new ArrayList<StructField>(7);
+    List<StructField> fields = new ArrayList<>(7);
     fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(20, 0),
       true));
     fields.add(DataTypes.createStructField("boolean", DataTypes.BooleanType, true));
@@ -175,10 +178,10 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("null", DataTypes.StringType, true));
     fields.add(DataTypes.createStructField("string", DataTypes.StringType, true));
     StructType expectedSchema = DataTypes.createStructType(fields);
-    List<Row> expectedResult = new ArrayList<Row>(2);
+    List<Row> expectedResult = new ArrayList<>(2);
     expectedResult.add(
       RowFactory.create(
-        new java.math.BigDecimal("92233720368547758070"),
+        new BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
         10,
@@ -187,7 +190,7 @@ public class JavaApplySchemaSuite implements Serializable {
         "this is a simple string."));
     expectedResult.add(
       RowFactory.create(
-        new java.math.BigDecimal("92233720368547758069"),
+        new BigDecimal("92233720368547758069"),
         false,
         1.7976931348623157E305,
         11,

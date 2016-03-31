@@ -17,6 +17,7 @@
 
 # Utility functions to deserialize objects from Java.
 
+# nolint start
 # Type mapping from Java to R
 #
 # void -> NULL
@@ -32,6 +33,8 @@
 #
 # Array[T] -> list()
 # Object -> jobj
+#
+# nolint end
 
 readObject <- function(con) {
   # Read type first
@@ -50,6 +53,8 @@ readTypedObject <- function(con, type) {
     "t" = readTime(con),
     "a" = readArray(con),
     "l" = readList(con),
+    "e" = readEnv(con),
+    "s" = readStruct(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
     stop(paste("Unsupported type for deserialization", type)))
@@ -57,8 +62,10 @@ readTypedObject <- function(con, type) {
 
 readString <- function(con) {
   stringLen <- readInt(con)
-  string <- readBin(con, raw(), stringLen, endian = "big")
-  rawToChar(string)
+  raw <- readBin(con, raw(), stringLen, endian = "big")
+  string <- rawToChar(raw)
+  Encoding(string) <- "UTF-8"
+  string
 }
 
 readInt <- function(con) {
@@ -119,6 +126,28 @@ readList <- function(con) {
   }
 }
 
+readEnv <- function(con) {
+  env <- new.env()
+  len <- readInt(con)
+  if (len > 0) {
+    for (i in 1:len) {
+      key <- readString(con)
+      value <- readObject(con)
+      env[[key]] <- value
+    }
+  }
+  env
+}
+
+# Read a field of StructType from DataFrame
+# into a named list in R whose class is "struct"
+readStruct <- function(con) {
+  names <- readObject(con)
+  fields <- readObject(con)
+  names(fields) <- names
+  listToStruct(fields)
+}
+
 readRaw <- function(con) {
   dataLen <- readInt(con)
   readBin(con, raw(), as.integer(dataLen), endian = "big")
@@ -157,7 +186,7 @@ readMultipleObjects <- function(inputCon) {
   # of the objects, so the number of objects varies, we try to read
   # all objects in a loop until the end of the stream.
   data <- list()
-  while(TRUE) {
+  while (TRUE) {
     # If reaching the end of the stream, type returned should be "".
     type <- readType(inputCon)
     if (type == "") {

@@ -23,6 +23,7 @@ import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
+import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class YarnClientSchedulerBackend(
@@ -177,9 +178,18 @@ private[spark] class YarnClientSchedulerBackend(
     if (monitorThread != null) {
       monitorThread.stopMonitor()
     }
+
+    // Report a final state to the launcher if one is connected. This is needed since in client
+    // mode this backend doesn't let the app monitor loop run to completion, so it does not report
+    // the final state itself.
+    //
+    // Note: there's not enough information at this point to provide a better final state,
+    // so assume the application was successful.
+    client.reportLauncherState(SparkAppHandle.State.FINISHED)
+
     super.stop()
-    client.stop()
     YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
+    client.stop()
     logInfo("Stopped")
   }
 

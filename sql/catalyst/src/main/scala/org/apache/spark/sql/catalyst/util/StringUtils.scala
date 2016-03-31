@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.Pattern
 
+import org.apache.spark.unsafe.types.UTF8String
+
 object StringUtils {
 
   // replace the _ with .{1} exactly match 1 time of any character
@@ -44,4 +46,10 @@ object StringUtils {
       v
     }
   }
+
+  private[this] val trueStrings = Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
+  private[this] val falseStrings = Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
+
+  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.toLowerCase)
+  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.toLowerCase)
 }

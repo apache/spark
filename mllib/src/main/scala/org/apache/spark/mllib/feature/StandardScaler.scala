@@ -18,13 +18,12 @@
 package org.apache.spark.mllib.feature
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit std using column summary
  * statistics on the samples in the training set.
  *
@@ -33,7 +32,6 @@ import org.apache.spark.rdd.RDD
  * @param withStd True by default. Scales the data to unit standard deviation.
  */
 @Since("1.1.0")
-@Experimental
 class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) extends Logging {
 
   @Since("1.1.0")
@@ -64,7 +62,6 @@ class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) exten
 }
 
 /**
- * :: Experimental ::
  * Represents a StandardScaler model that can transform vectors.
  *
  * @param std column standard deviation values
@@ -73,7 +70,6 @@ class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) exten
  * @param withMean whether to center the data before scaling
  */
 @Since("1.1.0")
-@Experimental
 class StandardScalerModel @Since("1.3.0") (
     @Since("1.3.0") val std: Vector,
     @Since("1.1.0") val mean: Vector,

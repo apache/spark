@@ -30,13 +30,12 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
  * may be written by Netty in a more efficient manner (i.e., zero-copy write).
  * Similarly, the client-side decoding will reuse the Netty ByteBuf as the buffer.
  */
-public final class ChunkFetchSuccess implements ResponseMessage {
+public final class ChunkFetchSuccess extends AbstractResponseMessage {
   public final StreamChunkId streamChunkId;
-  public final ManagedBuffer buffer;
 
   public ChunkFetchSuccess(StreamChunkId streamChunkId, ManagedBuffer buffer) {
+    super(buffer, true);
     this.streamChunkId = streamChunkId;
-    this.buffer = buffer;
   }
 
   @Override
@@ -53,6 +52,11 @@ public final class ChunkFetchSuccess implements ResponseMessage {
     streamChunkId.encode(buf);
   }
 
+  @Override
+  public ResponseMessage createFailureResponse(String error) {
+    return new ChunkFetchFailure(streamChunkId, error);
+  }
+
   /** Decoding uses the given ByteBuf as our data, and will retain() it. */
   public static ChunkFetchSuccess decode(ByteBuf buf) {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
@@ -63,14 +67,14 @@ public final class ChunkFetchSuccess implements ResponseMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamChunkId, buffer);
+    return Objects.hashCode(streamChunkId, body());
   }
 
   @Override
   public boolean equals(Object other) {
     if (other instanceof ChunkFetchSuccess) {
       ChunkFetchSuccess o = (ChunkFetchSuccess) other;
-      return streamChunkId.equals(o.streamChunkId) && buffer.equals(o.buffer);
+      return streamChunkId.equals(o.streamChunkId) && super.equals(o);
     }
     return false;
   }
@@ -79,7 +83,7 @@ public final class ChunkFetchSuccess implements ResponseMessage {
   public String toString() {
     return Objects.toStringHelper(this)
       .add("streamChunkId", streamChunkId)
-      .add("buffer", buffer)
+      .add("buffer", body())
       .toString();
   }
 }

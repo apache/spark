@@ -131,7 +131,7 @@ object LinearRegressionExample {
     println(s"Training time: $elapsedTime seconds")
 
     // Print the weights and intercept for linear regression.
-    println(s"Weights: ${lirModel.weights} Intercept: ${lirModel.intercept}")
+    println(s"Weights: ${lirModel.coefficients} Intercept: ${lirModel.intercept}")
 
     println("Training data results:")
     DecisionTreeExample.evaluateRegressionModel(lirModel, training, "label")

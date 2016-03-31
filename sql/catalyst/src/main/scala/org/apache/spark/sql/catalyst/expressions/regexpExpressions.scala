@@ -22,7 +22,7 @@ import java.util.regex.{MatchResult, Pattern}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -92,15 +92,15 @@ case class Like(left: Expression, right: Expression)
         s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).matches();
+            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
           }
         """
       } else {
         s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         """
       }
     } else {
@@ -108,7 +108,7 @@ case class Like(left: Expression, right: Expression)
         s"""
           String rightStr = ${eval2}.toString();
           ${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));
-          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).matches();
+          ${ev.value} = $pattern.matcher(${eval1}.toString()).matches();
         """
       })
     }
@@ -140,15 +140,15 @@ case class RLike(left: Expression, right: Expression)
         s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).find(0);
+            ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
           }
         """
       } else {
         s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         """
       }
     } else {
@@ -156,7 +156,7 @@ case class RLike(left: Expression, right: Expression)
         s"""
           String rightStr = ${eval2}.toString();
           ${patternClass} $pattern = ${patternClass}.compile(rightStr);
-          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).find(0);
+          ${ev.value} = $pattern.matcher(${eval1}.toString()).find(0);
         """
       })
     }
@@ -184,7 +184,7 @@ case class StringSplit(str: Expression, pattern: Expression)
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.primitive} = new $arrayClass($str.split($pattern, -1));""")
+      s"""${ev.value} = new $arrayClass($str.split($pattern, -1));""")
   }
 
   override def prettyName: String = "split"
@@ -275,7 +275,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         m.appendReplacement(${termResult}, ${termLastReplacement});
       }
       m.appendTail(${termResult});
-      ${ev.primitive} = UTF8String.fromString(${termResult}.toString());
+      ${ev.value} = UTF8String.fromString(${termResult}.toString());
       ${ev.isNull} = false;
     """
     })
@@ -335,10 +335,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
         ${termPattern}.matcher($subject.toString());
       if (m.find()) {
         java.util.regex.MatchResult mr = m.toMatchResult();
-        ${ev.primitive} = UTF8String.fromString(mr.group($idx));
+        ${ev.value} = UTF8String.fromString(mr.group($idx));
         ${ev.isNull} = false;
       } else {
-        ${ev.primitive} = UTF8String.EMPTY_UTF8;
+        ${ev.value} = UTF8String.EMPTY_UTF8;
         ${ev.isNull} = false;
       }"""
     })

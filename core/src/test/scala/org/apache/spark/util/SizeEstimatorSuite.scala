@@ -60,6 +60,12 @@ class DummyString(val arr: Array[Char]) {
   @transient val hash32: Int = 0
 }
 
+class DummyClass8 extends KnownSizeEstimation {
+  val x: Int = 0
+
+  override def estimatedSize: Long = 2015
+}
+
 class SizeEstimatorSuite
   extends SparkFunSuite
   with BeforeAndAfterEach
@@ -213,5 +219,11 @@ class SizeEstimatorSuite
     SizeEstimator invokePrivate initialize()
     // Class should be 32 bytes on s390x if recognised as 64 bit platform
     assertResult(32)(SizeEstimator.estimate(new DummyClass7))
+  }
+
+  test("SizeEstimation can provide the estimated size") {
+    // DummyClass8 provides its size estimation.
+    assertResult(2015)(SizeEstimator.estimate(new DummyClass8))
+    assertResult(20206)(SizeEstimator.estimate(Array.fill(10)(new DummyClass8)))
   }
 }

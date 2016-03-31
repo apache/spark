@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{Arrays, ArrayList => JArrayList, List => JList}
+import org.apache.log4j.LogManager
+import org.apache.spark.sql.AnalysisException
 
 import scala.collection.JavaConverters._
 
@@ -63,9 +65,12 @@ private[hive] class SparkSQLDriver(
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
-      case cause: Throwable =>
-        logError(s"Failed in [$command]", cause)
-        new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null)
+        case ae: AnalysisException =>
+          logDebug(s"Failed in [$command]", ae)
+          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(ae), null, ae)
+        case cause: Throwable =>
+          logError(s"Failed in [$command]", cause)
+          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null, cause)
     }
   }
 

@@ -27,7 +27,7 @@ if (! library(SparkR, lib.loc = LOCAL_LIB_LOC, logical.return = TRUE)) {
 # Installs lintr from Github in a local directory.
 # NOTE: The CRAN's version is too old to adapt to our rules.
 if ("lintr" %in% row.names(installed.packages())  == FALSE) {
-  devtools::install_github("jimhester/lintr")
+  devtools::install_github("jimhester/lintr@a769c0b")
 }
 
 library(lintr)

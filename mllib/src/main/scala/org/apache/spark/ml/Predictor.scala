@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -144,6 +144,10 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
 
   /** @group setParam */
   def setPredictionCol(value: String): M = set(predictionCol, value).asInstanceOf[M]
+
+  /** Returns the number of features the model was trained on. If unknown, returns -1 */
+  @Since("1.6.0")
+  def numFeatures: Int = -1
 
   /**
    * Returns the SQL DataType corresponding to the FeaturesType type parameter.

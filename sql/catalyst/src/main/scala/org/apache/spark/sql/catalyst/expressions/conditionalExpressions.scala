@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{NullType, BooleanType, DataType}
+import org.apache.spark.sql.types._
 
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
@@ -60,15 +60,15 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     s"""
       ${condEval.code}
       boolean ${ev.isNull} = false;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${condEval.isNull} && ${condEval.primitive}) {
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${condEval.isNull} && ${condEval.value}) {
         ${trueEval.code}
         ${ev.isNull} = ${trueEval.isNull};
-        ${ev.primitive} = ${trueEval.primitive};
+        ${ev.value} = ${trueEval.value};
       } else {
         ${falseEval.code}
         ${ev.isNull} = ${falseEval.isNull};
-        ${ev.primitive} = ${falseEval.primitive};
+        ${ev.value} = ${falseEval.value};
       }
     """
   }
@@ -110,6 +110,14 @@ trait CaseWhenLike extends Expression {
     // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
     thenList.exists(_.nullable) || (elseValue.map(_.nullable).getOrElse(true))
   }
+
+  /**
+   * Whether should it fallback to interpret mode or not.
+   * @return
+   */
+  protected def shouldFallback: Boolean = {
+    branches.length > 20
+  }
 }
 
 // scalastyle:off
@@ -119,7 +127,7 @@ trait CaseWhenLike extends Expression {
  * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
  */
 // scalastyle:on
-case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
+case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike with CodegenFallback {
 
   // Use private[this] Array to speed up evaluation.
   @transient private[this] lazy val branchesArr = branches.toArray
@@ -157,6 +165,11 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    if (shouldFallback) {
+      // Fallback to interpreted mode if there are too many branches, as it may reach the
+      // 64K limit (limit on bytecode size for a single function).
+      return super[CodegenFallback].genCode(ctx, ev)
+    }
     val len = branchesArr.length
     val got = ctx.freshName("got")
 
@@ -166,11 +179,11 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
       s"""
         if (!$got) {
           ${cond.code}
-          if (!${cond.isNull} && ${cond.primitive}) {
+          if (!${cond.isNull} && ${cond.value}) {
             $got = true;
             ${res.code}
             ${ev.isNull} = ${res.isNull};
-            ${ev.primitive} = ${res.primitive};
+            ${ev.value} = ${res.value};
           }
         }
       """
@@ -182,7 +195,7 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
         if (!$got) {
           ${res.code}
           ${ev.isNull} = ${res.isNull};
-          ${ev.primitive} = ${res.primitive};
+          ${ev.value} = ${res.value};
         }
       """
     } else {
@@ -192,7 +205,7 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
     s"""
       boolean $got = false;
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       $cases
       $other
     """
@@ -213,7 +226,8 @@ case class CaseWhen(branches: Seq[Expression]) extends CaseWhenLike {
  * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
  */
 // scalastyle:on
-case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseWhenLike {
+case class CaseKeyWhen(key: Expression, branches: Seq[Expression])
+  extends CaseWhenLike with CodegenFallback {
 
   // Use private[this] Array to speed up evaluation.
   @transient private[this] lazy val branchesArr = branches.toArray
@@ -257,6 +271,11 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    if (shouldFallback) {
+      // Fallback to interpreted mode if there are too many branches, as it may reach the
+      // 64K limit (limit on bytecode size for a single function).
+      return super[CodegenFallback].genCode(ctx, ev)
+    }
     val keyEval = key.gen(ctx)
     val len = branchesArr.length
     val got = ctx.freshName("got")
@@ -267,11 +286,11 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
       s"""
         if (!$got) {
           ${cond.code}
-          if (!${cond.isNull} && ${ctx.genEqual(key.dataType, keyEval.primitive, cond.primitive)}) {
+          if (!${cond.isNull} && ${ctx.genEqual(key.dataType, keyEval.value, cond.value)}) {
             $got = true;
             ${res.code}
             ${ev.isNull} = ${res.isNull};
-            ${ev.primitive} = ${res.primitive};
+            ${ev.value} = ${res.value};
           }
         }
       """
@@ -283,7 +302,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
         if (!$got) {
           ${res.code}
           ${ev.isNull} = ${res.isNull};
-          ${ev.primitive} = ${res.primitive};
+          ${ev.value} = ${res.value};
         }
       """
     } else {
@@ -293,7 +312,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
     s"""
       boolean $got = false;
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       ${keyEval.code}
       if (!${keyEval.isNull}) {
         $cases
@@ -348,19 +367,22 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evalChildren = children.map(_.gen(ctx))
-    def updateEval(i: Int): String =
+    val first = evalChildren(0)
+    val rest = evalChildren.drop(1)
+    def updateEval(eval: GeneratedExpressionCode): String =
       s"""
-        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
-          ${ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} < 0)) {
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, ev.value, eval.value)})) {
           ${ev.isNull} = false;
-          ${ev.primitive} = ${evalChildren(i).primitive};
+          ${ev.value} = ${eval.value};
         }
       """
     s"""
-      ${evalChildren.map(_.code).mkString("\n")}
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${children.indices.map(updateEval).mkString("\n")}
+      ${first.code}
+      boolean ${ev.isNull} = ${first.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
+      ${rest.map(updateEval).mkString("\n")}
     """
   }
 }
@@ -403,19 +425,23 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evalChildren = children.map(_.gen(ctx))
-    def updateEval(i: Int): String =
+    val first = evalChildren(0)
+    val rest = evalChildren.drop(1)
+    def updateEval(eval: GeneratedExpressionCode): String =
       s"""
-        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
-          ${ctx.genComp(dataType, evalChildren(i).primitive, ev.primitive)} > 0)) {
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, eval.value, ev.value)})) {
           ${ev.isNull} = false;
-          ${ev.primitive} = ${evalChildren(i).primitive};
+          ${ev.value} = ${eval.value};
         }
       """
     s"""
-      ${evalChildren.map(_.code).mkString("\n")}
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      ${children.indices.map(updateEval).mkString("\n")}
+      ${first.code}
+      boolean ${ev.isNull} = ${first.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
+      ${rest.map(updateEval).mkString("\n")}
     """
   }
 }
+

@@ -47,6 +47,6 @@ private[sql] case class SparkPartitionID() extends LeafExpression with Nondeterm
     ctx.addMutableState(ctx.JAVA_INT, idTerm,
       s"$idTerm = org.apache.spark.TaskContext.getPartitionId();")
     ev.isNull = "false"
-    s"final ${ctx.javaType(dataType)} ${ev.primitive} = $idTerm;"
+    s"final ${ctx.javaType(dataType)} ${ev.value} = $idTerm;"
   }
 }

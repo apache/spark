@@ -20,10 +20,11 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{Row, QueryTest}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveDataFrameWindowSuite extends QueryTest {
+class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
+  import hiveContext.implicits._
+  import hiveContext.sql
 
   test("reuse window partitionBy") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
@@ -254,5 +255,15 @@ class HiveDataFrameWindowSuite extends QueryTest {
       Row(1, 13, null) :: Row(2, 13, 2) :: Row(4, 7, 9) ::
         Row(3, 11, 6) :: Row(2, 13, 2) :: Row(1, 13, null) :: Nil)
 
+  }
+
+  test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
+    val src = Seq((0, 3, 5)).toDF("a", "b", "c")
+      .withColumn("Data", struct("a", "b"))
+      .drop("a")
+      .drop("b")
+    val winSpec = Window.partitionBy("Data.a", "Data.b").orderBy($"c".desc)
+    val df = src.select($"*", max("c").over(winSpec) as "max")
+    checkAnswer(df, Row(5, Row(0, 3), 5))
   }
 }

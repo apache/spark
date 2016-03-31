@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 
@@ -34,13 +33,11 @@ private[sql] case class LocalTableScan(
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
-  override def executeCollect(): Array[Row] = {
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    rows.map(converter(_).asInstanceOf[Row]).toArray
+  override def executeCollect(): Array[InternalRow] = {
+    rows.toArray
   }
 
-  override def executeTake(limit: Int): Array[Row] = {
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    rows.map(converter(_).asInstanceOf[Row]).take(limit).toArray
+  override def executeTake(limit: Int): Array[InternalRow] = {
+    rows.take(limit).toArray
   }
 }

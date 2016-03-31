@@ -92,12 +92,19 @@ abstract class Expression extends TreeNode[Expression] {
    * @return [[GeneratedExpressionCode]]
    */
   def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
-    val isNull = ctx.freshName("isNull")
-    val primitive = ctx.freshName("primitive")
-    val ve = GeneratedExpressionCode("", isNull, primitive)
-    ve.code = genCode(ctx, ve)
-    // Add `this` in the comment.
-    ve.copy(s"/* $this */\n" + ve.code)
+    ctx.subExprEliminationExprs.get(this).map { subExprState =>
+      // This expression is repeated meaning the code to evaluated has already been added
+      // as a function and called in advance. Just use it.
+      val code = s"/* ${this.toCommentSafeString} */"
+      GeneratedExpressionCode(code, subExprState.isNull, subExprState.value)
+    }.getOrElse {
+      val isNull = ctx.freshName("isNull")
+      val primitive = ctx.freshName("primitive")
+      val ve = GeneratedExpressionCode("", isNull, primitive)
+      ve.code = genCode(ctx, ve)
+      // Add `this` in the comment.
+      ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)
+    }
   }
 
   /**
@@ -145,9 +152,35 @@ abstract class Expression extends TreeNode[Expression] {
         case (i1, i2) => i1 == i2
       }
     }
+    // Non-deterministic expressions cannot be semantic equal
+    if (!deterministic || !other.deterministic) return false
     val elements1 = this.productIterator.toSeq
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
     checkSemantic(elements1, elements2)
+  }
+
+  /**
+   * Returns the hash for this expression. Expressions that compute the same result, even if
+   * they differ cosmetically should return the same hash.
+   */
+  def semanticHash() : Int = {
+    def computeHash(e: Seq[Any]): Int = {
+      // See http://stackoverflow.com/questions/113511/hash-code-implementation
+      var hash: Int = 17
+      e.foreach(i => {
+        val h: Int = i match {
+          case e: Expression => e.semanticHash()
+          case Some(e: Expression) => e.semanticHash()
+          case t: Traversable[_] => computeHash(t.toSeq)
+          case null => 0
+          case other => other.hashCode()
+        }
+        hash = hash * 37 + h
+      })
+      hash
+    }
+
+    computeHash(this.productIterator.toSeq)
   }
 
   /**
@@ -169,12 +202,27 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyString: String = {
     transform {
-      case a: AttributeReference => PrettyAttribute(a.name)
+      case a: AttributeReference => PrettyAttribute(a.name, a.dataType)
       case u: UnresolvedAttribute => PrettyAttribute(u.name)
     }.toString
   }
 
-  override def toString: String = prettyName + children.mkString("(", ",", ")")
+  private def flatArguments = productIterator.flatMap {
+    case t: Traversable[_] => t
+    case single => single :: Nil
+  }
+
+  override def simpleString: String = toString
+
+  override def toString: String = prettyName + flatArguments.mkString("(", ",", ")")
+
+  /**
+   * Returns the string representation of this expression that is safe to be put in
+   * code comments of generated code.
+   */
+  protected def toCommentSafeString: String = this.toString
+    .replace("*/", "\\*\\/")
+    .replace("\\u", "\\\\u")
 }
 
 
@@ -276,7 +324,7 @@ abstract class UnaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: String => String): String = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"${ev.primitive} = ${f(eval)};"
+      s"${ev.value} = ${f(eval)};"
     })
   }
 
@@ -292,10 +340,10 @@ abstract class UnaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: String => String): String = {
     val eval = child.gen(ctx)
-    val resultCode = f(eval.primitive)
+    val resultCode = f(eval.value)
     eval.code + s"""
       boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $resultCode
       }
@@ -357,7 +405,7 @@ abstract class BinaryExpression extends Expression {
       ev: GeneratedExpressionCode,
       f: (String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"${ev.primitive} = ${f(eval1, eval2)};"
+      s"${ev.value} = ${f(eval1, eval2)};"
     })
   }
 
@@ -375,11 +423,11 @@ abstract class BinaryExpression extends Expression {
       f: (String, String) => String): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
-    val resultCode = f(eval1.primitive, eval2.primitive)
+    val resultCode = f(eval1.value, eval2.value)
     s"""
       ${eval1.code}
       boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${eval2.code}
         if (!${eval2.isNull}) {
@@ -482,7 +530,7 @@ abstract class TernaryExpression extends Expression {
     ev: GeneratedExpressionCode,
     f: (String, String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
-      s"${ev.primitive} = ${f(eval1, eval2, eval3)};"
+      s"${ev.value} = ${f(eval1, eval2, eval3)};"
     })
   }
 
@@ -499,11 +547,11 @@ abstract class TernaryExpression extends Expression {
     ev: GeneratedExpressionCode,
     f: (String, String, String) => String): String = {
     val evals = children.map(_.gen(ctx))
-    val resultCode = f(evals(0).primitive, evals(1).primitive, evals(2).primitive)
+    val resultCode = f(evals(0).value, evals(1).value, evals(2).value)
     s"""
       ${evals(0).code}
       boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${evals(0).isNull}) {
         ${evals(1).code}
         if (!${evals(1).isNull}) {

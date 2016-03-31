@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.UUID
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -24,16 +26,23 @@ import org.apache.spark.sql.types._
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
-  def newExprId: ExprId = ExprId(curId.getAndIncrement())
+  private[expressions] val jvmId = UUID.randomUUID()
+  def newExprId: ExprId = ExprId(curId.getAndIncrement(), jvmId)
   def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType)
 }
 
 /**
- * A globally unique (within this JVM) id for a given named expression.
+ * A globally unique id for a given named expression.
  * Used to identify which attribute output by a relation is being
  * referenced in a subsequent computation.
+ *
+ * The `id` field is unique within a given JVM, while the `uuid` is used to uniquely identify JVMs.
  */
-case class ExprId(id: Long)
+case class ExprId(id: Long, jvmId: UUID)
+
+object ExprId {
+  def apply(id: Long): ExprId = ExprId(id, NamedExpression.jvmId)
+}
 
 /**
  * An [[Expression]] that is named.
@@ -185,7 +194,9 @@ case class AttributeReference(
   def sameRef(other: AttributeReference): Boolean = this.exprId == other.exprId
 
   override def equals(other: Any): Boolean = other match {
-    case ar: AttributeReference => name == ar.name && exprId == ar.exprId && dataType == ar.dataType
+    case ar: AttributeReference =>
+      name == ar.name && dataType == ar.dataType && nullable == ar.nullable &&
+        metadata == ar.metadata && exprId == ar.exprId && qualifiers == ar.qualifiers
     case _ => false
   }
 
@@ -194,12 +205,19 @@ case class AttributeReference(
     case _ => false
   }
 
+  override def semanticHash(): Int = {
+    this.exprId.hashCode()
+  }
+
   override def hashCode: Int = {
     // See http://stackoverflow.com/questions/113511/hash-code-implementation
     var h = 17
-    h = h * 37 + exprId.hashCode()
+    h = h * 37 + name.hashCode()
     h = h * 37 + dataType.hashCode()
+    h = h * 37 + nullable.hashCode()
     h = h * 37 + metadata.hashCode()
+    h = h * 37 + exprId.hashCode()
+    h = h * 37 + qualifiers.hashCode()
     h
   }
 
@@ -236,14 +254,31 @@ case class AttributeReference(
     }
   }
 
+  def withExprId(newExprId: ExprId): AttributeReference = {
+    if (exprId == newExprId) {
+      this
+    } else {
+      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifiers)
+    }
+  }
+
+  override protected final def otherCopyArgs: Seq[AnyRef] = {
+    exprId :: qualifiers :: Nil
+  }
+
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
+
+  // Since the expression id is not in the first constructor it is missing from the default
+  // tree string.
+  override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
 }
 
 /**
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(name: String) extends Attribute with Unevaluable {
+case class PrettyAttribute(name: String, dataType: DataType = NullType)
+  extends Attribute with Unevaluable {
 
   override def toString: String = name
 
@@ -256,7 +291,6 @@ case class PrettyAttribute(name: String) extends Attribute with Unevaluable {
   override def qualifiers: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = throw new UnsupportedOperationException
-  override def dataType: DataType = NullType
 }
 
 object VirtualColumn {

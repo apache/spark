@@ -29,7 +29,7 @@ import org.apache.spark.annotation.DeveloperApi
 class TaskInfo(
     val taskId: Long,
     val index: Int,
-    val attempt: Int,
+    val attemptNumber: Int,
     val launchTime: Long,
     val executorId: String,
     val host: String,
@@ -95,7 +95,10 @@ class TaskInfo(
     }
   }
 
-  def id: String = s"$index.$attempt"
+  @deprecated("Use attemptNumber", "1.6.0")
+  def attempt: Int = attemptNumber
+
+  def id: String = s"$index.$attemptNumber"
 
   def duration: Long = {
     if (!finished) {

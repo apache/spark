@@ -34,15 +34,15 @@ import org.apache.spark.util.Utils
  * reopened again.
  */
 private[spark] class DiskBlockObjectWriter(
-    val blockId: BlockId,
-    file: File,
+    val file: File,
     serializerInstance: SerializerInstance,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
     syncWrites: Boolean,
     // These write metrics concurrently shared with other active DiskBlockObjectWriters who
     // are themselves performing writes. All updates must be relative.
-    writeMetrics: ShuffleWriteMetrics)
+    writeMetrics: ShuffleWriteMetrics,
+    val blockId: BlockId = null)
   extends OutputStream
   with Logging {
 
@@ -144,8 +144,10 @@ private[spark] class DiskBlockObjectWriter(
    * Reverts writes that haven't been flushed yet. Callers should invoke this function
    * when there are runtime exceptions. This method will not throw, though it may be
    * unsuccessful in truncating written data.
+   *
+   * @return the file that this DiskBlockObjectWriter wrote to.
    */
-  def revertPartialWritesAndClose() {
+  def revertPartialWritesAndClose(): File = {
     // Discard current writes. We do this by flushing the outstanding writes and then
     // truncating the file to its initial position.
     try {
@@ -160,12 +162,14 @@ private[spark] class DiskBlockObjectWriter(
       val truncateStream = new FileOutputStream(file, true)
       try {
         truncateStream.getChannel.truncate(initialPosition)
+        file
       } finally {
         truncateStream.close()
       }
     } catch {
       case e: Exception =>
         logError("Uncaught exception while reverting partial writes to file " + file, e)
+        file
     }
   }
 

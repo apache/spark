@@ -69,8 +69,8 @@ object EnsembleTestHelper {
       required: Double,
       metricName: String = "mse") {
     val predictions = input.map(x => model.predict(x.features))
-    val errors = predictions.zip(input.map(_.label)).map { case (prediction, label) =>
-      label - prediction
+    val errors = predictions.zip(input).map { case (prediction, point) =>
+      point.label - prediction
     }
     val metric = metricName match {
       case "mse" =>

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction, Transformation, and Selection - SparkML
-displayTitle: <a href="ml-guide.html">ML</a> - Features
+title: Extracting, transforming and selecting features - spark.ml
+displayTitle: Extracting, transforming and selecting features - spark.ml
 ---
 
 This section covers algorithms for working with features, roughly divided into these groups:
@@ -28,186 +28,69 @@ The algorithm combines Term Frequency (TF) counts with the [hashing trick](http:
 **IDF**: `IDF` is an `Estimator` which fits on a dataset and produces an `IDFModel`.  The `IDFModel` takes feature vectors (generally created from `HashingTF`) and scales each column.  Intuitively, it down-weights columns which appear frequently in a corpus.
 
 Please refer to the [MLlib user guide on TF-IDF](mllib-feature-extraction.html#tf-idf) for more details on Term Frequency and Inverse Document Frequency.
-For API details, refer to the [HashingTF API docs](api/scala/index.html#org.apache.spark.ml.feature.HashingTF) and the [IDF API docs](api/scala/index.html#org.apache.spark.ml.feature.IDF).
 
 In the following code segment, we start with a set of sentences.  We split each sentence into words using `Tokenizer`.  For each sentence (bag of words), we use `HashingTF` to hash the sentence into a feature vector.  We use `IDF` to rescale the feature vectors; this generally improves performance when using text as features.  Our feature vectors could then be passed to a learning algorithm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer}
 
-val sentenceData = sqlContext.createDataFrame(Seq(
-  (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
-)).toDF("label", "sentence")
-val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
-val wordsData = tokenizer.transform(sentenceData)
-val hashingTF = new HashingTF().setInputCol("words").setOutputCol("rawFeatures").setNumFeatures(20)
-val featurizedData = hashingTF.transform(wordsData)
-val idf = new IDF().setInputCol("rawFeatures").setOutputCol("features")
-val idfModel = idf.fit(featurizedData)
-val rescaledData = idfModel.transform(featurizedData)
-rescaledData.select("features", "label").take(3).foreach(println)
-{% endhighlight %}
+Refer to the [HashingTF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.HashingTF) and
+the [IDF Scala docs](api/scala/index.html#org.apache.spark.ml.feature.IDF) for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/TfIdfExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.HashingTF;
-import org.apache.spark.ml.feature.IDF;
-import org.apache.spark.ml.feature.Tokenizer;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+Refer to the [HashingTF Java docs](api/java/org/apache/spark/ml/feature/HashingTF.html) and the
+[IDF Java docs](api/java/org/apache/spark/ml/feature/IDF.html) for more details on the API.
 
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(0, "Hi I heard about Spark"),
-  RowFactory.create(0, "I wish Java could use case classes"),
-  RowFactory.create(1, "Logistic regression models are neat")
-));
-StructType schema = new StructType(new StructField[]{
-  new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-  new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
-});
-DataFrame sentenceData = sqlContext.createDataFrame(jrdd, schema);
-Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
-DataFrame wordsData = tokenizer.transform(sentenceData);
-int numFeatures = 20;
-HashingTF hashingTF = new HashingTF()
-  .setInputCol("words")
-  .setOutputCol("rawFeatures")
-  .setNumFeatures(numFeatures);
-DataFrame featurizedData = hashingTF.transform(wordsData);
-IDF idf = new IDF().setInputCol("rawFeatures").setOutputCol("features");
-IDFModel idfModel = idf.fit(featurizedData);
-DataFrame rescaledData = idfModel.transform(featurizedData);
-for (Row r : rescaledData.select("features", "label").take(3)) {
-  Vector features = r.getAs(0);
-  Double label = r.getDouble(1);
-  System.out.println(features);
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaTfIdfExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.ml.feature import HashingTF, IDF, Tokenizer
 
-sentenceData = sqlContext.createDataFrame([
-  (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
-], ["label", "sentence"])
-tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
-wordsData = tokenizer.transform(sentenceData)
-hashingTF = HashingTF(inputCol="words", outputCol="rawFeatures", numFeatures=20)
-featurizedData = hashingTF.transform(wordsData)
-idf = IDF(inputCol="rawFeatures", outputCol="features")
-idfModel = idf.fit(featurizedData)
-rescaledData = idfModel.transform(featurizedData)
-for features_label in rescaledData.select("features", "label").take(3):
-  print(features_label)
-{% endhighlight %}
+Refer to the [HashingTF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.HashingTF) and
+the [IDF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IDF) for more details on the API.
+
+{% include_example python/ml/tf_idf_example.py %}
 </div>
 </div>
 
 ## Word2Vec
 
-`Word2Vec` is an `Estimator` which takes sequences of words that represents documents and trains a `Word2VecModel`. The model is a `Map(String, Vector)` essentially, which maps each word to an unique fix-sized vector. The `Word2VecModel` transforms each documents into a vector using the average of all words in the document, which aims to other computations of documents such as similarity calculation consequencely. Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#Word2Vec) for more details on Word2Vec.
+`Word2Vec` is an `Estimator` which takes sequences of words representing documents and trains a
+`Word2VecModel`. The model maps each word to a unique fixed-size vector. The `Word2VecModel`
+transforms each document into a vector using the average of all words in the document; this vector
+can then be used for as features for prediction, document similarity calculations, etc.
+Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#word2vec) for more
+details.
 
-Word2Vec is implemented in [Word2Vec](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec). In the following code segment, we start with a set of documents, each of them is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
+In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.feature.Word2Vec
 
-// Input data: Each row is a bag of words from a sentence or document.
-val documentDF = sqlContext.createDataFrame(Seq(
-  "Hi I heard about Spark".split(" "),
-  "I wish Java could use case classes".split(" "),
-  "Logistic regression models are neat".split(" ")
-).map(Tuple1.apply)).toDF("text")
+Refer to the [Word2Vec Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Word2Vec)
+for more details on the API.
 
-// Learn a mapping from words to Vectors.
-val word2Vec = new Word2Vec()
-  .setInputCol("text")
-  .setOutputCol("result")
-  .setVectorSize(3)
-  .setMinCount(0)
-val model = word2Vec.fit(documentDF)
-val result = model.transform(documentDF)
-result.select("result").take(3).foreach(println)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/Word2VecExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.*;
+Refer to the [Word2Vec Java docs](api/java/org/apache/spark/ml/feature/Word2Vec.html)
+for more details on the API.
 
-JavaSparkContext jsc = ...
-SQLContext sqlContext = ...
-
-// Input data: Each row is a bag of words from a sentence or document.
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(Arrays.asList("Hi I heard about Spark".split(" "))),
-  RowFactory.create(Arrays.asList("I wish Java could use case classes".split(" "))),
-  RowFactory.create(Arrays.asList("Logistic regression models are neat".split(" ")))
-));
-StructType schema = new StructType(new StructField[]{
-  new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
-});
-DataFrame documentDF = sqlContext.createDataFrame(jrdd, schema);
-
-// Learn a mapping from words to Vectors.
-Word2Vec word2Vec = new Word2Vec()
-  .setInputCol("text")
-  .setOutputCol("result")
-  .setVectorSize(3)
-  .setMinCount(0);
-Word2VecModel model = word2Vec.fit(documentDF);
-DataFrame result = model.transform(documentDF);
-for (Row r: result.select("result").take(3)) {
-  System.out.println(r);
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaWord2VecExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.ml.feature import Word2Vec
 
-# Input data: Each row is a bag of words from a sentence or document.
-documentDF = sqlContext.createDataFrame([
-  ("Hi I heard about Spark".split(" "), ),
-  ("I wish Java could use case classes".split(" "), ),
-  ("Logistic regression models are neat".split(" "), )
-], ["text"])
-# Learn a mapping from words to Vectors.
-word2Vec = Word2Vec(vectorSize=3, minCount=0, inputCol="text", outputCol="result")
-model = word2Vec.fit(documentDF)
-result = model.transform(documentDF)
-for feature in result.select("result").take(3):
-  print(feature)
-{% endhighlight %}
+Refer to the [Word2Vec Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Word2Vec)
+for more details on the API.
+
+{% include_example python/ml/word2vec_example.py %}
 </div>
 </div>
 
@@ -250,73 +133,21 @@ each vector represents the token counts of the document over the vocabulary.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-More details can be found in the API docs for
-[CountVectorizer](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizer) and
-[CountVectorizerModel](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizerModel).
-{% highlight scala %}
-import org.apache.spark.ml.feature.CountVectorizer
-import org.apache.spark.mllib.util.CountVectorizerModel
 
-val df = sqlContext.createDataFrame(Seq(
-  (0, Array("a", "b", "c")),
-  (1, Array("a", "b", "b", "c", "a"))
-)).toDF("id", "words")
+Refer to the [CountVectorizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizer)
+and the [CountVectorizerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizerModel)
+for more details on the API.
 
-// fit a CountVectorizerModel from the corpus
-val cvModel: CountVectorizerModel = new CountVectorizer()
-  .setInputCol("words")
-  .setOutputCol("features")
-  .setVocabSize(3)
-  .setMinDF(2) // a term must appear in more or equal to 2 documents to be included in the vocabulary
-  .fit(df)
-
-// alternatively, define CountVectorizerModel with a-priori vocabulary
-val cvm = new CountVectorizerModel(Array("a", "b", "c"))
-  .setInputCol("words")
-  .setOutputCol("features")
-
-cvModel.transform(df).select("features").show()
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/CountVectorizerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-More details can be found in the API docs for
-[CountVectorizer](api/java/org/apache/spark/ml/feature/CountVectorizer.html) and
-[CountVectorizerModel](api/java/org/apache/spark/ml/feature/CountVectorizerModel.html).
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.CountVectorizer;
-import org.apache.spark.ml.feature.CountVectorizerModel;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.*;
 
-// Input data: Each row is a bag of words from a sentence or document.
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(Arrays.asList("a", "b", "c")),
-  RowFactory.create(Arrays.asList("a", "b", "b", "c", "a"))
-));
-StructType schema = new StructType(new StructField [] {
-  new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
-});
-DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+Refer to the [CountVectorizer Java docs](api/java/org/apache/spark/ml/feature/CountVectorizer.html)
+and the [CountVectorizerModel Java docs](api/java/org/apache/spark/ml/feature/CountVectorizerModel.html)
+for more details on the API.
 
-// fit a CountVectorizerModel from the corpus
-CountVectorizerModel cvModel = new CountVectorizer()
-  .setInputCol("text")
-  .setOutputCol("feature")
-  .setVocabSize(3)
-  .setMinDF(2) // a term must appear in more or equal to 2 documents to be included in the vocabulary
-  .fit(df);
-
-// alternatively, define CountVectorizerModel with a-priori vocabulary
-CountVectorizerModel cvm = new CountVectorizerModel(new String[]{"a", "b", "c"})
-  .setInputCol("text")
-  .setOutputCol("feature");
-
-cvModel.transform(df).show();
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaCountVectorizerExample.java %}
 </div>
 </div>
 
@@ -334,84 +165,30 @@ cvModel.transform(df).show();
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.feature.{Tokenizer, RegexTokenizer}
 
-val sentenceDataFrame = sqlContext.createDataFrame(Seq(
-  (0, "Hi I heard about Spark"),
-  (1, "I wish Java could use case classes"),
-  (2, "Logistic,regression,models,are,neat")
-)).toDF("label", "sentence")
-val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
-val regexTokenizer = new RegexTokenizer()
-  .setInputCol("sentence")
-  .setOutputCol("words")
-  .setPattern("\\W")  // alternatively .setPattern("\\w+").setGaps(false)
+Refer to the [Tokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
+and the [RegexTokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
+for more details on the API.
 
-val tokenized = tokenizer.transform(sentenceDataFrame)
-tokenized.select("words", "label").take(3).foreach(println)
-val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
-regexTokenized.select("words", "label").take(3).foreach(println)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/TokenizerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.RegexTokenizer;
-import org.apache.spark.ml.feature.Tokenizer;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+Refer to the [Tokenizer Java docs](api/java/org/apache/spark/ml/feature/Tokenizer.html)
+and the [RegexTokenizer Java docs](api/java/org/apache/spark/ml/feature/RegexTokenizer.html)
+for more details on the API.
 
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(0, "Hi I heard about Spark"),
-  RowFactory.create(1, "I wish Java could use case classes"),
-  RowFactory.create(2, "Logistic,regression,models,are,neat")
-));
-StructType schema = new StructType(new StructField[]{
-  new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-  new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
-});
-DataFrame sentenceDataFrame = sqlContext.createDataFrame(jrdd, schema);
-Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
-DataFrame wordsDataFrame = tokenizer.transform(sentenceDataFrame);
-for (Row r : wordsDataFrame.select("words", "label").take(3)) {
-  java.util.List<String> words = r.getList(0);
-  for (String word : words) System.out.print(word + " ");
-  System.out.println();
-}
-
-RegexTokenizer regexTokenizer = new RegexTokenizer()
-  .setInputCol("sentence")
-  .setOutputCol("words")
-  .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaTokenizerExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.ml.feature import Tokenizer, RegexTokenizer
 
-sentenceDataFrame = sqlContext.createDataFrame([
-  (0, "Hi I heard about Spark"),
-  (1, "I wish Java could use case classes"),
-  (2, "Logistic,regression,models,are,neat")
-], ["label", "sentence"])
-tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
-wordsDataFrame = tokenizer.transform(sentenceDataFrame)
-for words_label in wordsDataFrame.select("words", "label").take(3):
-  print(words_label)
-regexTokenizer = RegexTokenizer(inputCol="sentence", outputCol="words", pattern="\\W")
-# alternatively, pattern="\\w+", gaps(False)
-{% endhighlight %}
+Refer to the [Tokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Tokenizer) and
+the the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
+for more details on the API.
+
+{% include_example python/ml/tokenizer_example.py %}
 </div>
 </div>
 
@@ -426,7 +203,8 @@ words from the input sequences. The list of stopwords is specified by
 the `stopWords` parameter.  We provide [a list of stop
 words](http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words) by
 default, accessible by calling `getStopWords` on a newly instantiated
-`StopWordsRemover` instance.
+`StopWordsRemover` instance. A boolean parameter `caseSensitive` indicates
+if the matches should be case sensitive (false by default).
 
 **Examples**
 
@@ -456,61 +234,26 @@ filtered out.
 
 <div data-lang="scala" markdown="1">
 
-[`StopWordsRemover`](api/scala/index.html#org.apache.spark.ml.feature.StopWordsRemover)
-takes an input column name, an output column name, a list of stop words,
-and a boolean indicating if the matches should be case sensitive (false
-by default).
+Refer to the [StopWordsRemover Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StopWordsRemover)
+for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.StopWordsRemover
-
-val remover = new StopWordsRemover()
-  .setInputCol("raw")
-  .setOutputCol("filtered")
-val dataSet = sqlContext.createDataFrame(Seq(
-  (0, Seq("I", "saw", "the", "red", "baloon")),
-  (1, Seq("Mary", "had", "a", "little", "lamb"))
-)).toDF("id", "raw")
-
-remover.transform(dataSet).show()
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/StopWordsRemoverExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-[`StopWordsRemover`](api/java/org/apache/spark/ml/feature/StopWordsRemover.html)
-takes an input column name, an output column name, a list of stop words,
-and a boolean indicating if the matches should be case sensitive (false
-by default).
+Refer to the [StopWordsRemover Java docs](api/java/org/apache/spark/ml/feature/StopWordsRemover.html)
+for more details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
+{% include_example java/org/apache/spark/examples/ml/JavaStopWordsRemoverExample.java %}
+</div>
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.StopWordsRemover;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+<div data-lang="python" markdown="1">
 
-StopWordsRemover remover = new StopWordsRemover()
-  .setInputCol("raw")
-  .setOutputCol("filtered");
+Refer to the [StopWordsRemover Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StopWordsRemover)
+for more details on the API.
 
-JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
-  RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
-));
-StructType schema = new StructType(new StructField[] {
-  new StructField("raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
-});
-DataFrame dataset = jsql.createDataFrame(rdd, schema);
-
-remover.transform(dataset).show();
-{% endhighlight %}
+{% include_example python/ml/stopwords_remover_example.py %}
 </div>
 </div>
 
@@ -524,164 +267,59 @@ An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (t
 
 <div data-lang="scala" markdown="1">
 
-[`NGram`](api/scala/index.html#org.apache.spark.ml.feature.NGram) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+Refer to the [NGram Scala docs](api/scala/index.html#org.apache.spark.ml.feature.NGram)
+for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.NGram
-
-val wordDataFrame = sqlContext.createDataFrame(Seq(
-  (0, Array("Hi", "I", "heard", "about", "Spark")),
-  (1, Array("I", "wish", "Java", "could", "use", "case", "classes")),
-  (2, Array("Logistic", "regression", "models", "are", "neat"))
-)).toDF("label", "words")
-
-val ngram = new NGram().setInputCol("words").setOutputCol("ngrams")
-val ngramDataFrame = ngram.transform(wordDataFrame)
-ngramDataFrame.take(3).map(_.getAs[Stream[String]]("ngrams").toList).foreach(println)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/NGramExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-[`NGram`](api/java/org/apache/spark/ml/feature/NGram.html) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+Refer to the [NGram Java docs](api/java/org/apache/spark/ml/feature/NGram.html)
+for more details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.NGram;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(0.0, Arrays.asList("Hi", "I", "heard", "about", "Spark")),
-  RowFactory.create(1.0, Arrays.asList("I", "wish", "Java", "could", "use", "case", "classes")),
-  RowFactory.create(2.0, Arrays.asList("Logistic", "regression", "models", "are", "neat"))
-));
-StructType schema = new StructType(new StructField[]{
-  new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-  new StructField("words", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
-});
-DataFrame wordDataFrame = sqlContext.createDataFrame(jrdd, schema);
-NGram ngramTransformer = new NGram().setInputCol("words").setOutputCol("ngrams");
-DataFrame ngramDataFrame = ngramTransformer.transform(wordDataFrame);
-for (Row r : ngramDataFrame.select("ngrams", "label").take(3)) {
-  java.util.List<String> ngrams = r.getList(0);
-  for (String ngram : ngrams) System.out.print(ngram + " --- ");
-  System.out.println();
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaNGramExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-[`NGram`](api/python/pyspark.ml.html#pyspark.ml.feature.NGram) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+Refer to the [NGram Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.NGram)
+for more details on the API.
 
-{% highlight python %}
-from pyspark.ml.feature import NGram
-
-wordDataFrame = sqlContext.createDataFrame([
-  (0, ["Hi", "I", "heard", "about", "Spark"]),
-  (1, ["I", "wish", "Java", "could", "use", "case", "classes"]),
-  (2, ["Logistic", "regression", "models", "are", "neat"])
-], ["label", "words"])
-ngram = NGram(inputCol="words", outputCol="ngrams")
-ngramDataFrame = ngram.transform(wordDataFrame)
-for ngrams_label in ngramDataFrame.select("ngrams", "label").take(3):
-  print(ngrams_label)
-{% endhighlight %}
+{% include_example python/ml/n_gram_example.py %}
 </div>
 </div>
 
 
 ## Binarizer
 
-Binarization is the process of thresholding numerical features to binary features. As some probabilistic estimators make assumption that the input data is distributed according to [Bernoulli distribution](http://en.wikipedia.org/wiki/Bernoulli_distribution), a binarizer is useful for pre-processing the input data with continuous numerical features.
+Binarization is the process of thresholding numerical features to binary (0/1) features.
 
-A simple [Binarizer](api/scala/index.html#org.apache.spark.ml.feature.Binarizer) class provides this functionality. Besides the common parameters of `inputCol` and `outputCol`, `Binarizer` has the parameter `threshold` used for binarizing continuous numerical features. The features greater than the threshold, will be binarized to 1.0. The features equal to or less than the threshold, will be binarized to 0.0. The example below shows how to binarize numerical features.
+`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold` for binarization. Feature values greater than the threshold are binarized to 1.0; values equal to or less than the threshold are binarized to 0.0.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.feature.Binarizer
-import org.apache.spark.sql.DataFrame
 
-val data = Array(
-  (0, 0.1),
-  (1, 0.8),
-  (2, 0.2)
-)
-val dataFrame: DataFrame = sqlContext.createDataFrame(data).toDF("label", "feature")
+Refer to the [Binarizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Binarizer)
+for more details on the API.
 
-val binarizer: Binarizer = new Binarizer()
-  .setInputCol("feature")
-  .setOutputCol("binarized_feature")
-  .setThreshold(0.5)
-
-val binarizedDataFrame = binarizer.transform(dataFrame)
-val binarizedFeatures = binarizedDataFrame.select("binarized_feature")
-binarizedFeatures.collect().foreach(println)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/BinarizerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.Binarizer;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+Refer to the [Binarizer Java docs](api/java/org/apache/spark/ml/feature/Binarizer.html)
+for more details on the API.
 
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(0, 0.1),
-  RowFactory.create(1, 0.8),
-  RowFactory.create(2, 0.2)
-));
-StructType schema = new StructType(new StructField[]{
-  new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-  new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
-});
-DataFrame continuousDataFrame = jsql.createDataFrame(jrdd, schema);
-Binarizer binarizer = new Binarizer()
-  .setInputCol("feature")
-  .setOutputCol("binarized_feature")
-  .setThreshold(0.5);
-DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
-DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
-for (Row r : binarizedFeatures.collect()) {
-  Double binarized_value = r.getDouble(0);
-  System.out.println(binarized_value);
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaBinarizerExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.ml.feature import Binarizer
 
-continuousDataFrame = sqlContext.createDataFrame([
-  (0, 0.1),
-  (1, 0.8),
-  (2, 0.2)
-], ["label", "feature"])
-binarizer = Binarizer(threshold=0.5, inputCol="feature", outputCol="binarized_feature")
-binarizedDataFrame = binarizer.transform(continuousDataFrame)
-binarizedFeatures = binarizedDataFrame.select("binarized_feature")
-for binarized_feature, in binarizedFeatures.collect():
-  print(binarized_feature)
-{% endhighlight %}
+Refer to the [Binarizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Binarizer)
+for more details on the API.
+
+{% include_example python/ml/binarizer_example.py %}
 </div>
 </div>
 
@@ -691,83 +329,27 @@ for binarized_feature, in binarizedFeatures.collect():
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-See the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.feature.PCA) for API details.
-{% highlight scala %}
-import org.apache.spark.ml.feature.PCA
-import org.apache.spark.mllib.linalg.Vectors
 
-val data = Array(
-  Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),
-  Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
-  Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
-)
-val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
-val pca = new PCA()
-  .setInputCol("features")
-  .setOutputCol("pcaFeatures")
-  .setK(3)
-  .fit(df)
-val pcaDF = pca.transform(df)
-val result = pcaDF.select("pcaFeatures")
-result.show()
-{% endhighlight %}
+Refer to the [PCA Scala docs](api/scala/index.html#org.apache.spark.ml.feature.PCA)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/PCAExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-See the [Java API documentation](api/java/org/apache/spark/ml/feature/PCA.html) for API details.
-{% highlight java %}
-import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.feature.PCA
-import org.apache.spark.ml.feature.PCAModel
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+Refer to the [PCA Java docs](api/java/org/apache/spark/ml/feature/PCA.html)
+for more details on the API.
 
-JavaSparkContext jsc = ...
-SQLContext jsql = ...
-JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
-  RowFactory.create(Vectors.sparse(5, new int[]{1, 3}, new double[]{1.0, 7.0})),
-  RowFactory.create(Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0)),
-  RowFactory.create(Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0))
-));
-StructType schema = new StructType(new StructField[] {
-  new StructField("features", new VectorUDT(), false, Metadata.empty()),
-});
-DataFrame df = jsql.createDataFrame(data, schema);
-PCAModel pca = new PCA()
-  .setInputCol("features")
-  .setOutputCol("pcaFeatures")
-  .setK(3)
-  .fit(df);
-DataFrame result = pca.transform(df).select("pcaFeatures");
-result.show();
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaPCAExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-See the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.feature.PCA) for API details.
-{% highlight python %}
-from pyspark.ml.feature import PCA
-from pyspark.mllib.linalg import Vectors
 
-data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),
-  (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
-  (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),)]
-df = sqlContext.createDataFrame(data,["features"])
-pca = PCA(k=3, inputCol="features", outputCol="pcaFeatures")
-model = pca.fit(df)
-result = model.transform(df).select("pcaFeatures")
-result.show(truncate=False)
-{% endhighlight %}
+Refer to the [PCA Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.PCA)
+for more details on the API.
+
+{% include_example python/ml/pca_example.py %}
 </div>
 </div>
 
@@ -777,80 +359,27 @@ result.show(truncate=False)
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.feature.PolynomialExpansion
-import org.apache.spark.mllib.linalg.Vectors
 
-val data = Array(
-  Vectors.dense(-2.0, 2.3),
-  Vectors.dense(0.0, 0.0),
-  Vectors.dense(0.6, -1.1)
-)
-val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
-val polynomialExpansion = new PolynomialExpansion()
-  .setInputCol("features")
-  .setOutputCol("polyFeatures")
-  .setDegree(3)
-val polyDF = polynomialExpansion.transform(df)
-polyDF.select("polyFeatures").take(3).foreach(println)
-{% endhighlight %}
+Refer to the [PolynomialExpansion Scala docs](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/PolynomialExpansionExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+Refer to the [PolynomialExpansion Java docs](api/java/org/apache/spark/ml/feature/PolynomialExpansion.html)
+for more details on the API.
 
-JavaSparkContext jsc = ...
-SQLContext jsql = ...
-PolynomialExpansion polyExpansion = new PolynomialExpansion()
-  .setInputCol("features")
-  .setOutputCol("polyFeatures")
-  .setDegree(3);
-JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
-  RowFactory.create(Vectors.dense(-2.0, 2.3)),
-  RowFactory.create(Vectors.dense(0.0, 0.0)),
-  RowFactory.create(Vectors.dense(0.6, -1.1))
-));
-StructType schema = new StructType(new StructField[] {
-  new StructField("features", new VectorUDT(), false, Metadata.empty()),
-});
-DataFrame df = jsql.createDataFrame(data, schema);
-DataFrame polyDF = polyExpansion.transform(df);
-Row[] row = polyDF.select("polyFeatures").take(3);
-for (Row r : row) {
-  System.out.println(r.get(0));
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaPolynomialExpansionExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.ml.feature import PolynomialExpansion
-from pyspark.mllib.linalg import Vectors
 
-df = sqlContext.createDataFrame(
-  [(Vectors.dense([-2.0, 2.3]), ),
-  (Vectors.dense([0.0, 0.0]), ),
-  (Vectors.dense([0.6, -1.1]), )],
-  ["features"])
-px = PolynomialExpansion(degree=2, inputCol="features", outputCol="polyFeatures")
-polyDF = px.transform(df)
-for expanded in polyDF.select("polyFeatures").take(3):
-  print(expanded)
-{% endhighlight %}
+Refer to the [PolynomialExpansion Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.PolynomialExpansion)
+for more details on the API.
+
+{% include_example python/ml/polynomial_expansion_example.py %}
 </div>
 </div>
 
@@ -870,58 +399,19 @@ $0$th DCT coefficient and _not_ the $N/2$th).
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.feature.DCT
-import org.apache.spark.mllib.linalg.Vectors
 
-val data = Seq(
-  Vectors.dense(0.0, 1.0, -2.0, 3.0),
-  Vectors.dense(-1.0, 2.0, 4.0, -7.0),
-  Vectors.dense(14.0, -2.0, -5.0, 1.0))
-val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
-val dct = new DCT()
-  .setInputCol("features")
-  .setOutputCol("featuresDCT")
-  .setInverse(false)
-val dctDf = dct.transform(df)
-dctDf.select("featuresDCT").show(3)
-{% endhighlight %}
+Refer to the [DCT Scala docs](api/scala/index.html#org.apache.spark.ml.feature.DCT)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/DCTExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.feature.DCT;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+Refer to the [DCT Java docs](api/java/org/apache/spark/ml/feature/DCT.html)
+for more details on the API.
 
-JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
-  RowFactory.create(Vectors.dense(0.0, 1.0, -2.0, 3.0)),
-  RowFactory.create(Vectors.dense(-1.0, 2.0, 4.0, -7.0)),
-  RowFactory.create(Vectors.dense(14.0, -2.0, -5.0, 1.0))
-));
-StructType schema = new StructType(new StructField[] {
-  new StructField("features", new VectorUDT(), false, Metadata.empty()),
-});
-DataFrame df = jsql.createDataFrame(data, schema);
-DCT dct = new DCT()
-  .setInputCol("features")
-  .setOutputCol("featuresDCT")
-  .setInverse(false);
-DataFrame dctDf = dct.transform(df);
-dctDf.select("featuresDCT").show(3);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaDCTExample.java %}
 </div>
 </div>
 
@@ -930,10 +420,10 @@ dctDf.select("featuresDCT").show(3);
 `StringIndexer` encodes a string column of labels to a column of label indices.
 The indices are in `[0, numLabels)`, ordered by label frequencies.
 So the most frequent label gets index `0`.
-If the input column is numeric, we cast it to string and index the string 
-values. When downstream pipeline components such as `Estimator` or 
-`Transformer` make use of this string-indexed label, you must set the input 
-column of the component to this string-indexed column name. In many cases, 
+If the input column is numeric, we cast it to string and index the string
+values. When downstream pipeline components such as `Estimator` or
+`Transformer` make use of this string-indexed label, you must set the input
+column of the component to this string-indexed column name. In many cases,
 you can set the input column with `setInputCol`.
 
 **Examples**
@@ -969,174 +459,165 @@ column, we should get the following:
 "a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
 index `2`.
 
+Additionaly, there are two strategies regarding how `StringIndexer` will handle
+unseen labels when you have fit a `StringIndexer` on one dataset and then use it
+to transform another:
+
+- throw an exception (which is the default)
+- skip the row containing the unseen label entirely
+
+**Examples**
+
+Let's go back to our previous example but this time reuse our previously defined
+`StringIndexer` on the following dataset:
+
+~~~~
+ id | category
+----|----------
+ 0  | a
+ 1  | b
+ 2  | c
+ 3  | d
+~~~~
+
+If you've not set how `StringIndexer` handles unseen labels or set it to
+"error", an exception will be thrown.
+However, if you had called `setHandleInvalid("skip")`, the following dataset
+will be generated:
+
+~~~~
+ id | category | categoryIndex
+----|----------|---------------
+ 0  | a        | 0.0
+ 1  | b        | 2.0
+ 2  | c        | 1.0
+~~~~
+
+Notice that the row containing "d" does not appear.
+
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
 
-[`StringIndexer`](api/scala/index.html#org.apache.spark.ml.feature.StringIndexer) takes an input
-column name and an output column name.
+Refer to the [StringIndexer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StringIndexer)
+for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.StringIndexer
-
-val df = sqlContext.createDataFrame(
-  Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
-).toDF("id", "category")
-val indexer = new StringIndexer()
-  .setInputCol("category")
-  .setOutputCol("categoryIndex")
-val indexed = indexer.fit(df).transform(df)
-indexed.show()
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/StringIndexerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-[`StringIndexer`](api/java/org/apache/spark/ml/feature/StringIndexer.html) takes an input column
-name and an output column name.
 
-{% highlight java %}
-import java.util.Arrays;
+Refer to the [StringIndexer Java docs](api/java/org/apache/spark/ml/feature/StringIndexer.html)
+for more details on the API.
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-import static org.apache.spark.sql.types.DataTypes.*;
-
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(0, "a"),
-  RowFactory.create(1, "b"),
-  RowFactory.create(2, "c"),
-  RowFactory.create(3, "a"),
-  RowFactory.create(4, "a"),
-  RowFactory.create(5, "c")
-));
-StructType schema = new StructType(new StructField[] {
-  createStructField("id", DoubleType, false),
-  createStructField("category", StringType, false)
-});
-DataFrame df = sqlContext.createDataFrame(jrdd, schema);
-StringIndexer indexer = new StringIndexer()
-  .setInputCol("category")
-  .setOutputCol("categoryIndex");
-DataFrame indexed = indexer.fit(df).transform(df);
-indexed.show();
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaStringIndexerExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-[`StringIndexer`](api/python/pyspark.ml.html#pyspark.ml.feature.StringIndexer) takes an input
-column name and an output column name.
+Refer to the [StringIndexer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StringIndexer)
+for more details on the API.
 
-{% highlight python %}
-from pyspark.ml.feature import StringIndexer
+{% include_example python/ml/string_indexer_example.py %}
+</div>
+</div>
 
-df = sqlContext.createDataFrame(
-    [(0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")],
-    ["id", "category"])
-indexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
-indexed = indexer.fit(df).transform(df)
-indexed.show()
-{% endhighlight %}
+
+## IndexToString
+
+Symmetrically to `StringIndexer`, `IndexToString` maps a column of label indices
+back to a column containing the original labels as strings. The common use case
+is to produce indices from labels with `StringIndexer`, train a model with those
+indices and retrieve the original labels from the column of predicted indices
+with `IndexToString`. However, you are free to supply your own labels.
+
+**Examples**
+
+Building on the `StringIndexer` example, let's assume we have the following
+DataFrame with columns `id` and `categoryIndex`:
+
+~~~~
+ id | categoryIndex
+----|---------------
+ 0  | 0.0
+ 1  | 2.0
+ 2  | 1.0
+ 3  | 0.0
+ 4  | 0.0
+ 5  | 1.0
+~~~~
+
+Applying `IndexToString` with `categoryIndex` as the input column,
+`originalCategory` as the output column, we are able to retrieve our original
+labels (they will be inferred from the columns' metadata):
+
+~~~~
+ id | categoryIndex | originalCategory
+----|---------------|-----------------
+ 0  | 0.0           | a
+ 1  | 2.0           | b
+ 2  | 1.0           | c
+ 3  | 0.0           | a
+ 4  | 0.0           | a
+ 5  | 1.0           | c
+~~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [IndexToString Scala docs](api/scala/index.html#org.apache.spark.ml.feature.IndexToString)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/IndexToStringExample.scala %}
+
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [IndexToString Java docs](api/java/org/apache/spark/ml/feature/IndexToString.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaIndexToStringExample.java %}
+
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [IndexToString Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IndexToString)
+for more details on the API.
+
+{% include_example python/ml/index_to_string_example.py %}
+
 </div>
 </div>
 
 ## OneHotEncoder
 
-[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features 
+[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer}
 
-val df = sqlContext.createDataFrame(Seq(
-  (0, "a"),
-  (1, "b"),
-  (2, "c"),
-  (3, "a"),
-  (4, "a"),
-  (5, "c")
-)).toDF("id", "category")
+Refer to the [OneHotEncoder Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoder)
+for more details on the API.
 
-val indexer = new StringIndexer()
-  .setInputCol("category")
-  .setOutputCol("categoryIndex")
-  .fit(df)
-val indexed = indexer.transform(df)
-
-val encoder = new OneHotEncoder().setInputCol("categoryIndex").
-  setOutputCol("categoryVec")
-val encoded = encoder.transform(indexed)
-encoded.select("id", "categoryVec").foreach(println)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/OneHotEncoderExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.OneHotEncoder;
-import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.ml.feature.StringIndexerModel;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+Refer to the [OneHotEncoder Java docs](api/java/org/apache/spark/ml/feature/OneHotEncoder.html)
+for more details on the API.
 
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-    RowFactory.create(0, "a"),
-    RowFactory.create(1, "b"),
-    RowFactory.create(2, "c"),
-    RowFactory.create(3, "a"),
-    RowFactory.create(4, "a"),
-    RowFactory.create(5, "c")
-));
-StructType schema = new StructType(new StructField[]{
-    new StructField("id", DataTypes.DoubleType, false, Metadata.empty()),
-    new StructField("category", DataTypes.StringType, false, Metadata.empty())
-});
-DataFrame df = sqlContext.createDataFrame(jrdd, schema);
-StringIndexerModel indexer = new StringIndexer()
-  .setInputCol("category")
-  .setOutputCol("categoryIndex")
-  .fit(df);
-DataFrame indexed = indexer.transform(df);
-
-OneHotEncoder encoder = new OneHotEncoder()
-  .setInputCol("categoryIndex")
-  .setOutputCol("categoryVec");
-DataFrame encoded = encoder.transform(indexed);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaOneHotEncoderExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.ml.feature import OneHotEncoder, StringIndexer
 
-df = sqlContext.createDataFrame([
-  (0, "a"),
-  (1, "b"),
-  (2, "c"),
-  (3, "a"),
-  (4, "a"),
-  (5, "c")
-], ["id", "category"])
+Refer to the [OneHotEncoder Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoder)
+for more details on the API.
 
-stringIndexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
-model = stringIndexer.fit(df)
-indexed = model.transform(df)
-encoder = OneHotEncoder(includeFirst=False, inputCol="categoryIndex", outputCol="categoryVec")
-encoded = encoder.transform(indexed)
-{% endhighlight %}
+{% include_example python/ml/onehot_encoder_example.py %}
 </div>
 </div>
 
@@ -1152,74 +633,31 @@ It can both automatically decide which features are categorical and convert orig
 
 Indexing categorical features allows algorithms such as Decision Trees and Tree Ensembles to treat categorical features appropriately, improving performance.
 
-Please refer to the [VectorIndexer API docs](api/scala/index.html#org.apache.spark.ml.feature.VectorIndexer) for more details.
-
 In the example below, we read in a dataset of labeled points and then use `VectorIndexer` to decide which features should be treated as categorical.  We transform the categorical feature values to their indices.  This transformed data could then be passed to algorithms such as `DecisionTreeRegressor` that handle categorical features.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.feature.VectorIndexer
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
-val indexer = new VectorIndexer()
-  .setInputCol("features")
-  .setOutputCol("indexed")
-  .setMaxCategories(10)
-val indexerModel = indexer.fit(data)
-val categoricalFeatures: Set[Int] = indexerModel.categoryMaps.keys.toSet
-println(s"Chose ${categoricalFeatures.size} categorical features: " +
-  categoricalFeatures.mkString(", "))
+Refer to the [VectorIndexer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorIndexer)
+for more details on the API.
 
-// Create new column "indexed" with categorical values transformed to indices
-val indexedData = indexerModel.transform(data)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/VectorIndexerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Map;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.VectorIndexer;
-import org.apache.spark.ml.feature.VectorIndexerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.sql.DataFrame;
+Refer to the [VectorIndexer Java docs](api/java/org/apache/spark/ml/feature/VectorIndexer.html)
+for more details on the API.
 
-JavaRDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(sc.sc(),
-  "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
-VectorIndexer indexer = new VectorIndexer()
-  .setInputCol("features")
-  .setOutputCol("indexed")
-  .setMaxCategories(10);
-VectorIndexerModel indexerModel = indexer.fit(data);
-Map<Integer, Map<Double, Integer>> categoryMaps = indexerModel.javaCategoryMaps();
-System.out.print("Chose " + categoryMaps.size() + "categorical features:");
-for (Integer feature : categoryMaps.keySet()) {
-  System.out.print(" " + feature);
-}
-System.out.println();
-
-// Create new column "indexed" with categorical values transformed to indices
-DataFrame indexedData = indexerModel.transform(data);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaVectorIndexerExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.ml.feature import VectorIndexer
-from pyspark.mllib.util import MLUtils
 
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
-indexer = VectorIndexer(inputCol="features", outputCol="indexed", maxCategories=10)
-indexerModel = indexer.fit(data)
+Refer to the [VectorIndexer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorIndexer)
+for more details on the API.
 
-# Create new column "indexed" with categorical values transformed to indices
-indexedData = indexerModel.transform(data)
-{% endhighlight %}
+{% include_example python/ml/vector_indexer_example.py %}
 </div>
 </div>
 
@@ -1231,66 +669,28 @@ indexedData = indexerModel.transform(data)
 The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^2$ norm and unit $L^\infty$ norm.
 
 <div class="codetabs">
-<div data-lang="scala">
-{% highlight scala %}
-import org.apache.spark.ml.feature.Normalizer
-import org.apache.spark.mllib.util.MLUtils
+<div data-lang="scala" markdown="1">
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val dataFrame = sqlContext.createDataFrame(data)
+Refer to the [Normalizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Normalizer)
+for more details on the API.
 
-// Normalize each Vector using $L^1$ norm.
-val normalizer = new Normalizer()
-  .setInputCol("features")
-  .setOutputCol("normFeatures")
-  .setP(1.0)
-val l1NormData = normalizer.transform(dataFrame)
-
-// Normalize each Vector using $L^\infty$ norm.
-val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.PositiveInfinity)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/NormalizerExample.scala %}
 </div>
 
-<div data-lang="java">
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.Normalizer;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.sql.DataFrame;
+<div data-lang="java" markdown="1">
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+Refer to the [Normalizer Java docs](api/java/org/apache/spark/ml/feature/Normalizer.html)
+for more details on the API.
 
-// Normalize each Vector using $L^1$ norm.
-Normalizer normalizer = new Normalizer()
-  .setInputCol("features")
-  .setOutputCol("normFeatures")
-  .setP(1.0);
-DataFrame l1NormData = normalizer.transform(dataFrame);
-
-// Normalize each Vector using $L^\infty$ norm.
-DataFrame lInfNormData =
-  normalizer.transform(dataFrame, normalizer.p().w(Double.POSITIVE_INFINITY));
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaNormalizerExample.java %}
 </div>
 
-<div data-lang="python">
-{% highlight python %}
-from pyspark.mllib.util import MLUtils
-from pyspark.ml.feature import Normalizer
+<div data-lang="python" markdown="1">
 
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-dataFrame = sqlContext.createDataFrame(data)
+Refer to the [Normalizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Normalizer)
+for more details on the API.
 
-# Normalize each Vector using $L^1$ norm.
-normalizer = Normalizer(inputCol="features", outputCol="normFeatures", p=1.0)
-l1NormData = normalizer.transform(dataFrame)
-
-# Normalize each Vector using $L^\infty$ norm.
-lInfNormData = normalizer.transform(dataFrame, {normalizer.p: float("inf")})
-{% endhighlight %}
+{% include_example python/ml/normalizer_example.py %}
 </div>
 </div>
 
@@ -1302,80 +702,35 @@ lInfNormData = normalizer.transform(dataFrame, {normalizer.p: float("inf")})
 * `withStd`: True by default. Scales the data to unit standard deviation.
 * `withMean`: False by default. Centers the data with mean before scaling. It will build a dense output, so this does not work on sparse input and will raise an exception.
 
-`StandardScaler` is a `Model` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
+`StandardScaler` is an `Estimator` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
 
 Note that if the standard deviation of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
-
-More details can be found in the API docs for
-[StandardScaler](api/scala/index.html#org.apache.spark.ml.feature.StandardScaler) and
-[StandardScalerModel](api/scala/index.html#org.apache.spark.ml.feature.StandardScalerModel).
 
 The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
 
 <div class="codetabs">
-<div data-lang="scala">
-{% highlight scala %}
-import org.apache.spark.ml.feature.StandardScaler
-import org.apache.spark.mllib.util.MLUtils
+<div data-lang="scala" markdown="1">
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val dataFrame = sqlContext.createDataFrame(data)
-val scaler = new StandardScaler()
-  .setInputCol("features")
-  .setOutputCol("scaledFeatures")
-  .setWithStd(true)
-  .setWithMean(false)
+Refer to the [StandardScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StandardScaler)
+for more details on the API.
 
-// Compute summary statistics by fitting the StandardScaler
-val scalerModel = scaler.fit(dataFrame)
-
-// Normalize each feature to have unit standard deviation.
-val scaledData = scalerModel.transform(dataFrame)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/StandardScalerExample.scala %}
 </div>
 
-<div data-lang="java">
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.StandardScaler;
-import org.apache.spark.ml.feature.StandardScalerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.sql.DataFrame;
+<div data-lang="java" markdown="1">
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
-StandardScaler scaler = new StandardScaler()
-  .setInputCol("features")
-  .setOutputCol("scaledFeatures")
-  .setWithStd(true)
-  .setWithMean(false);
+Refer to the [StandardScaler Java docs](api/java/org/apache/spark/ml/feature/StandardScaler.html)
+for more details on the API.
 
-// Compute summary statistics by fitting the StandardScaler
-StandardScalerModel scalerModel = scaler.fit(dataFrame);
-
-// Normalize each feature to have unit standard deviation.
-DataFrame scaledData = scalerModel.transform(dataFrame);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaStandardScalerExample.java %}
 </div>
 
-<div data-lang="python">
-{% highlight python %}
-from pyspark.mllib.util import MLUtils
-from pyspark.ml.feature import StandardScaler
+<div data-lang="python" markdown="1">
 
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-dataFrame = sqlContext.createDataFrame(data)
-scaler = StandardScaler(inputCol="features", outputCol="scaledFeatures",
-                        withStd=True, withMean=False)
+Refer to the [StandardScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StandardScaler)
+for more details on the API.
 
-# Compute summary statistics by fitting the StandardScaler
-scalerModel = scaler.fit(dataFrame)
-
-# Normalize each feature to have unit standard deviation.
-scaledData = scalerModel.transform(dataFrame)
-{% endhighlight %}
+{% include_example python/ml/standard_scaler_example.py %}
 </div>
 </div>
 
@@ -1400,52 +755,21 @@ The following example demonstrates how to load a dataset in libsvm format and th
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-More details can be found in the API docs for
-[MinMaxScaler](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
-[MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
-{% highlight scala %}
-import org.apache.spark.ml.feature.MinMaxScaler
-import org.apache.spark.mllib.util.MLUtils
 
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-val dataFrame = sqlContext.createDataFrame(data)
-val scaler = new MinMaxScaler()
-  .setInputCol("features")
-  .setOutputCol("scaledFeatures")
+Refer to the [MinMaxScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler)
+and the [MinMaxScalerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel)
+for more details on the API.
 
-// Compute summary statistics and generate MinMaxScalerModel
-val scalerModel = scaler.fit(dataFrame)
-
-// rescale each feature to range [min, max].
-val scaledData = scalerModel.transform(dataFrame)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/MinMaxScalerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-More details can be found in the API docs for
-[MinMaxScaler](api/java/org/apache/spark/ml/feature/MinMaxScaler.html) and
-[MinMaxScalerModel](api/java/org/apache/spark/ml/feature/MinMaxScalerModel.html).
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.MinMaxScaler;
-import org.apache.spark.ml.feature.MinMaxScalerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
-MinMaxScaler scaler = new MinMaxScaler()
-  .setInputCol("features")
-  .setOutputCol("scaledFeatures");
+Refer to the [MinMaxScaler Java docs](api/java/org/apache/spark/ml/feature/MinMaxScaler.html)
+and the [MinMaxScalerModel Java docs](api/java/org/apache/spark/ml/feature/MinMaxScalerModel.html)
+for more details on the API.
 
-// Compute summary statistics and generate MinMaxScalerModel
-MinMaxScalerModel scalerModel = scaler.fit(dataFrame);
-
-// rescale each feature to range [min, max].
-DataFrame scaledData = scalerModel.transform(dataFrame);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaMinMaxScalerExample.java %}
 </div>
 </div>
 
@@ -1464,75 +788,28 @@ More details can be found in the API docs for [Bucketizer](api/scala/index.html#
 The following example demonstrates how to bucketize a column of `Double`s into another index-wised column.
 
 <div class="codetabs">
-<div data-lang="scala">
-{% highlight scala %}
-import org.apache.spark.ml.feature.Bucketizer
-import org.apache.spark.sql.DataFrame
+<div data-lang="scala" markdown="1">
 
-val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity)
+Refer to the [Bucketizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer)
+for more details on the API.
 
-val data = Array(-0.5, -0.3, 0.0, 0.2)
-val dataFrame = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
-
-val bucketizer = new Bucketizer()
-  .setInputCol("features")
-  .setOutputCol("bucketedFeatures")
-  .setSplits(splits)
-
-// Transform original data into its bucket index.
-val bucketedData = bucketizer.transform(dataFrame)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/BucketizerExample.scala %}
 </div>
 
-<div data-lang="java">
-{% highlight java %}
-import java.util.Arrays;
+<div data-lang="java" markdown="1">
 
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+Refer to the [Bucketizer Java docs](api/java/org/apache/spark/ml/feature/Bucketizer.html)
+for more details on the API.
 
-double[] splits = {Double.NEGATIVE_INFINITY, -0.5, 0.0, 0.5, Double.POSITIVE_INFINITY};
-
-JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
-  RowFactory.create(-0.5),
-  RowFactory.create(-0.3),
-  RowFactory.create(0.0),
-  RowFactory.create(0.2)
-));
-StructType schema = new StructType(new StructField[] {
-  new StructField("features", DataTypes.DoubleType, false, Metadata.empty())
-});
-DataFrame dataFrame = jsql.createDataFrame(data, schema);
-
-Bucketizer bucketizer = new Bucketizer()
-  .setInputCol("features")
-  .setOutputCol("bucketedFeatures")
-  .setSplits(splits);
-
-// Transform original data into its bucket index.
-DataFrame bucketedData = bucketizer.transform(dataFrame);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaBucketizerExample.java %}
 </div>
 
-<div data-lang="python">
-{% highlight python %}
-from pyspark.ml.feature import Bucketizer
+<div data-lang="python" markdown="1">
 
-splits = [-float("inf"), -0.5, 0.0, 0.5, float("inf")]
+Refer to the [Bucketizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Bucketizer)
+for more details on the API.
 
-data = [(-0.5,), (-0.3,), (0.0,), (0.2,)]
-dataFrame = sqlContext.createDataFrame(data, ["features"])
-
-bucketizer = Bucketizer(splits=splits, inputCol="features", outputCol="bucketedFeatures")
-
-# Transform original data into its bucket index.
-bucketedData = bucketizer.transform(dataFrame)
-{% endhighlight %}
+{% include_example python/ml/bucketizer_example.py %}
 </div>
 </div>
 
@@ -1556,87 +833,91 @@ v_N
   \end{pmatrix}
 \]`
 
-[`ElementwiseProduct`](api/scala/index.html#org.apache.spark.ml.feature.ElementwiseProduct) takes the following parameter:
-
-* `scalingVec`: the transforming vector.
-
 This example below demonstrates how to transform vectors using a transforming vector value.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.feature.ElementwiseProduct
-import org.apache.spark.mllib.linalg.Vectors
 
-// Create some vector data; also works for sparse vectors
-val dataFrame = sqlContext.createDataFrame(Seq(
-  ("a", Vectors.dense(1.0, 2.0, 3.0)),
-  ("b", Vectors.dense(4.0, 5.0, 6.0)))).toDF("id", "vector")
+Refer to the [ElementwiseProduct Scala docs](api/scala/index.html#org.apache.spark.ml.feature.ElementwiseProduct)
+for more details on the API.
 
-val transformingVector = Vectors.dense(0.0, 1.0, 2.0)
-val transformer = new ElementwiseProduct()
-  .setScalingVec(transformingVector)
-  .setInputCol("vector")
-  .setOutputCol("transformedVector")
-
-// Batch transform the vectors to create new column:
-transformer.transform(dataFrame).show()
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/ElementwiseProductExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.ElementwiseProduct;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+Refer to the [ElementwiseProduct Java docs](api/java/org/apache/spark/ml/feature/ElementwiseProduct.html)
+for more details on the API.
 
-// Create some vector data; also works for sparse vectors
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create("a", Vectors.dense(1.0, 2.0, 3.0)),
-  RowFactory.create("b", Vectors.dense(4.0, 5.0, 6.0))
-));
-List<StructField> fields = new ArrayList<StructField>(2);
-fields.add(DataTypes.createStructField("id", DataTypes.StringType, false));
-fields.add(DataTypes.createStructField("vector", DataTypes.StringType, false));
-StructType schema = DataTypes.createStructType(fields);
-DataFrame dataFrame = sqlContext.createDataFrame(jrdd, schema);
-Vector transformingVector = Vectors.dense(0.0, 1.0, 2.0);
-ElementwiseProduct transformer = new ElementwiseProduct()
-  .setScalingVec(transformingVector)
-  .setInputCol("vector")
-  .setOutputCol("transformedVector");
-// Batch transform the vectors to create new column:
-transformer.transform(dataFrame).show();
-
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaElementwiseProductExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.ml.feature import ElementwiseProduct
-from pyspark.mllib.linalg import Vectors
 
-data = [(Vectors.dense([1.0, 2.0, 3.0]),), (Vectors.dense([4.0, 5.0, 6.0]),)]
-df = sqlContext.createDataFrame(data, ["vector"])
-transformer = ElementwiseProduct(scalingVec=Vectors.dense([0.0, 1.0, 2.0]), 
-                                 inputCol="vector", outputCol="transformedVector")
-transformer.transform(df).show()
+Refer to the [ElementwiseProduct Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ElementwiseProduct)
+for more details on the API.
 
-{% endhighlight %}
+{% include_example python/ml/elementwise_product_example.py %}
+</div>
 </div>
 
+## SQLTransformer
+
+`SQLTransformer` implements the transformations which are defined by SQL statement.
+Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
+where `"__THIS__"` represents the underlying table of the input dataset.
+The select clause specifies the fields, constants, and expressions to display in
+the output, it can be any select clause that Spark SQL supports. Users can also
+use Spark SQL built-in function and UDFs to operate on these selected columns.
+For example, `SQLTransformer` supports statements like:
+
+* `SELECT a, a + b AS a_b FROM __THIS__`
+* `SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5`
+* `SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b`
+
+**Examples**
+
+Assume that we have the following DataFrame with columns `id`, `v1` and `v2`:
+
+~~~~
+ id |  v1 |  v2
+----|-----|-----
+ 0  | 1.0 | 3.0  
+ 2  | 2.0 | 5.0
+~~~~
+
+This is the output of the `SQLTransformer` with statement `"SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__"`:
+
+~~~~
+ id |  v1 |  v2 |  v3 |  v4
+----|-----|-----|-----|-----
+ 0  | 1.0 | 3.0 | 4.0 | 3.0
+ 2  | 2.0 | 5.0 | 7.0 |10.0
+~~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [SQLTransformer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.SQLTransformer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/SQLTransformerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [SQLTransformer Java docs](api/java/org/apache/spark/ml/feature/SQLTransformer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaSQLTransformerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [SQLTransformer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.SQLTransformer) for more details on the API.
+
+{% include_example python/ml/sql_transformer.py %}
+</div>
 </div>
 
 ## VectorAssembler
@@ -1677,79 +958,91 @@ output column to `features`, after transformation we should get the following Da
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`VectorAssembler`](api/scala/index.html#org.apache.spark.ml.feature.VectorAssembler) takes an array
-of input column names and an output column name.
+Refer to the [VectorAssembler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorAssembler)
+for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.ml.feature.VectorAssembler
-
-val dataset = sqlContext.createDataFrame(
-  Seq((0, 18, 1.0, Vectors.dense(0.0, 10.0, 0.5), 1.0))
-).toDF("id", "hour", "mobile", "userFeatures", "clicked")
-val assembler = new VectorAssembler()
-  .setInputCols(Array("hour", "mobile", "userFeatures"))
-  .setOutputCol("features")
-val output = assembler.transform(dataset)
-println(output.select("features", "clicked").first())
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/VectorAssemblerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-[`VectorAssembler`](api/java/org/apache/spark/ml/feature/VectorAssembler.html) takes an array
-of input column names and an output column name.
+Refer to the [VectorAssembler Java docs](api/java/org/apache/spark/ml/feature/VectorAssembler.html)
+for more details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.*;
-import static org.apache.spark.sql.types.DataTypes.*;
-
-StructType schema = createStructType(new StructField[] {
-  createStructField("id", IntegerType, false),
-  createStructField("hour", IntegerType, false),
-  createStructField("mobile", DoubleType, false),
-  createStructField("userFeatures", new VectorUDT(), false),
-  createStructField("clicked", DoubleType, false)
-});
-Row row = RowFactory.create(0, 18, 1.0, Vectors.dense(0.0, 10.0, 0.5), 1.0);
-JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(row));
-DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
-
-VectorAssembler assembler = new VectorAssembler()
-  .setInputCols(new String[] {"hour", "mobile", "userFeatures"})
-  .setOutputCol("features");
-
-DataFrame output = assembler.transform(dataset);
-System.out.println(output.select("features", "clicked").first());
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaVectorAssemblerExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-[`VectorAssembler`](api/python/pyspark.ml.html#pyspark.ml.feature.VectorAssembler) takes a list
-of input column names and an output column name.
+Refer to the [VectorAssembler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorAssembler)
+for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.linalg import Vectors
-from pyspark.ml.feature import VectorAssembler
+{% include_example python/ml/vector_assembler_example.py %}
+</div>
+</div>
 
-dataset = sqlContext.createDataFrame(
-    [(0, 18, 1.0, Vectors.dense([0.0, 10.0, 0.5]), 1.0)],
-    ["id", "hour", "mobile", "userFeatures", "clicked"])
-assembler = VectorAssembler(
-    inputCols=["hour", "mobile", "userFeatures"],
-    outputCol="features")
-output = assembler.transform(dataset)
-print(output.select("features", "clicked").first())
-{% endhighlight %}
+## QuantileDiscretizer
+
+`QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
+categorical features.
+The bin ranges are chosen by taking a sample of the data and dividing it into roughly equal parts.
+The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
+This attempts to find `numBuckets` partitions based on a sample of the given input data, but it may
+find fewer depending on the data sample values.
+
+Note that the result may be different every time you run it, since the sample strategy behind it is
+non-deterministic.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id`, `hour`:
+
+~~~
+ id | hour
+----|------
+ 0  | 18.0
+----|------
+ 1  | 19.0
+----|------
+ 2  | 8.0
+----|------
+ 3  | 5.0
+----|------
+ 4  | 2.2
+~~~
+
+`hour` is a continuous feature with `Double` type. We want to turn the continuous feature into
+categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
+
+~~~
+ id | hour | result
+----|------|------
+ 0  | 18.0 | 2.0
+----|------|------
+ 1  | 19.0 | 2.0
+----|------|------
+ 2  | 8.0  | 1.0
+----|------|------
+ 3  | 5.0  | 1.0
+----|------|------
+ 4  | 2.2  | 0.0
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [QuantileDiscretizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.QuantileDiscretizer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/QuantileDiscretizerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [QuantileDiscretizer Java docs](api/java/org/apache/spark/ml/feature/QuantileDiscretizer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
 </div>
 </div>
 
@@ -1761,15 +1054,15 @@ print(output.select("features", "clicked").first())
 sub-array of the original features. It is useful for extracting features from a vector column.
 
 `VectorSlicer` accepts a vector column with a specified indices, then outputs a new vector column
-whose values are selected via those indices. There are two types of indices, 
+whose values are selected via those indices. There are two types of indices,
 
  1. Integer indices that represents the indices into the vector, `setIndices()`;
 
- 2. String indices that represents the names of features into the vector, `setNames()`. 
+ 2. String indices that represents the names of features into the vector, `setNames()`.
  *This requires the vector column to have an `AttributeGroup` since the implementation matches on
  the name field of an `Attribute`.*
 
-Specification by integer and string are both acceptable. Moreover, you can use integer index and 
+Specification by integer and string are both acceptable. Moreover, you can use integer index and
 string name simultaneously. At least one feature must be selected. Duplicate features are not
 allowed, so there can be no overlap between selected indices and names. Note that if names of
 features are selected, an exception will be threw out when encountering with empty input attributes.
@@ -1782,9 +1075,9 @@ followed by the selected names (in the order given).
 Suppose that we have a DataFrame with the column `userFeatures`:
 
 ~~~
- userFeatures     
+ userFeatures
 ------------------
- [0.0, 10.0, 0.5] 
+ [0.0, 10.0, 0.5]
 ~~~
 
 `userFeatures` is a vector column that contains three user features. Assuming that the first column
@@ -1798,7 +1091,7 @@ column named `features`:
  [0.0, 10.0, 0.5] | [10.0, 0.5]
 ~~~
 
-Suppose also that we have a potential input attributes for the `userFeatures`, i.e. 
+Suppose also that we have a potential input attributes for the `userFeatures`, i.e.
 `["f1", "f2", "f3"]`, then we can use `setNames("f2", "f3")` to select them.
 
 ~~~
@@ -1811,78 +1104,18 @@ Suppose also that we have a potential input attributes for the `userFeatures`, i
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`VectorSlicer`](api/scala/index.html#org.apache.spark.ml.feature.VectorSlicer) takes an input
-column name with specified indices or names and an output column name.
+Refer to the [VectorSlicer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorSlicer)
+for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
-import org.apache.spark.ml.feature.VectorSlicer
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-
-val data = Array(
-  Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
-  Vectors.dense(-2.0, 2.3, 0.0)
-)
-
-val defaultAttr = NumericAttribute.defaultAttr
-val attrs = Array("f1", "f2", "f3").map(defaultAttr.withName)
-val attrGroup = new AttributeGroup("userFeatures", attrs.asInstanceOf[Array[Attribute]])
-
-val dataRDD = sc.parallelize(data).map(Row.apply)
-val dataset = sqlContext.createDataFrame(dataRDD, StructType(attrGroup.toStructField()))
-
-val slicer = new VectorSlicer().setInputCol("userFeatures").setOutputCol("features")
-
-slicer.setIndices(1).setNames("f3")
-// or slicer.setIndices(Array(1, 2)), or slicer.setNames(Array("f2", "f3"))
-
-val output = slicer.transform(dataset)
-println(output.select("userFeatures", "features").first())
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/VectorSlicerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-[`VectorSlicer`](api/java/org/apache/spark/ml/feature/VectorSlicer.html) takes an input column name
-with specified indices or names and an output column name.
+Refer to the [VectorSlicer Java docs](api/java/org/apache/spark/ml/feature/VectorSlicer.html)
+for more details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.*;
-import static org.apache.spark.sql.types.DataTypes.*;
-
-Attribute[] attrs = new Attribute[]{
-  NumericAttribute.defaultAttr().withName("f1"),
-  NumericAttribute.defaultAttr().withName("f2"),
-  NumericAttribute.defaultAttr().withName("f3")
-};
-AttributeGroup group = new AttributeGroup("userFeatures", attrs);
-
-JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
-  RowFactory.create(Vectors.sparse(3, new int[]{0, 1}, new double[]{-2.0, 2.3})),
-  RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
-));
-
-DataFrame dataset = jsql.createDataFrame(jrdd, (new StructType()).add(group.toStructField()));
-
-VectorSlicer vectorSlicer = new VectorSlicer()
-  .setInputCol("userFeatures").setOutputCol("features");
-
-vectorSlicer.setIndices(new int[]{1}).setNames(new String[]{"f3"});
-// or slicer.setIndices(new int[]{1, 2}), or slicer.setNames(new String[]{"f2", "f3"})
-
-DataFrame output = vectorSlicer.transform(dataset);
-
-System.out.println(output.select("userFeatures", "features").first());
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaVectorSlicerExample.java %}
 </div>
 </div>
 
@@ -1916,81 +1149,75 @@ id | country | hour | clicked | features         | label
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`RFormula`](api/scala/index.html#org.apache.spark.ml.feature.RFormula) takes an R formula string, and optional parameters for the names of its output columns.
+Refer to the [RFormula Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RFormula)
+for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.RFormula
-
-val dataset = sqlContext.createDataFrame(Seq(
-  (7, "US", 18, 1.0),
-  (8, "CA", 12, 0.0),
-  (9, "NZ", 15, 0.0)
-)).toDF("id", "country", "hour", "clicked")
-val formula = new RFormula()
-  .setFormula("clicked ~ country + hour")
-  .setFeaturesCol("features")
-  .setLabelCol("label")
-val output = formula.fit(dataset).transform(dataset)
-output.select("features", "label").show()
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/RFormulaExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-[`RFormula`](api/java/org/apache/spark/ml/feature/RFormula.html) takes an R formula string, and optional parameters for the names of its output columns.
+Refer to the [RFormula Java docs](api/java/org/apache/spark/ml/feature/RFormula.html)
+for more details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.RFormula;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.*;
-import static org.apache.spark.sql.types.DataTypes.*;
-
-StructType schema = createStructType(new StructField[] {
-  createStructField("id", IntegerType, false),
-  createStructField("country", StringType, false),
-  createStructField("hour", IntegerType, false),
-  createStructField("clicked", DoubleType, false)
-});
-JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(7, "US", 18, 1.0),
-  RowFactory.create(8, "CA", 12, 0.0),
-  RowFactory.create(9, "NZ", 15, 0.0)
-));
-DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
-
-RFormula formula = new RFormula()
-  .setFormula("clicked ~ country + hour")
-  .setFeaturesCol("features")
-  .setLabelCol("label");
-
-DataFrame output = formula.fit(dataset).transform(dataset);
-output.select("features", "label").show();
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaRFormulaExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-[`RFormula`](api/python/pyspark.ml.html#pyspark.ml.feature.RFormula) takes an R formula string, and optional parameters for the names of its output columns.
+Refer to the [RFormula Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RFormula)
+for more details on the API.
 
-{% highlight python %}
-from pyspark.ml.feature import RFormula
+{% include_example python/ml/rformula_example.py %}
+</div>
+</div>
 
-dataset = sqlContext.createDataFrame(
-    [(7, "US", 18, 1.0),
-     (8, "CA", 12, 0.0),
-     (9, "NZ", 15, 0.0)],
-    ["id", "country", "hour", "clicked"])
-formula = RFormula(
-    formula="clicked ~ country + hour",
-    featuresCol="features",
-    labelCol="label")
-output = formula.fit(dataset).transform(dataset)
-output.select("features", "label").show()
-{% endhighlight %}
+## ChiSqSelector
+
+`ChiSqSelector` stands for Chi-Squared feature selection. It operates on labeled data with
+categorical features. ChiSqSelector orders features based on a
+[Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test)
+from the class, and then filters (selects) the top features which the class label depends on the
+most. This is akin to yielding the features with the most predictive power.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id`, `features`, and `clicked`, which is used as
+our target to be predicted:
+
+~~~
+id | features              | clicked
+---|-----------------------|---------
+ 7 | [0.0, 0.0, 18.0, 1.0] | 1.0
+ 8 | [0.0, 1.0, 12.0, 0.0] | 0.0
+ 9 | [1.0, 0.0, 15.0, 0.1] | 0.0
+~~~
+
+If we use `ChiSqSelector` with a `numTopFeatures = 1`, then according to our label `clicked` the
+last column in our `features` chosen as the most useful feature:
+
+~~~
+id | features              | clicked | selectedFeatures
+---|-----------------------|---------|------------------
+ 7 | [0.0, 0.0, 18.0, 1.0] | 1.0     | [1.0]
+ 8 | [0.0, 1.0, 12.0, 0.0] | 0.0     | [0.0]
+ 9 | [1.0, 0.0, 15.0, 0.1] | 0.0     | [0.1]
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [ChiSqSelector Scala docs](api/scala/index.html#org.apache.spark.ml.feature.ChiSqSelector)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ChiSqSelectorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [ChiSqSelector Java docs](api/java/org/apache/spark/ml/feature/ChiSqSelector.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaChiSqSelectorExample.java %}
 </div>
 </div>

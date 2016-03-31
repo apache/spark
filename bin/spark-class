@@ -17,10 +17,11 @@
 # limitations under the License.
 #
 
-# Figure out where Spark is installed
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-. "$SPARK_HOME"/bin/load-spark-env.sh
+. "${SPARK_HOME}"/bin/load-spark-env.sh
 
 # Find the java binary
 if [ -n "${JAVA_HOME}" ]; then
@@ -36,12 +37,13 @@ fi
 
 # Find assembly jar
 SPARK_ASSEMBLY_JAR=
-if [ -f "$SPARK_HOME/RELEASE" ]; then
-  ASSEMBLY_DIR="$SPARK_HOME/lib"
+if [ -f "${SPARK_HOME}/RELEASE" ]; then
+  ASSEMBLY_DIR="${SPARK_HOME}/lib"
 else
-  ASSEMBLY_DIR="$SPARK_HOME/assembly/target/scala-$SPARK_SCALA_VERSION"
+  ASSEMBLY_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION"
 fi
 
+GREP_OPTIONS=
 num_jars="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*hadoop.*\.jar$" | wc -l)"
 if [ "$num_jars" -eq "0" -a -z "$SPARK_ASSEMBLY_JAR" -a "$SPARK_PREPEND_CLASSES" != "1" ]; then
   echo "Failed to find Spark assembly in $ASSEMBLY_DIR." 1>&2
@@ -64,10 +66,16 @@ LAUNCH_CLASSPATH="$SPARK_ASSEMBLY_JAR"
 
 # Add the launcher build dir to the classpath if requested.
 if [ -n "$SPARK_PREPEND_CLASSES" ]; then
-  LAUNCH_CLASSPATH="$SPARK_HOME/launcher/target/scala-$SPARK_SCALA_VERSION/classes:$LAUNCH_CLASSPATH"
+  LAUNCH_CLASSPATH="${SPARK_HOME}/launcher/target/scala-$SPARK_SCALA_VERSION/classes:$LAUNCH_CLASSPATH"
 fi
 
 export _SPARK_ASSEMBLY="$SPARK_ASSEMBLY_JAR"
+
+# For tests
+if [[ -n "$SPARK_TESTING" ]]; then
+  unset YARN_CONF_DIR
+  unset HADOOP_CONF_DIR
+fi
 
 # The launcher library will print arguments separated by a NULL character, to allow arguments with
 # characters that would be otherwise interpreted by the shell. Read that in a while loop, populating

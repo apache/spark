@@ -35,12 +35,12 @@ import org.apache.spark.streaming.Durations;
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
- * Usage: DirectKafkaWordCount <brokers> <topics>
+ * Usage: JavaDirectKafkaWordCount <brokers> <topics>
  *   <brokers> is a list of one or more Kafka brokers
  *   <topics> is a list of one or more kafka topics to consume from
  *
  * Example:
- *    $ bin/run-example streaming.KafkaWordCount broker1-host:port,broker2-host:port topic1,topic2
+ *    $ bin/run-example streaming.JavaDirectKafkaWordCount broker1-host:port,broker2-host:port topic1,topic2
  */
 
 public final class JavaDirectKafkaWordCount {
@@ -48,7 +48,7 @@ public final class JavaDirectKafkaWordCount {
 
   public static void main(String[] args) {
     if (args.length < 2) {
-      System.err.println("Usage: DirectKafkaWordCount <brokers> <topics>\n" +
+      System.err.println("Usage: JavaDirectKafkaWordCount <brokers> <topics>\n" +
           "  <brokers> is a list of one or more Kafka brokers\n" +
           "  <topics> is a list of one or more kafka topics to consume from\n\n");
       System.exit(1);
@@ -59,7 +59,7 @@ public final class JavaDirectKafkaWordCount {
     String brokers = args[0];
     String topics = args[1];
 
-    // Create context with 2 second batch interval
+    // Create context with a 2 seconds batch interval
     SparkConf sparkConf = new SparkConf().setAppName("JavaDirectKafkaWordCount");
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.seconds(2));
 

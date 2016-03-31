@@ -21,12 +21,13 @@
 # Rest server to handle driver requests for Mesos cluster mode.
 # Only one cluster dispatcher is needed per Mesos cluster.
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-. "$sbin/spark-config.sh"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
 if [ "$SPARK_MESOS_DISPATCHER_PORT" = "" ]; then
   SPARK_MESOS_DISPATCHER_PORT=7077
@@ -37,4 +38,4 @@ if [ "$SPARK_MESOS_DISPATCHER_HOST" = "" ]; then
 fi
 
 
-"$sbin"/spark-daemon.sh start org.apache.spark.deploy.mesos.MesosClusterDispatcher 1 --host $SPARK_MESOS_DISPATCHER_HOST --port $SPARK_MESOS_DISPATCHER_PORT "$@"
+"${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.mesos.MesosClusterDispatcher 1 --host $SPARK_MESOS_DISPATCHER_HOST --port $SPARK_MESOS_DISPATCHER_PORT "$@"

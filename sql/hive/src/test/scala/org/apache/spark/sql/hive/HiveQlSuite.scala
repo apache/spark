@@ -17,22 +17,17 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.plans.logical.Generate
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.client.{ManagedTable, HiveColumn, ExternalTable, HiveTable}
-import org.scalatest.BeforeAndAfterAll
+import org.apache.spark.sql.hive.client.{ExternalTable, HiveColumn, HiveTable, ManagedTable}
 
 
 class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
-  override def beforeAll() {
-    if (SessionState.get() == null) {
-      SessionState.start(new HiveConf())
-    }
-  }
-
   private def extractTableDesc(sql: String): (HiveTable, Boolean) = {
     HiveQl.createPlan(sql).collect {
       case CreateTableAsSelect(desc, child, allowExisting) => (desc, allowExisting)
@@ -189,5 +184,16 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
       "hour 49 outside range [0, 23]")
     assertError("select interval '.1111111111' second",
       "nanosecond 1111111111 outside range")
+  }
+
+  test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {
+    val plan = HiveQl.parseSql(
+      """
+        |SELECT *
+        |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
+        |LATERAL VIEW json_tuple(json, 'f1', 'f2') jt AS a, b
+      """.stripMargin)
+
+    assert(plan.children.head.asInstanceOf[Generate].generator.isInstanceOf[JsonTuple])
   }
 }

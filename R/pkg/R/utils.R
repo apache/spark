@@ -158,7 +158,7 @@ wrapInt <- function(value) {
 # Multiply `val` by 31 and add `addVal` to the result. Ensures that
 # integer-overflows are handled at every step.
 mult31AndAdd <- function(val, addVal) {
-  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
+  vec <- c(bitwShiftL(val, c(4, 3, 2, 1, 0)), addVal)
   Reduce(function(a, b) {
           wrapInt(as.numeric(a) + as.numeric(b))
          },
@@ -202,7 +202,7 @@ serializeToString <- function(rdd) {
 # This function amortizes the allocation cost by doubling
 # the size of the list every time it fills up.
 addItemToAccumulator <- function(acc, item) {
-  if(acc$counter == acc$size) {
+  if (acc$counter == acc$size) {
     acc$size <- acc$size * 2
     length(acc$data) <- acc$size
   }
@@ -359,16 +359,6 @@ numToInt <- function(num) {
     warning(paste("Coercing", as.list(sys.call())[[2]], "to integer."))
   }
   as.integer(num)
-}
-
-# create a Seq in JVM
-toSeq <- function(...) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", list(...))
-}
-
-# create a Seq in JVM from a list
-listToSeq <- function(l) {
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "toSeq", l)
 }
 
 # Utility function to recursively traverse the Abstract Syntax Tree (AST) of a
@@ -597,4 +587,57 @@ mergePartitions <- function(rdd, zip) {
   }
 
   PipelinedRDD(rdd, partitionFunc)
+}
+
+# Convert a named list to struct so that
+# SerDe won't confuse between a normal named list and struct
+listToStruct <- function(list) {
+  stopifnot(class(list) == "list")
+  stopifnot(!is.null(names(list)))
+  class(list) <- "struct"
+  list
+}
+
+# Convert a struct to a named list
+structToList <- function(struct) {
+  stopifnot(class(list) == "struct")
+
+  class(struct) <- "list"
+  struct
+}
+
+# Convert a named list to an environment to be passed to JVM
+convertNamedListToEnv <- function(namedList) {
+  # Make sure each item in the list has a name
+  names <- names(namedList)
+  stopifnot(
+    if (is.null(names)) {
+      length(namedList) == 0
+    } else {
+      !any(is.na(names))
+    })
+
+  env <- new.env()
+  for (name in names) {
+    env[[name]] <- namedList[[name]]
+  }
+  env
+}
+
+# Assign a new environment for attach() and with() methods
+assignNewEnv <- function(data) {
+  stopifnot(class(data) == "DataFrame")
+  cols <- columns(data)
+  stopifnot(length(cols) > 0)
+
+  env <- new.env()
+  for (i in 1:length(cols)) {
+    assign(x = cols[i], value = data[, cols[i]], envir = env)
+  }
+  env
+}
+
+# Utility function to split by ',' and whitespace, remove empty tokens
+splitString <- function(input) {
+  Filter(nzchar, unlist(strsplit(input, ",|\\s")))
 }

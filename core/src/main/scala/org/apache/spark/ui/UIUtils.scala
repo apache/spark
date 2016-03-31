@@ -17,10 +17,13 @@
 
 package org.apache.spark.ui
 
+import java.net.URLDecoder
 import java.text.SimpleDateFormat
-import java.util.{Locale, Date}
+import java.util.{Date, Locale}
 
-import scala.xml.{Node, Text, Unparsed}
+import scala.util.control.NonFatal
+import scala.xml._
+import scala.xml.transform.{RewriteRule, RuleTransformer}
 
 import org.apache.spark.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
@@ -29,6 +32,7 @@ import org.apache.spark.ui.scope.RDDOperationGraph
 private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
+  val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -140,14 +144,10 @@ private[spark] object UIUtils extends Logging {
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
   def uiRoot: String = {
-    if (System.getenv("APPLICATION_WEB_PROXY_BASE") != null) {
-      System.getenv("APPLICATION_WEB_PROXY_BASE")
-    } else if (System.getProperty("spark.ui.proxyBase") != null) {
-      System.getProperty("spark.ui.proxyBase")
-    }
-    else {
-      ""
-    }
+    // SPARK-11484 - Use the proxyBase set by the AM, if not found then use env.
+    sys.props.get("spark.ui.proxyBase")
+      .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
+      .getOrElse("")
   }
 
   def prependBaseUri(basePath: String = "", resource: String = ""): String = {
@@ -211,10 +211,10 @@ private[spark] object UIUtils extends Logging {
                 <span class="version">{org.apache.spark.SPARK_VERSION}</span>
               </a>
             </div>
-            <ul class="nav">{header}</ul>
             <p class="navbar-text pull-right">
               <strong title={appName}>{shortAppName}</strong> application UI
             </p>
+            <ul class="nav">{header}</ul>
           </div>
         </div>
         <div class="container-fluid">
@@ -320,7 +320,9 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+    // started + completed can be > total when there are speculative tasks
+    val boundedStarted = math.min(started, total - completed)
+    val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)
 
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%; left:0;">
@@ -395,4 +397,74 @@ private[spark] object UIUtils extends Logging {
     </script>
   }
 
+  /**
+   * Returns HTML rendering of a job or stage description. It will try to parse the string as HTML
+   * and make sure that it only contains anchors with root-relative links. Otherwise,
+   * the whole string will rendered as a simple escaped text.
+   *
+   * Note: In terms of security, only anchor tags with root relative links are supported. So any
+   * attempts to embed links outside Spark UI, or other tags like <script> will cause in the whole
+   * description to be treated as plain text.
+   */
+  def makeDescription(desc: String, basePathUri: String): NodeSeq = {
+    import scala.language.postfixOps
+
+    // If the description can be parsed as HTML and has only relative links, then render
+    // as HTML, otherwise render as escaped string
+    try {
+      // Try to load the description as unescaped HTML
+      val xml = XML.loadString(s"""<span class="description-input">$desc</span>""")
+
+      // Verify that this has only anchors and span (we are wrapping in span)
+      val allowedNodeLabels = Set("a", "span")
+      val illegalNodes = xml \\ "_"  filterNot { case node: Node =>
+        allowedNodeLabels.contains(node.label)
+      }
+      if (illegalNodes.nonEmpty) {
+        throw new IllegalArgumentException(
+          "Only HTML anchors allowed in job descriptions\n" +
+            illegalNodes.map { n => s"${n.label} in $n"}.mkString("\n\t"))
+      }
+
+      // Verify that all links are relative links starting with "/"
+      val allLinks =
+        xml \\ "a" flatMap { _.attributes } filter { _.key == "href" } map { _.value.toString }
+      if (allLinks.exists { ! _.startsWith ("/") }) {
+        throw new IllegalArgumentException(
+          "Links in job descriptions must be root-relative:\n" + allLinks.mkString("\n\t"))
+      }
+
+      // Prepend the relative links with basePathUri
+      val rule = new RewriteRule() {
+        override def transform(n: Node): Seq[Node] = {
+          n match {
+            case e: Elem if e \ "@href" nonEmpty =>
+              val relativePath = e.attribute("href").get.toString
+              val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
+              e % Attribute(null, "href", fullUri, Null)
+            case _ => n
+          }
+        }
+      }
+      new RuleTransformer(rule).transform(xml)
+    } catch {
+      case NonFatal(e) =>
+        <span class="description-input">{desc}</span>
+    }
+  }
+
+  /**
+   * Decode URLParameter if URL is encoded by YARN-WebAppProxyServlet.
+   * Due to YARN-2844: WebAppProxyServlet cannot handle urls which contain encoded characters
+   * Therefore we need to decode it until we get the real URLParameter.
+   */
+  def decodeURLParameter(urlParam: String): String = {
+    var param = urlParam
+    var decodedParam = URLDecoder.decode(param, "UTF-8")
+    while (param != decodedParam) {
+      param = decodedParam
+      decodedParam = URLDecoder.decode(param, "UTF-8")
+    }
+    param
+  }
 }

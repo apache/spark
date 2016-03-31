@@ -85,6 +85,7 @@ case class AllDataTypesScan(
         Date.valueOf("1970-01-01"),
         new Timestamp(20000 + i),
         s"varchar_$i",
+        s"char_$i",
         Seq(i, i + 1),
         Seq(Map(s"str_$i" -> Row(i.toLong))),
         Map(i -> i.toString),
@@ -115,6 +116,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       Date.valueOf("1970-01-01"),
       new Timestamp(20000 + i),
       s"varchar_$i",
+      s"char_$i",
       Seq(i, i + 1),
       Seq(Map(s"str_$i" -> Row(i.toLong))),
       Map(i -> i.toString),
@@ -154,6 +156,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
         |dateField dAte,
         |timestampField tiMestamp,
         |varcharField varchaR(12),
+        |charField ChaR(18),
         |arrayFieldSimple Array<inT>,
         |arrayFieldComplex Array<Map<String, Struct<key:bigInt>>>,
         |mapFieldSimple MAP<iNt, StRing>,
@@ -207,6 +210,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       StructField("dateField", DateType, true) ::
       StructField("timestampField", TimestampType, true) ::
       StructField("varcharField", StringType, true) ::
+      StructField("charField", StringType, true) ::
       StructField("arrayFieldSimple", ArrayType(IntegerType), true) ::
       StructField("arrayFieldComplex",
         ArrayType(
@@ -248,6 +252,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
           | dateField,
           | timestampField,
           | varcharField,
+          | charField,
           | arrayFieldSimple,
           | arrayFieldComplex,
           | mapFieldSimple,

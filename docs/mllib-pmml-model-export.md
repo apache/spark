@@ -1,21 +1,21 @@
 ---
 layout: global
-title: PMML model export - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - PMML model export
+title: PMML model export - spark.mllib
+displayTitle: PMML model export - spark.mllib
 ---
 
 * Table of contents
 {:toc}
 
-## MLlib supported models
+## `spark.mllib` supported models
 
-MLlib supports model export to Predictive Model Markup Language ([PMML](http://en.wikipedia.org/wiki/Predictive_Model_Markup_Language)).
+`spark.mllib` supports model export to Predictive Model Markup Language ([PMML](http://en.wikipedia.org/wiki/Predictive_Model_Markup_Language)).
 
-The table below outlines the MLlib models that can be exported to PMML and their equivalent PMML model.
+The table below outlines the `spark.mllib` models that can be exported to PMML and their equivalent PMML model.
 
 <table class="table">
   <thead>
-    <tr><th>MLlib model</th><th>PMML model</th></tr>
+    <tr><th>`spark.mllib` model</th><th>PMML model</th></tr>
   </thead>
   <tbody>
     <tr>
@@ -44,6 +44,8 @@ The table below outlines the MLlib models that can be exported to PMML and their
 
 <div data-lang="scala" markdown="1">
 To export a supported `model` (see table above) to PMML, simply call `model.toPMML`.
+
+Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`Vectors` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors) for details on the API.
 
 Here a complete example of building a KMeansModel and print it out in PMML format:
 {% highlight scala %}

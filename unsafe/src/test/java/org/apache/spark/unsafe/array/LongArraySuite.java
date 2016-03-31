@@ -34,5 +34,9 @@ public class LongArraySuite {
     Assert.assertEquals(2, arr.size());
     Assert.assertEquals(1L, arr.get(0));
     Assert.assertEquals(3L, arr.get(1));
+
+    arr.zeroOut();
+    Assert.assertEquals(0L, arr.get(0));
+    Assert.assertEquals(0L, arr.get(1));
   }
 }

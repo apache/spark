@@ -77,7 +77,7 @@ public class Java8APISuite implements Serializable {
   public void foreach() {
     foreachCalls = 0;
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
-    rdd.foreach((x) -> foreachCalls++);
+    rdd.foreach(x -> foreachCalls++);
     Assert.assertEquals(2, foreachCalls);
   }
 
@@ -180,7 +180,7 @@ public class Java8APISuite implements Serializable {
     JavaPairRDD<Integer, Integer> pairs = rdd.mapToPair(x -> new Tuple2<>(x, x))
       .cache();
     pairs.collect();
-    JavaRDD<String> strings = rdd.map(x -> x.toString()).cache();
+    JavaRDD<String> strings = rdd.map(Object::toString).cache();
     strings.collect();
   }
 
@@ -195,7 +195,9 @@ public class Java8APISuite implements Serializable {
 
     JavaPairRDD<String, String> pairs = rdd.flatMapToPair(s -> {
       List<Tuple2<String, String>> pairs2 = new LinkedList<>();
-      for (String word : s.split(" ")) pairs2.add(new Tuple2<>(word, word));
+      for (String word : s.split(" ")) {
+        pairs2.add(new Tuple2<>(word, word));
+      }
       return pairs2;
     });
 
@@ -204,11 +206,12 @@ public class Java8APISuite implements Serializable {
 
     JavaDoubleRDD doubles = rdd.flatMapToDouble(s -> {
       List<Double> lengths = new LinkedList<>();
-      for (String word : s.split(" ")) lengths.add(word.length() * 1.0);
+      for (String word : s.split(" ")) {
+        lengths.add((double) word.length());
+      }
       return lengths;
     });
 
-    Double x = doubles.first();
     Assert.assertEquals(5.0, doubles.first(), 0.01);
     Assert.assertEquals(11, pairs.count());
   }
@@ -228,7 +231,7 @@ public class Java8APISuite implements Serializable {
     swapped.collect();
 
     // There was never a bug here, but it's worth testing:
-    pairRDD.map(item -> item.swap()).collect();
+    pairRDD.map(Tuple2::swap).collect();
   }
 
   @Test
@@ -282,11 +285,11 @@ public class Java8APISuite implements Serializable {
     FlatMapFunction2<Iterator<Integer>, Iterator<String>, Integer> sizesFn =
       (Iterator<Integer> i, Iterator<String> s) -> {
         int sizeI = 0;
-        int sizeS = 0;
         while (i.hasNext()) {
           sizeI += 1;
           i.next();
         }
+        int sizeS = 0;
         while (s.hasNext()) {
           sizeS += 1;
           s.next();
@@ -301,30 +304,31 @@ public class Java8APISuite implements Serializable {
   public void accumulators() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
 
-    final Accumulator<Integer> intAccum = sc.intAccumulator(10);
-    rdd.foreach(x -> intAccum.add(x));
+    Accumulator<Integer> intAccum = sc.intAccumulator(10);
+    rdd.foreach(intAccum::add);
     Assert.assertEquals((Integer) 25, intAccum.value());
 
-    final Accumulator<Double> doubleAccum = sc.doubleAccumulator(10.0);
+    Accumulator<Double> doubleAccum = sc.doubleAccumulator(10.0);
     rdd.foreach(x -> doubleAccum.add((double) x));
     Assert.assertEquals((Double) 25.0, doubleAccum.value());
 
     // Try a custom accumulator type
     AccumulatorParam<Float> floatAccumulatorParam = new AccumulatorParam<Float>() {
+      @Override
       public Float addInPlace(Float r, Float t) {
         return r + t;
       }
-
+      @Override
       public Float addAccumulator(Float r, Float t) {
         return r + t;
       }
-
+      @Override
       public Float zero(Float initialValue) {
         return 0.0f;
       }
     };
 
-    final Accumulator<Float> floatAccum = sc.accumulator(10.0f, floatAccumulatorParam);
+    Accumulator<Float> floatAccum = sc.accumulator(10.0f, floatAccumulatorParam);
     rdd.foreach(x -> floatAccum.add((float) x));
     Assert.assertEquals((Float) 25.0f, floatAccum.value());
 
@@ -336,7 +340,7 @@ public class Java8APISuite implements Serializable {
   @Test
   public void keyBy() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2));
-    List<Tuple2<String, Integer>> s = rdd.keyBy(x -> x.toString()).collect();
+    List<Tuple2<String, Integer>> s = rdd.keyBy(Object::toString).collect();
     Assert.assertEquals(new Tuple2<>("1", 1), s.get(0));
     Assert.assertEquals(new Tuple2<>("2", 2), s.get(1));
   }
@@ -349,7 +353,7 @@ public class Java8APISuite implements Serializable {
     JavaPairRDD<Integer, Integer> rdd3 =
       rdd2.mapToPair(in -> new Tuple2<>(in._2(), in._1()));
     Assert.assertEquals(Arrays.asList(
-      new Tuple2<Integer, Integer>(1, 1),
+      new Tuple2<>(1, 1),
       new Tuple2<>(0, 2),
       new Tuple2<>(1, 3),
       new Tuple2<>(0, 4)), rdd3.collect());
@@ -361,7 +365,7 @@ public class Java8APISuite implements Serializable {
 
     JavaPairRDD<Integer, Integer> rdd2 =
       rdd1.mapToPair(i -> new Tuple2<>(i, i % 2));
-    List[] parts = rdd1.collectPartitions(new int[]{0});
+    List<Integer>[] parts = rdd1.collectPartitions(new int[]{0});
     Assert.assertEquals(Arrays.asList(1, 2), parts[0]);
 
     parts = rdd1.collectPartitions(new int[]{1, 2});
@@ -371,19 +375,19 @@ public class Java8APISuite implements Serializable {
     Assert.assertEquals(Arrays.asList(new Tuple2<>(1, 1), new Tuple2<>(2, 0)),
       rdd2.collectPartitions(new int[]{0})[0]);
 
-    parts = rdd2.collectPartitions(new int[]{1, 2});
-    Assert.assertEquals(Arrays.asList(new Tuple2<>(3, 1), new Tuple2<>(4, 0)), parts[0]);
+    List<Tuple2<Integer, Integer>>[] parts2 = rdd2.collectPartitions(new int[]{1, 2});
+    Assert.assertEquals(Arrays.asList(new Tuple2<>(3, 1), new Tuple2<>(4, 0)), parts2[0]);
     Assert.assertEquals(Arrays.asList(new Tuple2<>(5, 1), new Tuple2<>(6, 0), new Tuple2<>(7, 1)),
-      parts[1]);
+      parts2[1]);
   }
 
   @Test
   public void collectAsMapWithIntArrayValues() {
     // Regression test for SPARK-1040
-    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(new Integer[]{1}));
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1));
     JavaPairRDD<Integer, int[]> pairRDD =
       rdd.mapToPair(x -> new Tuple2<>(x, new int[]{x}));
     pairRDD.collect();  // Works fine
-    Map<Integer, int[]> map = pairRDD.collectAsMap();  // Used to crash with ClassCastException
+    pairRDD.collectAsMap();  // Used to crash with ClassCastException
   }
 }

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Basic Statistics - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Basic Statistics 
+title: Basic Statistics - spark.mllib
+displayTitle: Basic Statistics - spark.mllib
 ---
 
 * Table of contents
@@ -38,6 +38,8 @@ available in `Statistics`.
 which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
 total count.
 
+Refer to the [`MultivariateStatisticalSummary` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
@@ -59,6 +61,8 @@ println(summary.numNonzeros) // number of nonzeros in each column
 [`MultivariateStatisticalSummary`](api/java/org/apache/spark/mllib/stat/MultivariateStatisticalSummary.html),
 which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
 total count.
+
+Refer to the [`MultivariateStatisticalSummary` Java docs](api/java/org/apache/spark/mllib/stat/MultivariateStatisticalSummary.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
@@ -86,6 +90,8 @@ System.out.println(summary.numNonzeros()); // number of nonzeros in each column
 which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
 total count.
 
+Refer to the [`MultivariateStatisticalSummary` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.MultivariateStatisticalSummary) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.stat import Statistics
 
@@ -106,7 +112,7 @@ print(summary.numNonzeros())
 
 ## Correlations
 
-Calculating the correlation between two series of data is a common operation in Statistics. In MLlib
+Calculating the correlation between two series of data is a common operation in Statistics. In `spark.mllib`
 we provide the flexibility to calculate pairwise correlations among many series. The supported 
 correlation methods are currently Pearson's and Spearman's correlation.
  
@@ -115,6 +121,8 @@ correlation methods are currently Pearson's and Spearman's correlation.
 [`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to 
 calculate correlations between series. Depending on the type of input, two `RDD[Double]`s or 
 an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` respectively.
+
+Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
@@ -143,6 +151,8 @@ val correlMatrix: Matrix = Statistics.corr(data, "pearson")
 [`Statistics`](api/java/org/apache/spark/mllib/stat/Statistics.html) provides methods to 
 calculate correlations between series. Depending on the type of input, two `JavaDoubleRDD`s or 
 a `JavaRDD<Vector>`, the output will be a `Double` or the correlation `Matrix` respectively.
+
+Refer to the [`Statistics` Java docs](api/java/org/apache/spark/mllib/stat/Statistics.html) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.api.java.JavaDoubleRDD;
@@ -173,6 +183,8 @@ Matrix correlMatrix = Statistics.corr(data.rdd(), "pearson");
 calculate correlations between series. Depending on the type of input, two `RDD[Double]`s or 
 an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` respectively.
 
+Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.stat import Statistics
 
@@ -197,7 +209,7 @@ print(Statistics.corr(data, method="pearson"))
 
 ## Stratified sampling
 
-Unlike the other statistics functions, which reside in MLlib, stratified sampling methods,
+Unlike the other statistics functions, which reside in `spark.mllib`, stratified sampling methods,
 `sampleByKey` and `sampleByKeyExact`, can be performed on RDD's of key-value pairs. For stratified
 sampling, the keys can be thought of as a label and the value as a specific attribute. For example 
 the key can be man or woman, or document ids, and the respective values can be the list of ages 
@@ -282,12 +294,12 @@ approxSample = data.sampleByKey(False, fractions);
 ## Hypothesis testing
 
 Hypothesis testing is a powerful tool in statistics to determine whether a result is statistically 
-significant, whether this result occurred by chance or not. MLlib currently supports Pearson's 
+significant, whether this result occurred by chance or not. `spark.mllib` currently supports Pearson's 
 chi-squared ( $\chi^2$) tests for goodness of fit and independence. The input data types determine
 whether the goodness of fit or the independence test is conducted. The goodness of fit test requires 
 an input type of `Vector`, whereas the independence test requires a `Matrix` as input.
 
-MLlib also supports the input type `RDD[LabeledPoint]` to enable feature selection via chi-squared 
+`spark.mllib` also supports the input type `RDD[LabeledPoint]` to enable feature selection via chi-squared 
 independence tests.
 
 <div class="codetabs">
@@ -338,6 +350,8 @@ featureTestResults.foreach { result =>
 run Pearson's chi-squared tests. The following example demonstrates how to run and interpret 
 hypothesis tests.
 
+Refer to the [`ChiSqTestResult` Java docs](api/java/org/apache/spark/mllib/stat/test/ChiSqTestResult.html) for details on the API.
+
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -385,6 +399,8 @@ for (ChiSqTestResult result : featureTestResults) {
 run Pearson's chi-squared tests. The following example demonstrates how to run and interpret
 hypothesis tests.
 
+Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
+
 {% highlight python %}
 from pyspark import SparkContext
 from pyspark.mllib.linalg import Vectors, Matrices
@@ -422,7 +438,7 @@ for i, result in enumerate(featureTestResults):
 
 </div>
 
-Additionally, MLlib provides a 1-sample, 2-sided implementation of the Kolmogorov-Smirnov (KS) test
+Additionally, `spark.mllib` provides a 1-sample, 2-sided implementation of the Kolmogorov-Smirnov (KS) test
 for equality of probability distributions. By providing the name of a theoretical distribution
 (currently solely supported for the normal distribution) and its parameters, or a function to 
 calculate the cumulative distribution according to a given theoretical distribution, the user can
@@ -436,6 +452,8 @@ message.
 [`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to
 run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
 and interpret the hypothesis tests.
+
+Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.stat.Statistics
@@ -458,6 +476,8 @@ val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
 [`Statistics`](api/java/org/apache/spark/mllib/stat/Statistics.html) provides methods to
 run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
 and interpret the hypothesis tests.
+
+Refer to the [`Statistics` Java docs](api/java/org/apache/spark/mllib/stat/Statistics.html) for details on the API.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -483,6 +503,8 @@ System.out.println(testResult);
 run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
 and interpret the hypothesis tests.
 
+Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.stat import Statistics
 
@@ -499,11 +521,36 @@ print(testResult) # summary of the test including the p-value, test statistic,
 </div>
 </div>
 
+### Streaming Significance Testing
+`spark.mllib` provides online implementations of some tests to support use cases
+like A/B testing. These tests may be performed on a Spark Streaming
+`DStream[(Boolean,Double)]` where the first element of each tuple
+indicates control group (`false`) or treatment group (`true`) and the
+second element is the value of an observation.
+
+Streaming significance testing supports the following parameters:
+
+* `peacePeriod` - The number of initial data points from the stream to
+ignore, used to mitigate novelty effects.
+* `windowSize` - The number of past batches to perform hypothesis
+testing over. Setting to `0` will perform cumulative processing using
+all prior batches.
+
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+[`StreamingTest`](api/scala/index.html#org.apache.spark.mllib.stat.test.StreamingTest)
+provides streaming hypothesis testing.
+
+{% include_example scala/org/apache/spark/examples/mllib/StreamingTestExample.scala %}
+</div>
+</div>
+
 
 ## Random data generation
 
 Random data generation is useful for randomized algorithms, prototyping, and performance testing.
-MLlib supports generating random RDDs with i.i.d. values drawn from a given distribution:
+`spark.mllib` supports generating random RDDs with i.i.d. values drawn from a given distribution:
 uniform, standard normal, or Poisson.
 
 <div class="codetabs">
@@ -512,6 +559,8 @@ uniform, standard normal, or Poisson.
 methods to generate random double RDDs or vector RDDs.
 The following example generates a random double RDD, whose values follows the standard normal
 distribution `N(0, 1)`, and then map it to `N(1, 4)`.
+
+Refer to the [`RandomRDDs` Scala docs](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
@@ -532,6 +581,8 @@ val v = u.map(x => 1.0 + 2.0 * x)
 methods to generate random double RDDs or vector RDDs.
 The following example generates a random double RDD, whose values follows the standard normal
 distribution `N(0, 1)`, and then map it to `N(1, 4)`.
+
+Refer to the [`RandomRDDs` Java docs](api/java/org/apache/spark/mllib/random/RandomRDDs) for details on the API.
 
 {% highlight java %}
 import org.apache.spark.SparkContext;
@@ -559,6 +610,8 @@ methods to generate random double RDDs or vector RDDs.
 The following example generates a random double RDD, whose values follows the standard normal
 distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
+Refer to the [`RandomRDDs` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.random.RandomRDDs) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.random import RandomRDDs
 
@@ -566,7 +619,7 @@ sc = ... # SparkContext
 
 # Generate a random double RDD that contains 1 million i.i.d. values drawn from the
 # standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-u = RandomRDDs.uniformRDD(sc, 1000000L, 10)
+u = RandomRDDs.normalRDD(sc, 1000000L, 10)
 # Apply a transform to get a random double RDD following `N(1, 4)`.
 v = u.map(lambda x: 1.0 + 2.0 * x)
 {% endhighlight %}
@@ -588,6 +641,8 @@ mean of PDFs of normal distributions centered around each of the samples.
 [`KernelDensity`](api/scala/index.html#org.apache.spark.mllib.stat.KernelDensity) provides methods
 to compute kernel density estimates from an RDD of samples. The following example demonstrates how
 to do so.
+
+Refer to the [`KernelDensity` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.KernelDensity) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.stat.KernelDensity
@@ -611,6 +666,8 @@ val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
 to compute kernel density estimates from an RDD of samples. The following example demonstrates how
 to do so.
 
+Refer to the [`KernelDensity` Java docs](api/java/org/apache/spark/mllib/stat/KernelDensity.html) for details on the API.
+
 {% highlight java %}
 import org.apache.spark.mllib.stat.KernelDensity;
 import org.apache.spark.rdd.RDD;
@@ -632,6 +689,8 @@ double[] densities = kd.estimate(new double[] {-1.0, 2.0, 5.0});
 [`KernelDensity`](api/python/pyspark.mllib.html#pyspark.mllib.stat.KernelDensity) provides methods
 to compute kernel density estimates from an RDD of samples. The following example demonstrates how
 to do so.
+
+Refer to the [`KernelDensity` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.KernelDensity) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.stat import KernelDensity

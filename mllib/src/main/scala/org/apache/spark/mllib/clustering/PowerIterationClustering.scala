@@ -21,10 +21,9 @@ import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
@@ -33,15 +32,12 @@ import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.{Logging, SparkContext, SparkException}
 
 /**
- * :: Experimental ::
- *
  * Model produced by [[PowerIterationClustering]].
  *
  * @param k number of clusters
  * @param assignments an RDD of clustering [[PowerIterationClustering#Assignment]]s
  */
 @Since("1.3.0")
-@Experimental
 class PowerIterationClusteringModel @Since("1.3.0") (
     @Since("1.3.0") val k: Int,
     @Since("1.3.0") val assignments: RDD[PowerIterationClustering.Assignment])
@@ -73,7 +69,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
     @Since("1.4.0")
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       val metadata = compact(render(
@@ -87,7 +83,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     @Since("1.4.0")
     def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
       implicit val formats = DefaultFormats
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
@@ -107,8 +103,6 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 }
 
 /**
- * :: Experimental ::
- *
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
  * [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]]. From the abstract: PIC finds a very
  * low-dimensional embedding of a dataset using truncated power iteration on a normalized pair-wise
@@ -120,7 +114,6 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
  *
  * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
  */
-@Experimental
 @Since("1.3.0")
 class PowerIterationClustering private[clustering] (
     private var k: Int,
@@ -239,17 +232,14 @@ class PowerIterationClustering private[clustering] (
 }
 
 @Since("1.3.0")
-@Experimental
 object PowerIterationClustering extends Logging {
 
   /**
-   * :: Experimental ::
    * Cluster assignment.
    * @param id node id
    * @param cluster assigned cluster id
    */
   @Since("1.3.0")
-  @Experimental
   case class Assignment(id: Long, cluster: Int)
 
   /**
@@ -271,10 +261,12 @@ object PowerIterationClustering extends Logging {
       },
       mergeMsg = _ + _,
       TripletFields.EdgeOnly)
-    GraphImpl.fromExistingRDDs(vD, graph.edges)
+    Graph(vD, graph.edges)
       .mapTriplets(
         e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
-        TripletFields.Src)
+        new TripletFields(/* useSrc */ true,
+                          /* useDst */ false,
+                          /* useEdge */ true))
   }
 
   /**
@@ -300,10 +292,12 @@ object PowerIterationClustering extends Logging {
       },
       mergeMsg = _ + _,
       TripletFields.EdgeOnly)
-    GraphImpl.fromExistingRDDs(vD, gA.edges)
+    Graph(vD, gA.edges)
       .mapTriplets(
         e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
-        TripletFields.Src)
+        new TripletFields(/* useSrc */ true,
+                          /* useDst */ false,
+                          /* useEdge */ true))
   }
 
   /**
@@ -324,7 +318,7 @@ object PowerIterationClustering extends Logging {
       }, preservesPartitioning = true).cache()
     val sum = r.values.map(math.abs).sum()
     val v0 = r.mapValues(x => x / sum)
-    GraphImpl.fromExistingRDDs(VertexRDD(v0), g.edges)
+    Graph(VertexRDD(v0), g.edges)
   }
 
   /**
@@ -339,7 +333,7 @@ object PowerIterationClustering extends Logging {
   def initDegreeVector(g: Graph[Double, Double]): Graph[Double, Double] = {
     val sum = g.vertices.values.sum()
     val v0 = g.vertices.mapValues(_ / sum)
-    GraphImpl.fromExistingRDDs(VertexRDD(v0), g.edges)
+    Graph(VertexRDD(v0), g.edges)
   }
 
   /**
@@ -364,7 +358,9 @@ object PowerIterationClustering extends Logging {
       val v = curG.aggregateMessages[Double](
         sendMsg = ctx => ctx.sendToSrc(ctx.attr * ctx.dstAttr),
         mergeMsg = _ + _,
-        TripletFields.Dst).cache()
+        new TripletFields(/* useSrc */ false,
+                          /* useDst */ true,
+                          /* useEdge */ true)).cache()
       // normalize v
       val norm = v.values.map(math.abs).sum()
       logInfo(s"$msgPrefix: norm(v) = $norm.")
@@ -377,7 +373,7 @@ object PowerIterationClustering extends Logging {
       diffDelta = math.abs(delta - prevDelta)
       logInfo(s"$msgPrefix: diff(delta) = $diffDelta.")
       // update v
-      curG = GraphImpl.fromExistingRDDs(VertexRDD(v1), g.edges)
+      curG = Graph(VertexRDD(v1), g.edges)
       prevDelta = delta
     }
     curG.vertices
@@ -394,7 +390,6 @@ object PowerIterationClustering extends Logging {
     val points = v.mapValues(x => Vectors.dense(x)).cache()
     val model = new KMeans()
       .setK(k)
-      .setRuns(5)
       .setSeed(0L)
       .run(points.values)
     points.mapValues(p => model.predict(p)).cache()

@@ -30,10 +30,11 @@ import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 
+import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.memory.StaticMemoryManager
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -44,9 +45,10 @@ import org.apache.spark.util._
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with ResetSystemProperties {
 
-  private val conf = new SparkConf(false)
+  private val conf = new SparkConf(false).set("spark.app.id", "test")
   var store: BlockManager = null
   var store2: BlockManager = null
+  var store3: BlockManager = null
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
   conf.set("spark.authenticate", "false")
@@ -65,11 +67,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    val transfer = new NioBlockTransferService(conf, securityMgr)
-    val manager = new BlockManager(name, rpcEnv, master, serializer, maxMem, conf,
-      mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
-    manager.initialize("app-id")
-    manager
+    val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
+    val blockManager = new BlockManager(name, rpcEnv, master, serializer, conf,
+      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    memManager.setMemoryStore(blockManager.memoryStore)
+    blockManager.initialize("app-id")
+    blockManager
   }
 
   override def beforeEach(): Unit = {
@@ -98,6 +102,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     if (store2 != null) {
       store2.stop()
       store2 = null
+    }
+    if (store3 != null) {
+      store3.stop()
+      store3 = null
     }
     rpcEnv.shutdown()
     rpcEnv.awaitTermination()
@@ -443,6 +451,38 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(list2DiskGet.get.readMethod === DataReadMethod.Disk)
   }
 
+  test("SPARK-9591: getRemoteBytes from another location when Exception throw") {
+    val origTimeoutOpt = conf.getOption("spark.network.timeout")
+    try {
+      conf.set("spark.network.timeout", "2s")
+      store = makeBlockManager(8000, "executor1")
+      store2 = makeBlockManager(8000, "executor2")
+      store3 = makeBlockManager(8000, "executor3")
+      val list1 = List(new Array[Byte](4000))
+      store2.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store3.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      var list1Get = store.getRemoteBytes("list1")
+      assert(list1Get.isDefined, "list1Get expected to be fetched")
+      // block manager exit
+      store2.stop()
+      store2 = null
+      list1Get = store.getRemoteBytes("list1")
+      // get `list1` block
+      assert(list1Get.isDefined, "list1Get expected to be fetched")
+      store3.stop()
+      store3 = null
+      // exception throw because there is no locations
+      intercept[BlockFetchException] {
+        list1Get = store.getRemoteBytes("list1")
+      }
+    } finally {
+      origTimeoutOpt match {
+        case Some(t) => conf.set("spark.network.timeout", t)
+        case None => conf.remove("spark.network.timeout")
+      }
+    }
+  }
+
   test("in-memory LRU storage") {
     store = makeBlockManager(12000)
     val a1 = new Array[Byte](4000)
@@ -782,10 +822,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
-    val transfer = new NioBlockTransferService(conf, securityMgr)
+    val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
+    val memoryManager = new StaticMemoryManager(
+      conf,
+      maxOnHeapExecutionMemory = Long.MaxValue,
+      maxStorageMemory = 1200,
+      numCores = 1)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
-      new JavaSerializer(conf), 1200, conf, mapOutputTracker, shuffleManager, transfer, securityMgr,
-      0)
+      new JavaSerializer(conf), conf, memoryManager, mapOutputTracker,
+      shuffleManager, transfer, securityMgr, 0)
+    memoryManager.setMemoryStore(store.memoryStore)
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass
@@ -796,7 +842,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Make sure get a1 doesn't hang and returns None.
     failAfter(1 second) {
-      assert(store.getSingle("a1") == None, "a1 should not be in store")
+      assert(store.getSingle("a1").isEmpty, "a1 should not be in store")
     }
   }
 
@@ -1006,14 +1052,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(memoryStore.currentUnrollMemory === 0)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
+    def reserveUnrollMemoryForThisTask(memory: Long): Boolean = {
+      memoryStore.reserveUnrollMemoryForThisTask(
+        TestBlockId(""), memory, new ArrayBuffer[(BlockId, BlockStatus)])
+    }
+
     // Reserve
-    memoryStore.reserveUnrollMemoryForThisTask(100)
+    assert(reserveUnrollMemoryForThisTask(100))
     assert(memoryStore.currentUnrollMemoryForThisTask === 100)
-    memoryStore.reserveUnrollMemoryForThisTask(200)
+    assert(reserveUnrollMemoryForThisTask(200))
     assert(memoryStore.currentUnrollMemoryForThisTask === 300)
-    memoryStore.reserveUnrollMemoryForThisTask(500)
+    assert(reserveUnrollMemoryForThisTask(500))
     assert(memoryStore.currentUnrollMemoryForThisTask === 800)
-    memoryStore.reserveUnrollMemoryForThisTask(1000000)
+    assert(!reserveUnrollMemoryForThisTask(1000000))
     assert(memoryStore.currentUnrollMemoryForThisTask === 800) // not granted
     // Release
     memoryStore.releaseUnrollMemoryForThisTask(100)
@@ -1021,9 +1072,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     memoryStore.releaseUnrollMemoryForThisTask(100)
     assert(memoryStore.currentUnrollMemoryForThisTask === 600)
     // Reserve again
-    memoryStore.reserveUnrollMemoryForThisTask(4400)
+    assert(reserveUnrollMemoryForThisTask(4400))
     assert(memoryStore.currentUnrollMemoryForThisTask === 5000)
-    memoryStore.reserveUnrollMemoryForThisTask(20000)
+    assert(!reserveUnrollMemoryForThisTask(20000))
     assert(memoryStore.currentUnrollMemoryForThisTask === 5000) // not granted
     // Release again
     memoryStore.releaseUnrollMemoryForThisTask(1000)

@@ -74,21 +74,21 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
       val isNullB = ctx.freshName("isNullB")
       val primitiveB = ctx.freshName("primitiveB")
       s"""
-          i = a;
+          ${ctx.INPUT_ROW} = a;
           boolean $isNullA;
           ${ctx.javaType(order.child.dataType)} $primitiveA;
           {
             ${eval.code}
             $isNullA = ${eval.isNull};
-            $primitiveA = ${eval.primitive};
+            $primitiveA = ${eval.value};
           }
-          i = b;
+          ${ctx.INPUT_ROW} = b;
           boolean $isNullB;
           ${ctx.javaType(order.child.dataType)} $primitiveB;
           {
             ${eval.code}
             $isNullB = ${eval.isNull};
-            $primitiveB = ${eval.primitive};
+            $primitiveB = ${eval.value};
           }
           if ($isNullA && $isNullB) {
             // Nothing
@@ -126,9 +126,8 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           ${initMutableStates(ctx)}
         }
 
-        @Override
         public int compare(InternalRow a, InternalRow b) {
-          InternalRow i = null;  // Holds current row being evaluated.
+          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
           $comparisons
           return 0;
         }

@@ -39,7 +39,7 @@ import org.apache.spark.streaming.receiver.Receiver
 */
 private[streaming]
 class TwitterInputDStream(
-    @transient ssc_ : StreamingContext,
+    ssc_ : StreamingContext,
     twitterAuth: Option[Authorization],
     filters: Seq[String],
     storageLevel: StorageLevel
@@ -87,7 +87,7 @@ class TwitterReceiver(
 
       val query = new FilterQuery
       if (filters.size > 0) {
-        query.track(filters.toArray)
+        query.track(filters.mkString(","))
         newTwitterStream.filter(query)
       } else {
         newTwitterStream.sample()

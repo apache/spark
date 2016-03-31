@@ -142,5 +142,10 @@ object AssociationRules {
     def javaConsequent: java.util.List[Item] = {
       consequent.toList.asJava
     }
+
+    override def toString: String = {
+      s"${antecedent.mkString("{", ",", "}")} => " +
+        s"${consequent.mkString("{", ",", "}")}: ${confidence}"
+    }
   }
 }

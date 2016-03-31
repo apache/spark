@@ -77,13 +77,11 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double = 0.1): Seq[LabeledPoint] = {
-    generateLinearInput(intercept, weights,
-      Array.fill[Double](weights.length)(0.0),
-      Array.fill[Double](weights.length)(1.0 / 3.0),
-      nPoints, seed, eps)}
+    generateLinearInput(intercept, weights, Array.fill[Double](weights.length)(0.0),
+      Array.fill[Double](weights.length)(1.0 / 3.0), nPoints, seed, eps)
+  }
 
   /**
-   *
    * @param intercept Data intercept
    * @param weights  Weights to be applied.
    * @param xMean the mean of the generated features. Lots of time, if the features are not properly
@@ -104,16 +102,49 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double): Seq[LabeledPoint] = {
+    generateLinearInput(intercept, weights, xMean, xVariance, nPoints, seed, eps, 0.0)
+  }
 
+
+  /**
+   * @param intercept Data intercept
+   * @param weights  Weights to be applied.
+   * @param xMean the mean of the generated features. Lots of time, if the features are not properly
+   *              standardized, the algorithm with poor implementation will have difficulty
+   *              to converge.
+   * @param xVariance the variance of the generated features.
+   * @param nPoints Number of points in sample.
+   * @param seed Random seed
+   * @param eps Epsilon scaling factor.
+   * @param sparsity The ratio of zero elements. If it is 0.0, LabeledPoints with
+   *                 DenseVector is returned.
+   * @return Seq of input.
+   */
+  @Since("1.6.0")
+  def generateLinearInput(
+      intercept: Double,
+      weights: Array[Double],
+      xMean: Array[Double],
+      xVariance: Array[Double],
+      nPoints: Int,
+      seed: Int,
+      eps: Double,
+      sparsity: Double): Seq[LabeledPoint] = {
+    require(0.0 <= sparsity && sparsity <= 1.0)
     val rnd = new Random(seed)
     val x = Array.fill[Array[Double]](nPoints)(
       Array.fill[Double](weights.length)(rnd.nextDouble()))
 
+    val sparseRnd = new Random(seed)
     x.foreach { v =>
       var i = 0
       val len = v.length
       while (i < len) {
-        v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
+        if (sparseRnd.nextDouble() < sparsity) {
+          v(i) = 0.0
+        } else {
+          v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
+        }
         i += 1
       }
     }
@@ -121,7 +152,16 @@ object LinearDataGenerator {
     val y = x.map { xi =>
       blas.ddot(weights.length, xi, 1, weights, 1) + intercept + eps * rnd.nextGaussian()
     }
-    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+
+    y.zip(x).map { p =>
+      if (sparsity == 0.0) {
+        // Return LabeledPoints with DenseVector
+        LabeledPoint(p._1, Vectors.dense(p._2))
+      } else {
+        // Return LabeledPoints with SparseVector
+        LabeledPoint(p._1, Vectors.dense(p._2).toSparse)
+      }
+    }
   }
 
   /**

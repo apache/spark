@@ -254,7 +254,7 @@ public class RetryingBlockFetcherSuite {
                                           BlockFetchingListener listener)
     throws IOException {
 
-    TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+    TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     BlockFetchStarter fetchStarter = mock(BlockFetchStarter.class);
 
     Stubber stub = null;

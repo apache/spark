@@ -21,18 +21,18 @@ import org.apache.commons.cli.*;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+// $example on$
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.OneVsRest;
 import org.apache.spark.ml.classification.OneVsRestModel;
 import org.apache.spark.ml.util.MetadataUtils;
 import org.apache.spark.mllib.evaluation.MulticlassMetrics;
 import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
+import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.StructField;
+// $example off$
 
 /**
  * An example runner for Multiclass to Binary Reduction with One Vs Rest.
@@ -63,6 +63,7 @@ public class JavaOneVsRestExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
+    // $example on$
     // configure the base classifier
     LogisticRegression classifier = new LogisticRegression()
       .setMaxIter(params.maxIter)
@@ -80,31 +81,30 @@ public class JavaOneVsRestExample {
     OneVsRest ovr = new OneVsRest().setClassifier(classifier);
 
     String input = params.input;
-    RDD<LabeledPoint> inputData = MLUtils.loadLibSVMFile(jsc.sc(), input);
-    RDD<LabeledPoint> train;
-    RDD<LabeledPoint> test;
+    DataFrame inputData = jsql.read().format("libsvm").load(input);
+    DataFrame train;
+    DataFrame test;
 
     // compute the train/ test split: if testInput is not provided use part of input
     String testInput = params.testInput;
     if (testInput != null) {
       train = inputData;
       // compute the number of features in the training set.
-      int numFeatures = inputData.first().features().size();
-      test = MLUtils.loadLibSVMFile(jsc.sc(), testInput, numFeatures);
+      int numFeatures = inputData.first().<Vector>getAs(1).size();
+      test = jsql.read().format("libsvm").option("numFeatures",
+        String.valueOf(numFeatures)).load(testInput);
     } else {
       double f = params.fracTest;
-      RDD<LabeledPoint>[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
+      DataFrame[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
       train = tmp[0];
       test = tmp[1];
     }
 
     // train the multiclass model
-    DataFrame trainingDataFrame = jsql.createDataFrame(train, LabeledPoint.class);
-    OneVsRestModel ovrModel = ovr.fit(trainingDataFrame.cache());
+    OneVsRestModel ovrModel = ovr.fit(train.cache());
 
     // score the model on test data
-    DataFrame testDataFrame = jsql.createDataFrame(test, LabeledPoint.class);
-    DataFrame predictions = ovrModel.transform(testDataFrame.cache())
+    DataFrame predictions = ovrModel.transform(test.cache())
       .select("prediction", "label");
 
     // obtain metrics
@@ -128,6 +128,7 @@ public class JavaOneVsRestExample {
     System.out.println(confusionMatrix);
     System.out.println();
     System.out.println(results);
+    // $example off$
 
     jsc.stop();
   }

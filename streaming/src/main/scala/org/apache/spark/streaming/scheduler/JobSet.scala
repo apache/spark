@@ -18,8 +18,10 @@
 package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.HashSet
+import scala.util.Failure
 
 import org.apache.spark.streaming.Time
+import org.apache.spark.util.Utils
 
 /** Class representing a set of Jobs
   * belong to the same batch.
@@ -62,12 +64,13 @@ case class JobSet(
   }
 
   def toBatchInfo: BatchInfo = {
-    new BatchInfo(
+    BatchInfo(
       time,
       streamIdToInputInfo,
       submissionTime,
-      if (processingStartTime >= 0 ) Some(processingStartTime) else None,
-      if (processingEndTime >= 0 ) Some(processingEndTime) else None
+      if (processingStartTime >= 0) Some(processingStartTime) else None,
+      if (processingEndTime >= 0) Some(processingEndTime) else None,
+      jobs.map { job => (job.outputOpId, job.toOutputOperationInfo) }.toMap
     )
   }
 }

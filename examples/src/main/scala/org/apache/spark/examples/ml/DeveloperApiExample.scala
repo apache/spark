@@ -172,6 +172,9 @@ private class MyLogisticRegressionModel(
   /** Number of classes the label can take.  2 indicates binary classification. */
   override val numClasses: Int = 2
 
+  /** Number of features the model was trained on. */
+  override val numFeatures: Int = weights.size
+
   /**
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.

@@ -428,4 +428,12 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-14219: pickRandomVertex") {
+    withSpark { sc =>
+      val vert = sc.parallelize(List((1L, "a")), 1)
+      val edges = sc.parallelize(List(Edge[Long](1L, 1L)), 1)
+      val g0 = Graph(vert, edges)
+      assert(g0.pickRandomVertex() === 1L)
+    }
+  }
 }

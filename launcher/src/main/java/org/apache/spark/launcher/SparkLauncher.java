@@ -21,8 +21,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -57,6 +59,33 @@ public class SparkLauncher {
   public static final String EXECUTOR_EXTRA_LIBRARY_PATH = "spark.executor.extraLibraryPath";
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
+
+  /** Logger name to use when launching a child process. */
+  public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";
+
+  /**
+   * Maximum time (in ms) to wait for a child process to connect back to the launcher server
+   * when using @link{#start()}.
+   */
+  public static final String CHILD_CONNECTION_TIMEOUT = "spark.launcher.childConectionTimeout";
+
+  /** Used internally to create unique logger names. */
+  private static final AtomicInteger COUNTER = new AtomicInteger();
+
+  static final Map<String, String> launcherConfig = new HashMap<String, String>();
+
+  /**
+   * Set a configuration value for the launcher library. These config values do not affect the
+   * launched application, but rather the behavior of the launcher library itself when managing
+   * applications.
+   *
+   * @since 1.6.0
+   * @param name Config name.
+   * @param value Config value.
+   */
+  public static void setConfig(String name, String value) {
+    launcherConfig.put(name, value);
+  }
 
   // Visible for testing.
   final SparkSubmitCommandBuilder builder;
@@ -109,7 +138,7 @@ public class SparkLauncher {
    */
   public SparkLauncher setPropertiesFile(String path) {
     checkNotNull(path, "path");
-    builder.propertiesFile = path;
+    builder.setPropertiesFile(path);
     return this;
   }
 
@@ -197,6 +226,7 @@ public class SparkLauncher {
    * Use this method with caution. It is possible to create an invalid Spark command by passing
    * unknown arguments to this method, since those are allowed for forward compatibility.
    *
+   * @since 1.5.0
    * @param arg Argument to add.
    * @return This launcher.
    */
@@ -218,6 +248,7 @@ public class SparkLauncher {
    * Use this method with caution. It is possible to create an invalid Spark command by passing
    * unknown arguments to this method, since those are allowed for forward compatibility.
    *
+   * @since 1.5.0
    * @param name Name of argument to add.
    * @param value Value of the argument.
    * @return This launcher.
@@ -319,10 +350,81 @@ public class SparkLauncher {
 
   /**
    * Launches a sub-process that will start the configured Spark application.
+   * <p>
+   * The {@link #startApplication(SparkAppHandle.Listener...)} method is preferred when launching
+   * Spark, since it provides better control of the child application.
    *
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
+    return createBuilder().start();
+  }
+
+  /**
+   * Starts a Spark application.
+   * <p>
+   * This method returns a handle that provides information about the running application and can
+   * be used to do basic interaction with it.
+   * <p>
+   * The returned handle assumes that the application will instantiate a single SparkContext
+   * during its lifetime. Once that context reports a final state (one that indicates the
+   * SparkContext has stopped), the handle will not perform new state transitions, so anything
+   * that happens after that cannot be monitored. If the underlying application is launched as
+   * a child process, {@link SparkAppHandle#kill()} can still be used to kill the child process.
+   * <p>
+   * Currently, all applications are launched as child processes. The child's stdout and stderr
+   * are merged and written to a logger (see <code>java.util.logging</code>). The logger's name
+   * can be defined by setting {@link #CHILD_PROCESS_LOGGER_NAME} in the app's configuration. If
+   * that option is not set, the code will try to derive a name from the application's name or
+   * main class / script file. If those cannot be determined, an internal, unique name will be
+   * used. In all cases, the logger name will start with "org.apache.spark.launcher.app", to fit
+   * more easily into the configuration of commonly-used logging systems.
+   *
+   * @since 1.6.0
+   * @param listeners Listeners to add to the handle before the app is launched.
+   * @return A handle for the launched application.
+   */
+  public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    for (SparkAppHandle.Listener l : listeners) {
+      handle.addListener(l);
+    }
+
+    String appName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
+    if (appName == null) {
+      if (builder.appName != null) {
+        appName = builder.appName;
+      } else if (builder.mainClass != null) {
+        int dot = builder.mainClass.lastIndexOf(".");
+        if (dot >= 0 && dot < builder.mainClass.length() - 1) {
+          appName = builder.mainClass.substring(dot + 1, builder.mainClass.length());
+        } else {
+          appName = builder.mainClass;
+        }
+      } else if (builder.appResource != null) {
+        appName = new File(builder.appResource).getName();
+      } else {
+        appName = String.valueOf(COUNTER.incrementAndGet());
+      }
+    }
+
+    String loggerPrefix = getClass().getPackage().getName();
+    String loggerName = String.format("%s.app.%s", loggerPrefix, appName);
+    ProcessBuilder pb = createBuilder().redirectErrorStream(true);
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
+      String.valueOf(LauncherServer.getServerInstance().getPort()));
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
+    try {
+      handle.setChildProc(pb.start(), loggerName);
+    } catch (IOException ioe) {
+      handle.kill();
+      throw ioe;
+    }
+
+    return handle;
+  }
+
+  private ProcessBuilder createBuilder() {
     List<String> cmd = new ArrayList<String>();
     String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
     cmd.add(join(File.separator, builder.getSparkHome(), "bin", script));
@@ -343,7 +445,7 @@ public class SparkLauncher {
     for (Map.Entry<String, String> e : builder.childEnv.entrySet()) {
       pb.environment().put(e.getKey(), e.getValue());
     }
-    return pb.start();
+    return pb;
   }
 
   private static class ArgumentValidator extends SparkSubmitOptionParser {

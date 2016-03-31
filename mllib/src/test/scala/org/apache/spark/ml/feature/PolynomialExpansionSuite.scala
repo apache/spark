@@ -21,12 +21,14 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 
-class PolynomialExpansionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class PolynomialExpansionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new PolynomialExpansion)
@@ -97,6 +99,14 @@ class PolynomialExpansionSuite extends SparkFunSuite with MLlibTestSparkContext 
       case _ =>
         throw new TestFailedException("Unmatched data types after polynomial expansion", 0)
     }
+  }
+
+  test("read/write") {
+    val t = new PolynomialExpansion()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setDegree(3)
+    testDefaultReadWrite(t)
   }
 }
 

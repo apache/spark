@@ -74,10 +74,8 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   }
 
   /**
-   * :: Experimental ::
    * Approximate operation to return the mean within a timeout.
    */
-  @Experimental
   def meanApprox(
       timeout: Long,
       confidence: Double = 0.95): PartialResult[BoundedDouble] = self.withScope {
@@ -87,10 +85,8 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   }
 
   /**
-   * :: Experimental ::
    * Approximate operation to return the sum within a timeout.
    */
-  @Experimental
   def sumApprox(
       timeout: Long,
       confidence: Double = 0.95): PartialResult[BoundedDouble] = self.withScope {

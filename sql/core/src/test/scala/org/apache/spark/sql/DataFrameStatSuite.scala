@@ -29,7 +29,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
   test("sample with replacement") {
     val n = 100
-    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    val data = sparkContext.parallelize(1 to n, 2).toDF("id")
     checkAnswer(
       data.sample(withReplacement = true, 0.05, seed = 13),
       Seq(5, 10, 52, 73).map(Row(_))
@@ -38,16 +38,16 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
   test("sample without replacement") {
     val n = 100
-    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    val data = sparkContext.parallelize(1 to n, 2).toDF("id")
     checkAnswer(
       data.sample(withReplacement = false, 0.05, seed = 13),
-      Seq(16, 23, 88, 100).map(Row(_))
+      Seq(3, 17, 27, 58, 62).map(Row(_))
     )
   }
 
   test("randomSplit") {
     val n = 600
-    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    val data = sparkContext.parallelize(1 to n, 2).toDF("id")
     for (seed <- 1 to 5) {
       val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
       assert(splits.length == 3, "wrong number of splits")
@@ -60,6 +60,28 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       assert(math.abs(s(1) - 200) < 50) // std = 11.55
       assert(math.abs(s(2) - 300) < 50) // std = 12.25
     }
+  }
+
+  test("randomSplit on reordered partitions") {
+    // This test ensures that randomSplit does not create overlapping splits even when the
+    // underlying dataframe (such as the one below) doesn't guarantee a deterministic ordering of
+    // rows in each partition.
+    val data =
+      sparkContext.parallelize(1 to 600, 2).mapPartitions(scala.util.Random.shuffle(_)).toDF("id")
+    val splits = data.randomSplit(Array[Double](2, 3), seed = 1)
+
+    assert(splits.length == 2, "wrong number of splits")
+
+    // Verify that the splits span the entire dataset
+    assert(splits.flatMap(_.collect()).toSet == data.collect().toSet)
+
+    // Verify that the splits don't overalap
+    assert(splits(0).intersect(splits(1)).collect().isEmpty)
+
+    // Verify that the results are deterministic across multiple runs
+    val firstRun = splits.toSeq.map(_.collect().toSeq)
+    val secondRun = data.randomSplit(Array[Double](2, 3), seed = 1).toSeq.map(_.collect().toSeq)
+    assert(firstRun == secondRun)
   }
 
   test("pearson correlation") {
@@ -164,7 +186,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Frequent Items 2") {
-    val rows = ctx.sparkContext.parallelize(Seq.empty[Int], 4)
+    val rows = sparkContext.parallelize(Seq.empty[Int], 4)
     // this is a regression test, where when merging partitions, we omitted values with higher
     // counts than those that existed in the map when the map was full. This test should also fail
     // if anything like SPARK-9614 is observed once again
@@ -182,10 +204,10 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   }
 
   test("sampleBy") {
-    val df = ctx.range(0, 100).select((col("id") % 3).as("key"))
+    val df = sqlContext.range(0, 100).select((col("id") % 3).as("key"))
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
-      Seq(Row(0, 5), Row(1, 8)))
+      Seq(Row(0, 6), Row(1, 11)))
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io.File
 
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class SecurityManagerSuite extends SparkFunSuite {
 
@@ -125,6 +125,47 @@ class SecurityManagerSuite extends SparkFunSuite {
 
   }
 
+  test("set security with * in acls") {
+    val conf = new SparkConf
+    conf.set("spark.ui.acls.enable", "true")
+    conf.set("spark.admin.acls", "user1,user2")
+    conf.set("spark.ui.view.acls", "*")
+    conf.set("spark.modify.acls", "user4")
+
+    val securityManager = new SecurityManager(conf)
+    assert(securityManager.aclsEnabled() === true)
+
+    // check for viewAcls with *
+    assert(securityManager.checkUIViewPermissions("user1") === true)
+    assert(securityManager.checkUIViewPermissions("user5") === true)
+    assert(securityManager.checkUIViewPermissions("user6") === true)
+    assert(securityManager.checkModifyPermissions("user4") === true)
+    assert(securityManager.checkModifyPermissions("user7") === false)
+    assert(securityManager.checkModifyPermissions("user8") === false)
+
+    // check for modifyAcls with *
+    securityManager.setModifyAcls(Set("user4"), "*")
+    assert(securityManager.checkModifyPermissions("user7") === true)
+    assert(securityManager.checkModifyPermissions("user8") === true)
+
+    securityManager.setAdminAcls("user1,user2")
+    securityManager.setModifyAcls(Set("user1"), "user2")
+    securityManager.setViewAcls(Set("user1"), "user2")
+    assert(securityManager.checkUIViewPermissions("user5") === false)
+    assert(securityManager.checkUIViewPermissions("user6") === false)
+    assert(securityManager.checkModifyPermissions("user7") === false)
+    assert(securityManager.checkModifyPermissions("user8") === false)
+
+    // check for adminAcls with *
+    securityManager.setAdminAcls("user1,*")
+    securityManager.setModifyAcls(Set("user1"), "user2")
+    securityManager.setViewAcls(Set("user1"), "user2")
+    assert(securityManager.checkUIViewPermissions("user5") === true)
+    assert(securityManager.checkUIViewPermissions("user6") === true)
+    assert(securityManager.checkModifyPermissions("user7") === true)
+    assert(securityManager.checkModifyPermissions("user8") === true)
+  }
+
   test("ssl on setup") {
     val conf = SSLSampleConfigs.sparkSSLConfig()
     val expectedAlgorithms = Set(
@@ -180,6 +221,27 @@ class SecurityManagerSuite extends SparkFunSuite {
     assert(securityManager.akkaSSLOptions.enabled === false)
     assert(securityManager.sslSocketFactory.isDefined === false)
     assert(securityManager.hostnameVerifier.isDefined === false)
+  }
+
+  test("missing secret authentication key") {
+    val conf = new SparkConf().set("spark.authenticate", "true")
+    intercept[IllegalArgumentException] {
+      new SecurityManager(conf)
+    }
+  }
+
+  test("secret authentication key") {
+    val key = "very secret key"
+    val conf = new SparkConf()
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
+    assert(key === new SecurityManager(conf).getSecretKey())
+
+    val keyFromEnv = "very secret key from env"
+    val conf2 = new SparkConfWithEnv(Map(SecurityManager.ENV_AUTH_SECRET -> keyFromEnv))
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
+    assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
 }

@@ -75,11 +75,11 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     String[] topic1data = createTopicAndSendData(topic1);
     String[] topic2data = createTopicAndSendData(topic2);
 
-    HashSet<String> sent = new HashSet<String>();
+    Set<String> sent = new HashSet<>();
     sent.addAll(Arrays.asList(topic1data));
     sent.addAll(Arrays.asList(topic2data));
 
-    HashMap<String, String> kafkaParams = new HashMap<String, String>();
+    Map<String, String> kafkaParams = new HashMap<>();
     kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
     kafkaParams.put("auto.offset.reset", "smallest");
 
@@ -95,17 +95,17 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
         // Make sure you can get offset ranges from the rdd
         new Function<JavaPairRDD<String, String>, JavaPairRDD<String, String>>() {
           @Override
-          public JavaPairRDD<String, String> call(JavaPairRDD<String, String> rdd) throws Exception {
+          public JavaPairRDD<String, String> call(JavaPairRDD<String, String> rdd) {
             OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
             offsetRanges.set(offsets);
-            Assert.assertEquals(offsets[0].topic(), topic1);
+            Assert.assertEquals(topic1, offsets[0].topic());
             return rdd;
           }
         }
     ).map(
         new Function<Tuple2<String, String>, String>() {
           @Override
-          public String call(Tuple2<String, String> kv) throws Exception {
+          public String call(Tuple2<String, String> kv) {
             return kv._2();
           }
         }
@@ -119,10 +119,10 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
         StringDecoder.class,
         String.class,
         kafkaParams,
-        topicOffsetToMap(topic2, (long) 0),
+        topicOffsetToMap(topic2, 0L),
         new Function<MessageAndMetadata<String, String>, String>() {
           @Override
-          public String call(MessageAndMetadata<String, String> msgAndMd) throws Exception {
+          public String call(MessageAndMetadata<String, String> msgAndMd) {
             return msgAndMd.message();
           }
         }
@@ -133,7 +133,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     unifiedStream.foreachRDD(
         new Function<JavaRDD<String>, Void>() {
           @Override
-          public Void call(JavaRDD<String> rdd) throws Exception {
+          public Void call(JavaRDD<String> rdd) {
             result.addAll(rdd.collect());
             for (OffsetRange o : offsetRanges.get()) {
               System.out.println(
@@ -155,14 +155,14 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     ssc.stop();
   }
 
-  private HashSet<String> topicToSet(String topic) {
-    HashSet<String> topicSet = new HashSet<String>();
+  private static Set<String> topicToSet(String topic) {
+    Set<String> topicSet = new HashSet<>();
     topicSet.add(topic);
     return topicSet;
   }
 
-  private HashMap<TopicAndPartition, Long> topicOffsetToMap(String topic, Long offsetToStart) {
-    HashMap<TopicAndPartition, Long> topicMap = new HashMap<TopicAndPartition, Long>();
+  private static Map<TopicAndPartition, Long> topicOffsetToMap(String topic, Long offsetToStart) {
+    Map<TopicAndPartition, Long> topicMap = new HashMap<>();
     topicMap.put(new TopicAndPartition(topic, 0), offsetToStart);
     return topicMap;
   }

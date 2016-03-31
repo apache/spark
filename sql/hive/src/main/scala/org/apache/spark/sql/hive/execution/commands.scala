@@ -18,18 +18,18 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
+
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{TableIdentifier, SqlParser}
+import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * Analyzes the given table in the current database to generate statistics, which will be
@@ -70,8 +70,24 @@ case class DropTable(
       case e: Throwable => log.warn(s"${e.getMessage}", e)
     }
     hiveContext.invalidateTable(tableName)
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(Seq(tableName))
+    val tableNameForHive = {
+      // Hive's parser will unquote an identifier (see the rule of QuotedIdentifier in
+      // HiveLexer.g of Hive 1.2.1). For the DROP TABLE command that we pass in Hive, we
+      // will use the quoted form (db.tableName) if the table name starts with a _.
+      // Otherwise, we keep the unquoted form (`db`.`tableName`), which is the same as tableName
+      // passed into this DropTable class. Please note that although QuotedIdentifier rule
+      // allows backticks appearing in an identifier, Hive does not actually allow such
+      // an identifier be a table name. So, we do not check if a table name part has
+      // any backtick or not.
+      //
+      // This change is at here because this patch is just for 1.6 branch and we try to
+      // avoid of affecting normal cases (tables do not use _ as the first character of
+      // their name).
+      val identifier = SqlParser.parseTableIdentifier(tableName)
+      if (identifier.table.startsWith("_")) identifier.quotedString else identifier.unquotedString
+    }
+    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableNameForHive")
+    hiveContext.catalog.unregisterTable(TableIdentifier(tableName))
     Seq.empty[Row]
   }
 }
@@ -86,26 +102,7 @@ case class AddJar(path: String) extends RunnableCommand {
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    val currentClassLoader = Utils.getContextOrSparkClassLoader
-
-    // Add jar to current context
-    val jarURL = new java.io.File(path).toURI.toURL
-    val newClassLoader = new java.net.URLClassLoader(Array(jarURL), currentClassLoader)
-    Thread.currentThread.setContextClassLoader(newClassLoader)
-    // We need to explicitly set the class loader associated with the conf in executionHive's
-    // state because this class loader will be used as the context class loader of the current
-    // thread to execute any Hive command.
-    // We cannot use `org.apache.hadoop.hive.ql.metadata.Hive.get().getConf()` because Hive.get()
-    // returns the value of a thread local variable and its HiveConf may not be the HiveConf
-    // associated with `executionHive.state` (for example, HiveContext is created in one thread
-    // and then add jar is called from another thread).
-    hiveContext.executionHive.state.getConf.setClassLoader(newClassLoader)
-    // Add jar to isolated hive (metadataHive) class loader.
-    hiveContext.runSqlHive(s"ADD JAR $path")
-
-    // Add jar to executors
-    hiveContext.sparkContext.addJar(path)
+    sqlContext.addJar(path)
 
     Seq(Row(0))
   }
@@ -122,7 +119,6 @@ case class AddFile(path: String) extends RunnableCommand {
   }
 }
 
-// TODO: Use TableIdentifier instead of String for tableName (SPARK-10104).
 private[hive]
 case class CreateMetastoreDataSource(
     tableIdent: TableIdentifier,
@@ -150,7 +146,7 @@ case class CreateMetastoreDataSource(
     val tableName = tableIdent.unquotedString
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
-    if (hiveContext.catalog.tableExists(tableIdent.toSeq)) {
+    if (hiveContext.catalog.tableExists(tableIdent)) {
       if (allowExisting) {
         return Seq.empty[Row]
       } else {
@@ -179,7 +175,6 @@ case class CreateMetastoreDataSource(
   }
 }
 
-// TODO: Use TableIdentifier instead of String for tableName (SPARK-10104).
 private[hive]
 case class CreateMetastoreDataSourceAsSelect(
     tableIdent: TableIdentifier,
@@ -217,7 +212,7 @@ case class CreateMetastoreDataSourceAsSelect(
       }
 
     var existingSchema = None: Option[StructType]
-    if (sqlContext.catalog.tableExists(tableIdent.toSeq)) {
+    if (sqlContext.catalog.tableExists(tableIdent)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -234,8 +229,8 @@ case class CreateMetastoreDataSourceAsSelect(
           val resolved = ResolvedDataSource(
             sqlContext, Some(query.schema.asNullable), partitionColumns, provider, optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
-          EliminateSubQueries(sqlContext.catalog.lookupRelation(tableIdent.toSeq)) match {
-            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation) =>
+          EliminateSubQueries(sqlContext.catalog.lookupRelation(tableIdent)) match {
+            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _) =>
               if (l.relation != createdRelation.relation) {
                 val errorDescription =
                   s"Cannot append to table $tableName because the resolved relation does not " +

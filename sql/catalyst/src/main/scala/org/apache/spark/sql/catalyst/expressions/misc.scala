@@ -92,18 +92,18 @@ case class Sha2(left: Expression, right: Expression)
           try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-224");
             md.update($eval1);
-            ${ev.primitive} = UTF8String.fromBytes(md.digest());
+            ${ev.value} = UTF8String.fromBytes(md.digest());
           } catch (java.security.NoSuchAlgorithmException e) {
             ${ev.isNull} = true;
           }
         } else if ($eval2 == 256 || $eval2 == 0) {
-          ${ev.primitive} =
+          ${ev.value} =
             UTF8String.fromString($digestUtils.sha256Hex($eval1));
         } else if ($eval2 == 384) {
-          ${ev.primitive} =
+          ${ev.value} =
             UTF8String.fromString($digestUtils.sha384Hex($eval1));
         } else if ($eval2 == 512) {
-          ${ev.primitive} =
+          ${ev.value} =
             UTF8String.fromString($digestUtils.sha512Hex($eval1));
         } else {
           ${ev.isNull} = true;
@@ -155,7 +155,7 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
       s"""
         $CRC32 checksum = new $CRC32();
         checksum.update($value, 0, $value.length);
-        ${ev.primitive} = checksum.getValue();
+        ${ev.value} = checksum.getValue();
       """
     })
   }

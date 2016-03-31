@@ -39,7 +39,7 @@ import org.apache.spark.streaming.receiver.Receiver
  */
 private[streaming]
 class RawInputDStream[T: ClassTag](
-    @transient ssc_ : StreamingContext,
+    ssc_ : StreamingContext,
     host: String,
     port: Int,
     storageLevel: StorageLevel

@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.rdd.RDD
 
@@ -36,7 +36,6 @@ import org.apache.spark.rdd.RDD
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
 @Since("1.2.0")
-@Experimental
 class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])
   extends Logging with Serializable {
 
@@ -159,7 +158,6 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
 
 }
 
-@Experimental
 object RankingMetrics {
 
   /**

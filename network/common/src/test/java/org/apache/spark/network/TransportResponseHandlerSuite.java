@@ -17,6 +17,9 @@
 
 package org.apache.spark.network;
 
+import java.nio.ByteBuffer;
+
+import io.netty.channel.Channel;
 import io.netty.channel.local.LocalChannel;
 import org.junit.Test;
 
@@ -26,18 +29,23 @@ import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.RpcFailure;
 import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamChunkId;
+import org.apache.spark.network.protocol.StreamFailure;
+import org.apache.spark.network.protocol.StreamResponse;
+import org.apache.spark.network.util.TransportFrameDecoder;
 
 public class TransportResponseHandlerSuite {
   @Test
-  public void handleSuccessfulFetch() {
+  public void handleSuccessfulFetch() throws Exception {
     StreamChunkId streamChunkId = new StreamChunkId(1, 0);
 
     TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
@@ -51,7 +59,7 @@ public class TransportResponseHandlerSuite {
   }
 
   @Test
-  public void handleFailedFetch() {
+  public void handleFailedFetch() throws Exception {
     StreamChunkId streamChunkId = new StreamChunkId(1, 0);
     TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
     ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
@@ -64,7 +72,7 @@ public class TransportResponseHandlerSuite {
   }
 
   @Test
-  public void clearAllOutstandingRequests() {
+  public void clearAllOutstandingRequests() throws Exception {
     TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
     ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
     handler.addFetchRequest(new StreamChunkId(1, 0), callback);
@@ -83,23 +91,24 @@ public class TransportResponseHandlerSuite {
   }
 
   @Test
-  public void handleSuccessfulRPC() {
+  public void handleSuccessfulRPC() throws Exception {
     TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
     handler.addRpcRequest(12345, callback);
     assertEquals(1, handler.numOutstandingRequests());
 
-    handler.handle(new RpcResponse(54321, new byte[7])); // should be ignored
+    // This response should be ignored.
+    handler.handle(new RpcResponse(54321, new NioManagedBuffer(ByteBuffer.allocate(7))));
     assertEquals(1, handler.numOutstandingRequests());
 
-    byte[] arr = new byte[10];
-    handler.handle(new RpcResponse(12345, arr));
-    verify(callback, times(1)).onSuccess(eq(arr));
+    ByteBuffer resp = ByteBuffer.allocate(10);
+    handler.handle(new RpcResponse(12345, new NioManagedBuffer(resp)));
+    verify(callback, times(1)).onSuccess(eq(ByteBuffer.allocate(10)));
     assertEquals(0, handler.numOutstandingRequests());
   }
 
   @Test
-  public void handleFailedRPC() {
+  public void handleFailedRPC() throws Exception {
     TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
     handler.addRpcRequest(12345, callback);
@@ -110,6 +119,28 @@ public class TransportResponseHandlerSuite {
 
     handler.handle(new RpcFailure(12345, "oh no"));
     verify(callback, times(1)).onFailure((Throwable) any());
+    assertEquals(0, handler.numOutstandingRequests());
+  }
+
+  @Test
+  public void testActiveStreams() throws Exception {
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamResponse response = new StreamResponse("stream", 1234L, null);
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback(cb);
+    assertEquals(1, handler.numOutstandingRequests());
+    handler.handle(response);
+    assertEquals(1, handler.numOutstandingRequests());
+    handler.deactivateStream();
+    assertEquals(0, handler.numOutstandingRequests());
+
+    StreamFailure failure = new StreamFailure("stream", "uh-oh");
+    handler.addStreamCallback(cb);
+    assertEquals(1, handler.numOutstandingRequests());
+    handler.handle(failure);
     assertEquals(0, handler.numOutstandingRequests());
   }
 }
