@@ -72,7 +72,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
       case stage: MLWritable => // good
       case other =>
         throw new UnsupportedOperationException("OneVsRest write will fail " +
-          s" because it contains $name which does not implement Writable." +
+          s" because it contains $name which does not implement MLWritable." +
           s" Non-Writable $name: ${other.uid} of type ${other.getClass}")
     }
 
@@ -90,7 +90,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
       sc: SparkContext,
       extraMetadata: Option[JObject] = None): Unit = {
 
-    val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
+    val params = instance.extractParamMap().toSeq
     val jsonParams = render(params
       .filter { case ParamPair(p, v) => p.name != "classifier" }
       .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
@@ -98,7 +98,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 
-    val classifierPath = new Path(path, "metadata_classifier").toString
+    val classifierPath = new Path(path, "classifier").toString
     instance.getClassifier.asInstanceOf[MLWritable].save(classifierPath)
   }
 
@@ -108,7 +108,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
       expectedClassName: String): (DefaultParamsReader.Metadata, ClassifierType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-    val classifierPath = new Path(path, "metadata_classifier").toString
+    val classifierPath = new Path(path, "classifier").toString
     val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](classifierPath, sc)
     (metadata, estimator)
   }
@@ -131,7 +131,7 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
 @Experimental
 final class OneVsRestModel private[ml] (
     @Since("1.4.0") override val uid: String,
-    @Since("1.4.0") val labelMetadata: Metadata,
+    private[ml] val labelMetadata: Metadata,
     @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams with MLWritable {
 

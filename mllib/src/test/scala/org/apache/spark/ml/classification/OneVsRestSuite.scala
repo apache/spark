@@ -194,15 +194,18 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       assert(model.getLabelCol === model2.getLabelCol)
       assert(model.getPredictionCol === model2.getPredictionCol)
 
-    model2.getClassifier match {
-      case lr2: LogisticRegression =>
-        assert(model.getClassifier.asInstanceOf[LogisticRegression].uid === lr2.uid)
-        assert(model.getClassifier.asInstanceOf[LogisticRegression].getMaxIter === lr2.getMaxIter)
-        assert(model.getClassifier.asInstanceOf[LogisticRegression].getRegParam === lr2.getRegParam)
-      case other =>
-        throw new AssertionError(s"Loaded OneVsRestModel expected classifier of type" +
-          s" LogisticRegression but found ${other.getClass.getName}")
-    }
+      val classifier = model.getClassifier.asInstanceOf[LogisticRegression]
+
+      model2.getClassifier match {
+        case lr2: LogisticRegression =>
+          assert(classifier.uid === lr2.uid)
+          assert(classifier.getMaxIter === lr2.getMaxIter)
+          assert(classifier.getRegParam === lr2.getRegParam)
+        case other =>
+          throw new AssertionError(s"Loaded OneVsRestModel expected classifier of type" +
+            s" LogisticRegression but found ${other.getClass.getName}")
+      }
+
       assert(model.labelMetadata === model2.labelMetadata)
       model.models.zip(model2.models).foreach {
         case (lrModel1: LogisticRegressionModel, lrModel2: LogisticRegressionModel) =>
@@ -215,25 +218,9 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       }
     }
 
-    val labelIndexer = new StringIndexer()
-      .setInputCol("label")
-      .setOutputCol("indexed")
-
-    val indexedDataset = labelIndexer
-      .fit(dataset)
-      .transform(dataset)
-      .drop("label")
-      .withColumnRenamed("features", "f")
-
     val lr = new LogisticRegression().setMaxIter(10).setRegParam(0.01)
-
-    val ova = new OneVsRest()
-      .setClassifier(lr)
-      .setLabelCol(labelIndexer.getOutputCol)
-      .setFeaturesCol("f")
-      .setPredictionCol("p")
-
-    val ovaModel = ova.fit(indexedDataset)
+    val ova = new OneVsRest().setClassifier(lr)
+    val ovaModel = ova.fit(dataset)
     val newOvaModel = testDefaultReadWrite(ovaModel, testParams = false)
     checkModelData(ovaModel, newOvaModel)
   }
