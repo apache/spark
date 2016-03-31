@@ -417,6 +417,11 @@ object SQLConf {
     .longConf
     .createWithDefault(128 * 1024 * 1024) // parquet.block.size
 
+  val FILES_MAX_NUM_IN_PARTITION = SQLConfigBuilder("spark.sql.files.maxNumInPartition")
+    .doc("The maximum number of files to pack into a single partition when reading files.")
+    .longConf
+    .createWithDefault(32)
+
   val EXCHANGE_REUSE_ENABLED = SQLConfigBuilder("spark.sql.exchange.reuse")
     .internal()
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
@@ -476,6 +481,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
+
+  def filesMaxNumInPartition: Long = getConf(FILES_MAX_NUM_IN_PARTITION)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
