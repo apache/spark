@@ -44,13 +44,13 @@ object PatternMatchedDStream {
   }
 }
 
-case class WindowMetric(first: Any, prev: Any) {}
+case class WindowState(first: Any, prev: Any) {}
 
 private[streaming]
 class PatternMatchedDStream[T: ClassTag](
     parent: DStream[T],
     pattern: scala.util.matching.Regex,
-    predicates: Map[String, (T, WindowMetric) => Boolean],
+    predicates: Map[String, (T, WindowState) => Boolean],
     _windowDuration: Duration,
     _slideDuration: Duration
     ) extends DStream[List[T]](parent.ssc) {
@@ -216,7 +216,7 @@ class PatternMatchedDStream[T: ClassTag](
               }
             }
           }
-          isMatch = predicate._2(x._2._1, WindowMetric(first._2._1, x._2._2.getOrElse(prev)))
+          isMatch = predicate._2(x._2._1, WindowState(first._2._1, x._2._2.getOrElse(prev)))
           if (isMatch) {
             matchName = predicate._1
           }

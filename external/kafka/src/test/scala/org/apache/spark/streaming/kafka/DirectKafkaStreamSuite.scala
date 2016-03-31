@@ -36,7 +36,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
-import org.apache.spark.streaming.dstream.{WindowMetric, DStream}
+import org.apache.spark.streaming.dstream.{WindowState, DStream}
 import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
@@ -554,21 +554,21 @@ object DirectKafkaWordCount {
     })
 
     // define rise, drop & deep predicates
-    def rise(in: Tick, ew: WindowMetric): Boolean = {
+    def rise(in: Tick, ew: WindowState): Boolean = {
       in.price > ew.first.asInstanceOf[Tick].price  &&
         in.price >= ew.prev.asInstanceOf[Tick].price
     }
-    def drop(in: Tick, ew: WindowMetric): Boolean = {
+    def drop(in: Tick, ew: WindowState): Boolean = {
       in.price >= ew.first.asInstanceOf[Tick].price  &&
         in.price < ew.prev.asInstanceOf[Tick].price
     }
-    def deep(in: Tick, ew: WindowMetric): Boolean = {
+    def deep(in: Tick, ew: WindowState): Boolean = {
       in.price < ew.first.asInstanceOf[Tick].price &&
         in.price < ew.prev.asInstanceOf[Tick].price
     }
 
     // map the predicates to their state names
-    val predicateMapping: Map[String, (Tick, WindowMetric) => Boolean] =
+    val predicateMapping: Map[String, (Tick, WindowState) => Boolean] =
       Map("rise" -> rise, "drop" -> drop, "deep" -> deep)
 
     val matches = ticks.matchPatternByWindow("rise drop [rise ]+ deep".r,

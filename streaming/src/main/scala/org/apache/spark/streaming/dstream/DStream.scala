@@ -868,7 +868,7 @@ abstract class DStream[T: ClassTag] (
     */
   def matchPatternByWindow(
       pattern: scala.util.matching.Regex,
-      predicates: Map[String, (T, WindowMetric) => Boolean],
+      predicates: Map[String, (T, WindowState) => Boolean],
       windowDuration: Duration,
       slideDuration: Duration)
       (implicit ord: Ordering[T] = null)
