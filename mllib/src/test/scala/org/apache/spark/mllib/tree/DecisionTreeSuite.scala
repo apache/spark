@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.tree
 
-import org.apache.spark.ml.tree.impl.DecisionTreeMetadata
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.tree.impl.DecisionTreeMetadata
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
