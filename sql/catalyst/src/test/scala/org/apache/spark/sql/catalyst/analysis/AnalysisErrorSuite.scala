@@ -276,56 +276,56 @@ class AnalysisErrorSuite extends AnalysisTest {
     "slide duration greater than window in time window",
     testRelation2.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "2 second", "0 second").as("window")),
-      s"The slide duration (2) must be less than or equal to the windowDuration (1)." :: Nil
+      s"The slide duration " :: " must be less than or equal to the windowDuration " :: Nil
   )
 
   errorTest(
     "start time greater than slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 minute").as("window")),
-      "The start time (60) must be less than the slideDuration (1)." :: Nil
+      "The start time " :: " must be less than the slideDuration " :: Nil
   )
 
   errorTest(
     "start time equal to slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 second").as("window")),
-      "The start time (1) must be less than the slideDuration (1)." :: Nil
+      "The start time " :: " must be less than the slideDuration " :: Nil
   )
 
   errorTest(
     "negative window duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "-1 second", "1 second", "0 second").as("window")),
-      "The window duration (-1) must be greater than 0." :: Nil
+      "The window duration " :: " must be greater than 0." :: Nil
   )
 
   errorTest(
     "zero window duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "0 second", "1 second", "0 second").as("window")),
-      "The window duration (0) must be greater than 0." :: Nil
+      "The window duration " :: " must be greater than 0." :: Nil
   )
 
   errorTest(
     "negative slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "-1 second", "0 second").as("window")),
-      "The slide duration (-1) must be greater than 0." :: Nil
+      "The slide duration " :: " must be greater than 0." :: Nil
   )
 
   errorTest(
     "zero slide duration in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
-      "The slide duration (0) must be greater than 0." :: Nil
+      "The slide duration" :: " must be greater than 0." :: Nil
   )
 
   errorTest(
     "negative start time in time window",
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-5 second").as("window")),
-      "The start time (-5) must be greater than or equal to 0." :: Nil
+      "The start time" :: "must be greater than or equal to 0." :: Nil
   )
 
   test("SPARK-6452 regression test") {
