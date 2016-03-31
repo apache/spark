@@ -513,38 +513,22 @@ class SparkSqlAstBuilder extends AstBuilder {
    * For example:
    * {{{
    *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
+   *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
    * }}}
    */
   override def visitAddTablePartition(
       ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     // Create partition spec to location mapping.
-    val specsAndLocs = ctx.partitionSpecLocation.asScala.map {
-      splCtx =>
-        val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
-        val location = Option(splCtx.locationSpec).map(visitLocationSpec)
-        spec -> location
-    }
-    AlterTableAddPartition(
-      visitTableIdentifier(ctx.tableIdentifier),
-      specsAndLocs,
-      ctx.EXISTS != null)(
-      command(ctx))
-  }
-
-  /**
-   * Create an [[AlterTableAddPartition]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
-   * }}}
-   */
-  override def visitAddViewPartition(
-      ctx: AddViewPartitionContext): LogicalPlan = withOrigin(ctx) {
-    // Create partition spec to location mapping.
-    // Different from ALTER TABLE ADD PARTITION, location is not allowed here.
-    val specsAndLocs = ctx.partitionSpec.asScala.map {
-      visitNonOptionalPartitionSpec(_) -> None
+    val specsAndLocs = if (ctx.partitionSpecLocation.isEmpty) {
+      // Alter View: the location clauses are not allowed.
+      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec(_) -> None)
+    } else {
+      ctx.partitionSpecLocation.asScala.map {
+        splCtx =>
+          val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
+          val location = Option(splCtx.locationSpec).map(visitLocationSpec)
+          spec -> location
+      }
     }
     AlterTableAddPartition(
       visitTableIdentifier(ctx.tableIdentifier),

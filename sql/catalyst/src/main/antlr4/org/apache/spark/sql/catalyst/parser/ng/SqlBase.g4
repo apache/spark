@@ -76,7 +76,7 @@ statement
     | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
     | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
-        partitionSpec+                                                 #addViewPartition
+        partitionSpec+                                                 #addTablePartition
     | ALTER TABLE tableIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER TABLE from=tableIdentifier
