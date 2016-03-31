@@ -139,7 +139,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
         codegen = options.exists(_.CODEGEN != null))
     } else {
-      ExplainCommand(OneRowRelation, codegen = options.exists(_.CODEGEN != null))
+      ExplainCommand(OneRowRelation)
     }
   }
 

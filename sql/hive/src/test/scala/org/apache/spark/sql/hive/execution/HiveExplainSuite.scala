@@ -106,7 +106,11 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkExistence(sql("EXPLAIN CODEGEN SELECT 1"), true,
       "== Physical Plan ==",
       "WholeStageCodegen",
-      "Generated code:")
+      "Generated code:",
+      "/* 001 */ public Object generate(Object[] references) {",
+      "/* 002 */   return new GeneratedIterator(references);",
+      "/* 003 */ }"
+    )
 
     checkExistence(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"), true,
       "== Parsed Logical Plan ==",
@@ -114,6 +118,10 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
       "WholeStageCodegen",
-      "Generated code:")
+      "Generated code:",
+      "/* 001 */ public Object generate(Object[] references) {",
+      "/* 002 */   return new GeneratedIterator(references);",
+      "/* 003 */ }"
+    )
   }
 }
