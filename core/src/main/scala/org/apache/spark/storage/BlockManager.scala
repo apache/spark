@@ -1264,9 +1264,12 @@ private[spark] class BlockManager(
             "the disk, memory, or external block store")
         }
         blockInfoManager.removeBlock(blockId)
+        val removeBlockStatus = getCurrentBlockStatus(blockId, info)
         if (tellMaster && info.tellMaster) {
-          val status = getCurrentBlockStatus(blockId, info)
-          reportBlockStatus(blockId, info, status)
+          reportBlockStatus(blockId, info, removeBlockStatus)
+        }
+        Option(TaskContext.get()).foreach { c =>
+          c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, removeBlockStatus)))
         }
     }
   }
