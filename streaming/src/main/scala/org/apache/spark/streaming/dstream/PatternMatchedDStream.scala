@@ -145,8 +145,10 @@ class PatternMatchedDStream[T: ClassTag](
         one.split(" ").map(sub => {
           val id = y._2.get(it.start + len)
           list += id.get._2
+          println("matched " + tracker.toString)
           if (tracker.toString.toLong < id.get._1) {
             tracker.setValue(id.get._1)
+            println("set it")
           }
           len += sub.length + 1
         })
@@ -188,8 +190,21 @@ class PatternMatchedDStream[T: ClassTag](
     }
 
     if (!windowRDD.isEmpty()) {
-      val first = windowRDD.first()
-      val taggedRDD = windowRDD.map(x => {
+
+      // we dont want to report old matched patterns in current window if any
+      val tracker = PatternMatchedDStream.getInstance(this.ssc.sparkContext)
+      println("init " + tracker.toString)
+      val shift = if (tracker.toString.toLong > 0L) {
+        val copy = tracker.toString.toLong
+        tracker.setValue(0L)
+        copy
+      } else {
+        0L
+      }
+      val newRDD = windowRDD.filter(x => x._1 > shift)
+
+      val first = newRDD.first()
+      val taggedRDD = newRDD.map(x => {
         var isMatch = false
         var matchName = "NAN"
         for (predicate <- predicatesCopy if !isMatch) {
@@ -204,7 +219,7 @@ class PatternMatchedDStream[T: ClassTag](
               }
             }
           }
-          println("broadcast " + brdcst.value)
+          //println("broadcast " + brdcst.value)
           isMatch = predicate._2(x._2._1, WindowMetric(first._2._1, x._2._2.getOrElse(prev)))
           if (isMatch) {
             matchName = predicate._1
