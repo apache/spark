@@ -236,7 +236,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
           @volatile var query: StreamExecution = null
           try {
             val df = ds.toDF
-            val metadataRoot = Utils.createTempDir("streaming.metadata").getCanonicalPath
+            val metadataRoot =
+              Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
             query = sqlContext
               .streams
               .startQuery(

@@ -202,8 +202,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("read from text files") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
     val filtered = textSource.toDF().filter($"value" contains "keep")
@@ -224,8 +224,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("read from json files") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val textSource = createFileStreamSource("json", src.getCanonicalPath, Some(valueSchema))
     val filtered = textSource.toDF().filter($"value" contains "keep")
@@ -258,8 +258,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("read from json files with inferring schema") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     // Add a file so that we can infer its schema
     stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
@@ -279,8 +279,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("read from parquet files") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val fileSource = createFileStreamSource("parquet", src.getCanonicalPath, Some(valueSchema))
     val filtered = fileSource.toDF().filter($"value" contains "keep")
@@ -301,7 +301,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("file stream source without schema") {
-    val src = Utils.createTempDir("streaming.src")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
 
     // Only "text" doesn't need a schema
     createFileStreamSource("text", src.getCanonicalPath)
@@ -318,8 +318,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("fault tolerance") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
     val filtered = textSource.toDF().filter($"value" contains "keep")
@@ -346,8 +346,8 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQ
   import testImplicits._
 
   test("file source stress test") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
     val ds = textSource.toDS[String]().map(_.toInt + 1)
