@@ -104,7 +104,7 @@ private[spark] class PythonRunner(
     argOffsets: Array[Array[Int]])
   extends Logging {
 
-  require(funcs.length == argOffsets.length, "numArgs should have the same length as funcs")
+  require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
 
   // All the Python functions should have the same exec, version and envvars.
   private val envVars = funcs.head.funcs.head.envVars
