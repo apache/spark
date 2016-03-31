@@ -891,7 +891,10 @@ private[execution] object AggregateProcessor {
     // partition size attribute reference, i.e., `SizeBasedWindowFunction.n`. Here we must collect
     // the singleton instance created on driver side instead of using executor side
     // `SizeBasedWindowFunction.n` to avoid binding failure caused by mismatching expression ID.
-    val partitionSize = windowPartitionSizeAttribute(functions)
+    val partitionSize = {
+      val aggs = functions.flatMap(_.collectFirst { case f: SizeBasedWindowFunction => f })
+      aggs.headOption.map(_.n).getOrElse(SizeBasedWindowFunction.n)
+    }
 
     // Check if there are any SizeBasedWindowFunctions. If there are, we add the partition size to
     // the aggregation buffer. Note that the ordinal of the partition size value will always be 0.
@@ -944,12 +947,6 @@ private[execution] object AggregateProcessor {
       evaluateProjection,
       imperatives.toArray,
       trackPartitionSize)
-  }
-
-  // SPARK-14244: When binding
-  def windowPartitionSizeAttribute(expressions: Array[Expression]): AttributeReference = {
-    val aggs = expressions.flatMap(_.collectFirst { case f: SizeBasedWindowFunction => f })
-    aggs.headOption.map(_.n).getOrElse(SizeBasedWindowFunction.n)
   }
 }
 
