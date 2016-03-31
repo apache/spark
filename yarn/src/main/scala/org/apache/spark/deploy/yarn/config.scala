@@ -101,6 +101,11 @@ package object config {
     .intConf
     .optional
 
+  private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.staging-dir")
+    .doc("Staging directory used while submitting applications.")
+    .stringConf
+    .optional
+
   /* Cluster-mode launcher configuration. */
 
   private[spark] val WAIT_FOR_APP_COMPLETION = ConfigBuilder("spark.yarn.submit.waitAppCompletion")
