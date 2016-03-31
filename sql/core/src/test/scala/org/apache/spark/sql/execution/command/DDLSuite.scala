@@ -160,20 +160,17 @@ class DDLSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14129: alter table - rename") {
-    import testImplicits._
+    val sql1 = """
+      |CREATE TEMPORARY TABLE test1
+      |USING org.apache.spark.sql.sources.DDLScanSource
+      |OPTIONS (From '1', To '10', Table 'Test')
+    """.stripMargin
 
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val df =
-        sparkContext.parallelize(1 to 10).toDF("num")
-      df.write.format("parquet").save(path)
-      // create the temporary table
-      sql(s"CREATE TEMPORARY TABLE test1 USING parquet OPTIONS (path '$path')")
-      assert(sql("SHOW TABLES").collect().count(_ == Row("test1", true)) == 1)
-      // rename the table
-      sql("ALTER TABLE test1 RENAME TO test2")
-      assert(sql("SHOW TABLES").collect().count(_ == Row("test2", true)) == 1)
-    }
+    sql(sql1)
+    checkExistence(sql("SHOW TABLES"), true, "test1" + true)
+    // rename the table
+    sql("ALTER TABLE test1 RENAME TO test2")
+    checkExistence(sql("SHOW TABLES"), true, "test2" + true)
   }
 
   // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext

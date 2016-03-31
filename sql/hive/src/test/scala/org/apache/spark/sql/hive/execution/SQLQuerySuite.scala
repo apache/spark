@@ -1818,10 +1818,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     sql("DROP TABLE test2")
     // create the table
     sql("CREATE TABLE test1 (i INT)")
-    assert(sql("SHOW TABLES").collect().count(_ == Row("test1", false)) == 1)
+    checkExistence(sql("SHOW TABLES"), true, "test1" + false)
     // rename the table
     sql("ALTER TABLE test1 RENAME TO test2")
-    assert(sql("SHOW TABLES").collect().count(_ == Row("test2", false)) == 1)
+    checkExistence(sql("SHOW TABLES"), true, "test2" + false)
     // drop the table
     sql("DROP TABLE test2")
   }
