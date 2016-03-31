@@ -328,6 +328,13 @@ class AnalysisErrorSuite extends AnalysisTest {
       "The start time (-5) must be greater than or equal to 0." :: Nil
   )
 
+  errorTest(
+    "time window longer than a month",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 month", "1 second", "-5 second").as("window")),
+    "The start time (-5) must be greater than or equal to 0." :: Nil
+  )
+
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept

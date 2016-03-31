@@ -1635,29 +1635,27 @@ object TimeWindowing extends Rule[LogicalPlan] {
       // Only support a single window expression for now
       if (windowExpressions.size == 1 &&
           windowExpressions.head.timeColumn.resolved &&
-          windowExpressions.head.timeColumn.dataType == TimestampType &&
           windowExpressions.head.checkInputDataTypes().isSuccess) {
         val window = windowExpressions.head
         val windowAttr = AttributeReference("window", window.dataType)()
 
         val maxNumOverlapping = math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
         val windows = Seq.tabulate(maxNumOverlapping + 1) { i =>
-          val windowId = Ceil((Cast(window.timeColumn, LongType) - window.startTime) /
-              window.slideDuration)
+          val windowId = Ceil((PreciseTimestamp(window.timeColumn) - window.startTime) /
+            window.slideDuration)
           val windowStart = (windowId + i - maxNumOverlapping) *
               window.slideDuration + window.startTime
           val windowEnd = windowStart + window.windowDuration
 
-          // the 1000000 is necessary for properly casting a LongType to a TimestampType
           CreateNamedStruct(
-            Literal(WINDOW_START) :: windowStart * 1000000 ::
-            Literal(WINDOW_END) :: windowEnd * 1000000 :: Nil)
+            Literal(WINDOW_START) :: windowStart ::
+            Literal(WINDOW_END) :: windowEnd :: Nil)
         }
 
         val projections = windows.map(_ +: p.children.head.output)
 
         val filterExpr =
-          window.timeColumn >= windowAttr.getField(WINDOW_START)
+          window.timeColumn >= windowAttr.getField(WINDOW_START) &&
           window.timeColumn < windowAttr.getField(WINDOW_END)
 
         val expandedPlan =
@@ -1676,5 +1674,4 @@ object TimeWindowing extends Rule[LogicalPlan] {
         p // Return unchanged. Analyzer will throw exception later
       }
   }
-
 }

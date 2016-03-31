@@ -17,23 +17,37 @@
 
 package org.apache.spark.sql
 
+import java.util.TimeZone
+
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{TimestampType, LongType, StringType}
 
-class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
+class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   import testImplicits._
 
-  test("tumbling window groupBy statement") {
-    // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC, 2016-03-27 19:39:27 UTC
-    val df = Seq(
-      (1459103974L, 1, "a"),
-      (1459103996L, 2, "a"),
-      (1459103967L, 4, "b")).toDF("time", "value", "id")
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+  }
 
+  override def afterEach(): Unit = {
+    super.beforeEach()
+    TimeZone.setDefault(null)
+  }
+
+  test("tumbling window groupBy statement") {
+    val df = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
     checkAnswer(
       df.groupBy(window($"time", "10 seconds"))
         .agg(count("*").as("counts"))
+        .orderBy($"window.start".asc)
         .select("counts"),
       Seq(Row(1), Row(1), Row(1))
     )
@@ -48,47 +62,61 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.groupBy(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"id")
         .agg(count("*").as("counts"))
+        .orderBy($"window.start".asc)
         .select("counts"),
       Seq(Row(1), Row(1), Row(1)))
   }
 
   test("tumbling window with multi-column projection") {
-    // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC, 2016-03-27 19:39:27 UTC
     val df = Seq(
-      (1459103974L, 1, "a"),
-      (1459103996L, 2, "a"),
-      (1459103967L, 4, "b")).toDF("time", "value", "id")
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+
     checkAnswer(
       df.select(window($"time", "10 seconds"), $"value")
-        .select("value"),
-      Seq(Row(4), Row(1), Row(2))
+        .orderBy($"window.start".asc)
+        .select($"window.start".cast("string"), $"window.end".cast("string"), $"value"),
+      Seq(
+        Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", 4),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1),
+        Row("2016-03-27 19:39:50", "2016-03-27 19:40:00", 2)
+      )
     )
   }
 
-  test("time windowing - sliding window grouping") {
-    // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC, 2016-03-27 19:39:27 UTC
+  test("sliding window grouping") {
     val df = Seq(
-      (1459103974L, 1, "a"),
-      (1459103996L, 2, "a"),
-      (1459103967L, 4, "b")).toDF("time", "value", "id")
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
 
     checkAnswer(
       df.groupBy(window($"time", "10 seconds", "3 seconds", "0 second"))
         .agg(count("*").as("counts"))
-        .select("counts"),
+        .orderBy($"window.start".asc)
+        .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts"),
       // 2016-03-27 19:39:27 UTC -> 4 bins
       // 2016-03-27 19:39:34 UTC -> 3 bins
       // 2016-03-27 19:39:56 UTC -> 3 bins
-      Seq(Row(1), Row(1), Row(1), Row(2), Row(1), Row(1), Row(1), Row(1), Row(1))
+      Seq(
+        Row("2016-03-27 19:39:18", "2016-03-27 19:39:28", 1),
+        Row("2016-03-27 19:39:21", "2016-03-27 19:39:31", 1),
+        Row("2016-03-27 19:39:24", "2016-03-27 19:39:34", 1),
+        Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", 2),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1),
+        Row("2016-03-27 19:39:33", "2016-03-27 19:39:43", 1),
+        Row("2016-03-27 19:39:48", "2016-03-27 19:39:58", 1),
+        Row("2016-03-27 19:39:51", "2016-03-27 19:40:01", 1),
+        Row("2016-03-27 19:39:54", "2016-03-27 19:40:04", 1))
     )
   }
 
-  test("time windowing - sliding window projection") {
-    // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC, 2016-03-27 19:39:27 UTC
+  test("sliding window projection") {
     val df = Seq(
-      (1459103974L, 1, "a"),
-      (1459103996L, 2, "a"),
-      (1459103967L, 4, "b")).toDF("time", "value", "id")
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
 
     checkAnswer(
       df.select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
@@ -101,10 +129,9 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
   }
 
   test("windowing combined with explode expression") {
-    // 2016-03-27 19:39:34 UTC, 2016-03-27 19:39:56 UTC
     val df = Seq(
-      (1459103974L, 1, Seq("a", "b")),
-      (1459103996L, 2, Seq("a", "c", "d"))).toDF("time", "value", "ids")
+      ("2016-03-27 19:39:34", 1, Seq("a", "b")),
+      ("2016-03-27 19:39:56", 2, Seq("a", "c", "d"))).toDF("time", "value", "ids")
 
     checkAnswer(
       df.select(window($"time", "10 seconds"), $"value", explode($"ids"))
@@ -114,7 +141,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("string timestamps") {
+  test("null timestamps") {
     val df = Seq(
       ("2016-03-27 09:00:05", 1),
       ("2016-03-27 09:00:32", 2),
@@ -123,6 +150,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
 
     checkDataset(
       df.select(window($"time", "10 seconds"), $"value")
+        .orderBy($"window.start".asc)
         .select("value")
         .as[Int],
       1, 2) // null columns are dropped
@@ -149,11 +177,16 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
   }
 
   test("negative timestamps") {
-    val df4 = Seq((2L, 1), (12L, 2)).toDF("time", "value")
+    val df4 = Seq(
+      ("1970-01-01 00:00:02", 1),
+      ("1970-01-01 00:00:12", 2)).toDF("time", "value")
     checkAnswer(
       df4.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
-        .orderBy($"window.start".asc).select("value"),
-      Seq(Row(1), Row(2))
+        .orderBy($"window.start".asc)
+        .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+      Seq(
+        Row("1969-12-31 23:59:55", "1970-01-01 00:00:05", 1),
+        Row("1970-01-01 00:00:05", "1970-01-01 00:00:15", 2))
     )
   }
 
@@ -178,6 +211,32 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext {
         .orderBy($"time_window.start".asc)
         .select("value"),
       Seq(Row(1), Row(2))
+    )
+  }
+
+  test("millisecond precision sliding windows") {
+    val df = Seq(
+      ("2016-03-27 09:00:00.41", 3),
+      ("2016-03-27 09:00:00.62", 6),
+      ("2016-03-27 09:00:00.715", 8)).toDF("time", "value")
+    checkAnswer(
+      df.groupBy(window($"time", "200 milliseconds", "40 milliseconds", "0 milliseconds"))
+        .agg(count("*").as("counts"))
+        .orderBy($"window.start".asc)
+        .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"counts"),
+      Seq(
+        Row("2016-03-27 09:00:00.24", "2016-03-27 09:00:00.44", 1),
+        Row("2016-03-27 09:00:00.28", "2016-03-27 09:00:00.48", 1),
+        Row("2016-03-27 09:00:00.32", "2016-03-27 09:00:00.52", 1),
+        Row("2016-03-27 09:00:00.36", "2016-03-27 09:00:00.56", 1),
+        Row("2016-03-27 09:00:00.4", "2016-03-27 09:00:00.6", 1),
+        Row("2016-03-27 09:00:00.44", "2016-03-27 09:00:00.64", 1),
+        Row("2016-03-27 09:00:00.48", "2016-03-27 09:00:00.68", 1),
+        Row("2016-03-27 09:00:00.52", "2016-03-27 09:00:00.72", 2),
+        Row("2016-03-27 09:00:00.56", "2016-03-27 09:00:00.76", 2),
+        Row("2016-03-27 09:00:00.6", "2016-03-27 09:00:00.8", 2),
+        Row("2016-03-27 09:00:00.64", "2016-03-27 09:00:00.84", 1),
+        Row("2016-03-27 09:00:00.68", "2016-03-27 09:00:00.88", 1))
     )
   }
 }

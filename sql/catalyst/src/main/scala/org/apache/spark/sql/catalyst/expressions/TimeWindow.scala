@@ -22,6 +22,7 @@ import org.apache.commons.lang.StringUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.expressions.codegen.{ExprCode, CodegenContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -79,10 +80,10 @@ object TimeWindow {
    * if the user omitted it.
    *
    * @param interval The interval string
-   * @return The interval duration in seconds. SparkSQL casts TimestampType to Long in seconds,
-   *         therefore we use seconds here as well.
+   * @return The interval duration in microseconds. SparkSQL casts TimestampType has microsecond
+   *         precision.
    */
-  private def getIntervalInSeconds(interval: String): Long = {
+  private def getIntervalInMicroSeconds(interval: String): Long = {
     if (StringUtils.isBlank(interval)) {
       throw new IllegalArgumentException(
         "The window duration, slide duration and start time cannot be null or blank.")
@@ -97,7 +98,11 @@ object TimeWindow {
       throw new IllegalArgumentException(
         s"The provided interval ($interval) did not correspond to a valid interval string.")
     }
-    (cal.months * 4 * CalendarInterval.MICROS_PER_WEEK + cal.microseconds) / 1000000
+    if (cal.months > 0) {
+      throw new IllegalArgumentException(
+        s"Intervals greater than a month is not supported ($interval).")
+    }
+    cal.microseconds
   }
 
   def apply(
@@ -106,8 +111,24 @@ object TimeWindow {
       slideDuration: String,
       startTime: String): TimeWindow = {
     TimeWindow(timeColumn,
-      getIntervalInSeconds(windowDuration),
-      getIntervalInSeconds(slideDuration),
-      getIntervalInSeconds(startTime))
+      getIntervalInMicroSeconds(windowDuration),
+      getIntervalInMicroSeconds(slideDuration),
+      getIntervalInMicroSeconds(startTime))
+  }
+}
+
+/**
+ * Expression used internally to convert the TimestampType to Long without losing
+ * precision, i.e. in microseconds. Used in time windowing.
+ */
+case class PreciseTimestamp(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def dataType: DataType = LongType
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval = child.gen(ctx)
+    eval.code +
+      s"""boolean ${ev.isNull} = ${eval.isNull};
+         |${ctx.javaType(dataType)} ${ev.value} = ${eval.value};
+       """.stripMargin
   }
 }
