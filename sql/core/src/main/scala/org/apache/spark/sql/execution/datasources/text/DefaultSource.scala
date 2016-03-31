@@ -129,8 +129,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def buildReader(
       sqlContext: SQLContext,
-      partitionSchema: StructType,
       dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
     val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
