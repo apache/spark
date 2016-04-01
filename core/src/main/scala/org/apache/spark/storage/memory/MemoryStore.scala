@@ -74,10 +74,10 @@ private[spark] class MemoryStore(
     blockInfoManager: BlockInfoManager,
     serializerManager: SerializerManager,
     memoryManager: MemoryManager,
-    blockEvictionHandler: BlockEvictionHandler,
-    blockManager: BlockManager = _)
+    blockEvictionHandler: BlockEvictionHandler)
   extends Logging {
 
+  val blockManager = blockEvictionHandler.asInstanceOf[BlockManager]
   // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
   // acquiring or releasing unroll memory, must be synchronized on `memoryManager`!
 
