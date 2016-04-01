@@ -438,7 +438,7 @@ private[spark] class MemoryStore(
     memoryManager.synchronized {
       var freedMemory = 0L
       val rddToAdd = blockId.flatMap(getRddId)
-      val selectedBlocks = new ArrayBuffer[BlockId]
+      var selectedBlocks = new ArrayBuffer[BlockId]
       def blockIsEvictable(blockId: BlockId): Boolean = {
         rddToAdd.isEmpty || rddToAdd != getRddId(blockId)
       }
@@ -462,9 +462,9 @@ private[spark] class MemoryStore(
 //        }
 //      }
 //      val foo = new FIFOMemoryEntryManager[BlockId, MemoryEntry[_]]
-      (selectedBlocks, freedMemory) = entries.foo(freedMemory, space,
-        (blockId: BlockId) => blockIsEvictable(blockId),
-        (blockId: BlockId) => blockInfoManager.lockForWriting(blockId, true).isDefined)
+      freedMemory = entries.foo(freedMemory, space,
+        (blockId: BlockId) => true,
+        (blockId: BlockId) => true)
 
       def dropBlock[T](blockId: BlockId, entry: MemoryEntry[T]): Unit = {
         val data = entry match {

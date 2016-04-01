@@ -101,7 +101,7 @@ class LRUMemoryEntryManager[K, V <: MemoryEntry[_]] extends MemoryEntryManager[K
 
 
   def foo(freedMemory: Long, space: Long, blockIsEvictable: (K) => Boolean,
-          hasWriteLock: (K) => Boolean): (ArrayBuffer[K], Long) = {
+          hasWriteLock: (K) => Boolean): Long = {
     val selectedBlocks = new ArrayBuffer[K]
     var freed = freedMemory
     entries.synchronized {
@@ -117,6 +117,7 @@ class LRUMemoryEntryManager[K, V <: MemoryEntry[_]] extends MemoryEntryManager[K
         }
       }
     }
-    (selectedBlocks, freed)
+//    (selectedBlocks, freed)
+    freed
   }
 }
