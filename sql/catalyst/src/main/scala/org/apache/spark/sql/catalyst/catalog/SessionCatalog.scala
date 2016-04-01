@@ -537,6 +537,8 @@ class SessionCatalog(
    * Note: This is currently only used for temporary functions.
    */
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    // TODO: if the function is not in function registry. It needs to load the function from
+    // the external catalog and loads resources.
     functionRegistry.lookupFunction(name, children)
   }
 
@@ -557,7 +559,19 @@ class SessionCatalog(
    * Return a temporary function. For testing only.
    */
   private[catalog] def getTempFunction(name: String): Option[FunctionBuilder] = {
+    // TODO: Why do we need this?
     functionRegistry.lookupFunctionBuilder(name)
+  }
+
+  /**
+   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   *
+   * This performs reflection to decide what type of [[Expression]] to return in the builder.
+   * This is useful for creating temporary functions.
+   */
+  def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
+    // TODO: at least support UDAFs here
+    throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
   }
 
 }

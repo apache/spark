@@ -36,14 +36,6 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   }
 
   /**
-   * Internal catalog for managing functions registered by the user.
-   * Note that HiveUDFs will be overridden by functions registered in this context.
-   */
-  override lazy val functionRegistry: FunctionRegistry = {
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive, this)
-  }
-
-  /**
    * Internal catalog for managing table and database states.
    */
   override lazy val catalog = {

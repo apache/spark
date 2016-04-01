@@ -21,18 +21,12 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.hive.{HiveFunctionRegistry, HiveSessionState}
-import org.apache.spark.sql.hive.execution.HiveSqlParser
 
 
 trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
   protected val sqlContext: SQLContext = TestHive
   protected val hiveContext: TestHiveContext = TestHive
-  private val functionRegistry =
-    new HiveFunctionRegistry(
-      FunctionRegistry.builtin.copy(), hiveContext.executionHive, new HiveSessionState(hiveContext))
-  protected val hiveSqlParser = new HiveSqlParser(functionRegistry)
+  protected val hiveSqlParser = hiveContext.sessionState.sqlParser
 
 
   protected override def afterAll(): Unit = {

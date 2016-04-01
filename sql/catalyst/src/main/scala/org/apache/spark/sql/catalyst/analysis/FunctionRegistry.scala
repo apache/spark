@@ -52,17 +52,6 @@ trait FunctionRegistry {
 
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
-
-  /**
-   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
-   *
-   * This performs reflection to decide what type of [[Expression]] to return in the builder.
-   * This is useful for creating temporary functions.
-   */
-  def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
-    // TODO: at least support UDAFs here
-    throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
-  }
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {

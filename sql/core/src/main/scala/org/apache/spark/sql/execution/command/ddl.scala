@@ -197,7 +197,7 @@ case class CreateFunction(
     if (isTemp) {
       val info = new ExpressionInfo(className, functionName)
       val builder =
-        sqlContext.sessionState.functionRegistry.makeFunctionBuilder(functionName, className)
+        sqlContext.sessionState.catalog.makeFunctionBuilder(functionName, className)
       sqlContext.sessionState.catalog.createTempFunction(
         functionName, info, builder, ignoreIfExists = false)
     } else {
