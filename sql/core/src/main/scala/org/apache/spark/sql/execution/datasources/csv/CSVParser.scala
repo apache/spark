@@ -118,9 +118,9 @@ private[sql] class LineCsvReader(params: CSVOptions)
  * @param headers headers for the columns
  */
 private[sql] class BulkCsvReader(
-                                  iter: Iterator[String],
-                                  params: CSVOptions,
-                                  headers: Seq[String])
+    iter: Iterator[String],
+    params: CSVOptions,
+    headers: Seq[String])
   extends CsvReader(params, headers) with Iterator[Array[String]] {
 
   private val reader = new StringIteratorReader(iter)
