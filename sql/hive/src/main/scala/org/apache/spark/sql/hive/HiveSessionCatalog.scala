@@ -62,9 +62,9 @@ class HiveSessionCatalog(
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
 
-  override def getDefaultDBPath(db: String): String = {
-    val defaultPath = context.hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
-    new Path(new Path(defaultPath), db + ".db").toString
+  override def getDatabasePath(dbName: String, path: Option[String] = None): String = {
+    val dbPath = path.getOrElse(context.hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE))
+    new Path(new Path(dbPath), dbName + ".db").toString
   }
 
   // Catalog for handling data source tables. TODO: This really doesn't belong here since it is

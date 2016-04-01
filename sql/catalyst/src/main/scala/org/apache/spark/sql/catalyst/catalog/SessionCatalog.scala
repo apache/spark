@@ -116,8 +116,9 @@ class SessionCatalog(
     currentDb = db
   }
 
-  def getDefaultDBPath(db: String): String = {
-    new Path(new Path(System.getProperty("java.io.tmpdir")), db + ".db").toString
+  def getDatabasePath(dbName: String, path: Option[String]): String = {
+    val dbPath = path.getOrElse(System.getProperty("java.io.tmpdir"))
+    new Path(new Path(dbPath), dbName + ".db").toString
   }
 
   // ----------------------------------------------------------------------------
