@@ -403,7 +403,8 @@ private[sql] class DefaultSource
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
     // There could some be partition columns
-    val returningBatch = sqlContext.conf.wholeStageEnabled && dataSchema.length <= 190
+    val returningBatch = sqlContext.conf.wholeStageEnabled &&
+      dataSchema.length + 10 <= sqlContext.conf.wholeStageMaxNumFields
 
     // Parquet row group size. We will use this value as the value for
     // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value

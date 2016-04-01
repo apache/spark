@@ -178,7 +178,7 @@ private[sql] case class DataSourceScan(
     lazy val conf = SQLContext.getActive().get.conf
     relation match {
       case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] &&
-        conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED) &&
+        conf.parquetVectorizedReaderEnabled &&
         conf.wholeStageEnabled && schema.length <= conf.wholeStageMaxNumFields =>
         true
       case _ =>
