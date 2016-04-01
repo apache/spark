@@ -911,6 +911,57 @@ class BinaryLogisticRegressionSummary private[classification] (
   @transient lazy val recallByThreshold: DataFrame = {
     binaryMetrics.recallByThreshold().toDF("threshold", "recall")
   }
+  /**
+   * Returns a string representation for the fields : [[roc]] , [[pr]]
+   * and [[fMeasureByThreshold]]
+   * //TODO add more fields in toString method
+   */
+  @Since("1.6.0")
+  override def toString: String = {
+    val newLine = sys.props("line.separator")
+
+    def dataFrameToString(dataFrameName: String, dataFrame: DataFrame, sep: String): String = {
+      val dataFrameStringBuilder = new StringBuilder()
+      val rowStringBuilder = new StringBuilder
+
+      // Append data frame name
+      dataFrameStringBuilder.append(dataFrameName + ":")
+      dataFrameStringBuilder.append(newLine)
+      // create header of string representation
+      dataFrameStringBuilder.append(dataFrame.columns.mkString(sep))
+      dataFrameStringBuilder.append(newLine)
+
+      // create data string representation
+      dataFrame.collect().map(row => {
+        rowStringBuilder.clear
+        row.toSeq.map(s => {
+          if (s.isInstanceOf[Double]) {
+            rowStringBuilder.append(f"${s.asInstanceOf[Double]}%1.2f")
+          }
+          else {
+            rowStringBuilder.append(s.toString)
+          }
+
+          rowStringBuilder.append(sep)
+          rowStringBuilder.toString
+        })
+        dataFrameStringBuilder.append(rowStringBuilder.toString.trim)
+        dataFrameStringBuilder.append(newLine)
+      })
+      dataFrameStringBuilder.toString
+    }
+    val summaryStringBuilder = new StringBuilder
+    // TODO Dynamic adjustment for separator based on col width (if needed)
+    val colSep = "\t"
+    summaryStringBuilder.append(dataFrameToString("ROC", roc, colSep))
+    summaryStringBuilder.append(newLine)
+    summaryStringBuilder.append(dataFrameToString("Precision", pr, colSep))
+    summaryStringBuilder.append(newLine)
+    summaryStringBuilder.append(dataFrameToString("F-Measure by threshold", fMeasureByThreshold,
+      colSep))
+    summaryStringBuilder.append(newLine)
+    summaryStringBuilder.toString
+  }
 }
 
 /**
