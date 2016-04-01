@@ -48,7 +48,7 @@ package object debug {
     // scalastyle:on println
   }
 
-  def codegenString(plan : SparkPlan): String = {
+  def codegenString(plan: SparkPlan): String = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegen]()
     plan transform {
       case s: WholeStageCodegen =>

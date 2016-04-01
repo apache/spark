@@ -245,10 +245,14 @@ case class ExplainCommand(
   override def run(sqlContext: SQLContext): Seq[Row] = try {
     // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
     val queryExecution = sqlContext.executePlan(logicalPlan)
-    var outputString = if (extended) queryExecution.toString else queryExecution.simpleString
-    if (codegen) {
-      outputString = codegenString(queryExecution.executedPlan)
-    }
+    val outputString =
+      if (codegen) {
+        codegenString(queryExecution.executedPlan)
+      } else if (extended) {
+        queryExecution.toString
+      } else {
+        queryExecution.simpleString
+      }
     outputString.split("\n").map(Row(_))
   } catch { case cause: TreeNodeException[_] =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
