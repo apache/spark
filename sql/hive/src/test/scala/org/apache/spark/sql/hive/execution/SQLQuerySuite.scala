@@ -212,7 +212,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    // Re-enable this test after we fix SPARK-14335.
+    // TODO: Re-enable this test after we fix SPARK-14335.
     // checkAnswer(sql("SHOW functions `~`"), Row("~"))
     checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
     checkAnswer(sql("SHOW functions `weekofyea.*`"), Row("weekofyear"))
@@ -241,7 +241,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkExistence(sql("describe functioN abcadf"), true,
       "Function: abcadf not found.")
 
-    // Re-enable this test after we fix SPARK-14335.
+    // TODO: Re-enable this test after we fix SPARK-14335.
     // checkExistence(sql("describe functioN  `~`"), true,
     //  "Function: ~",
     //  "Class: org.apache.hadoop.hive.ql.udf.UDFOPBitNot",
