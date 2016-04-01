@@ -2550,6 +2550,143 @@ object functions {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
 
+  /**
+   * Bucketize rows into one or more time windows given a timestamp specifying column. Window
+   * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+   * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+   * the order of months are not supported. The following example takes the average stock price for
+   * a one minute window every 10 seconds starting 5 seconds after the hour:
+   *
+   * {{{
+   *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
+   *   df.groupBy(window($"time", "1 minute", "10 seconds", "5 seconds"), $"stockId")
+   *     .agg(mean("price"))
+   * }}}
+   *
+   * The windows will look like:
+   *
+   * {{{
+   *   09:00:05-09:01:05
+   *   09:00:15-09:01:15
+   *   09:00:25-09:01:25 ...
+   * }}}
+   *
+   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time can be as TimestampType or LongType, however when using LongType,
+   *                   the time must be given in seconds.
+   * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
+   *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
+   *                       valid duration identifiers.
+   * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
+   *                      A new window will be generated every `slideDuration`. Must be less than
+   *                      or equal to the `windowDuration`. Check
+   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration
+   *                      identifiers.
+   * @param startTime The offset with respect to 1970-01-01 00:00:00 UTC with which to start
+   *                  window intervals. For example, in order to have hourly tumbling windows that
+   *                  start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
+   *                  `startTime` as `15 minutes`.
+   *
+   * @group datetime_funcs
+   * @since 2.0.0
+   */
+  @Experimental
+  def window(
+      timeColumn: Column,
+      windowDuration: String,
+      slideDuration: String,
+      startTime: String): Column = {
+    withExpr {
+      TimeWindow(timeColumn.expr, windowDuration, slideDuration, startTime)
+    }.as("window")
+  }
+
+
+  /**
+   * Bucketize rows into one or more time windows given a timestamp specifying column. Window
+   * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+   * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+   * the order of months are not supported. The windows start beginning at 1970-01-01 00:00:00 UTC.
+   * The following example takes the average stock price for a one minute window every 10 seconds:
+   *
+   * {{{
+   *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
+   *   df.groupBy(window($"time", "1 minute", "10 seconds"), $"stockId")
+   *     .agg(mean("price"))
+   * }}}
+   *
+   * The windows will look like:
+   *
+   * {{{
+   *   09:00:00-09:01:00
+   *   09:00:10-09:01:10
+   *   09:00:20-09:01:20 ...
+   * }}}
+   *
+   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time can be as TimestampType or LongType, however when using LongType,
+   *                   the time must be given in seconds.
+   * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
+   *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
+   *                       valid duration identifiers.
+   * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
+   *                      A new window will be generated every `slideDuration`. Must be less than
+   *                      or equal to the `windowDuration`. Check
+   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration.
+   *
+   * @group datetime_funcs
+   * @since 2.0.0
+   */
+  @Experimental
+  def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
+    window(timeColumn, windowDuration, slideDuration, "0 second")
+  }
+
+  /**
+   * Generates tumbling time windows given a timestamp specifying column. Window
+   * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+   * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+   * the order of months are not supported. The windows start beginning at 1970-01-01 00:00:00 UTC.
+   * The following example takes the average stock price for a one minute tumbling window:
+   *
+   * {{{
+   *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
+   *   df.groupBy(window($"time", "1 minute"), $"stockId")
+   *     .agg(mean("price"))
+   * }}}
+   *
+   * The windows will look like:
+   *
+   * {{{
+   *   09:00:00-09:01:00
+   *   09:01:00-09:02:00
+   *   09:02:00-09:03:00 ...
+   * }}}
+   *
+   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time can be as TimestampType or LongType, however when using LongType,
+   *                   the time must be given in seconds.
+   * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
+   *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
+   *                       valid duration identifiers.
+   *
+   * @group datetime_funcs
+   * @since 2.0.0
+   */
+  @Experimental
+  def window(timeColumn: Column, windowDuration: String): Column = {
+    window(timeColumn, windowDuration, windowDuration, "0 second")
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
