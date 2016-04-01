@@ -59,26 +59,6 @@ class FIFOMemoryEntryManager[K, V <: MemoryEntry[_]] extends MemoryEntryManager[
     }
   }
 
-  def foo(freedMemory: Long, space: Long, blockIsEvictable: (K) => Boolean,
-          hasWriteLock: (K, Boolean) => Boolean): (ArrayBuffer[K], Long) = {
-    val selectedBlocks = new ArrayBuffer[K]
-    var freed = freedMemory
-    entries.synchronized {
-      val iterator = entries.entrySet().iterator()
-      while (freedMemory < space && iterator.hasNext) {
-        val pair = iterator.next()
-        val blockId = pair.getKey
-        if (blockIsEvictable(blockId)) {
-          if (hasWriteLock(blockId, false)) {
-            selectedBlocks += blockId
-            freed += pair.getValue.size
-          }
-        }
-      }
-    }
-    (selectedBlocks, freed)
-  }
-
   override def containsEntry(key: K): Boolean = {
     entries.synchronized {
       entries.containsKey(key)
@@ -86,7 +66,7 @@ class FIFOMemoryEntryManager[K, V <: MemoryEntry[_]] extends MemoryEntryManager[
   }
 }
 
-class LRUMemoryEntryManager[K, V] extends MemoryEntryManager[K, V] {
+class LRUMemoryEntryManager[K, V <: MemoryEntry[_]] extends MemoryEntryManager[K, V] {
   val entries = new util.LinkedHashMap[K, V](32, 0.75f, true)
 
   override def getEntry(key: K): V = {
@@ -117,5 +97,26 @@ class LRUMemoryEntryManager[K, V] extends MemoryEntryManager[K, V] {
     entries.synchronized {
       entries.containsKey(key)
     }
+  }
+
+
+  def foo(freedMemory: Long, space: Long, blockIsEvictable: (K) => Boolean,
+          hasWriteLock: (K) => Boolean): (ArrayBuffer[K], Long) = {
+    val selectedBlocks = new ArrayBuffer[K]
+    var freed = freedMemory
+    entries.synchronized {
+      val iterator = entries.entrySet().iterator()
+      while (freedMemory < space && iterator.hasNext) {
+        val pair = iterator.next()
+        val blockId = pair.getKey
+        if (blockIsEvictable(blockId)) {
+          if (hasWriteLock(blockId)) {
+            selectedBlocks += blockId
+            freed += pair.getValue.size
+          }
+        }
+      }
+    }
+    (selectedBlocks, freed)
   }
 }

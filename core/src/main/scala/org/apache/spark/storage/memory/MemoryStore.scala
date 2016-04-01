@@ -461,10 +461,10 @@ private[spark] class MemoryStore(
 //          }
 //        }
 //      }
-      val foo = new FIFOMemoryEntryManager[BlockId, MemoryEntry[_]]
-      (selectedBlocks, freedMemory) = foo.foo(freedMemory, space,
+//      val foo = new FIFOMemoryEntryManager[BlockId, MemoryEntry[_]]
+      (selectedBlocks, freedMemory) = entries.foo(freedMemory, space,
         (blockId: BlockId) => blockIsEvictable(blockId),
-        (blockId: BlockId, bar) => blockInfoManager.lockForWriting(blockId, bar).isDefined)
+        (blockId: BlockId) => blockInfoManager.lockForWriting(blockId, true).isDefined)
 
       def dropBlock[T](blockId: BlockId, entry: MemoryEntry[T]): Unit = {
         val data = entry match {
