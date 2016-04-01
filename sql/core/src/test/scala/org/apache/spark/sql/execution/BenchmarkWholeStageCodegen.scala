@@ -140,7 +140,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     */
   }
 
-  test("broadcast hash join") {
+  ignore("broadcast hash join") {
     val N = 20 << 20
     val M = 1 << 16
     val dim = broadcast(sqlContext.range(M).selectExpr("id as k", "cast(id as string) as v"))
