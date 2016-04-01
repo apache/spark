@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.ProcessingTime
+import org.apache.spark.util.{Clock, SystemClock}
 
 trait TriggerExecutor {
 
@@ -31,35 +32,37 @@ trait TriggerExecutor {
 /**
  * A trigger executor that runs a batch every `intervalMs` milliseconds.
  */
-case class ProcessingTimeExecutor(processingTime: ProcessingTime)
+case class ProcessingTimeExecutor(processingTime: ProcessingTime, clock: Clock = new SystemClock())
   extends TriggerExecutor with Logging {
 
   private val intervalMs = processingTime.intervalMs
 
   override def execute(batchRunner: () => Boolean): Unit = {
     while (true) {
-      val batchStartTimeMs = System.currentTimeMillis()
-      if (!batchRunner()) {
-        return
-      }
+      val batchStartTimeMs = clock.getTimeMillis()
+      val terminated = !batchRunner()
       if (intervalMs > 0) {
-        val batchEndTimeMs = System.currentTimeMillis()
+        val batchEndTimeMs = clock.getTimeMillis()
         val batchElapsedTimeMs = batchEndTimeMs - batchStartTimeMs
         if (batchElapsedTimeMs > intervalMs) {
-          logWarning("Current batch is falling behind. The trigger interval is " +
-            s"${intervalMs} milliseconds, but spent ${batchElapsedTimeMs} milliseconds")
+          notifyBatchFallingBehind(batchElapsedTimeMs)
         }
-        waitUntil(nextBatchTime(batchEndTimeMs))
+        if (terminated) {
+          return
+        }
+        clock.waitTillTime(nextBatchTime(batchEndTimeMs))
+      } else {
+        if (terminated) {
+          return
+        }
       }
     }
   }
 
-  private def waitUntil(time: Long): Unit = {
-    var now = System.currentTimeMillis()
-    while (now < time) {
-      Thread.sleep(time - now)
-      now = System.currentTimeMillis()
-    }
+  /** Called when a batch falls behind. Expose for test only */
+  def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
+    logWarning("Current batch is falling behind. The trigger interval is " +
+      s"${intervalMs} milliseconds, but spent ${realElapsedTimeMs} milliseconds")
   }
 
   /** Return the next multiple of intervalMs */

@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.ProcessingTime
+import org.apache.spark.util.ManualClock
 
 class ProcessingTimeExecutorSuite extends SparkFunSuite {
 
@@ -29,5 +32,47 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite {
     assert(processingTimeExecutor.nextBatchTime(100) === 100)
     assert(processingTimeExecutor.nextBatchTime(101) === 200)
     assert(processingTimeExecutor.nextBatchTime(150) === 200)
+  }
+
+  private def testBatchTermination(intervalMs: Long): Unit = {
+    @volatile var batchCounts = 0
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(intervalMs))
+    processingTimeExecutor.execute(() => {
+      batchCounts += 1
+      // If the batch termination works well, batchCounts should be 3 after `execute`
+      batchCounts < 3
+    })
+    assert(batchCounts === 3)
+  }
+
+  test("batch termination") {
+    testBatchTermination(0)
+    testBatchTermination(10)
+  }
+
+  test("notifyBatchFallingBehind") {
+    val clock = new ManualClock()
+    @volatile var batchFallingBehindCalled = false
+    val latch = new CountDownLatch(1)
+    val t = new Thread() {
+      override def run(): Unit = {
+        val processingTimeExecutor = new ProcessingTimeExecutor(ProcessingTime(100), clock) {
+          override def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
+            batchFallingBehindCalled = true
+          }
+        }
+        processingTimeExecutor.execute(() => {
+          latch.countDown()
+          clock.waitTillTime(200)
+          false
+        })
+      }
+    }
+    t.start()
+    // Wait until the batch is running so that we don't call `advance` too early
+    assert(latch.await(10, TimeUnit.SECONDS), "the batch has not yet started in 10 seconds")
+    clock.advance(200)
+    t.join()
+    assert(batchFallingBehindCalled === true)
   }
 }

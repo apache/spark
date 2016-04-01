@@ -280,8 +280,7 @@ trait StreamTest extends QueryTest with Timeouts {
                   StreamExecution.nextName,
                   metadataRoot,
                   stream,
-                  sink,
-                  ProcessingTime(0L))
+                  sink)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {

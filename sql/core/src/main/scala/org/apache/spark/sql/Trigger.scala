@@ -23,36 +23,57 @@ import scala.concurrent.duration.Duration
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * A interface that indicates how to run a batch.
+ * :: Experimental ::
+ * Used to indicate how often results should be produced by a [[ContinuousQuery]].
  */
+@Experimental
 sealed trait Trigger {}
 
 /**
+ * :: Experimental ::
  * A trigger that runs a query periodically based on the processing time. If `intervalMs` is 0,
  * the query will run as fast as possible.
  *
  * Scala Example:
  * {{{
- *   def.writer.trigger(ProcessingTime(10.seconds))
  *   def.writer.trigger(ProcessingTime("10 seconds"))
+ *
+ *   import scala.concurrent.duration._
+ *   def.writer.trigger(ProcessingTime(10.seconds))
  * }}}
  *
  * Java Example:
- *
  * {{{
- *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
  *   def.writer.trigger(ProcessingTime.create("10 seconds"))
+ *
+ *   import java.util.concurrent.TimeUnit
+ *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
  * }}}
  */
+@Experimental
 case class ProcessingTime(intervalMs: Long) extends Trigger {
   require(intervalMs >= 0, "the interval of trigger should not be negative")
 }
 
+/**
+ * :: Experimental ::
+ * Used to create [[ProcessingTime]] triggers for [[ContinuousQuery]]s.
+ */
+@Experimental
 object ProcessingTime {
 
+  /**
+   * Create a [[ProcessingTime]]. If `intervalMs` is 0, the query will run as fast as possible.
+   *
+   * Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime("10 seconds"))
+   * }}}
+   */
   def apply(interval: String): ProcessingTime = {
     if (StringUtils.isBlank(interval)) {
       throw new IllegalArgumentException(
@@ -72,14 +93,40 @@ object ProcessingTime {
     new ProcessingTime(cal.microseconds / 1000)
   }
 
+  /**
+   * Create a [[ProcessingTime]]. If `intervalMs` is 0, the query will run as fast as possible.
+   *
+   * Example:
+   * {{{
+   *   import scala.concurrent.duration._
+   *   def.writer.trigger(ProcessingTime(10.seconds))
+   * }}}
+   */
   def apply(interval: Duration): ProcessingTime = {
     new ProcessingTime(interval.toMillis)
   }
 
+  /**
+   * Create a [[ProcessingTime]]. If `intervalMs` is 0, the query will run as fast as possible.
+   *
+   * Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime.create("10 seconds"))
+   * }}}
+   */
   def create(interval: String): ProcessingTime = {
     apply(interval)
   }
 
+  /**
+   * Create a [[ProcessingTime]]. If `intervalMs` is 0, the query will run as fast as possible.
+   *
+   * Example:
+   * {{{
+   *   import java.util.concurrent.TimeUnit
+   *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   * }}}
+   */
   def create(interval: Long, unit: TimeUnit): ProcessingTime = {
     new ProcessingTime(unit.toMillis(interval))
   }

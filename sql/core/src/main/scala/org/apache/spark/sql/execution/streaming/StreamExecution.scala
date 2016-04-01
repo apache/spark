@@ -78,7 +78,6 @@ class StreamExecution(
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t)
-    case t => throw new IllegalArgumentException(s"${t.getClass} is not supported")
   }
 
   /** Defines the internal state of execution */

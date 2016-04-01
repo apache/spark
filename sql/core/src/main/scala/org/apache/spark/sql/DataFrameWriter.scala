@@ -78,11 +78,29 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * :: Experimental ::
    * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will run
    * the query as fast as possible.
    *
+   * Scala Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime("10 seconds"))
+   *
+   *   import scala.concurrent.duration._
+   *   def.writer.trigger(ProcessingTime(10.seconds))
+   * }}}
+   *
+   * Java Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime.create("10 seconds"))
+   *
+   *   import java.util.concurrent.TimeUnit
+   *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   * }}}
+   *
    * @since 2.0.0
    */
+  @Experimental
   def trigger(trigger: Trigger): DataFrameWriter = {
     this.trigger = trigger
     this
