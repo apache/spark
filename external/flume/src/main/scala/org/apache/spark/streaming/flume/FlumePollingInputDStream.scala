@@ -28,12 +28,12 @@ import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.flume.sink._
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running

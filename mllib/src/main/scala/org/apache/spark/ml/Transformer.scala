@@ -19,8 +19,8 @@ package org.apache.spark.ml
 
 import scala.annotation.varargs
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.sql.DataFrame
@@ -115,8 +115,8 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    dataset.withColumn($(outputCol),
-      callUDF(this.createTransformFunc, outputDataType, dataset($(inputCol))))
+    val transformUDF = udf(this.createTransformFunc, outputDataType)
+    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
   override def copy(extra: ParamMap): T = defaultCopy(extra)

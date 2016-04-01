@@ -37,11 +37,12 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     val pca = new PCA(k).fit(dataRDD)
 
     val mat = new RowMatrix(dataRDD)
-    val pc = mat.computePrincipalComponents(k)
+    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
 
     val pca_transform = pca.transform(dataRDD).collect()
     val mat_multiply = mat.multiply(pc).rows.collect()
 
     assert(pca_transform.toSet === mat_multiply.toSet)
+    assert(pca.explainedVariance === explainedVariance)
   }
 }

@@ -27,14 +27,13 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage, Transformer}
 import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
-import org.apache.spark.ml.feature.{VectorIndexer, StringIndexer}
+import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.ml.util.MetadataUtils
-import org.apache.spark.mllib.evaluation.{RegressionMetrics, MulticlassMetrics}
+import org.apache.spark.mllib.evaluation.{MulticlassMetrics, RegressionMetrics}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{SQLContext, DataFrame}
-
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 /**
  * An example runner for decision trees. Run with
@@ -311,8 +310,8 @@ object DecisionTreeExample {
       data: DataFrame,
       labelColName: String): Unit = {
     val fullPredictions = model.transform(data).cache()
-    val predictions = fullPredictions.select("prediction").map(_.getDouble(0))
-    val labels = fullPredictions.select(labelColName).map(_.getDouble(0))
+    val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
+    val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
     // Print number of classes for reference
     val numClasses = MetadataUtils.getNumClasses(fullPredictions.schema(labelColName)) match {
       case Some(n) => n
@@ -336,8 +335,8 @@ object DecisionTreeExample {
       data: DataFrame,
       labelColName: String): Unit = {
     val fullPredictions = model.transform(data).cache()
-    val predictions = fullPredictions.select("prediction").map(_.getDouble(0))
-    val labels = fullPredictions.select(labelColName).map(_.getDouble(0))
+    val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
+    val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
     val RMSE = new RegressionMetrics(predictions.zip(labels)).rootMeanSquaredError
     println(s"  Root mean squared error (RMSE): $RMSE")
   }

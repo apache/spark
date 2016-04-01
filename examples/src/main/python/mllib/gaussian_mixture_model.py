@@ -62,5 +62,9 @@ if __name__ == "__main__":
     for i in range(args.k):
         print(("weight = ", model.weights[i], "mu = ", model.gaussians[i].mu,
                "sigma = ", model.gaussians[i].sigma.toArray()))
+    print("\n")
+    print(("The membership value of each vector to all mixture components (first 100): ",
+           model.predictSoft(data).take(100)))
+    print("\n")
     print(("Cluster labels (first 100): ", model.predict(data).take(100)))
     sc.stop()

@@ -22,7 +22,7 @@ import java.lang.reflect.InvocationTargetException
 import scala.reflect.runtime.universe._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.Row
@@ -36,45 +36,47 @@ import org.apache.spark.sql.types._
  *                  null. Use boxed type or [[Option]] if you wanna do the null-handling yourself.
  * @param dataType  Return type of function.
  * @param children  The input expressions of this UDF.
- * @param inputTypes  The expected input types of this UDF.
+ * @param inputTypes  The expected input types of this UDF, used to perform type coercion. If we do
+ *                    not want to perform coercion, simply use "Nil". Note that it would've been
+ *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
+ *                    type coercion. However, that would require more refactoring of the codebase.
  */
 case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
     inputTypes: Seq[DataType] = Nil)
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with ImplicitCastInputTypes with NonSQLExpression {
 
   override def nullable: Boolean = true
 
-  override def toString: String = s"UDF(${children.mkString(",")})"
+  override def toString: String = s"UDF(${children.mkString(", ")})"
 
   // The dataType used in output expression encoder
   // The return values of UDF will be encoded in a field in an internal row
   def getDataType(): StructType = StructType(StructField("_c0", dataType) :: Nil)
 
   lazy val inputSchema: StructType = {
-      val fields = if (inputTypes == Nil) {
-        // from the deprecated callUDF codepath
-        children.zipWithIndex.map { case (e, i) =>
-          StructField(s"_c$i", e.dataType)
-        }
-      } else {
-        inputTypes.zipWithIndex.map { case (t, i) =>
-          StructField(s"_c$i", t)
-        }
+    val fields = if (inputTypes == Nil) {
+      // from the deprecated callUDF codepath
+      children.zipWithIndex.map { case (e, i) =>
+        StructField(s"_c$i", e.dataType)
       }
-      StructType(fields)
+    } else {
+      inputTypes.zipWithIndex.map { case (t, i) =>
+        StructField(s"_c$i", t)
+      }
     }
+    StructType(fields)
+  }
 
   override def genCode(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode): String = {
-
-    ctx.references += this
-    val scalaUDFTermIdx = ctx.references.size - 1
+      ctx: CodegenContext,
+      ev: ExprCode): String = {
 
     val scalaUDFClassName = classOf[ScalaUDF].getName
+    val scalaUDFObject = ctx.addReferenceObj("scalaUDF", this, scalaUDFClassName)
+ 
     val converterClassName = classOf[Any => Any].getName
     val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
     val expressionClassName = classOf[Expression].getName
@@ -96,14 +98,13 @@ case class ScalaUDF(
     val inputExpressionEncoderTerm = ctx.freshName("inputExpressionEncoder")
     ctx.addMutableState(expressionEncoderClassName, inputExpressionEncoderTerm,
       s"this.$inputExpressionEncoderTerm = ($expressionEncoderClassName)$rowEncoderClassName" +
-        s".apply((($scalaUDFClassName)expressions" +
-          s"[$scalaUDFTermIdx]).inputSchema());")
+        s".apply($scalaUDFObject.inputSchema());")
 
     // Generate code for output encoder
     val outputExpressionEncoderTerm = ctx.freshName("outputExpressionEncoder")
     ctx.addMutableState(expressionEncoderClassName, outputExpressionEncoderTerm,
       s"this.$outputExpressionEncoderTerm = ($expressionEncoderClassName)$rowEncoderClassName" +
-        s".apply((($scalaUDFClassName)expressions[$scalaUDFTermIdx]).getDataType());")
+        s".apply($scalaUDFObject.getDataType());")
 
     val resultTerm = ctx.freshName("result")
 
@@ -112,13 +113,12 @@ case class ScalaUDF(
 
     val funcTerm = ctx.freshName("udf")
     ctx.addMutableState(funcClassName, funcTerm,
-      s"this.$funcTerm = ($funcClassName)((($scalaUDFClassName)expressions" +
-        s"[$scalaUDFTermIdx]).function());")
+      s"this.$funcTerm = ($funcClassName)($scalaUDFObject.function());")
 
     // codegen for children expressions
     val evals = children.map(_.gen(ctx))
     val evalsArgs = evals.map(_.value).mkString(", ")
-    val evalsAsSeq = s"$javaConversionClassName.asScalaIterable" +
+    val evalsAsSeq = s"$javaConversionClassName.collectionAsScalaIterable" +
       s"(java.util.Arrays.asList($evalsArgs)).toList()"
 
     // Encode children expression results to Scala objects
@@ -138,7 +138,7 @@ case class ScalaUDF(
 
     val rowParametersTerm = ctx.freshName("rowParameters")
     val innerRow = s"$rowClass $rowParametersTerm = $rowClassName.apply(" +
-      s"$javaConversionClassName.asScalaIterable" +
+      s"$javaConversionClassName.collectionAsScalaIterable" +
       s"(java.util.Arrays.asList($funcTerm.apply($funcArguments))).toList());"
 
     // Encode Scala objects of UDF return values to Spark SQL internal row
@@ -148,7 +148,7 @@ case class ScalaUDF(
 
     // UDF return values are encoded as the field 0 as StructType in the internal row
     // We extract it back
-    val udfDataType = s"(($scalaUDFClassName)expressions[$scalaUDFTermIdx]).dataType()"
+    val udfDataType = s"$scalaUDFObject.dataType()"
     val callFunc = s"${ctx.boxedType(ctx.javaType(dataType))} $resultTerm = " +
       s"(${ctx.boxedType(ctx.javaType(dataType))}) $internalRowTerm.get(0, $udfDataType);"
 

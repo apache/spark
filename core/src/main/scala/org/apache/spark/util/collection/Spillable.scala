@@ -17,8 +17,9 @@
 
 package org.apache.spark.util.collection
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
-import org.apache.spark.{Logging, SparkEnv}
 
 /**
  * Spills contents of an in-memory collection to disk when the memory threshold

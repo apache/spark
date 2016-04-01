@@ -33,10 +33,9 @@ class StorageSuite extends SparkFunSuite {
     assert(status.memUsed === 0L)
     assert(status.memRemaining === 1000L)
     assert(status.diskUsed === 0L)
-    assert(status.offHeapUsed === 0L)
-    status.addBlock(TestBlockId("foo"), BlockStatus(memAndDisk, 10L, 20L, 1L))
-    status.addBlock(TestBlockId("fee"), BlockStatus(memAndDisk, 10L, 20L, 1L))
-    status.addBlock(TestBlockId("faa"), BlockStatus(memAndDisk, 10L, 20L, 1L))
+    status.addBlock(TestBlockId("foo"), BlockStatus(memAndDisk, 10L, 20L))
+    status.addBlock(TestBlockId("fee"), BlockStatus(memAndDisk, 10L, 20L))
+    status.addBlock(TestBlockId("faa"), BlockStatus(memAndDisk, 10L, 20L))
     status
   }
 
@@ -50,18 +49,16 @@ class StorageSuite extends SparkFunSuite {
     assert(status.memUsed === 30L)
     assert(status.memRemaining === 970L)
     assert(status.diskUsed === 60L)
-    assert(status.offHeapUsed === 3L)
   }
 
   test("storage status update non-RDD blocks") {
     val status = storageStatus1
-    status.updateBlock(TestBlockId("foo"), BlockStatus(memAndDisk, 50L, 100L, 1L))
-    status.updateBlock(TestBlockId("fee"), BlockStatus(memAndDisk, 100L, 20L, 0L))
+    status.updateBlock(TestBlockId("foo"), BlockStatus(memAndDisk, 50L, 100L))
+    status.updateBlock(TestBlockId("fee"), BlockStatus(memAndDisk, 100L, 20L))
     assert(status.blocks.size === 3)
     assert(status.memUsed === 160L)
     assert(status.memRemaining === 840L)
     assert(status.diskUsed === 140L)
-    assert(status.offHeapUsed === 2L)
   }
 
   test("storage status remove non-RDD blocks") {
@@ -73,20 +70,19 @@ class StorageSuite extends SparkFunSuite {
     assert(status.memUsed === 10L)
     assert(status.memRemaining === 990L)
     assert(status.diskUsed === 20L)
-    assert(status.offHeapUsed === 1L)
   }
 
   // For testing add, update, remove, get, and contains etc. for both RDD and non-RDD blocks
   private def storageStatus2: StorageStatus = {
     val status = new StorageStatus(BlockManagerId("big", "dog", 1), 1000L)
     assert(status.rddBlocks.isEmpty)
-    status.addBlock(TestBlockId("dan"), BlockStatus(memAndDisk, 10L, 20L, 0L))
-    status.addBlock(TestBlockId("man"), BlockStatus(memAndDisk, 10L, 20L, 0L))
-    status.addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 10L, 20L, 1L))
-    status.addBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 100L, 200L, 1L))
-    status.addBlock(RDDBlockId(2, 2), BlockStatus(memAndDisk, 10L, 20L, 1L))
-    status.addBlock(RDDBlockId(2, 3), BlockStatus(memAndDisk, 10L, 20L, 0L))
-    status.addBlock(RDDBlockId(2, 4), BlockStatus(memAndDisk, 10L, 40L, 0L))
+    status.addBlock(TestBlockId("dan"), BlockStatus(memAndDisk, 10L, 20L))
+    status.addBlock(TestBlockId("man"), BlockStatus(memAndDisk, 10L, 20L))
+    status.addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 10L, 20L))
+    status.addBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 100L, 200L))
+    status.addBlock(RDDBlockId(2, 2), BlockStatus(memAndDisk, 10L, 20L))
+    status.addBlock(RDDBlockId(2, 3), BlockStatus(memAndDisk, 10L, 20L))
+    status.addBlock(RDDBlockId(2, 4), BlockStatus(memAndDisk, 10L, 40L))
     status
   }
 
@@ -113,9 +109,6 @@ class StorageSuite extends SparkFunSuite {
     assert(status.diskUsedByRdd(0) === 20L)
     assert(status.diskUsedByRdd(1) === 200L)
     assert(status.diskUsedByRdd(2) === 80L)
-    assert(status.offHeapUsedByRdd(0) === 1L)
-    assert(status.offHeapUsedByRdd(1) === 1L)
-    assert(status.offHeapUsedByRdd(2) === 1L)
     assert(status.rddStorageLevel(0) === Some(memAndDisk))
     assert(status.rddStorageLevel(1) === Some(memAndDisk))
     assert(status.rddStorageLevel(2) === Some(memAndDisk))
@@ -124,15 +117,14 @@ class StorageSuite extends SparkFunSuite {
     assert(status.rddBlocksById(10).isEmpty)
     assert(status.memUsedByRdd(10) === 0L)
     assert(status.diskUsedByRdd(10) === 0L)
-    assert(status.offHeapUsedByRdd(10) === 0L)
     assert(status.rddStorageLevel(10) === None)
   }
 
   test("storage status update RDD blocks") {
     val status = storageStatus2
-    status.updateBlock(TestBlockId("dan"), BlockStatus(memAndDisk, 5000L, 0L, 0L))
-    status.updateBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 0L, 0L, 0L))
-    status.updateBlock(RDDBlockId(2, 2), BlockStatus(memAndDisk, 0L, 1000L, 0L))
+    status.updateBlock(TestBlockId("dan"), BlockStatus(memAndDisk, 5000L, 0L))
+    status.updateBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 0L, 0L))
+    status.updateBlock(RDDBlockId(2, 2), BlockStatus(memAndDisk, 0L, 1000L))
     assert(status.blocks.size === 7)
     assert(status.rddBlocks.size === 5)
     assert(status.rddBlocksById(0).size === 1)
@@ -144,9 +136,6 @@ class StorageSuite extends SparkFunSuite {
     assert(status.diskUsedByRdd(0) === 0L)
     assert(status.diskUsedByRdd(1) === 200L)
     assert(status.diskUsedByRdd(2) === 1060L)
-    assert(status.offHeapUsedByRdd(0) === 0L)
-    assert(status.offHeapUsedByRdd(1) === 1L)
-    assert(status.offHeapUsedByRdd(2) === 0L)
   }
 
   test("storage status remove RDD blocks") {
@@ -170,9 +159,6 @@ class StorageSuite extends SparkFunSuite {
     assert(status.diskUsedByRdd(0) === 20L)
     assert(status.diskUsedByRdd(1) === 0L)
     assert(status.diskUsedByRdd(2) === 20L)
-    assert(status.offHeapUsedByRdd(0) === 1L)
-    assert(status.offHeapUsedByRdd(1) === 0L)
-    assert(status.offHeapUsedByRdd(2) === 0L)
   }
 
   test("storage status containsBlock") {
@@ -209,17 +195,17 @@ class StorageSuite extends SparkFunSuite {
     val status = storageStatus2
     assert(status.blocks.size === status.numBlocks)
     assert(status.rddBlocks.size === status.numRddBlocks)
-    status.addBlock(TestBlockId("Foo"), BlockStatus(memAndDisk, 0L, 0L, 100L))
-    status.addBlock(RDDBlockId(4, 4), BlockStatus(memAndDisk, 0L, 0L, 100L))
-    status.addBlock(RDDBlockId(4, 8), BlockStatus(memAndDisk, 0L, 0L, 100L))
+    status.addBlock(TestBlockId("Foo"), BlockStatus(memAndDisk, 0L, 0L))
+    status.addBlock(RDDBlockId(4, 4), BlockStatus(memAndDisk, 0L, 0L))
+    status.addBlock(RDDBlockId(4, 8), BlockStatus(memAndDisk, 0L, 0L))
     assert(status.blocks.size === status.numBlocks)
     assert(status.rddBlocks.size === status.numRddBlocks)
     assert(status.rddBlocksById(4).size === status.numRddBlocksById(4))
     assert(status.rddBlocksById(10).size === status.numRddBlocksById(10))
-    status.updateBlock(TestBlockId("Foo"), BlockStatus(memAndDisk, 0L, 10L, 400L))
-    status.updateBlock(RDDBlockId(4, 0), BlockStatus(memAndDisk, 0L, 0L, 100L))
-    status.updateBlock(RDDBlockId(4, 8), BlockStatus(memAndDisk, 0L, 0L, 100L))
-    status.updateBlock(RDDBlockId(10, 10), BlockStatus(memAndDisk, 0L, 0L, 100L))
+    status.updateBlock(TestBlockId("Foo"), BlockStatus(memAndDisk, 0L, 10L))
+    status.updateBlock(RDDBlockId(4, 0), BlockStatus(memAndDisk, 0L, 0L))
+    status.updateBlock(RDDBlockId(4, 8), BlockStatus(memAndDisk, 0L, 0L))
+    status.updateBlock(RDDBlockId(10, 10), BlockStatus(memAndDisk, 0L, 0L))
     assert(status.blocks.size === status.numBlocks)
     assert(status.rddBlocks.size === status.numRddBlocks)
     assert(status.rddBlocksById(4).size === status.numRddBlocksById(4))
@@ -244,29 +230,24 @@ class StorageSuite extends SparkFunSuite {
     val status = storageStatus2
     def actualMemUsed: Long = status.blocks.values.map(_.memSize).sum
     def actualDiskUsed: Long = status.blocks.values.map(_.diskSize).sum
-    def actualOffHeapUsed: Long = status.blocks.values.map(_.externalBlockStoreSize).sum
     assert(status.memUsed === actualMemUsed)
     assert(status.diskUsed === actualDiskUsed)
-    assert(status.offHeapUsed === actualOffHeapUsed)
-    status.addBlock(TestBlockId("fire"), BlockStatus(memAndDisk, 4000L, 5000L, 6000L))
-    status.addBlock(TestBlockId("wire"), BlockStatus(memAndDisk, 400L, 500L, 600L))
-    status.addBlock(RDDBlockId(25, 25), BlockStatus(memAndDisk, 40L, 50L, 60L))
+    status.addBlock(TestBlockId("fire"), BlockStatus(memAndDisk, 4000L, 5000L))
+    status.addBlock(TestBlockId("wire"), BlockStatus(memAndDisk, 400L, 500L))
+    status.addBlock(RDDBlockId(25, 25), BlockStatus(memAndDisk, 40L, 50L))
     assert(status.memUsed === actualMemUsed)
     assert(status.diskUsed === actualDiskUsed)
-    assert(status.offHeapUsed === actualOffHeapUsed)
-    status.updateBlock(TestBlockId("dan"), BlockStatus(memAndDisk, 4L, 5L, 6L))
-    status.updateBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 4L, 5L, 6L))
-    status.updateBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 4L, 5L, 6L))
+    status.updateBlock(TestBlockId("dan"), BlockStatus(memAndDisk, 4L, 5L))
+    status.updateBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 4L, 5L))
+    status.updateBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 4L, 5L))
     assert(status.memUsed === actualMemUsed)
     assert(status.diskUsed === actualDiskUsed)
-    assert(status.offHeapUsed === actualOffHeapUsed)
     status.removeBlock(TestBlockId("fire"))
     status.removeBlock(TestBlockId("man"))
     status.removeBlock(RDDBlockId(2, 2))
     status.removeBlock(RDDBlockId(2, 3))
     assert(status.memUsed === actualMemUsed)
     assert(status.diskUsed === actualDiskUsed)
-    assert(status.offHeapUsed === actualOffHeapUsed)
   }
 
   // For testing StorageUtils.updateRddInfo and StorageUtils.getRddBlockLocations
@@ -274,14 +255,14 @@ class StorageSuite extends SparkFunSuite {
     val status1 = new StorageStatus(BlockManagerId("big", "dog", 1), 1000L)
     val status2 = new StorageStatus(BlockManagerId("fat", "duck", 2), 2000L)
     val status3 = new StorageStatus(BlockManagerId("fat", "cat", 3), 3000L)
-    status1.addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    status1.addBlock(RDDBlockId(0, 1), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    status2.addBlock(RDDBlockId(0, 2), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    status2.addBlock(RDDBlockId(0, 3), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    status2.addBlock(RDDBlockId(1, 0), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    status2.addBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    status3.addBlock(RDDBlockId(0, 4), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    status3.addBlock(RDDBlockId(1, 2), BlockStatus(memAndDisk, 1L, 2L, 0L))
+    status1.addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 1L, 2L))
+    status1.addBlock(RDDBlockId(0, 1), BlockStatus(memAndDisk, 1L, 2L))
+    status2.addBlock(RDDBlockId(0, 2), BlockStatus(memAndDisk, 1L, 2L))
+    status2.addBlock(RDDBlockId(0, 3), BlockStatus(memAndDisk, 1L, 2L))
+    status2.addBlock(RDDBlockId(1, 0), BlockStatus(memAndDisk, 1L, 2L))
+    status2.addBlock(RDDBlockId(1, 1), BlockStatus(memAndDisk, 1L, 2L))
+    status3.addBlock(RDDBlockId(0, 4), BlockStatus(memAndDisk, 1L, 2L))
+    status3.addBlock(RDDBlockId(1, 2), BlockStatus(memAndDisk, 1L, 2L))
     Seq(status1, status2, status3)
   }
 
@@ -334,9 +315,9 @@ class StorageSuite extends SparkFunSuite {
 
   test("StorageUtils.getRddBlockLocations with multiple locations") {
     val storageStatuses = stockStorageStatuses
-    storageStatuses(0).addBlock(RDDBlockId(1, 0), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    storageStatuses(0).addBlock(RDDBlockId(0, 4), BlockStatus(memAndDisk, 1L, 2L, 0L))
-    storageStatuses(2).addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 1L, 2L, 0L))
+    storageStatuses(0).addBlock(RDDBlockId(1, 0), BlockStatus(memAndDisk, 1L, 2L))
+    storageStatuses(0).addBlock(RDDBlockId(0, 4), BlockStatus(memAndDisk, 1L, 2L))
+    storageStatuses(2).addBlock(RDDBlockId(0, 0), BlockStatus(memAndDisk, 1L, 2L))
     val blockLocations0 = StorageUtils.getRddBlockLocations(0, storageStatuses)
     val blockLocations1 = StorageUtils.getRddBlockLocations(1, storageStatuses)
     assert(blockLocations0.size === 5)

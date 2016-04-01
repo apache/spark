@@ -19,8 +19,8 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Connection
 
-import org.apache.spark.sql.types._
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.types._
 
 /**
  * :: DeveloperApi ::

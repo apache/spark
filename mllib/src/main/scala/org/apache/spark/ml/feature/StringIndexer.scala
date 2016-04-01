@@ -82,6 +82,7 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
 
   override def fit(dataset: DataFrame): StringIndexerModel = {
     val counts = dataset.select(col($(inputCol)).cast(StringType))
+      .rdd
       .map(_.getString(0))
       .countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
@@ -149,6 +150,7 @@ class StringIndexerModel (
         "Skip StringIndexerModel.")
       return dataset
     }
+    validateAndTransformSchema(dataset.schema)
 
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
@@ -159,15 +161,14 @@ class StringIndexerModel (
     }
 
     val metadata = NominalAttribute.defaultAttr
-      .withName($(inputCol)).withValues(labels).toMetadata()
+      .withName($(outputCol)).withValues(labels).toMetadata()
     // If we are skipping invalid records, filter them out.
-    val filteredDataset = (getHandleInvalid) match {
-      case "skip" => {
+    val filteredDataset = getHandleInvalid match {
+      case "skip" =>
         val filterer = udf { label: String =>
           labelToIndex.contains(label)
         }
         dataset.where(filterer(dataset($(inputCol))))
-      }
       case _ => dataset
     }
     filteredDataset.select(col("*"),

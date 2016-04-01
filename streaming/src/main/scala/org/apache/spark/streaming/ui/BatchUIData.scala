@@ -33,7 +33,7 @@ private[ui] case class BatchUIData(
     val processingStartTime: Option[Long],
     val processingEndTime: Option[Long],
     val outputOperations: mutable.HashMap[OutputOpId, OutputOperationUIData] = mutable.HashMap(),
-    var outputOpIdSparkJobIdPairs: Seq[OutputOpIdAndSparkJobId] = Seq.empty) {
+    var outputOpIdSparkJobIdPairs: Iterable[OutputOpIdAndSparkJobId] = Seq.empty) {
 
   /**
    * Time taken for the first job of this batch to start processing from the time this batch

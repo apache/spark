@@ -18,7 +18,6 @@
 Binary Classification Metrics Example.
 """
 from __future__ import print_function
-import sys
 from pyspark import SparkContext, SQLContext
 # $example on$
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS

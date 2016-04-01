@@ -21,9 +21,11 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class StringLongClass(a: String, b: Long)
 
@@ -32,89 +34,93 @@ case class StringIntClass(a: String, b: Int)
 case class ComplexClass(a: Long, b: StringLongClass)
 
 class EncoderResolutionSuite extends PlanTest {
+  private val str = UTF8String.fromString("hello")
+
   test("real type doesn't match encoder schema but they are compatible: product") {
     val encoder = ExpressionEncoder[StringLongClass]
-    val cls = classOf[StringLongClass]
 
-    {
-      val attrs = Seq('a.string, 'b.int)
-      val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
-      val expected: Expression = NewInstance(
-        cls,
-        toExternalString('a.string) :: 'b.int.cast(LongType) :: Nil,
-        false,
-        ObjectType(cls))
-      compareExpressions(fromRowExpr, expected)
-    }
+    // int type can be up cast to long type
+    val attrs1 = Seq('a.string, 'b.int)
+    encoder.resolve(attrs1, null).bind(attrs1).fromRow(InternalRow(str, 1))
 
-    {
-      val attrs = Seq('a.int, 'b.long)
-      val fromRowExpr = encoder.resolve(attrs, null).fromRowExpression
-      val expected = NewInstance(
-        cls,
-        toExternalString('a.int.cast(StringType)) :: 'b.long :: Nil,
-        false,
-        ObjectType(cls))
-      compareExpressions(fromRowExpr, expected)
-    }
+    // int type can be up cast to string type
+    val attrs2 = Seq('a.int, 'b.long)
+    encoder.resolve(attrs2, null).bind(attrs2).fromRow(InternalRow(1, 2L))
   }
 
   test("real type doesn't match encoder schema but they are compatible: nested product") {
     val encoder = ExpressionEncoder[ComplexClass]
-    val innerCls = classOf[StringLongClass]
-    val cls = classOf[ComplexClass]
-
-    val structType = new StructType().add("a", IntegerType).add("b", LongType)
-    val attrs = Seq('a.int, 'b.struct(structType))
-    val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
-    val expected: Expression = NewInstance(
-      cls,
-      Seq(
-        'a.int.cast(LongType),
-        If(
-          'b.struct(structType).isNull,
-          Literal.create(null, ObjectType(innerCls)),
-          NewInstance(
-            innerCls,
-            Seq(
-              toExternalString(
-                GetStructField('b.struct(structType), 0, Some("a")).cast(StringType)),
-              GetStructField('b.struct(structType), 1, Some("b"))),
-            false,
-            ObjectType(innerCls))
-        )),
-      false,
-      ObjectType(cls))
-    compareExpressions(fromRowExpr, expected)
+    val attrs = Seq('a.int, 'b.struct('a.int, 'b.long))
+    encoder.resolve(attrs, null).bind(attrs).fromRow(InternalRow(1, InternalRow(2, 3L)))
   }
 
   test("real type doesn't match encoder schema but they are compatible: tupled encoder") {
     val encoder = ExpressionEncoder.tuple(
       ExpressionEncoder[StringLongClass],
       ExpressionEncoder[Long])
-    val cls = classOf[StringLongClass]
-
-    val structType = new StructType().add("a", StringType).add("b", ByteType)
-    val attrs = Seq('a.struct(structType), 'b.int)
-    val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
-    val expected: Expression = NewInstance(
-      classOf[Tuple2[_, _]],
-      Seq(
-        NewInstance(
-          cls,
-          Seq(
-            toExternalString(GetStructField('a.struct(structType), 0, Some("a"))),
-            GetStructField('a.struct(structType), 1, Some("b")).cast(LongType)),
-          false,
-          ObjectType(cls)),
-        'b.int.cast(LongType)),
-      false,
-      ObjectType(classOf[Tuple2[_, _]]))
-    compareExpressions(fromRowExpr, expected)
+    val attrs = Seq('a.struct('a.string, 'b.byte), 'b.int)
+    encoder.resolve(attrs, null).bind(attrs).fromRow(InternalRow(InternalRow(str, 1.toByte), 2))
   }
 
-  private def toExternalString(e: Expression): Expression = {
-    Invoke(e, "toString", ObjectType(classOf[String]), Nil)
+  test("nullability of array type element should not fail analysis") {
+    val encoder = ExpressionEncoder[Seq[Int]]
+    val attrs = 'a.array(IntegerType) :: Nil
+
+    // It should pass analysis
+    val bound = encoder.resolve(attrs, null).bind(attrs)
+
+    // If no null values appear, it should works fine
+    bound.fromRow(InternalRow(new GenericArrayData(Array(1, 2))))
+
+    // If there is null value, it should throw runtime exception
+    val e = intercept[RuntimeException] {
+      bound.fromRow(InternalRow(new GenericArrayData(Array(1, null))))
+    }
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+  }
+
+  test("the real number of fields doesn't match encoder schema: tuple encoder") {
+    val encoder = ExpressionEncoder[(String, Long)]
+
+    {
+      val attrs = Seq('a.string, 'b.long, 'c.int)
+      assert(intercept[AnalysisException](encoder.validate(attrs)).message ==
+        "Try to map struct<a:string,b:bigint,c:int> to Tuple2, " +
+          "but failed as the number of fields does not line up.\n" +
+          " - Input schema: struct<a:string,b:bigint,c:int>\n" +
+          " - Target schema: struct<_1:string,_2:bigint>")
+    }
+
+    {
+      val attrs = Seq('a.string)
+      assert(intercept[AnalysisException](encoder.validate(attrs)).message ==
+        "Try to map struct<a:string> to Tuple2, " +
+          "but failed as the number of fields does not line up.\n" +
+          " - Input schema: struct<a:string>\n" +
+          " - Target schema: struct<_1:string,_2:bigint>")
+    }
+  }
+
+  test("the real number of fields doesn't match encoder schema: nested tuple encoder") {
+    val encoder = ExpressionEncoder[(String, (Long, String))]
+
+    {
+      val attrs = Seq('a.string, 'b.struct('x.long, 'y.string, 'z.int))
+      assert(intercept[AnalysisException](encoder.validate(attrs)).message ==
+        "Try to map struct<x:bigint,y:string,z:int> to Tuple2, " +
+          "but failed as the number of fields does not line up.\n" +
+          " - Input schema: struct<a:string,b:struct<x:bigint,y:string,z:int>>\n" +
+          " - Target schema: struct<_1:string,_2:struct<_1:bigint,_2:string>>")
+    }
+
+    {
+      val attrs = Seq('a.string, 'b.struct('x.long))
+      assert(intercept[AnalysisException](encoder.validate(attrs)).message ==
+        "Try to map struct<x:bigint> to Tuple2, " +
+          "but failed as the number of fields does not line up.\n" +
+          " - Input schema: struct<a:string,b:struct<x:bigint>>\n" +
+          " - Target schema: struct<_1:string,_2:struct<_1:bigint,_2:string>>")
+    }
   }
 
   test("throw exception if real type is not compatible with encoder schema") {
@@ -136,7 +142,7 @@ class EncoderResolutionSuite extends PlanTest {
     }.message
     assert(msg2 ==
       s"""
-         |Cannot up cast `b.b` from decimal(38,18) to bigint as it may truncate
+         |Cannot up cast `b`.`b` from decimal(38,18) to bigint as it may truncate
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.catalyst.encoders.StringLongClass", name: "b")

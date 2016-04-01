@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.{Row, QueryTest}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -44,7 +44,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
     path.delete()
 
     val base = sqlContext.range(100)
-    val df = base.unionAll(base).select($"id", lit(1).as("data"))
+    val df = base.union(base).select($"id", lit(1).as("data"))
     df.write.partitionBy("id").save(path.getCanonicalPath)
 
     checkAnswer(

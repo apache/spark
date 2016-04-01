@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.internal.SQLConf
 
 private[sql] abstract class DataSourceTest extends QueryTest {
 

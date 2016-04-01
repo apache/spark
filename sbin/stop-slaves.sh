@@ -25,9 +25,4 @@ fi
 
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
-# do before the below calls as they exec
-if [ -e "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon ]; then
-  "${SPARK_HOME}/sbin/slaves.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon killAll tachyon.worker.Worker
-fi
-
 "${SPARK_HOME}/sbin/slaves.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin"/stop-slave.sh

@@ -681,6 +681,129 @@ _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
 
 
+_FIXED_DECIMAL = re.compile("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)")
+
+
+_BRACKETS = {'(': ')', '[': ']', '{': '}'}
+
+
+def _parse_basic_datatype_string(s):
+    if s in _all_atomic_types.keys():
+        return _all_atomic_types[s]()
+    elif s == "int":
+        return IntegerType()
+    elif _FIXED_DECIMAL.match(s):
+        m = _FIXED_DECIMAL.match(s)
+        return DecimalType(int(m.group(1)), int(m.group(2)))
+    else:
+        raise ValueError("Could not parse datatype: %s" % s)
+
+
+def _ignore_brackets_split(s, separator):
+    """
+    Splits the given string by given separator, but ignore separators inside brackets pairs, e.g.
+    given "a,b" and separator ",", it will return ["a", "b"], but given "a<b,c>, d", it will return
+    ["a<b,c>", "d"].
+    """
+    parts = []
+    buf = ""
+    level = 0
+    for c in s:
+        if c in _BRACKETS.keys():
+            level += 1
+            buf += c
+        elif c in _BRACKETS.values():
+            if level == 0:
+                raise ValueError("Brackets are not correctly paired: %s" % s)
+            level -= 1
+            buf += c
+        elif c == separator and level > 0:
+            buf += c
+        elif c == separator:
+            parts.append(buf)
+            buf = ""
+        else:
+            buf += c
+
+    if len(buf) == 0:
+        raise ValueError("The %s cannot be the last char: %s" % (separator, s))
+    parts.append(buf)
+    return parts
+
+
+def _parse_struct_fields_string(s):
+    parts = _ignore_brackets_split(s, ",")
+    fields = []
+    for part in parts:
+        name_and_type = _ignore_brackets_split(part, ":")
+        if len(name_and_type) != 2:
+            raise ValueError("The strcut field string format is: 'field_name:field_type', " +
+                             "but got: %s" % part)
+        field_name = name_and_type[0].strip()
+        field_type = _parse_datatype_string(name_and_type[1])
+        fields.append(StructField(field_name, field_type))
+    return StructType(fields)
+
+
+def _parse_datatype_string(s):
+    """
+    Parses the given data type string to a :class:`DataType`. The data type string format equals
+    to `DataType.simpleString`, except that top level struct type can omit the `struct<>` and
+    atomic types use `typeName()` as their format, e.g. use `byte` instead of `tinyint` for
+    ByteType. We can also use `int` as a short name for IntegerType.
+
+    >>> _parse_datatype_string("int ")
+    IntegerType
+    >>> _parse_datatype_string("a: byte, b: decimal(  16 , 8   ) ")
+    StructType(List(StructField(a,ByteType,true),StructField(b,DecimalType(16,8),true)))
+    >>> _parse_datatype_string("a: array< short>")
+    StructType(List(StructField(a,ArrayType(ShortType,true),true)))
+    >>> _parse_datatype_string(" map<string , string > ")
+    MapType(StringType,StringType,true)
+
+    >>> # Error cases
+    >>> _parse_datatype_string("blabla") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _parse_datatype_string("a: int,") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _parse_datatype_string("array<int") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _parse_datatype_string("map<int, boolean>>") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    """
+    s = s.strip()
+    if s.startswith("array<"):
+        if s[-1] != ">":
+            raise ValueError("'>' should be the last char, but got: %s" % s)
+        return ArrayType(_parse_datatype_string(s[6:-1]))
+    elif s.startswith("map<"):
+        if s[-1] != ">":
+            raise ValueError("'>' should be the last char, but got: %s" % s)
+        parts = _ignore_brackets_split(s[4:-1], ",")
+        if len(parts) != 2:
+            raise ValueError("The map type string format is: 'map<key_type,value_type>', " +
+                             "but got: %s" % s)
+        kt = _parse_datatype_string(parts[0])
+        vt = _parse_datatype_string(parts[1])
+        return MapType(kt, vt)
+    elif s.startswith("struct<"):
+        if s[-1] != ">":
+            raise ValueError("'>' should be the last char, but got: %s" % s)
+        return _parse_struct_fields_string(s[7:-1])
+    elif ":" in s:
+        return _parse_struct_fields_string(s)
+    else:
+        return _parse_basic_datatype_string(s)
+
+
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
     >>> import pickle
@@ -728,9 +851,6 @@ def _parse_datatype_json_string(json_string):
     >>> check_datatype(complex_maptype)
     """
     return _parse_datatype_json_value(json.loads(json_string))
-
-
-_FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
 
 
 def _parse_datatype_json_value(json_value):
@@ -940,9 +1060,6 @@ def _create_converter(dataType):
     return convert_struct
 
 
-_BRACKETS = {'(': ')', '[': ']', '{': '}'}
-
-
 def _split_schema_abstract(s):
     """
     split the schema abstract into fields
@@ -1091,10 +1208,13 @@ _acceptable_types = {
 }
 
 
-def _verify_type(obj, dataType):
+def _verify_type(obj, dataType, nullable=True):
     """
-    Verify the type of obj against dataType, raise an exception if
-    they do not match.
+    Verify the type of obj against dataType, raise a TypeError if they do not match.
+
+    Also verify the value of obj against datatype, raise a ValueError if it's not within the allowed
+    range, e.g. using 128 as ByteType will overflow. Note that, Python float is not checked, so it
+    will become infinity when cast to Java float if it overflows.
 
     >>> _verify_type(None, StructType([]))
     >>> _verify_type("", StringType())
@@ -1111,10 +1231,35 @@ def _verify_type(obj, dataType):
     Traceback (most recent call last):
         ...
     ValueError:...
+    >>> # Check if numeric values are within the allowed range.
+    >>> _verify_type(12, ByteType())
+    >>> _verify_type(1234, ByteType()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _verify_type(None, ByteType(), False) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _verify_type([1, None], ArrayType(ShortType(), False)) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _verify_type({None: 1}, MapType(StringType(), IntegerType()))
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> schema = StructType().add("a", IntegerType()).add("b", StringType(), False)
+    >>> _verify_type((1, None), schema) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     """
-    # all objects are nullable
     if obj is None:
-        return
+        if nullable:
+            return
+        else:
+            raise ValueError("This field is not nullable, but got None")
 
     # StringType can work with any types
     if isinstance(dataType, StringType):
@@ -1137,21 +1282,33 @@ def _verify_type(obj, dataType):
         if type(obj) not in _acceptable_types[_type]:
             raise TypeError("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
 
-    if isinstance(dataType, ArrayType):
+    if isinstance(dataType, ByteType):
+        if obj < -128 or obj > 127:
+            raise ValueError("object of ByteType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, ShortType):
+        if obj < -32768 or obj > 32767:
+            raise ValueError("object of ShortType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, IntegerType):
+        if obj < -2147483648 or obj > 2147483647:
+            raise ValueError("object of IntegerType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, ArrayType):
         for i in obj:
-            _verify_type(i, dataType.elementType)
+            _verify_type(i, dataType.elementType, dataType.containsNull)
 
     elif isinstance(dataType, MapType):
         for k, v in obj.items():
-            _verify_type(k, dataType.keyType)
-            _verify_type(v, dataType.valueType)
+            _verify_type(k, dataType.keyType, False)
+            _verify_type(v, dataType.valueType, dataType.valueContainsNull)
 
     elif isinstance(dataType, StructType):
         if len(obj) != len(dataType.fields):
             raise ValueError("Length of object (%d) does not match with "
                              "length of fields (%d)" % (len(obj), len(dataType.fields)))
         for v, f in zip(obj, dataType.fields):
-            _verify_type(v, f.dataType)
+            _verify_type(v, f.dataType, f.nullable)
 
 
 # This is used to unpickle a Row from JVM

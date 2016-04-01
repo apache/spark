@@ -17,9 +17,9 @@
 
 package org.apache.spark
 
-import org.apache.spark.util.NonSerializable
-
 import java.io.{IOException, NotSerializableException, ObjectInputStream}
+
+import org.apache.spark.util.NonSerializable
 
 // Common state shared by FailureSuite-launched tasks. We use a global object
 // for this because any local variables used in the task closures will rightfully

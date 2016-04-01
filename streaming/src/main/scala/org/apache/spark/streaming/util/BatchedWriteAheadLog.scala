@@ -18,8 +18,8 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.{Iterator => JIterator}
+import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -27,7 +27,8 @@ import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
@@ -166,10 +167,12 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       var segment: WriteAheadLogRecordHandle = null
       if (buffer.length > 0) {
         logDebug(s"Batched ${buffer.length} records for Write Ahead Log write")
+        // threads may not be able to add items in order by time
+        val sortedByTime = buffer.sortBy(_.time)
         // We take the latest record for the timestamp. Please refer to the class Javadoc for
         // detailed explanation
-        val time = buffer.last.time
-        segment = wrappedLog.write(aggregate(buffer), time)
+        val time = sortedByTime.last.time
+        segment = wrappedLog.write(aggregate(sortedByTime), time)
       }
       buffer.foreach(_.promise.success(segment))
     } catch {

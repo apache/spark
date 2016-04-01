@@ -139,6 +139,21 @@ private[ml] trait HasProbabilityCol extends Params {
 }
 
 /**
+ * Trait for shared param varianceCol.
+ */
+private[ml] trait HasVarianceCol extends Params {
+
+  /**
+   * Param for Column name for the biased sample variance of prediction.
+   * @group param
+   */
+  final val varianceCol: Param[String] = new Param[String](this, "varianceCol", "Column name for the biased sample variance of prediction")
+
+  /** @group getParam */
+  final def getVarianceCol: String = $(varianceCol)
+}
+
+/**
  * Trait for shared param threshold (default: 0.5).
  */
 private[ml] trait HasThreshold extends Params {
@@ -161,10 +176,10 @@ private[ml] trait HasThreshold extends Params {
 private[ml] trait HasThresholds extends Params {
 
   /**
-   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold..
+   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
    * @group param
    */
-  final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.", (t: Array[Double]) => t.forall(_ >= 0))
+  final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold", (t: Array[Double]) => t.forall(_ >= 0))
 
   /** @group getParam */
   def getThresholds: Array[Double] = $(thresholds)
@@ -255,10 +270,10 @@ private[ml] trait HasFitIntercept extends Params {
 private[ml] trait HasHandleInvalid extends Params {
 
   /**
-   * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later..
+   * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
    * @group param
    */
-  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", ParamValidators.inArray(Array("skip", "error")))
+  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later", ParamValidators.inArray(Array("skip", "error")))
 
   /** @group getParam */
   final def getHandleInvalid: String = $(handleInvalid)
@@ -334,10 +349,10 @@ private[ml] trait HasTol extends Params {
 private[ml] trait HasStepSize extends Params {
 
   /**
-   * Param for Step size to be used for each iteration of optimization..
+   * Param for Step size to be used for each iteration of optimization.
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.")
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization")
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
@@ -349,10 +364,10 @@ private[ml] trait HasStepSize extends Params {
 private[ml] trait HasWeightCol extends Params {
 
   /**
-   * Param for weight column name. If this is not set or empty, we treat all instance weights as 1.0..
+   * Param for weight column name. If this is not set or empty, we treat all instance weights as 1.0.
    * @group param
    */
-  final val weightCol: Param[String] = new Param[String](this, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+  final val weightCol: Param[String] = new Param[String](this, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0")
 
   /** @group getParam */
   final def getWeightCol: String = $(weightCol)
@@ -364,10 +379,10 @@ private[ml] trait HasWeightCol extends Params {
 private[ml] trait HasSolver extends Params {
 
   /**
-   * Param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'..
+   * Param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
    * @group param
    */
-  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.")
+  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'")
 
   setDefault(solver, "auto")
 

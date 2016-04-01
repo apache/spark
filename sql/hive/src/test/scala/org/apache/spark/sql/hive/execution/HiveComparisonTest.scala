@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.util.control.NonFatal
 
@@ -27,8 +28,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
+import org.apache.spark.sql.execution.command.{ExplainCommand, SetCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
+import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable, SQLBuilder}
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -126,8 +128,16 @@ abstract class HiveComparisonTest
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
     val digest = java.security.MessageDigest.getInstance("MD5")
-    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes("utf-8"))
+    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes(StandardCharsets.UTF_8))
     new java.math.BigInteger(1, digest.digest).toString(16)
+  }
+
+  override protected def afterAll(): Unit = {
+    try {
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   protected def prepareAnswer(
@@ -372,14 +382,63 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = new TestHive.QueryExecution(queryString)
-          try { (query, prepareAnswer(query, query.stringResult())) } catch {
+          var query: TestHive.QueryExecution = null
+          try {
+            query = {
+              val originalQuery = new TestHive.QueryExecution(queryString)
+              val containsCommands = originalQuery.analyzed.collectFirst {
+                case _: Command => ()
+                case _: LogicalInsertIntoHiveTable => ()
+              }.nonEmpty
+
+              if (containsCommands) {
+                originalQuery
+              } else {
+                val convertedSQL = try {
+                  new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
+                } catch {
+                  case NonFatal(e) => fail(
+                    s"""Cannot convert the following HiveQL query plan back to SQL query string:
+                        |
+                        |# Original HiveQL query string:
+                        |$queryString
+                        |
+                        |# Resolved query plan:
+                        |${originalQuery.analyzed.treeString}
+                     """.stripMargin, e)
+                }
+
+                try {
+                  val queryExecution = new TestHive.QueryExecution(convertedSQL)
+                  // Trigger the analysis of this converted SQL query.
+                  queryExecution.analyzed
+                  queryExecution
+                } catch {
+                  case NonFatal(e) => fail(
+                    s"""Failed to analyze the converted SQL string:
+                        |
+                        |# Original HiveQL query string:
+                        |$queryString
+                        |
+                        |# Resolved query plan:
+                        |${originalQuery.analyzed.treeString}
+                        |
+                        |# Converted SQL query string:
+                        |$convertedSQL
+                     """.stripMargin, e)
+                }
+              }
+            }
+
+            (query, prepareAnswer(query, query.stringResult()))
+          } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
                   |Failed to execute query using catalyst:
                   |Error: ${e.getMessage}
                   |${stackTraceToString(e)}
+                  |$queryString
                   |$query
                   |== HIVE - ${hive.size} row(s) ==
                   |${hive.mkString("\n")}
@@ -421,6 +480,10 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHive.QueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
+                  // We should take executedPlan instead of sparkPlan, because in following codes we
+                  // will run the collected plans. As we will do extra processing for sparkPlan such
+                  // as adding exchage, collapsing codegen stages, etc., collecing sparkPlan here
+                  // will cause some errors when running these plans later.
                   case (q, e) => e.executedPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)

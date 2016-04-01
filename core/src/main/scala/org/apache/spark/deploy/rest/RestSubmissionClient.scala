@@ -19,19 +19,20 @@ package org.apache.spark.deploy.rest
 
 import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
-import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
-import com.google.common.base.Charsets
 
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SPARK_VERSION => sparkVersion, SparkConf}
 
 /**
  * A client that submits applications to a [[RestSubmissionServer]].
@@ -211,7 +212,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     try {
       val out = new DataOutputStream(conn.getOutputStream)
       Utils.tryWithSafeFinally {
-        out.write(json.getBytes(Charsets.UTF_8))
+        out.write(json.getBytes(StandardCharsets.UTF_8))
       } {
         out.close()
       }
@@ -382,7 +383,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       logWarning(s"Unable to connect to server ${masterUrl}.")
       lostMasters += masterUrl
     }
-    lostMasters.size >= masters.size
+    lostMasters.size >= masters.length
   }
 }
 
@@ -412,13 +413,13 @@ private[spark] object RestSubmissionClient {
   }
 
   def main(args: Array[String]): Unit = {
-    if (args.size < 2) {
+    if (args.length < 2) {
       sys.error("Usage: RestSubmissionClient [app resource] [main class] [app args*]")
       sys.exit(1)
     }
     val appResource = args(0)
     val mainClass = args(1)
-    val appArgs = args.slice(2, args.size)
+    val appArgs = args.slice(2, args.length)
     val conf = new SparkConf
     val env = filterSystemEnvironment(sys.env)
     run(appResource, mainClass, appArgs, conf, env)
@@ -428,8 +429,10 @@ private[spark] object RestSubmissionClient {
    * Filter non-spark environment variables from any environment.
    */
   private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
-    env.filter { case (k, _) =>
-      (k.startsWith("SPARK_") && k != "SPARK_ENV_LOADED") || k.startsWith("MESOS_")
+    env.filterKeys { k =>
+      // SPARK_HOME is filtered out because it is usually wrong on the remote machine (SPARK-12345)
+      (k.startsWith("SPARK_") && k != "SPARK_ENV_LOADED" && k != "SPARK_HOME") ||
+        k.startsWith("MESOS_")
     }
   }
 }
