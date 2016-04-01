@@ -19,7 +19,7 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
-from pyspark.ml import Estimator, Transformer, Model
+from pyspark.ml import Estimator, Model, MutableEstimator, Transformer
 from pyspark.ml.param import Params
 from pyspark.ml.util import _jvm
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
@@ -141,6 +141,12 @@ class JavaWrapper(Params):
                                       % stage_name)
         return py_stage
 
+    def _call_java(self, name, *args):
+        m = getattr(self._java_obj, name)
+        sc = SparkContext._active_spark_context
+        java_args = [_py2java(sc, arg) for arg in args]
+        return _java2py(sc, m(*java_args))
+
 
 @inherit_doc
 class JavaEstimator(Estimator, JavaWrapper):
@@ -164,7 +170,6 @@ class JavaEstimator(Estimator, JavaWrapper):
 
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
-        :param params: additional params (overwriting embedded values)
         :return: fitted Java model
         """
         self._transfer_params_to_java()
@@ -237,8 +242,26 @@ class JavaModel(Model, JavaTransformer):
             that._transfer_params_to_java()
         return that
 
-    def _call_java(self, name, *args):
-        m = getattr(self._java_obj, name)
-        sc = SparkContext._active_spark_context
-        java_args = [_py2java(sc, arg) for arg in args]
-        return _java2py(sc, m(*java_args))
+
+@inherit_doc
+class JavaMutableEstimator(MutableEstimator, JavaTransformer):
+    """
+    Base class for :py:class:`MutableEstimator`s that wrap Java/Scala
+    implementations.
+    """
+
+    __metaclass__ = ABCMeta
+
+    def _fit_java(self, dataset):
+        """
+        Fits this instance's internal Java model to the input dataset.
+
+        :param dataset: input dataset, which is an instance of
+                        :py:class:`pyspark.sql.DataFrame`
+        """
+        self._transfer_params_to_java()
+        self._java_obj.fit(dataset._jdf)
+        self._transfer_params_from_java()
+
+    def fit(self, dataset):
+        self._fit_java(dataset)

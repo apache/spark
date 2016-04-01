@@ -16,6 +16,7 @@
 #
 
 from abc import ABCMeta, abstractmethod
+import warnings
 
 from pyspark import since
 from pyspark.ml.param import Params
@@ -116,3 +117,26 @@ class Model(Transformer):
     """
 
     __metaclass__ = ABCMeta
+
+
+# NOTE: This class temporarily overrides Transformer during the process of merging Estimator
+#       and Model.  This helps with handling meta-algorithms.  We will later extend PipelineStage
+#       instead of Transformer.
+@inherit_doc
+class MutableEstimator(Transformer):
+    """
+    Abstract class for estimators that fit models to data.
+
+    .. versionadded:: 2.0.0
+    """
+
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def fit(self, dataset):
+        """
+        Fits this model to the input data, modifying this instance in-place.
+
+        :param dataset: input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        raise NotImplementedError()

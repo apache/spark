@@ -113,9 +113,9 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val labelIndexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("indexed")
+    labelIndexer.fit(dataset)
 
     val indexedDataset = labelIndexer
-      .fit(dataset)
       .transform(dataset)
       .drop("label")
       .withColumnRenamed("features", "f")

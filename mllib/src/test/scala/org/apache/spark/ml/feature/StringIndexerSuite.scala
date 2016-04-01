@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
@@ -31,8 +31,8 @@ class StringIndexerSuite
 
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
-    val model = new StringIndexerModel("indexer", Array("a", "b"))
-    val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
+    val model = StringIndexer("indexer", Array("a", "b"))
+    val modelWithoutUid = new StringIndexer().setLabels(Array("a", "b"))
     ParamsSuite.checkParams(model)
     ParamsSuite.checkParams(modelWithoutUid)
   }
@@ -43,10 +43,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
-
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(indexer)
+    indexer.fit(df)
 
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
@@ -68,7 +65,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    indexer.fit(df)
     // Verify we throw by default with unseen values
     intercept[SparkException] {
       indexer.transform(df2).collect()
@@ -77,7 +74,7 @@ class StringIndexerSuite
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .setHandleInvalid("skip")
-      .fit(df)
+    indexerSkipInvalid.fit(df)
     // Verify that we skip the c record
     val transformed = indexerSkipInvalid.transform(df2)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
@@ -97,7 +94,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    indexer.fit(df)
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
@@ -111,7 +108,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexerModel should keep silent if the input column does not exist.") {
-    val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
+    val indexerModel = StringIndexer("indexer", Array("a", "b", "c"))
       .setInputCol("label")
       .setOutputCol("labelIndex")
     val df = sqlContext.range(0L, 10L).toDF()
@@ -123,7 +120,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("input")
       .setOutputCol("output")
-      .fit(df)
+    indexer.fit(df)
     intercept[IllegalArgumentException] {
       indexer.transform(df)
     }
@@ -138,7 +135,7 @@ class StringIndexerSuite
   }
 
   test("StringIndexerModel read/write") {
-    val instance = new StringIndexerModel("myStringIndexerModel", Array("a", "b", "c"))
+    val instance = StringIndexer("myStringIndexerModel", Array("a", "b", "c"))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setHandleInvalid("skip")
@@ -184,7 +181,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    indexer.fit(df)
     val transformed = indexer.transform(df)
     val idx2str = new IndexToString()
       .setInputCol("labelIndex")
@@ -217,7 +214,7 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    indexer.fit(df)
     val transformed = indexer.transform(df)
     val attrs =
       NominalAttribute.decodeStructField(transformed.schema("labelIndex"), preserveName = true)

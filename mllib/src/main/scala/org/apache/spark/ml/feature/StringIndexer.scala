@@ -17,11 +17,9 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.{Estimator, Model, Transformer}
+import org.apache.spark.ml.{MutableEstimator, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -31,43 +29,55 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
-/**
- * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
- */
-private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
-    with HasHandleInvalid {
-
-  /** Validates and transforms the input schema. */
-  protected def validateAndTransformSchema(schema: StructType): StructType = {
-    val inputColName = $(inputCol)
-    val inputDataType = schema(inputColName).dataType
-    require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
-      s"The input column $inputColName must be either string type or numeric type, " +
-        s"but got $inputDataType.")
-    val inputFields = schema.fields
-    val outputColName = $(outputCol)
-    require(inputFields.forall(_.name != outputColName),
-      s"Output column $outputColName already exists.")
-    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
-    val outputFields = inputFields :+ attr.toStructField()
-    StructType(outputFields)
-  }
-}
 
 /**
  * :: Experimental ::
- * A label indexer that maps a string column of labels to an ML column of label indices.
- * If the input column is numeric, we cast it to string and index the string values.
- * The indices are in [0, numLabels), ordered by label frequencies.
- * So the most frequent label gets index 0.
+ *
+ * A label indexer that maps a String column of labels (categories) to a column of label indices.
+ * If the input column is numeric, we cast values to strings and index the string values.
+ *
+ * When this class is used as an Estimator, fitting computes a label index.
+ * The user may also specify a pre-computed index by setting `labels`.
  *
  * @see [[IndexToString]] for the inverse transformation
  */
 @Experimental
-class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
-  with StringIndexerBase with DefaultParamsWritable {
+class StringIndexer(override val uid: String) extends MutableEstimator[StringIndexer]
+  with HasInputCol with HasOutputCol with HasHandleInvalid with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("strIdx"))
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Params
+  ////////////////////////////////////////////////////////////////////////////
+
+  private[ml] val labelsParam: StringArrayParam = new StringArrayParam(this, "labelsParam",
+    "Array of labels specifying index-string mapping to use during transform()." +
+      " If not provided, then this is computed during fit().")
+
+  /**
+   * Array of labels specifying the index-string mapping to use during [[transform()]].
+   *
+   * If the user does not specify [[labels]], then [[labels]] will be computed during [[fit()]].
+   * The computed index will be accessible via this param.
+   *
+   * If the user specifies [[labels]], then the given [[labels]] will be used for [[transform()]],
+   * and nothing will happen during [[fit()]].
+   *
+   * Default: Not set.  [[labels]] are computed during [[fit()]].
+   *
+   * @group param
+   */
+  final def labels: Array[String] = {
+    if (!isSet(labelsParam)) {
+      throw new RuntimeException("StringIndexer.labels was called, but labels are not yet" +
+        " defined.  Either set labels manually, or call fit() to compute label index.")
+    }
+    $(labelsParam)
+  }
+
+  /** @group setParam */
+  def setLabels(value: Array[String]): this.type = set(labelsParam, value)
 
   /** @group setParam */
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
@@ -79,89 +89,51 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  ////////////////////////////////////////////////////////////////////////////
+  // Estimator API
+  ////////////////////////////////////////////////////////////////////////////
 
-  override def fit(dataset: DataFrame): StringIndexerModel = {
+  /**
+   * Computes a label index for [[inputCol]], setting [[labels]] to store the computes index.
+   *
+   * The indices are in [0, numLabels), ordered by decreasing label frequencies so that
+   * the most frequent label gets index 0.
+   */
+  override def fit(dataset: DataFrame): Unit = {
     val counts = dataset.select(col($(inputCol)).cast(StringType))
       .rdd
       .map(_.getString(0))
       .countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
-    copyValues(new StringIndexerModel(uid, labels).setParent(this))
+    setLabels(labels)
   }
 
-  override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
-  }
-
-  override def copy(extra: ParamMap): StringIndexer = defaultCopy(extra)
-}
-
-@Since("1.6.0")
-object StringIndexer extends DefaultParamsReadable[StringIndexer] {
-
-  @Since("1.6.0")
-  override def load(path: String): StringIndexer = super.load(path)
-}
-
-/**
- * :: Experimental ::
- * Model fitted by [[StringIndexer]].
- *
- * NOTE: During transformation, if the input column does not exist,
- * [[StringIndexerModel.transform]] would return the input dataset unmodified.
- * This is a temporary fix for the case when target labels do not exist during prediction.
- *
- * @param labels  Ordered list of labels, corresponding to indices to be assigned.
- */
-@Experimental
-class StringIndexerModel (
-    override val uid: String,
-    val labels: Array[String])
-  extends Model[StringIndexerModel] with StringIndexerBase with MLWritable {
-
-  import StringIndexerModel._
-
-  def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), labels)
-
-  private val labelToIndex: OpenHashMap[String, Double] = {
-    val n = labels.length
-    val map = new OpenHashMap[String, Double](n)
-    var i = 0
-    while (i < n) {
-      map.update(labels(i), i)
-      i += 1
-    }
-    map
-  }
-
-  /** @group setParam */
-  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
-  setDefault(handleInvalid, "error")
-
-  /** @group setParam */
-  def setInputCol(value: String): this.type = set(inputCol, value)
-
-  /** @group setParam */
-  def setOutputCol(value: String): this.type = set(outputCol, value)
-
+  /**
+   * Maps the [[inputCol]] column of labels (categories) to a new [[outputCol]] column of label
+   * indices.
+   */
   override def transform(dataset: DataFrame): DataFrame = {
     if (!dataset.schema.fieldNames.contains($(inputCol))) {
       logInfo(s"Input column ${$(inputCol)} does not exist during transformation. " +
-        "Skip StringIndexerModel.")
+        "Skip StringIndexer.")
       return dataset
     }
-    validateAndTransformSchema(dataset.schema)
+    require(isSet(labelsParam), s"StringIndexer.transform() was called without labels Param ever" +
+      s" being set.  Either set labels manually, or call fit() to compute the labels index.")
+    transformSchema(dataset.schema)
+
+    val l2i = labelToIndex
 
     val indexer = udf { label: String =>
-      if (labelToIndex.contains(label)) {
-        labelToIndex(label)
+      if (l2i.contains(label)) {
+        l2i(label)
       } else {
         throw new SparkException(s"Unseen label: $label.")
       }
     }
 
-    val metadata = NominalAttribute.defaultAttr
-      .withName($(outputCol)).withValues(labels).toMetadata()
+    val metadata = getOutputAttr.toMetadata()
+
     // If we are skipping invalid records, filter them out.
     val filteredDataset = getHandleInvalid match {
       case "skip" =>
@@ -177,60 +149,69 @@ class StringIndexerModel (
 
   override def transformSchema(schema: StructType): StructType = {
     if (schema.fieldNames.contains($(inputCol))) {
-      validateAndTransformSchema(schema)
+      val inputColName = $(inputCol)
+      val inputDataType = schema(inputColName).dataType
+      require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
+        s"The input column $inputColName must be either string type or numeric type, " +
+          s"but got $inputDataType.")
+      val inputFields = schema.fields
+      val outputColName = $(outputCol)
+      require(inputFields.forall(_.name != outputColName),
+        s"Output column $outputColName already exists.")
+      val outputFields = inputFields :+ getOutputAttr.toStructField()
+      StructType(outputFields)
     } else {
-      // If the input column does not exist during transformation, we skip StringIndexerModel.
+      // If the input column does not exist during transformation, we skip StringIndexer.
       schema
     }
   }
 
-  override def copy(extra: ParamMap): StringIndexerModel = {
-    val copied = new StringIndexerModel(uid, labels)
-    copyValues(copied, extra).setParent(parent)
+  private def getOutputAttr: NominalAttribute = {
+    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
+    if (isSet(labelsParam)) attr.withValues(labels) else attr
   }
 
-  @Since("1.6.0")
-  override def write: StringIndexModelWriter = new StringIndexModelWriter(this)
+  override def copy(extra: ParamMap): StringIndexer = {
+    val copied = new StringIndexer(uid)
+    copyValues(copied, extra)
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Internals
+  ////////////////////////////////////////////////////////////////////////////
+
+  // A reference to the array used to compute the labels.
+  private[this] var cachedArray: Array[String] = null
+
+  // A cache of the indexes.
+  private[this] var cachedLabelToIndex: OpenHashMap[String, Double] = null
+
+  private def labelToIndex: OpenHashMap[String, Double] = this.synchronized {
+    // Do reference equality to check if the label has been changed.
+    val currentArray = labels
+    if (cachedArray == null || !cachedArray.eq(currentArray)) {
+      cachedArray = currentArray
+      val n = currentArray.length
+      cachedLabelToIndex = new OpenHashMap[String, Double](n)
+      var i = 0
+      while (i < n) {
+        cachedLabelToIndex.update(currentArray(i), i)
+        i += 1
+      }
+    }
+    cachedLabelToIndex
+  }
 }
 
 @Since("1.6.0")
-object StringIndexerModel extends MLReadable[StringIndexerModel] {
+object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 
-  private[StringIndexerModel]
-  class StringIndexModelWriter(instance: StringIndexerModel) extends MLWriter {
-
-    private case class Data(labels: Array[String])
-
-    override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.labels)
-      val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
-    }
-  }
-
-  private class StringIndexerModelReader extends MLReader[StringIndexerModel] {
-
-    private val className = classOf[StringIndexerModel].getName
-
-    override def load(path: String): StringIndexerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
-        .select("labels")
-        .head()
-      val labels = data.getAs[Seq[String]](0).toArray
-      val model = new StringIndexerModel(metadata.uid, labels)
-      DefaultParamsReader.getAndSetParams(model, metadata)
-      model
-    }
+  def apply(uid: String, labels: Array[String]): StringIndexer = {
+    new StringIndexer(uid).setLabels(labels)
   }
 
   @Since("1.6.0")
-  override def read: MLReader[StringIndexerModel] = new StringIndexerModelReader
-
-  @Since("1.6.0")
-  override def load(path: String): StringIndexerModel = super.load(path)
+  override def load(path: String): StringIndexer = super.load(path)
 }
 
 /**
@@ -262,7 +243,8 @@ class IndexToString private[ml] (override val uid: String)
    * Optional param for array of labels specifying index-string mapping.
    *
    * Default: Empty array, in which case [[inputCol]] metadata is used for labels.
-   * @group param
+    *
+    * @group param
    */
   final val labels: StringArrayParam = new StringArrayParam(this, "labels",
     "Optional array of labels specifying index-string mapping." +

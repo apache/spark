@@ -23,7 +23,7 @@ from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import keyword_only, JavaMLReadable, JavaMLWritable
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaMutableEstimator, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
@@ -49,7 +49,7 @@ __all__ = ['Binarizer',
            'SQLTransformer',
            'StandardScaler', 'StandardScalerModel',
            'StopWordsRemover',
-           'StringIndexer', 'StringIndexerModel',
+           'StringIndexer',
            'Tokenizer',
            'VectorAssembler',
            'VectorIndexer', 'VectorIndexerModel',
@@ -1008,8 +1008,8 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
        category indices
 
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
-    >>> model = stringIndexer.fit(stringIndDf)
-    >>> td = model.transform(stringIndDf)
+    >>> stringIndexer.fit(stringIndDf)
+    >>> td = stringIndexer.transform(stringIndDf)
     >>> encoder = OneHotEncoder(inputCol="indexed", outputCol="features")
     >>> encoder.transform(td).head().features
     SparseVector(2, {0: 1.0})
@@ -1544,8 +1544,8 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, JavaMLReadable,
-                    JavaMLWritable):
+class StringIndexer(JavaMutableEstimator, HasInputCol, HasOutputCol, HasHandleInvalid,
+                    JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1555,12 +1555,13 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     So the most frequent label gets index 0.
 
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
-    >>> model = stringIndexer.fit(stringIndDf)
-    >>> td = model.transform(stringIndDf)
+    >>> stringIndexer.fit(stringIndDf)
+    >>> td = stringIndexer.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
-    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2", labels=model.labels)
+    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2",
+    ...     labels=stringIndexer.labels)
     >>> itd = inverter.transform(td)
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
@@ -1569,11 +1570,6 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     >>> stringIndexer.save(stringIndexerPath)
     >>> loadedIndexer = StringIndexer.load(stringIndexerPath)
     >>> loadedIndexer.getHandleInvalid() == stringIndexer.getHandleInvalid()
-    True
-    >>> modelPath = temp_path + "/string-indexer-model"
-    >>> model.save(modelPath)
-    >>> loadedModel = StringIndexerModel.load(modelPath)
-    >>> loadedModel.labels == model.labels
     True
     >>> indexToStringPath = temp_path + "/index-to-string"
     >>> inverter.save(indexToStringPath)
@@ -1585,15 +1581,20 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     """
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error"):
+    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error", labels=None):
         """
-        __init__(self, inputCol=None, outputCol=None, handleInvalid="error")
+        __init__(self, inputCol=None, outputCol=None, handleInvalid="error",\
+          labels=None)
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
         self._setDefault(handleInvalid="error")
-        kwargs = self.__init__._input_kwargs
+        kwargs = dict([(kw, self.__init__._input_kwargs[kw])
+                       for kw in self.__init__._input_kwargs
+                       if kw != 'labels'])
         self.setParams(**kwargs)
+        if labels is not None:
+            self._call_java("setLabels", labels)
 
     @keyword_only
     @since("1.4.0")
@@ -1605,24 +1606,19 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    def _create_model(self, java_model):
-        return StringIndexerModel(java_model)
-
-
-class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
-    """
-    .. note:: Experimental
-
-    Model fitted by StringIndexer.
-
-    .. versionadded:: 1.4.0
-    """
+    @since("2.0.0")
+    def setLabels(self, value):
+        """
+        Sets the value of `labels`.
+        """
+        self._call_java("setLabels", value)
+        return self
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def labels(self):
         """
-        Ordered list of labels, corresponding to indices to be assigned.
+        Gets the value of `labels`.
         """
         return self._call_java("labels")
 

@@ -36,6 +36,11 @@ object MimaExcludes {
   def excludes(version: String) = version match {
     case v if v.startsWith("2.0") =>
       Seq(
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.StringIndexer"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.feature.StringIndexerModel"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.feature.StringIndexerModel$"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.feature.StringIndexer.validateAndTransformSchema")
+      ) ++ Seq(
         excludePackage("org.apache.spark.rpc"),
         excludePackage("org.spark-project.jetty"),
         excludePackage("org.apache.spark.unused"),

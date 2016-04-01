@@ -38,8 +38,9 @@ object StringIndexerExample {
     val indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex")
+    indexer.fit(df)
 
-    val indexed = indexer.fit(df).transform(df)
+    val indexed = indexer.transform(df)
     indexed.show()
     // $example off$
     sc.stop()

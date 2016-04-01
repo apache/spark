@@ -46,10 +46,10 @@ public class JavaDecisionTreeClassificationExample {
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.
-    StringIndexerModel labelIndexer = new StringIndexer()
+    StringIndexer labelIndexer = new StringIndexer()
       .setInputCol("label")
-      .setOutputCol("indexedLabel")
-      .fit(data);
+      .setOutputCol("indexedLabel");
+    labelIndexer.fit(data);
 
     // Automatically identify categorical features, and index them.
     VectorIndexerModel featureIndexer = new VectorIndexer()

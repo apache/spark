@@ -28,7 +28,6 @@ import java.util.Arrays;
 
 import org.apache.spark.ml.feature.IndexToString;
 import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.ml.feature.StringIndexerModel;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -58,10 +57,10 @@ public class JavaIndexToStringExample {
     });
     Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
 
-    StringIndexerModel indexer = new StringIndexer()
+    StringIndexer indexer = new StringIndexer()
       .setInputCol("category")
-      .setOutputCol("categoryIndex")
-      .fit(df);
+      .setOutputCol("categoryIndex");
+    indexer.fit(df);
     Dataset<Row> indexed = indexer.transform(df);
 
     IndexToString converter = new IndexToString()

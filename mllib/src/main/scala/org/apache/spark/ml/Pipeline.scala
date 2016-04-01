@@ -29,10 +29,11 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
+
 
 /**
  * :: DeveloperApi ::
@@ -40,6 +41,25 @@ import org.apache.spark.sql.types.StructType
  */
 @DeveloperApi
 abstract class PipelineStage extends Params with Logging {
+
+  /**
+   * Sets parameter in the embedded param map.
+   */
+  final def set(paramMap: ParamMap): Unit = {
+    paramMap.toSeq.foreach(set)
+  }
+
+  /**
+   * Sets a parameter in the embedded param map.
+   */
+  @scala.annotation.varargs
+  final def set(
+      paramPair: ParamPair[_],
+      paramPair2: ParamPair[_],
+      other: ParamPair[_]*): this.type = {
+    (Seq(paramPair, paramPair2) ++ other.toSeq).foreach(set)
+    this
+  }
 
   /**
    * :: DeveloperApi ::
@@ -72,6 +92,8 @@ abstract class PipelineStage extends Params with Logging {
   }
 
   override def copy(extra: ParamMap): PipelineStage
+
+  def copy(): PipelineStage = copy(ParamMap.empty)
 }
 
 /**
@@ -133,6 +155,8 @@ class Pipeline @Since("1.4.0") (
       stage match {
         case _: Estimator[_] =>
           indexOfLastEstimator = index
+        case _: MutableEstimator[_] =>
+          indexOfLastEstimator = index
         case _ =>
       }
     }
@@ -143,6 +167,11 @@ class Pipeline @Since("1.4.0") (
         val transformer = stage match {
           case estimator: Estimator[_] =>
             estimator.fit(curDataset)
+          case estimator: MutableEstimator[_] =>
+            // Currently, we make a copy.  This will change when we merge Pipeline, PipelineModel.
+            val e = estimator.copy().asInstanceOf[MutableEstimator[_]]
+            e.fit(curDataset)
+            e
           case t: Transformer =>
             t
           case _ =>
