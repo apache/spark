@@ -85,11 +85,18 @@ package object config {
 
   private[spark] val ARCHIVES_TO_DISTRIBUTE = ConfigBuilder("spark.yarn.dist.archives")
     .stringConf
-    .optional
+    .toSequence
+    .withDefault(Nil)
 
   private[spark] val FILES_TO_DISTRIBUTE = ConfigBuilder("spark.yarn.dist.files")
     .stringConf
-    .optional
+    .toSequence
+    .withDefault(Nil)
+
+  private[spark] val JARS_TO_DISTRIBUTE = ConfigBuilder("spark.yarn.dist.jars")
+    .stringConf
+    .toSequence
+    .withDefault(Nil)
 
   private[spark] val PRESERVE_STAGING_FILES = ConfigBuilder("spark.yarn.preserve.staging.files")
     .doc("Whether to preserve temporary files created by the job in HDFS.")
@@ -183,13 +190,17 @@ package object config {
 
   private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
     .intConf
-    .optional
+    .withDefault(1)
 
   private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.yarn.driver.memoryOverhead")
     .bytesConf(ByteUnit.MiB)
     .optional
 
   /* Executor configuration. */
+
+  private[spark] val EXECUTOR_CORES = ConfigBuilder("spark.executor.cores")
+    .intConf
+    .withDefault(1)
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.yarn.executor.memoryOverhead")
     .bytesConf(ByteUnit.MiB)
@@ -245,5 +256,4 @@ package object config {
     .stringConf
     .toSequence
     .optional
-
 }

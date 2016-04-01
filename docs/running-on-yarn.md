@@ -216,6 +216,13 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.dist.jars</code></td>
+  <td>(none)</td>
+  <td>
+    Comma-separated list of jars to be placed in the working directory of each executor.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.cores</code></td>
   <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
   <td>

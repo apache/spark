@@ -18,6 +18,7 @@
 package org.apache.spark.internal
 
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.network.util.ByteUnit
 
 package object config {
 
@@ -33,6 +34,10 @@ package object config {
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.driver.userClassPathFirst").booleanConf.withDefault(false)
 
+  private[spark] val DRIVER_MEMORY = ConfigBuilder("spark.driver.memory")
+    .bytesConf(ByteUnit.MiB)
+    .withDefaultString("1g")
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.optional
 
@@ -44,6 +49,10 @@ package object config {
 
   private[spark] val EXECUTOR_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.executor.userClassPathFirst").booleanConf.withDefault(false)
+
+  private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
+    .bytesConf(ByteUnit.MiB)
+    .withDefaultString("1g")
 
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal
     .booleanConf.withDefault(false)
@@ -73,4 +82,9 @@ package object config {
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances").intConf.optional
 
+  private[spark] val PY_FILES = ConfigBuilder("spark.submit.pyFiles")
+    .internal
+    .stringConf
+    .toSequence
+    .withDefault(Nil)
 }
