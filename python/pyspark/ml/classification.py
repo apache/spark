@@ -18,6 +18,7 @@
 import warnings
 
 import operator
+import uuid
 
 from pyspark import since
 from pyspark.ml import Estimator, Model
@@ -29,7 +30,7 @@ from pyspark.ml.regression import (
     RandomForestParams, TreeEnsembleParams, DecisionTreeModel, TreeEnsembleModels)
 from pyspark.mllib.common import inherit_doc
 from pyspark.sql.functions import udf, when
-from pyspark.sql.types import MapType, IntegerType, DoubleType
+from pyspark.sql.types import ArrayType, MapType, IntegerType, DoubleType
 from pyspark.storagelevel import StorageLevel
 
 __all__ = ['LogisticRegression', 'LogisticRegressionModel',
@@ -930,12 +931,9 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     >>> model.models[0].weights
     >>> model.models[0].coefficients
     >>> model.models[0].intercept
-    # >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
-    # >>> model.transform(test0).head().indexed
-    # 0.0
-    # >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
-    # >>> model.transform(test1).head().indexed
-    # 1.0
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    >>> model.transform(test0).show()
+    0.0
 
     .. versionadded:: 2.0.0
     """
@@ -1053,8 +1051,10 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
         # add an accumulator column to store predictions of all the models
         accColName = "mbc$acc" + str(uuid.uuid4())
-        initUDF = udf(lambda x: {}, MapType(IntegerType(), DoubleType()))
-        newDataset = dataset.withColumn(accColName, initUDF())
+        initUDF = udf(lambda _: [], ArrayType(DoubleType()))
+        newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
+
+        newDataset.show()
 
         # persist if underlying dataset is not persistent.
         handlePersistence =\
@@ -1062,17 +1062,22 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         if handlePersistence:
             newDataset.persist(StorageLevel.MEMORY_AND_DISK)
 
+        def updateDict(predictions, i, prediction):
+            predictions[i] = prediction[1]
+            return predictions
+
         # update the accumulator column with the result of prediction of models
-        updatedDataset = newDataset
+        aggregatedDataset = newDataset
         for index, model in enumerate(self.models):
             rawPredictionCol = model._call_java("getRawPredictionCol")
             columns = origCols + [rawPredictionCol, accColName]
 
             # add temporary column to store intermediate scores and update
             tmpColName = "mbc$tmp" + str(uuid.uuid4())
-            updateUDF = \
-                udf(lambda predictions, prediction: predictions.update({index: prediction(1)}))
-            transformedDataset = model.transform(newDataset).select(*columns)
+            updateUDF = udf(
+                lambda predictions, prediction: predictions + [prediction[1]],
+                ArrayType(DoubleType()))
+            transformedDataset = model.transform(aggregatedDataset).select(*columns)
             updatedDataset = transformedDataset.withColumn(
                 tmpColName,
                 updateUDF(transformedDataset[accColName], transformedDataset[rawPredictionCol]))
@@ -1080,17 +1085,18 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
             # switch out the intermediate column with the accumulator column
             updatedDataset.select(*newColumns).withColumnRenamed(tmpColName, accColName)
+            aggregatedDataset = updatedDataset
 
         if handlePersistence:
             newDataset.unpersist()
 
+        return aggregatedDataset
         # output the index of the classifier with highest confidence as prediction
-        labelUDF = udf(
-            lambda predictions: float(max(predictions.iteritems(), key=operator.itemgetter(1))[0]))
+        # labelUDF = udf(lambda predictions: float(max(predictions, key=predictions.get)))
 
         # output label and label metadata as prediction
-        return updatedDataset.withColumn(
-            self.getPredictionCol(), labelUDF(accColName)).drop(accColName)
+        # return aggregatedDataset.withColumn(
+        #     self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])).drop(accColName)
 
     # @since("1.4.0")
     # def copy(self, extra=None):
