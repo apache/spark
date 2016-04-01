@@ -174,20 +174,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames.asScala).toList.sorted
     // The TestContext is shared by all the test cases, some functions may be registered before
     // this, so we check that all the builtin functions are returned.
-    val allFunctions = sql("SHOW functions").collect().map(r => r(0))
+    val allFunctions = sql("SHOW FUNCTIONS").collect().map(r => r(0))
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))
     }
-    checkAnswer(sql("SHOW functions abs"), Row("abs"))
-    checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
-    checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
-    checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    checkAnswer(sql("SHOW functions `~`"), Row("~"))
-    checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
-    checkAnswer(sql("SHOW functions `weekofyea.*`"), Row("weekofyear"))
+    checkAnswer(sql("SHOW FUNCTIONS abs"), Row("abs"))
+    checkAnswer(sql("SHOW FUNCTIONS 'abs'"), Row("abs"))
+    checkAnswer(sql("SHOW FUNCTIONS abc.abs"), Row("abs"))
+    checkAnswer(sql("SHOW FUNCTIONS `abc`.`abs`"), Row("abs"))
+    checkAnswer(sql("SHOW FUNCTIONS `abc`.`abs`"), Row("abs"))
+    checkAnswer(sql("SHOW FUNCTIONS `~`"), Row("~"))
+    checkAnswer(sql("SHOW FUNCTIONS `a function doens't exist`"), Nil)
+    checkAnswer(sql("SHOW FUNCTIONS `weekofyea.*`"), Row("weekofyear"))
     // this probably will failed if we add more function with `sha` prefixing.
-    checkAnswer(sql("SHOW functions `sha.*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+    checkAnswer(sql("SHOW FUNCTIONS `sha.*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+
+    sql("CREATE FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper'")
+    sql("CREATE TEMPORARY FUNCTION f2 AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper'")
+    checkExistence(sql("SHOW FUNCTIONS LIKE '*f*'"), true, "default.f1", "f2")
+    checkExistence(sql("SHOW FUNCTIONS"), true, "default.f1", "f2")
   }
 
   test("describe functions") {
@@ -1810,12 +1815,5 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           sql("SELECT col FROM source LATERAL VIEW EXPLODE(arr) exp AS col WHERE col > 3"))
       }
     }
-  }
-
-  test("show functions properly") {
-    sql("CREATE FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper'")
-    sql("CREATE TEMPORARY FUNCTION f2 AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper'")
-    checkExistence(sql("SHOW FUNCTIONS LIKE '*f*'"), true, "default.f1", "f2")
-    checkExistence(sql("SHOW FUNCTIONS"), true, "default.f1", "f2")
   }
 }

@@ -533,7 +533,7 @@ class SessionCatalog(
   def listFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
     val dbFunctions =
       externalCatalog.listFunctions(db, pattern).map { f => FunctionIdentifier(f, Some(db)) }
-    val regex = pattern.replaceAll("\\*", ".*").r
+    val regex = pattern.replaceAll(".\\*", "\\*").replaceAll("\\*", ".*").r
     val _tempFunctions = functionRegistry.listFunction()
       .filter { f => regex.pattern.matcher(f).matches() }
       .map { f => FunctionIdentifier(f) }
