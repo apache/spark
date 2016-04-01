@@ -2344,7 +2344,13 @@ class DAG(LoggingMixin):
 
     def get_active_runs(self):
         """
-        Maintains and returns the currently active runs as a list of dates
+        Maintains and returns the currently active runs as a list of dates.
+
+        A run is considered a SUCCESS if all of its root tasks either succeeded
+        or were skipped.
+
+        A run is considered a FAILURE if any of its root tasks failed OR if
+        it is deadlocked, meaning no tasks can run.
         """
         TI = TaskInstance
         session = settings.Session()
@@ -2354,26 +2360,84 @@ class DAG(LoggingMixin):
             .filter(
                 DagRun.dag_id == self.dag_id,
                 DagRun.state == State.RUNNING)
-            .all()
-        )
+            .order_by(DagRun.execution_date)
+            .all())
+
+        task_instances = (
+            session
+            .query(TI)
+            .filter(
+                TI.dag_id == self.dag_id,
+                TI.task_id.in_(self.active_task_ids),
+                TI.execution_date.in_(r.execution_date for r in active_runs)
+            )
+            .all())
+
+        for ti in task_instances:
+            ti.task = self.get_task(ti.task_id)
+
+        # Runs are considered deadlocked if there are unfinished tasks but
+        # none of them can run. First we check across *all* dagruns in case
+        # there are depends_on_past relationships which could make individual
+        # dags look deadlocked incorrectly. Later we will check individual
+        # dagruns, as long as they don't have depends_on_past=True
+        all_deadlocked = (
+            # AND there are unfinished tasks...
+            any(ti.state in State.unfinished() for ti in task_instances) and
+            # AND none of them have dependencies met...
+            all(not ti.are_dependencies_met() for ti in task_instances
+                if ti.state in State.unfinished())
+            )
+
+
         for run in active_runs:
             self.logger.info("Checking state for {}".format(run))
-            task_instances = session.query(TI).filter(
-                TI.dag_id == run.dag_id,
-                TI.task_id.in_(self.active_task_ids),
-                TI.execution_date == run.execution_date,
-            ).all()
-            if len(task_instances) == len(self.active_tasks):
-                task_states = [ti.state for ti in task_instances]
-                if State.FAILED in task_states:
+
+            tis = [
+                t for t in task_instances
+                if t.execution_date == run.execution_date
+            ]
+
+            if len(tis) == len(self.active_tasks):
+
+                # if any roots failed, the run failed
+                root_ids = [t.task_id for t in self.roots]
+                roots = [t for t in tis if t.task_id in root_ids]
+                if any(
+                        r.state in (State.FAILED,  State.UPSTREAM_FAILED)
+                        for r in roots):
                     self.logger.info('Marking run {} failed'.format(run))
                     run.state = State.FAILED
-                elif len(
-                    set(task_states) |
-                    set([State.SUCCESS, State.SKIPPED])
-                ) == 2:
+
+                # if all roots succeeded, the run succeeded
+                elif all(
+                        r.state in (State.SUCCESS, State.SKIPPED)
+                        for r in roots):
                     self.logger.info('Marking run {} successful'.format(run))
                     run.state = State.SUCCESS
+
+                # if *the individual dagrun* is deadlocked, the run failed
+                elif (
+                        # there are unfinished tasks
+                        any(t.state in State.unfinished() for t in tis) and
+                        # AND none of them depend on past
+                        all(not t.task.depends_on_past for t in tis
+                            if t.state in State.unfinished()) and
+                        # AND none of their dependencies are met
+                        all(not t.are_dependencies_met() for t in tis
+                            if t.state in State.unfinished())
+                        ):
+                    self.logger.info(
+                        'Deadlock; marking run {} failed'.format(run))
+                    run.state = State.FAILED
+
+                # if *ALL* dagruns are deadlocked, the run failed
+                elif all_deadlocked:
+                    self.logger.info(
+                        'Deadlock; marking run {} failed'.format(run))
+                    run.state = State.FAILED
+
+                # finally, if the roots aren't done, the dag is still running
                 else:
                     active_dates.append(run.execution_date)
             else:
