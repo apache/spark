@@ -17,18 +17,20 @@
 
 package org.apache.spark.sql.hive
 
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
-import org.apache.hadoop.hive.ql.udf.generic.{GenericUDTF, AbstractGenericUDAFResolver, GenericUDF}
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDFMacro, GenericUDTF, AbstractGenericUDAFResolver, GenericUDF}
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{ExpressionInfo, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.AnalysisException
@@ -159,17 +161,57 @@ class HiveSessionCatalog(
           udtf.elementTypes // Force it to check input data types.
           udtf
         } else {
-          throw new AnalysisException(s"No handler for UDF '${clazz.getCanonicalName}'")
+          throw new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}'")
         }
       } catch {
         case ae: AnalysisException =>
           throw ae
         case NonFatal(e) =>
           val analysisException =
-            new AnalysisException(s"No handler for UDF '${clazz.getCanonicalName}': $e")
+            new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}': $e")
           analysisException.setStackTrace(e.getStackTrace)
           throw analysisException
       }
+    }
+  }
+
+  // We have a list of Hive built-in functions that we do not support. So, we will check
+  // Hive's function registry and lazily load needed functions into our own function registry.
+  // Those Hive built-in functions are
+  // assert_true, collect_list, collect_set, compute_stats, context_ngrams, create_union,
+  // current_user ,elt, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
+  // histogram_numeric, in_file, index, inline, java_method, map_keys, map_values,
+  // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
+  // parse_url, parse_url_tuple, percentile, percentile_approx, posexplode, reflect, reflect2,
+  // regexp, sentences, stack, std, str_to_map, windowingtablefunction, xpath, xpath_boolean,
+  // xpath_double, xpath_float, xpath_int, xpath_long, xpath_number,
+  // xpath_short, and xpath_string.
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    Try(super.lookupFunction(name, children)) match {
+      case Success(expr) => expr
+      case Failure(error) =>
+        if (functionRegistry.functionExists(name)) {
+          // If the function actually exists in functionRegistry, it means that there is an
+          // error when we create the Expression using the given children.
+          // We need to throw the original exception.
+          throw error
+        } else {
+          // This function is not in functionRegistry, let's try to load it as a Hive's
+          // built-in function.
+          val functionName = name.toLowerCase
+          // TODO: This may not really work for current_user because current_user is not evaluated
+          // with session info.
+          val functionInfo =
+            Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
+              throw new AnalysisException(s"Undefined Hive UDF: $name"))
+          val className = functionInfo.getFunctionClass.getName
+          val builder = makeFunctionBuilder(functionName, className)
+          // Put this Hive built-in function to our function registry.
+          val info = new ExpressionInfo(className, functionName)
+          createTempFunction(functionName, info, builder, ignoreIfExists = false)
+          // Now, we need to create the Expression.
+          functionRegistry.lookupFunction(functionName, children)
+        }
     }
   }
 }

@@ -493,6 +493,38 @@ class SessionCatalog(
   // | Methods that interact with temporary and metastore functions |
   // ----------------------------------------------------------------
 
+
+  /**
+   * Return a temporary function. For testing only.
+   */
+  private[catalog] def getTempFunction(name: String): Option[FunctionBuilder] = {
+    // TODO: Why do we need this?
+    functionRegistry.lookupFunctionBuilder(name)
+  }
+
+  /**
+   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   *
+   * This performs reflection to decide what type of [[Expression]] to return in the builder.
+   * This is useful for creating temporary functions.
+   */
+  private[sql] def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
+    // TODO: at least support UDAFs here
+    throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
+  }
+
+  /**
+   * Loads resources such as JARs and Files to SQLContext.
+   */
+  def loadFunctionResources(resources: Seq[(String, String)]): Unit = {
+    resources.map(r => (r._1.toLowerCase, r._2)).foreach {
+      case (resourceType, uri) =>
+        val functionResource =
+          FunctionResource(FunctionResourceType.fromString(resourceType), uri)
+        functionResourceLoader.loadResource(functionResource)
+    }
+  }
+
   /**
    * Create a temporary function.
    * This assumes no database is specified in `funcDefinition`.
@@ -589,36 +621,5 @@ class SessionCatalog(
       .filter { f => regex.pattern.matcher(f).matches() }
       .map { f => FunctionIdentifier(f) }
     dbFunctions ++ _tempFunctions
-  }
-
-  /**
-   * Return a temporary function. For testing only.
-   */
-  private[catalog] def getTempFunction(name: String): Option[FunctionBuilder] = {
-    // TODO: Why do we need this?
-    functionRegistry.lookupFunctionBuilder(name)
-  }
-
-  /**
-   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
-   *
-   * This performs reflection to decide what type of [[Expression]] to return in the builder.
-   * This is useful for creating temporary functions.
-   */
-  def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
-    // TODO: at least support UDAFs here
-    throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
-  }
-
-  /**
-   * Loads resources such as JARs and Files to SQLContext.
-   */
-  def loadFunctionResources(resources: Seq[(String, String)]): Unit = {
-    resources.map(r => (r._1.toLowerCase, r._2)).foreach {
-      case (resourceType, uri) =>
-        val functionResource =
-          FunctionResource(FunctionResourceType.fromString(resourceType), uri)
-        functionResourceLoader.loadResource(functionResource)
-    }
   }
 }
