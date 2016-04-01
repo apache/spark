@@ -21,7 +21,6 @@ import java.lang.reflect.InvocationTargetException
 
 import scala.reflect.runtime.universe._
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -76,7 +75,7 @@ case class ScalaUDF(
 
     val scalaUDFClassName = classOf[ScalaUDF].getName
     val scalaUDFObject = ctx.addReferenceObj("scalaUDF", this, scalaUDFClassName)
- 
+
     val converterClassName = classOf[Any => Any].getName
     val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
     val expressionClassName = classOf[Expression].getName
