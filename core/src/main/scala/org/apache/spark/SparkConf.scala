@@ -435,6 +435,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val driverLibraryPathKey = "spark.driver.extraLibraryPath"
     val sparkExecutorInstances = "spark.executor.instances"
 
+
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
       val warning =
@@ -454,9 +455,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           "Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
         throw new Exception(msg)
       }
-      if (javaOpts.contains("-Xmx") || javaOpts.contains("-Xms")) {
-        val msg = s"$executorOptsKey is not allowed to alter memory settings (was '$javaOpts'). " +
-          "Use spark.executor.memory instead."
+      if (javaOpts.contains("-Xmx")) {
+        val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
+          s"(was '$javaOpts'). " + "Use spark.executor.memory instead."
         throw new Exception(msg)
       }
     }

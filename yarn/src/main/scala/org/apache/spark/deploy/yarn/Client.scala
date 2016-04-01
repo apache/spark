@@ -819,12 +819,22 @@ private[spark] class Client(
       javaOpts += "-XX:CMSIncrementalDutyCycle=10"
     }
 
-    // Include driver-specific java options if we are launching a driver
-    if (isClusterMode) {
-      val driverOpts = sparkConf.get(DRIVER_JAVA_OPTIONS).orElse(sys.env.get("SPARK_JAVA_OPTS"))
-      driverOpts.foreach { opts =>
+    val driverOpts = sparkConf.get(DRIVER_JAVA_OPTIONS).orElse(sys.env.get("SPARK_JAVA_OPTS"))
+
+    // Validate the driver specific options and add only if running in cluster mode
+    driverOpts.foreach { opts =>
+      if (opts.contains("-Xmx")) {
+        val msg = s"spark.driver.extraJavaOptions is not allowed to specify max heap memory settings (was '$opts')." +
+          " Use spark.driver.memory instead."
+        throw new SparkException(msg)
+      }
+      if (isClusterMode) {
         javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
       }
+    }
+
+    // Include driver-specific java options if we are launching a driver
+    if (isClusterMode) {
       val libraryPaths = Seq(sparkConf.get(DRIVER_LIBRARY_PATH),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
@@ -833,20 +843,21 @@ private[spark] class Client(
       if (sparkConf.get(AM_JAVA_OPTIONS).isDefined) {
         logWarning(s"${AM_JAVA_OPTIONS.key} will not take effect in cluster mode")
       }
+
     } else {
       // Validate and include yarn am specific java options in yarn-client mode.
       sparkConf.get(AM_JAVA_OPTIONS).foreach { opts =>
         if (opts.contains("-Dspark")) {
-          val msg = s"$${amJavaOptions.key} is not allowed to set Spark options (was '$opts'). "
+          val msg = s"spark.yarn.am.extraJavaOptions is not allowed to set Spark options (was '$opts')."
           throw new SparkException(msg)
         }
-        if (opts.contains("-Xmx") || opts.contains("-Xms")) {
-          val msg = s"$${amJavaOptions.key} is not allowed to alter memory settings (was '$opts')."
+        if (opts.contains("-Xmx")) {
+          val msg = s"spark.yarn.am.extraJavaOptions is not allowed to specify max heap memory settings" +
+            s"(was '$opts'). Use spark.yarn.am.memory instead."
           throw new SparkException(msg)
         }
         javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
       }
-
       sparkConf.get(AM_LIBRARY_PATH).foreach { paths =>
         prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(paths))))
       }

@@ -147,10 +147,10 @@ private[yarn] class ExecutorRunnable(
 
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
-    javaOpts += "-Xms" + executorMemoryString
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
+    //
     sparkConf.get(EXECUTOR_JAVA_OPTIONS).foreach { opts =>
       javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
