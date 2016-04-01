@@ -21,10 +21,12 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.hadoop.util.ContextUtil;
 import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
@@ -100,20 +102,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private static final MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
 
   /**
-   * Tries to initialize the reader for this split. Returns true if this reader supports reading
-   * this split and false otherwise.
-   */
-  public boolean tryInitialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
-      throws IOException, InterruptedException {
-    try {
-      initialize(inputSplit, taskAttemptContext);
-      return true;
-    } catch (UnsupportedOperationException e) {
-      return false;
-    }
-  }
-
-  /**
    * Implementation of RecordReader API.
    */
   @Override
@@ -121,6 +109,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       throws IOException, InterruptedException, UnsupportedOperationException {
     super.initialize(inputSplit, taskAttemptContext);
     initializeInternal();
+    Configuration conf = ContextUtil.getConfiguration(taskAttemptContext);
+    returnColumnarBatch = conf.getBoolean("returning.batch", false);
   }
 
   /**
@@ -220,17 +210,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public ColumnarBatch resultBatch() {
     if (columnarBatch == null) initBatch();
     return columnarBatch;
-  }
-
-  /**
-   * Can be called before any rows are returned to enable returning columnar batches directly.
-   *
-   * @param maxColumns The maximum number of fields supported by whole stage codegen.
-   */
-  public boolean tryEnableReturningBatches(int maxColumns) {
-    // Nested type are not supported
-    returnColumnarBatch = columnReaders.length <= maxColumns;
-    return returnColumnarBatch;
   }
 
   /**

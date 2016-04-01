@@ -594,6 +594,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
+  def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
+
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
