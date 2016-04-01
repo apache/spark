@@ -24,14 +24,12 @@ import java.util.LinkedHashMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
-
 import com.google.common.io.ByteStreams
-
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
-import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel}
+import org.apache.spark.storage.{BlockId, BlockInfoManager, BlockManager, StorageLevel}
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.{ByteArrayChunkOutputStream, ChunkedByteBuffer}
@@ -76,7 +74,8 @@ private[spark] class MemoryStore(
     blockInfoManager: BlockInfoManager,
     serializerManager: SerializerManager,
     memoryManager: MemoryManager,
-    blockEvictionHandler: BlockEvictionHandler)
+    blockEvictionHandler: BlockEvictionHandler,
+    blockManager: BlockManager = _)
   extends Logging {
 
   // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
@@ -457,6 +456,29 @@ private[spark] class MemoryStore(
             if (blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
               selectedBlocks += blockId
               freedMemory += pair.getValue.size
+            }
+          }
+        }
+      }
+
+      if (conf.get("***") == "LCS") {
+        blockManager.inMemBlockExInfo.synchronized {
+          val setIter = blockManager.inMemBlockExInfo.iterator()
+          while (freedMemory < space && setIter.hasNext) {
+            val cur = setIter.next()
+
+            blockManager.stageExInfos.get(blockManager.currentStage) match {
+              case Some(curStageExInfo) =>
+                // cur is this stage's output RDD
+                if (!curStageExInfo.curRunningRddMap.contains(cur.blockId.getRddId)) {
+                  if (blockInfoManager.lockForWriting(cur.blockId,
+                    blocking = false).isDefined) {
+                    selectedBlocks += cur.blockId
+                    freedMemory += cur.size
+                  }
+                }
+              case None =>
+                logError("ERROR HERE")
             }
           }
         }

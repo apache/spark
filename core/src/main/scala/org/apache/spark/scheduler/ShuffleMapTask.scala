@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
+import scala.collection.mutable.HashMap
 import scala.language.existentials
 
 import org.apache.spark._
@@ -49,13 +50,16 @@ private[spark] class ShuffleMapTask(
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation],
-    _initialAccums: Seq[Accumulator[_]])
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, _initialAccums)
+    _initialAccums: Seq[Accumulator[_]],
+    depMap: HashMap[Int, Set[Int]],
+    curRunningRddMap: HashMap[Int, Set[Int]])
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, _initialAccums, depMap,
+    curRunningRddMap)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) {
-    this(0, 0, null, new Partition { override def index: Int = 0 }, null, null)
+    this(0, 0, null, new Partition { override def index: Int = 0 }, null, null, null, null)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
