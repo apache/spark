@@ -38,22 +38,28 @@ import org.apache.spark.storage.BlockId
  * The implication is that attempts to cache blocks may fail if execution has already eaten
  * up most of the storage space, in which case the new blocks will be evicted immediately
  * according to their respective storage levels.
- *
- * @param onHeapStorageRegionSize Size of the storage region, in bytes.
- *                          This region is not statically reserved; execution can borrow from
- *                          it if necessary. Cached blocks can be evicted only if actual
- *                          storage memory usage exceeds this region.
  */
 private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
-    val maxHeapMemory: Long,
-    onHeapStorageRegionSize: Long,
-    numCores: Int)
+    numCores: Int,
+    totalHeapMemory: Long,
+    totalOffHeapMemory: Long)
   extends MemoryManager(
     conf,
     numCores,
-    onHeapStorageRegionSize,
-    maxHeapMemory - onHeapStorageRegionSize) {
+    totalHeapMemory,
+    totalOffHeapMemory) {
+
+  override protected val maxHeapExecutionMemory: Long = totalHeapMemory
+  override val maxHeapStorageMemory: Long = totalHeapMemory
+  override protected val maxOffHeapExecutionMemory: Long = totalOffHeapMemory
+  override protected val maxOffHeapStorageMemory: Long = totalOffHeapMemory
+
+  private[this] val storageFraction = conf.getDouble("spark.memory.storageFraction", 0.5)
+  override protected val unevictableHeapStorageMemory: Long =
+    (totalHeapMemory * storageFraction).toLong
+  override protected val unevictableOffHeapStorageMemory: Long =
+    (totalOffHeapMemory * storageFraction).toLong
 
   override def acquireUnrollMemory(
       blockId: BlockId,
@@ -72,19 +78,17 @@ object UnifiedMemoryManager {
   private val RESERVED_SYSTEM_MEMORY_BYTES = 300 * 1024 * 1024
 
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
-    val maxMemory = getMaxMemory(conf)
     new UnifiedMemoryManager(
       conf,
-      maxHeapMemory = maxMemory,
-      onHeapStorageRegionSize =
-        (maxMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong,
-      numCores = numCores)
+      numCores = numCores,
+      totalHeapMemory = getMaxHeapMemory(conf),
+      totalOffHeapMemory = conf.getSizeAsBytes("spark.memory.offHeap.size", 0))
   }
 
   /**
    * Return the total amount of memory shared between execution and storage, in bytes.
    */
-  private def getMaxMemory(conf: SparkConf): Long = {
+  private def getMaxHeapMemory(conf: SparkConf): Long = {
     val systemMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val reservedMemory = conf.getLong("spark.testing.reservedMemory",
       if (conf.contains("spark.testing")) 0 else RESERVED_SYSTEM_MEMORY_BYTES)

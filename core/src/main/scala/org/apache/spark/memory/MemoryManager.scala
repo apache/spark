@@ -64,7 +64,7 @@ private[spark] abstract class MemoryManager(
 
   protected def maxHeapExecutionMemory: Long
   protected def maxOffHeapExecutionMemory: Long
-  protected def maxHeapStorageMemory: Long
+  def maxHeapStorageMemory: Long
   protected def maxOffHeapStorageMemory: Long
   protected def unevictableHeapStorageMemory: Long
   protected def unevictableOffHeapStorageMemory: Long
@@ -76,11 +76,6 @@ private[spark] abstract class MemoryManager(
     }
     _memoryStore
   }
-
-
-  protected[this] val maxOffHeapMemory = conf.getSizeAsBytes("spark.memory.offHeap.size", 0)
-  protected[this] val offHeapStorageMemory =
-    (maxOffHeapMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong
 
   /**
    * Set the [[MemoryStore]] used by this manager to evict cached blocks.
@@ -98,38 +93,57 @@ private[spark] abstract class MemoryManager(
   def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
+      memoryMode: MemoryMode,
+      maxBytesToAttemptToFreeViaEviction: Long = Long.MaxValue): Boolean = synchronized {
     assert(numBytes >= 0)
+
+    def maxStorageMemory = memoryMode match {
+      case MemoryMode.ON_HEAP => maxHeapStorageMemory
+      case MemoryMode.OFF_HEAP => maxOffHeapStorageMemory
+    }
+
+    // Fail fast if fulfilling this request would cause us to exceed our storage memory limits:
+    if (numBytes > maxStorageMemory) {
+      return false
+    }
+
+    def freeMemory = memoryMode match {
+      case MemoryMode.ON_HEAP => freeHeapMemory
+      case MemoryMode.OFF_HEAP => freeOffHeapMemory
+    }
+
+    def acquire(size: Long) = memoryMode match {
+      case MemoryMode.ON_HEAP => freeHeapMemory -= size
+      case MemoryMode.OFF_HEAP => freeOffHeapMemory -= size
+    }
+
     // First, attempt to fulfill as much of the request as possible using free memory
-    val freeMemoryAcquired = memoryMode match {
-      case MemoryMode.ON_HEAP =>
-        val acquired = math.min(numBytes, math.min(maxHeapStorageMemory, freeHeapMemory))
-        freeHeapMemory -= acquired
-        acquired
-      case MemoryMode.OFF_HEAP =>
-        val acquired = math.min(numBytes, math.min(maxOffHeapMemory, freeOffHeapMemory))
-        freeHeapMemory -= acquired
-        acquired
+    val freeMemoryAcquired = {
+      val acquired = math.min(numBytes, freeMemory)
+      acquire(acquired)
+      acquired
     }
     // Next, acquire the remaining memory by evicting blocks
-    val numBytesToFree = numBytes - freeMemoryAcquired
     var success: Boolean = false
     try {
-      // Once we support off-heap caching, this will need to change:
-      if (numBytesToFree > 0 && memoryMode == MemoryMode.ON_HEAP) {
+      val numBytesToFree = numBytes - freeMemoryAcquired
+      // TODO: Once we support off-heap caching, this will need to change:
+      if (numBytesToFree > 0
+          && numBytesToFree <= maxBytesToAttemptToFreeViaEviction
+          && memoryMode == MemoryMode.ON_HEAP) {
         memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree)
       }
       // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
-      // back into this StorageMemoryPool in order to free memory. Therefore, these variables
+      // back into this StorageMemoryPool in order to free memory, so the free memory counters
       // should have been updated.
-      val enoughMemory = numBytesToFree <= memoryFree
-      if (enoughMemory) {
-        _memoryUsed += numBytesToAcquire
+      if (numBytesToFree <= freeMemory) {
+        acquire(numBytesToFree)
       }
-      success
+      success = true
     } finally {
-      if (!success)
-      releaseStorageMemory(freeMemoryAcquired, memoryMode)
+      if (!success) {
+        releaseStorageMemory(freeMemoryAcquired, memoryMode)
+      }
     }
     success
   }
@@ -174,14 +188,14 @@ private[spark] abstract class MemoryManager(
       case MemoryMode.OFF_HEAP => "off-heap execution memory"
     }
 
-    val memoryForTask = memoryMode match {
+    val executionMemoryForTask = memoryMode match {
       case MemoryMode.ON_HEAP => heapExecutionMemoryUsedForTask
       case MemoryMode.OFF_HEAP => offHeapExecutionMemoryUsedForTask
     }
 
     def memoryFree = memoryMode match {
       case MemoryMode.ON_HEAP => math.min(freeHeapMemory, maxHeapExecutionMemory)
-      case MemoryMode.ON_HEAP => math.min(freeOffHeapMemory, maxOffHeapExecutionMemory)
+      case MemoryMode.OFF_HEAP => math.min(freeOffHeapMemory, maxOffHeapExecutionMemory)
     }
 
     def maxExecutionMemory = memoryMode match {
@@ -189,17 +203,24 @@ private[spark] abstract class MemoryManager(
       case MemoryMode.OFF_HEAP => maxOffHeapExecutionMemory
     }
 
-    def totalExecutionMemoryUsed = memoryForTask.values.sum
+    def totalExecutionMemoryUsed = executionMemoryForTask.values.sum
 
     def unevictableStorageMemory = memoryMode match {
       case MemoryMode.ON_HEAP => unevictableHeapStorageMemory
       case MemoryMode.OFF_HEAP => unevictableOffHeapStorageMemory
     }
 
+    def evictableStorageMemory = memoryMode match {
+      case MemoryMode.ON_HEAP =>
+        math.max(0, heapStorageMemoryUsed - unevictableHeapStorageMemory)
+      case MemoryMode.OFF_HEAP =>
+        math.max(0, offHeapStorageMemoryUsed - unevictableOffHeapStorageMemory)
+    }
+
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
     // of active tasks, to let other tasks ramp down their memory in calls to `acquireMemory`
-    if (!memoryForTask.contains(taskAttemptId)) {
-      memoryForTask(taskAttemptId) = 0L
+    if (!executionMemoryForTask.contains(taskAttemptId)) {
+      executionMemoryForTask(taskAttemptId) = 0L
       // This will later cause waiting tasks to wake up and check numTasks again
       notifyAll()
     }
@@ -209,13 +230,27 @@ private[spark] abstract class MemoryManager(
     // memory to give it (we always let each task get at least 1 / (2 * numActiveTasks)).
     // TODO: simplify this to limit each task to its own slot
     while (true) {
-      val numActiveTasks = memoryForTask.keys.size
-      val curMem = memoryForTask(taskAttemptId)
+      val numActiveTasks = executionMemoryForTask.keys.size
+      val curMem = executionMemoryForTask(taskAttemptId)
 
-      // In every iteration of this loop, we should first try to reclaim any borrowed execution
-      // space from storage. This is necessary because of the potential race condition where new
-      // storage blocks may steal the free execution memory that this task was waiting for.
-      maybeGrowPool(numBytes - memoryFree)
+      // If there is not enough free memory, see whether we can reclaim some by evicting cached
+      // blocks:
+      if (numBytes > memoryFree && numBytes <= evictableStorageMemory) {
+        val extraMemoryNeeded = numBytes - memoryFree
+        val spaceFreedByEviction = {
+          // Once we support off-heap caching, this will need to change:
+          if (memoryMode == MemoryMode.ON_HEAP) {
+            memoryStore.evictBlocksToFreeSpace(None, extraMemoryNeeded)
+          } else {
+            0
+          }
+        }
+        // When a block is released, BlockManager.dropFromMemory() calls releaseMemory()
+        // so we do not need to update the memory bookkeeping structures here.
+        if (spaceFreedByEviction >= extraMemoryNeeded) {
+          assert(numBytes <= memoryFree)
+        }
+      }
 
       // Maximum amount of execution memory that can be used.
       // This is used to compute the upper bound of how much memory each task can occupy.
@@ -235,7 +270,7 @@ private[spark] abstract class MemoryManager(
         logInfo(s"TID $taskAttemptId waiting for at least 1/2N of $poolName to be free")
         wait()
       } else {
-        memoryForTask(taskAttemptId) += toGrant
+        executionMemoryForTask(taskAttemptId) += toGrant
         return toGrant
       }
     }
@@ -350,34 +385,6 @@ private[spark] abstract class MemoryManager(
     val heapUsage = heapExecutionMemoryUsedForTask.getOrElse(taskAttemptId, 0L)
     val offHeapUsage = offHeapExecutionMemoryUsedForTask.getOrElse(taskAttemptId, 0L)
     heapUsage + offHeapUsage
-  }
-
-  /**
-   * Try to shrink the size of this storage memory pool by `spaceToFree` bytes. Return the number
-   * of bytes removed from the pool's capacity.
-   */
-  def shrinkPoolToFreeSpace(spaceToFree: Long): Long = synchronized {
-    // First, shrink the pool by reclaiming free memory:
-    val spaceFreedByReleasingUnusedMemory = math.min(spaceToFree, memoryFree)
-    decrementPoolSize(spaceFreedByReleasingUnusedMemory)
-    val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
-    if (remainingSpaceToFree > 0) {
-      // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
-      val spaceFreedByEviction = {
-        // Once we support off-heap caching, this will need to change:
-        if (memoryMode == MemoryMode.ON_HEAP) {
-          memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree)
-        } else {
-          0
-        }
-      }
-      // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
-      // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.
-      decrementPoolSize(spaceFreedByEviction)
-      spaceFreedByReleasingUnusedMemory + spaceFreedByEviction
-    } else {
-      spaceFreedByReleasingUnusedMemory
-    }
   }
 
   // -- Fields related to Tungsten managed memory -------------------------------------------------

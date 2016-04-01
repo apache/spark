@@ -77,7 +77,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val serializer = new KryoSerializer(conf)
     val transfer = transferService
       .getOrElse(new NettyBlockTransferService(conf, securityMgr, numCores = 1))
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
+    val memManager =
+      new StaticMemoryManager(conf, numCores = 1, totalHeapMemory = maxMem, totalOffHeapMemory = 0)
     val serializerManager = new SerializerManager(serializer, conf)
     val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
@@ -820,9 +821,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
     val memoryManager = new StaticMemoryManager(
       conf,
-      maxOnHeapExecutionMemory = Long.MaxValue,
-      maxOnHeapStorageMemory = 1200,
-      numCores = 1)
+      numCores = 1,
+      totalHeapMemory = 1200,
+      totalOffHeapMemory = 0)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
