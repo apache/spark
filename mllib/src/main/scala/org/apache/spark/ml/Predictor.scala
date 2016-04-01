@@ -26,7 +26,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, DoubleType, NumericType, StructType}
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).
