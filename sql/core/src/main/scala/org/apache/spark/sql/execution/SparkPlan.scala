@@ -379,6 +379,13 @@ private[sql] trait LeafNode extends SparkPlan {
   override def producedAttributes: AttributeSet = outputSet
 }
 
+object UnaryNode {
+  def unapply(a: Any): Option[(SparkPlan, SparkPlan)] = a match {
+    case s: SparkPlan if s.children.size == 1 => Some((s, s.children.head))
+    case _ => None
+  }
+}
+
 private[sql] trait UnaryNode extends SparkPlan {
   def child: SparkPlan
 
