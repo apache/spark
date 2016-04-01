@@ -259,6 +259,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
     }
+    // throw exception for datasource tables
+    catalog.alterTable(catalog.getTable(tableIdent).copy(
+      properties = Map("spark.sql.sources.provider" -> "csv")))
+    val e = intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 SET TBLPROPERTIES ('sora' = 'bol')")
+    }
+    assert(e.getMessage.contains("datasource"))
   }
 
   test("alter table: unset properties") {
@@ -286,6 +293,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     // property to unset does not exist, but "IF EXISTS" is specified
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
     assert(catalog.getTable(tableIdent).properties.isEmpty)
+    // throw exception for datasource tables
+    catalog.alterTable(catalog.getTable(tableIdent).copy(
+      properties = Map("spark.sql.sources.provider" -> "csv")))
+    val e1 = intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('sora')")
+    }
+    assert(e1.getMessage.contains("datasource"))
   }
 
   test("alter table: set serde") {

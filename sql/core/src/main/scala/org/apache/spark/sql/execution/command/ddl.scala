@@ -233,7 +233,13 @@ case class AlterTableSetProperties(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
     val table = catalog.getTable(tableName)
-    val newTable = table.copy(properties = table.properties ++ properties)
+    val newProperties = table.properties ++ properties
+    // TODO: make this a constant
+    if (newProperties.contains("spark.sql.sources.provider")) {
+      throw new AnalysisException(
+        "alter table properties is not supported for datasource tables")
+    }
+    val newTable = table.copy(properties = newProperties)
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }
@@ -258,6 +264,11 @@ case class AlterTableUnsetProperties(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
     val table = catalog.getTable(tableName)
+    // TODO: make this a constant
+    if (table.properties.contains("spark.sql.sources.provider")) {
+      throw new AnalysisException(
+        "alter table properties is not supported for datasource tables")
+    }
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k)) {
