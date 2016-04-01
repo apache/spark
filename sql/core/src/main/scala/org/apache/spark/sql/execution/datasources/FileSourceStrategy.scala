@@ -59,6 +59,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       if (files.fileFormat.toString == "TestFileFormat" ||
          files.fileFormat.isInstanceOf[parquet.DefaultSource] ||
          files.fileFormat.toString == "ORC" ||
+         files.fileFormat.toString == "LibSVM" ||
          files.fileFormat.isInstanceOf[csv.DefaultSource] ||
          files.fileFormat.isInstanceOf[text.DefaultSource] ||
          files.fileFormat.isInstanceOf[json.DefaultSource]) &&

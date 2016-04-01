@@ -299,6 +299,9 @@ case class DataSource(
             "It must be specified manually")
         }
 
+        val enrichedOptions =
+          format.prepareRead(sqlContext, caseInsensitiveOptions, fileCatalog.allFiles())
+
         HadoopFsRelation(
           sqlContext,
           fileCatalog,
@@ -306,7 +309,7 @@ case class DataSource(
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          options)
+          enrichedOptions)
 
       case _ =>
         throw new AnalysisException(
