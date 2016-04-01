@@ -1811,4 +1811,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("show functions properly") {
+    sql("CREATE FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper'")
+    sql("CREATE TEMPORARY FUNCTION f2 AS 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper'")
+    checkExistence(sql("SHOW FUNCTIONS LIKE '*f*'"), true, "default.f1", "f2")
+    checkExistence(sql("SHOW FUNCTIONS"), true, "default.f1", "f2")
+  }
 }
