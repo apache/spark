@@ -109,8 +109,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     (file: PartitionedFile) => {
       val lineIterator = {
         val conf = broadcastedConf.value.value
-        val recordDelimiter = csvOptions.rowSeparator.getBytes(csvOptions.charset)
-        new HadoopFileLinesReader(file, conf, recordDelimiter).map { line =>
+        new HadoopFileLinesReader(file, conf).map { line =>
           new String(line.getBytes, 0, line.getLength, csvOptions.charset)
         }
       }
