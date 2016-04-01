@@ -101,7 +101,7 @@ package object config {
     .intConf
     .optional
 
-  private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.staging-dir")
+  private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .stringConf
     .optional

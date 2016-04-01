@@ -160,7 +160,7 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.staging-dir</code></td>
+  <td><code>spark.yarn.stagingDir</code></td>
   <td>Current user's home directory in the filesystem</td>
   <td>
     Staging directory used while submitting applications.

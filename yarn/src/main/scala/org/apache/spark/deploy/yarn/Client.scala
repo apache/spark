@@ -1445,7 +1445,8 @@ object Client extends Logging {
   }
 
   /**
-   *  Returns the app staging dir.
+   *  Returns the app staging dir based on the STAGING_DIR configuration if configured
+   *  otherwise based on the users home directory.
    */
   private def getAppStagingDirPath(
       conf: SparkConf,
