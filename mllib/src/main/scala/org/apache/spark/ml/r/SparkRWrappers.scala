@@ -17,15 +17,34 @@
 
 package org.apache.spark.ml.api.r
 
+import org.apache.spark.SparkException
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
-import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
+import org.apache.spark.ml.regression._
 import org.apache.spark.sql.DataFrame
 
 private[r] object SparkRWrappers {
+  def fitGLM(
+      value: String,
+      df: DataFrame,
+      family: String,
+      link: String,
+      lambda: Double,
+      solver: String): PipelineModel = {
+    val formula = new RFormula().setFormula(value)
+    val estimator = new GeneralizedLinearRegression()
+      .setFamily(family)
+      .setRegParam(lambda)
+      .setFitIntercept(formula.hasIntercept)
+
+    if (link != null) estimator.setLink(link)
+    val pipeline = new Pipeline().setStages(Array(formula, estimator))
+    pipeline.fit(df)
+  }
+
   def fitRModelFormula(
       value: String,
       df: DataFrame,
