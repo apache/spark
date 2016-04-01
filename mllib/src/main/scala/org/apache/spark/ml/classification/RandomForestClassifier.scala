@@ -155,7 +155,8 @@ final class RandomForestClassificationModel private[ml] (
     @Since("1.6.0") override val numFeatures: Int,
     @Since("1.5.0") override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
-  with RandomForestClassifierParams with TreeEnsembleModel with MLWritable with Serializable {
+  with RandomForestClassificationModelParams with TreeEnsembleModel with MLWritable
+  with Serializable {
 
   require(_trees.nonEmpty, "RandomForestClassificationModel requires at least 1 tree.")
 
@@ -216,6 +217,19 @@ final class RandomForestClassificationModel private[ml] (
           " raw2probabilityInPlace encountered SparseVector")
     }
   }
+
+  /**
+   * Number of trees in ensemble
+   * @deprecated  Use getNumTrees instead.  This method will be removed in 2.1.0
+   */
+  // TODO: Once this is removed, then this class can inherit from RandomForestClassifierParams
+  @deprecated("Use getNumTrees instead.  This method will be removed in 2.1.0.", "2.0.0")
+  val numTrees: Int = trees.length
+
+  /**
+   * Number of trees in ensemble
+   */
+  val getNumTrees: Int = trees.length
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
