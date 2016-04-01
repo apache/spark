@@ -35,8 +35,8 @@ import org.apache.spark.sql.internal.SQLConf
  * Usage:
  * {{{
  *   import org.apache.spark.sql.execution.debug._
- *   sql("SELECT key FROM src").debug()
- *   dataFrame.typeCheck()
+ *   sql("SELECT 1").debug()
+ *   sql("SELECT 1").debugCodegen()
  * }}}
  */
 package object debug {
