@@ -439,6 +439,15 @@ trait FileFormat {
       files: Seq[FileStatus]): Option[StructType]
 
   /**
+   * Prepares a read job and returns a potentially updated data source option [[Map]]. This method
+   * can be useful for collecting necessary global information for scanning input data.
+   */
+  def prepareRead(
+      sqlContext: SQLContext,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Map[String, String] = options
+
+  /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
    * be put here.  For example, user defined output committer can be configured here
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
