@@ -210,7 +210,7 @@ private class ChunkedByteBufferInputStream(
   }
 
   override def close(): Unit = {
-    if (dispose) {
+    if (chunkedByteBuffer != null && dispose) {
       chunkedByteBuffer.dispose()
     }
     chunkedByteBuffer = null
