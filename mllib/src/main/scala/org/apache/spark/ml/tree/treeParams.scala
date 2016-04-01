@@ -374,7 +374,6 @@ private[ml] trait HasNumTrees extends Params {
   final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
     ParamValidators.gtEq(1))
 
-
   setDefault(numTrees -> 20)
 
   /** @group setParam */
