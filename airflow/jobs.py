@@ -234,6 +234,7 @@ class SchedulerJob(BaseJob):
 
         self.refresh_dags_every = refresh_dags_every
         self.do_pickle = do_pickle
+        self.queued_tis = set()
         super(SchedulerJob, self).__init__(*args, **kwargs)
 
         self.heartrate = conf.getint('scheduler', 'SCHEDULER_HEARTBEAT_SEC')
@@ -507,6 +508,7 @@ class SchedulerJob(BaseJob):
                 self.logger.debug('Firing task: {}'.format(ti))
                 executor.queue_task_instance(ti, pickle_id=pickle_id)
 
+
         # Releasing the lock
         self.logger.debug("Unlocking DAG (scheduler_lock)")
         db_dag = (
@@ -521,27 +523,57 @@ class SchedulerJob(BaseJob):
         session.close()
 
     @provide_session
+    def process_events(self, executor, dagbag, session):
+        """
+        Respond to executor events.
+
+        Used to identify queued tasks and schedule them for further processing.
+        """
+        for key, executor_state in list(executor.get_event_buffer().items()):
+            dag_id, task_id, execution_date = key
+            if dag_id not in dagbag.dags:
+                self.logger.error(
+                    'Executor reported a dag_id that was not found in the '
+                    'DagBag: {}'.format(dag_id))
+                continue
+            elif not dagbag.dags[dag_id].has_task(task_id):
+                self.logger.error(
+                    'Executor reported a task_id that was not found in the '
+                    'dag: {} in dag {}'.format(task_id, dag_id))
+                continue
+            task = dagbag.dags[dag_id].get_task(task_id)
+            ti = models.TaskInstance(task, execution_date)
+            ti.refresh_from_db()
+
+            if executor_state == State.SUCCESS:
+                # collect queued tasks for prioritiztion
+                if ti.state == State.QUEUED:
+                    self.queued_tis.add(ti)
+                elif ti in self.queued_tis:
+                    self.queued_tis.remove(ti)
+            else:
+                # special instructions for failed executions could go here
+                pass
+
+    @provide_session
     def prioritize_queued(self, session, executor, dagbag):
         # Prioritizing queued task instances
 
         pools = {p.pool: p for p in session.query(models.Pool).all()}
-        TI = models.TaskInstance
-        queued_tis = (
-            session.query(TI)
-            .filter(TI.state == State.QUEUED)
-            .all()
-        )
-        self.logger.info("Prioritizing {} queued jobs".format(len(queued_tis)))
+
+        self.logger.info(
+            "Prioritizing {} queued jobs".format(len(self.queued_tis)))
         session.expunge_all()
         d = defaultdict(list)
-        for ti in queued_tis:
+        for ti in self.queued_tis:
             if ti.dag_id not in dagbag.dags:
-                self.logger.info("DAG not longer in dagbag, "
-                              "deleting {}".format(ti))
+                self.logger.info(
+                    "DAG no longer in dagbag, deleting {}".format(ti))
                 session.delete(ti)
                 session.commit()
             elif not dagbag.dags[ti.dag_id].has_task(ti.task_id):
-                self.logger.info("Task not longer exists, deleting {}".format(ti))
+                self.logger.info(
+                    "Task no longer exists, deleting {}".format(ti))
                 session.delete(ti)
                 session.commit()
             else:
@@ -625,6 +657,7 @@ class SchedulerJob(BaseJob):
             try:
                 loop_start_dttm = datetime.now()
                 try:
+                    self.process_events(executor=executor, dagbag=dagbag)
                     self.prioritize_queued(executor=executor, dagbag=dagbag)
                 except Exception as e:
                     self.logger.exception(e)
@@ -764,6 +797,7 @@ class BackfillJob(BaseJob):
         while tasks_to_run and not deadlocked:
 
             for key, ti in list(tasks_to_run.items()):
+
                 ti.refresh_from_db()
                 ignore_depends_on_past = (
                     self.ignore_first_depends_on_past and
