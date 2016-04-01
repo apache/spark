@@ -728,13 +728,15 @@ private[storage] class PartiallySerializedBlock[T](
     rest: Iterator[T],
     classTag: ClassTag[T]) {
 
-  private[this] var discarded: Boolean = false
-
+  // If the task does not fully consume `valuesIterator` or otherwise fails to consume or dispose of
+  // this PartiallySerializedBlock then we risk leaking of direct buffers, so we use a task
+  // completion listener here in order to ensure that `unrolled.dispose()` is called at least once.
+  // The dispose() method is idempotent, so it's safe to call it unconditionally.
   Option(TaskContext.get()).foreach { taskContext =>
     taskContext.addTaskCompletionListener { _ =>
-      if (!discarded) {
-        discard()
-      }
+      // When a task completes, its unroll memory will automatically be freed. Thus we do not call
+      // releaseUnrollMemoryForThisTask() here because we want to avoid double-freeing.
+      unrolled.dispose()
     }
   }
 
@@ -742,17 +744,15 @@ private[storage] class PartiallySerializedBlock[T](
    * Called to dispose of this block and free its memory.
    */
   def discard(): Unit = {
-    if (!discarded) {
-      try {
-        // We want to close the output stream in order to free any resources associated with the
-        // serializer itself (such as Kryo's internal buffers). close() might cause data to be
-        // written, so redirect the output stream to discard that data.
-        redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
-        serializationStream.close()
-      } finally {
-        memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
-        discarded = true
-      }
+    try {
+      // We want to close the output stream in order to free any resources associated with the
+      // serializer itself (such as Kryo's internal buffers). close() might cause data to be
+      // written, so redirect the output stream to discard that data.
+      redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
+      serializationStream.close()
+    } finally {
+      unrolled.dispose()
+      memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     }
   }
 
@@ -761,7 +761,8 @@ private[storage] class PartiallySerializedBlock[T](
    * and then serializing the values from the original input iterator.
    */
   def finishWritingToStream(os: OutputStream): Unit = {
-    ByteStreams.copy(unrolled.toInputStream(), os)
+    // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
+    ByteStreams.copy(unrolled.toInputStream(dispose = true), os)
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     redirectableOutputStream.setOutputStream(os)
     while (rest.hasNext) {
@@ -778,8 +779,9 @@ private[storage] class PartiallySerializedBlock[T](
    * `close()` on it to free its resources.
    */
   def valuesIterator: PartiallyUnrolledIterator[T] = {
-    val unrolledIter =
-      serializerManager.dataDeserializeStream(blockId, unrolled.toInputStream())(classTag)
+    // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
+    val unrolledIter = serializerManager.dataDeserializeStream(
+      blockId, unrolled.toInputStream(dispose = true))(classTag)
     new PartiallyUnrolledIterator(
       memoryStore,
       unrollMemory,

@@ -41,6 +41,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks.forall(_.limit() > 0), "chunks must be non-empty")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
+  private[this] var disposed: Boolean = false
+
   /**
    * This size of this buffer, in bytes.
    */
@@ -137,7 +139,10 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    * unfortunately no standard API to do this.
    */
   def dispose(): Unit = {
-    chunks.foreach(StorageUtils.dispose)
+    if (!disposed) {
+      chunks.foreach(StorageUtils.dispose)
+      disposed = true
+    }
   }
 }
 
@@ -163,7 +168,6 @@ private class ChunkedByteBufferInputStream(
 
   override def read(): Int = {
     if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
-      StorageUtils.dispose(currentChunk)
       currentChunk = chunks.next()
     }
     if (currentChunk != null && currentChunk.hasRemaining) {
@@ -176,7 +180,6 @@ private class ChunkedByteBufferInputStream(
 
   override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
     if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
-      StorageUtils.dispose(currentChunk)
       currentChunk = chunks.next()
     }
     if (currentChunk != null && currentChunk.hasRemaining) {
@@ -207,10 +210,8 @@ private class ChunkedByteBufferInputStream(
   }
 
   override def close(): Unit = {
-    if (currentChunk != null) {
-      if (dispose) {
-        chunkedByteBuffer.dispose()
-      }
+    if (dispose) {
+      chunkedByteBuffer.dispose()
     }
     chunkedByteBuffer = null
     chunks = null
