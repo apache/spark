@@ -257,12 +257,12 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
     }
   }
 
-  /** (private[ml]) Convert a model from the old API */
+  /** Convert a model from the old API */
   private[ml] def fromOld(
-                           oldModel: OldRandomForestModel,
-                           parent: RandomForestRegressor,
-                           categoricalFeatures: Map[Int, Int],
-                           numFeatures: Int = -1): RandomForestRegressionModel = {
+      oldModel: OldRandomForestModel,
+      parent: RandomForestRegressor,
+      categoricalFeatures: Map[Int, Int],
+      numFeatures: Int = -1): RandomForestRegressionModel = {
     require(oldModel.algo == OldAlgo.Regression, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestRegressionModel (new API).")
     val newTrees = oldModel.trees.map { tree =>

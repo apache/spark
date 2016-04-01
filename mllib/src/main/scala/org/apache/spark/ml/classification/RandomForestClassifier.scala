@@ -302,7 +302,7 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     }
   }
 
-  /** (private[ml]) Convert a model from the old API */
+  /** Convert a model from the old API */
   private[ml] def fromOld(
       oldModel: OldRandomForestModel,
       parent: RandomForestClassifier,
