@@ -33,7 +33,7 @@ class CSVParserSuite extends SparkFunSuite {
       read.append(c.toChar)
     } while (c != -1)
 
-    read.dropRight(1).toString()
+    read.dropRight(1).toString
   }
 
   private def readBufAll(iter: Iterator[String], bufSize: Int) = {
@@ -66,7 +66,7 @@ class CSVParserSuite extends SparkFunSuite {
       }
     } while (!done)
 
-    read.toString()
+    read.toString
   }
 
   test("Hygiene") {
