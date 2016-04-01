@@ -24,6 +24,7 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
   val sc = parent.sc
   val killEnabled = parent.killEnabled
+  val userName = parent.userName
   val jobProgresslistener = parent.jobProgressListener
   val executorListener = parent.executorsListener
   val operationGraphListener = parent.operationGraphListener

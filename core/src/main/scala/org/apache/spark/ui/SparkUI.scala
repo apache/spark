@@ -58,6 +58,7 @@ private[spark] class SparkUI private (
 
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
+  val userName = System.getProperty("user.name", "<unknown>")
 
   val stagesTab = new StagesTab(this)
 
