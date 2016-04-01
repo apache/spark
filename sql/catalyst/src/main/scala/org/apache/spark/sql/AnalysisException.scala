@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 
 // TODO: don't swallow original stack trace if it exists
@@ -30,7 +31,8 @@ import org.apache.spark.annotation.DeveloperApi
 class AnalysisException protected[sql] (
     val message: String,
     val line: Option[Int] = None,
-    val startPosition: Option[Int] = None)
+    val startPosition: Option[Int] = None,
+    val plan: Option[LogicalPlan] = None)
   extends Exception with Serializable {
 
   def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {

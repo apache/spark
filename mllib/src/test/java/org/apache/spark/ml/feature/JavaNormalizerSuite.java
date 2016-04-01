@@ -26,7 +26,8 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
 public class JavaNormalizerSuite {
@@ -53,17 +54,17 @@ public class JavaNormalizerSuite {
       new VectorIndexerSuite.FeatureData(Vectors.dense(1.0, 3.0)),
       new VectorIndexerSuite.FeatureData(Vectors.dense(1.0, 4.0))
     ));
-    DataFrame dataFrame = jsql.createDataFrame(points, VectorIndexerSuite.FeatureData.class);
+    Dataset<Row> dataFrame = jsql.createDataFrame(points, VectorIndexerSuite.FeatureData.class);
     Normalizer normalizer = new Normalizer()
       .setInputCol("features")
       .setOutputCol("normFeatures");
 
     // Normalize each Vector using $L^2$ norm.
-    DataFrame l2NormData = normalizer.transform(dataFrame, normalizer.p().w(2));
+    Dataset<Row> l2NormData = normalizer.transform(dataFrame, normalizer.p().w(2));
     l2NormData.count();
 
     // Normalize each Vector using $L^\infty$ norm.
-    DataFrame lInfNormData =
+    Dataset<Row> lInfNormData =
       normalizer.transform(dataFrame, normalizer.p().w(Double.POSITIVE_INFINITY));
     lInfNormData.count();
   }

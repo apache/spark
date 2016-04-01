@@ -95,7 +95,9 @@ public class JavaFPGrowthSuite implements Serializable {
 
     try {
       model.save(sc.sc(), outputPath);
-      FPGrowthModel newModel = FPGrowthModel.load(sc.sc(), outputPath);
+      @SuppressWarnings("unchecked")
+      FPGrowthModel<String> newModel =
+          (FPGrowthModel<String>) FPGrowthModel.load(sc.sc(), outputPath);
       List<FPGrowth.FreqItemset<String>> freqItemsets = newModel.freqItemsets().toJavaRDD()
         .collect();
       assertEquals(18, freqItemsets.size());

@@ -21,9 +21,10 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv, TaskState}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._

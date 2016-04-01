@@ -20,7 +20,7 @@ package org.apache.spark.rpc
 import java.io.{File, NotSerializableException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
-import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeoutException, TimeUnit}
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._

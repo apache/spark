@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.random.PoissonSampler
 
@@ -39,15 +39,26 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  override def usedInputs: AttributeSet = {
+    // only the attributes those are used at least twice should be evaluated before this plan,
+    // otherwise we could defer the evaluation until output attribute is actually used.
+    val usedExprIds = projectList.flatMap(_.collect {
+      case a: Attribute => a.exprId
+    })
+    val usedMoreThanOnce = usedExprIds.groupBy(id => id).filter(_._2.size > 1).keySet
+    references.filter(a => usedMoreThanOnce.contains(a.exprId))
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
     ctx.currentVars = input
-    val output = exprs.map(_.gen(ctx))
+    val resultVars = exprs.map(_.gen(ctx))
+    // Evaluation of non-deterministic expressions can't be deferred.
+    val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
     s"""
-       | ${output.map(_.code).mkString("\n")}
-       |
-       | ${consume(ctx, output)}
+       |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonDeterministicAttrs))}
+       |${consume(ctx, resultVars)}
      """.stripMargin
   }
 
@@ -63,8 +74,31 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 }
 
 
-case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode with CodegenSupport {
-  override def output: Seq[Attribute] = child.output
+case class Filter(condition: Expression, child: SparkPlan)
+  extends UnaryNode with CodegenSupport with PredicateHelper {
+
+  // Split out all the IsNotNulls from condition.
+  private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
+    case IsNotNull(a) if child.output.exists(_.semanticEquals(a)) => true
+    case _ => false
+  }
+
+  // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
+  private val notNullAttributes = notNullPreds.flatMap(_.references)
+
+  // Mark this as empty. We'll evaluate the input during doConsume(). We don't want to evaluate
+  // all the variables at the beginning to take advantage of short circuiting.
+  override def usedInputs: AttributeSet = AttributeSet.empty
+
+  override def output: Seq[Attribute] = {
+    child.output.map { a =>
+      if (a.nullable && notNullAttributes.exists(_.semanticEquals(a))) {
+        a.withNullability(false)
+      } else {
+        a
+      }
+    }
+  }
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
@@ -77,23 +111,85 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val expr = ExpressionCanonicalizer.execute(
-      BindReferences.bindReference(condition, child.output))
-    ctx.currentVars = input
-    val eval = expr.gen(ctx)
-    val nullCheck = if (expr.nullable) {
-      s"!${eval.isNull} &&"
-    } else {
-      s""
+
+    /**
+     * Generates code for `c`, using `in` for input attributes and `attrs` for nullability.
+     */
+    def genPredicate(c: Expression, in: Seq[ExprCode], attrs: Seq[Attribute]): String = {
+      val bound = BindReferences.bindReference(c, attrs)
+      val evaluated = evaluateRequiredVariables(child.output, in, c.references)
+
+      // Generate the code for the predicate.
+      val ev = ExpressionCanonicalizer.execute(bound).gen(ctx)
+      val nullCheck = if (bound.nullable) {
+        s"${ev.isNull} || "
+      } else {
+        s""
+      }
+
+      s"""
+         |$evaluated
+         |${ev.code}
+         |if (${nullCheck}!${ev.value}) continue;
+       """.stripMargin
     }
+
+    ctx.currentVars = input
+
+    // To generate the predicates we will follow this algorithm.
+    // For each predicate that is not IsNotNull, we will generate them one by one loading attributes
+    // as necessary. For each of both attributes, if there is a IsNotNull predicate we will generate
+    // that check *before* the predicate. After all of these predicates, we will generate the
+    // remaining IsNotNull checks that were not part of other predicates.
+    // This has the property of not doing redundant IsNotNull checks and taking better advantage of
+    // short-circuiting, not loading attributes until they are needed.
+    // This is very perf sensitive.
+    // TODO: revisit this. We can consider reodering predicates as well.
+    val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
+    val generated = otherPreds.map { c =>
+      val nullChecks = c.references.map { r =>
+        val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
+        if (idx != -1 && !generatedIsNotNullChecks(idx)) {
+          generatedIsNotNullChecks(idx) = true
+          // Use the child's output. The nullability is what the child produced.
+          genPredicate(notNullPreds(idx), input, child.output)
+        } else {
+          ""
+        }
+      }.mkString("\n").trim
+
+      // Here we use *this* operator's output with this output's nullability since we already
+      // enforced them with the IsNotNull checks above.
+      s"""
+         |$nullChecks
+         |${genPredicate(c, input, output)}
+       """.stripMargin.trim
+    }.mkString("\n")
+
+    val nullChecks = notNullPreds.zipWithIndex.map { case (c, idx) =>
+      if (!generatedIsNotNullChecks(idx)) {
+        genPredicate(c, input, child.output)
+      } else {
+        ""
+      }
+    }.mkString("\n")
+
+    // Reset the isNull to false for the not-null columns, then the followed operators could
+    // generate better code (remove dead branches).
+    val resultVars = input.zipWithIndex.map { case (ev, i) =>
+      if (notNullAttributes.exists(_.semanticEquals(child.output(i)))) {
+        ev.isNull = "false"
+      }
+      ev
+    }
+
     s"""
-       | ${eval.code}
-       | if ($nullCheck ${eval.value}) {
-       |   $numOutput.add(1);
-       |   ${consume(ctx, ctx.currentVars)}
-       | }
+       |$generated
+       |$nullChecks
+       |$numOutput.add(1);
+       |${consume(ctx, resultVars)}
      """.stripMargin
   }
 
@@ -155,6 +251,9 @@ case class Range(
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
+  // output attributes should not affect the results
+  override lazy val cleanArgs: Seq[Any] = Seq(start, step, numSlices, numElements)
 
   override def upstreams(): Seq[RDD[InternalRow]] = {
     sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
@@ -235,7 +334,6 @@ case class Range(
       |    $overflow = true;
       |  }
       |  ${consume(ctx, Seq(ev))}
-      |
       |  if (shouldStop()) return;
       | }
      """.stripMargin

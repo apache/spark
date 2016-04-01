@@ -21,7 +21,6 @@ import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
@@ -187,7 +186,7 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
     assertCached(table("refreshTable"))
     checkAnswer(
       table("refreshTable"),
-      table("src").unionAll(table("src")).collect())
+      table("src").union(table("src")).collect())
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
@@ -199,7 +198,7 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
     sql("REFRESH TABLE refreshTable")
     checkAnswer(
       table("refreshTable"),
-      table("src").unionAll(table("src")).collect())
+      table("src").union(table("src")).collect())
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
 

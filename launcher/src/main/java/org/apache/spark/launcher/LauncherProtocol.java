@@ -17,13 +17,7 @@
 
 package org.apache.spark.launcher;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.io.Serializable;
-import java.net.Socket;
-import java.util.Map;
 
 /**
  * Message definitions for the launcher communication protocol. These messages must remain

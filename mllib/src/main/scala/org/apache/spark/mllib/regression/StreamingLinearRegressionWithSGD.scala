@@ -43,6 +43,7 @@ import org.apache.spark.mllib.linalg.Vector
 class StreamingLinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
+    private var regParam: Double,
     private var miniBatchFraction: Double)
   extends StreamingLinearAlgorithm[LinearRegressionModel, LinearRegressionWithSGD]
   with Serializable {
@@ -54,10 +55,10 @@ class StreamingLinearRegressionWithSGD private[mllib] (
    * (see `StreamingLinearAlgorithm`)
    */
   @Since("1.1.0")
-  def this() = this(0.1, 50, 1.0)
+  def this() = this(0.1, 50, 0.0, 1.0)
 
   @Since("1.1.0")
-  val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
+  val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction)
 
   protected var model: Option[LinearRegressionModel] = None
 
@@ -71,8 +72,17 @@ class StreamingLinearRegressionWithSGD private[mllib] (
   }
 
   /**
-   * Set the number of iterations of gradient descent to run per update. Default: 50.
+   * Set the regularization parameter. Default: 0.0.
    */
+  @Since("2.0.0")
+  def setRegParam(regParam: Double): this.type = {
+    this.algorithm.optimizer.setRegParam(regParam)
+    this
+  }
+
+  /**
+    * Set the number of iterations of gradient descent to run per update. Default: 50.
+    */
   @Since("1.1.0")
   def setNumIterations(numIterations: Int): this.type = {
     this.algorithm.optimizer.setNumIterations(numIterations)

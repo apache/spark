@@ -33,7 +33,6 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableJobConf
 
 private[hive]
@@ -46,7 +45,7 @@ case class InsertIntoHiveTable(
 
   @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
-  @transient private lazy val catalog = sc.catalog
+  @transient private lazy val client = sc.metadataHive
 
   def output: Seq[Attribute] = Seq.empty
 
@@ -178,7 +177,7 @@ case class InsertIntoHiveTable(
       // loadPartition call orders directories created on the iteration order of the this map
       val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
       table.hiveQlTable.getPartCols.asScala.foreach { entry =>
-        orderedPartitionSpec.put(entry.getName, partitionSpec.get(entry.getName).getOrElse(""))
+        orderedPartitionSpec.put(entry.getName, partitionSpec.getOrElse(entry.getName, ""))
       }
 
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
@@ -187,8 +186,8 @@ case class InsertIntoHiveTable(
       // TODO: Correctly set isSkewedStoreAsSubdir.
       val isSkewedStoreAsSubdir = false
       if (numDynamicPartitions > 0) {
-        catalog.synchronized {
-          catalog.client.loadDynamicPartitions(
+        client.synchronized {
+          client.loadDynamicPartitions(
             outputPath.toString,
             qualifiedTableName,
             orderedPartitionSpec,
@@ -203,12 +202,12 @@ case class InsertIntoHiveTable(
         // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
         // scalastyle:on
         val oldPart =
-          catalog.client.getPartitionOption(
-            catalog.client.getTable(table.databaseName, table.tableName),
+          client.getPartitionOption(
+            client.getTable(table.databaseName, table.tableName),
             partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
-            catalog.client.loadPartition(
+            client.loadPartition(
               outputPath.toString,
               qualifiedTableName,
               orderedPartitionSpec,
@@ -219,7 +218,7 @@ case class InsertIntoHiveTable(
         }
       }
     } else {
-      catalog.client.loadTable(
+      client.loadTable(
         outputPath.toString, // TODO: URI
         qualifiedTableName,
         overwrite,

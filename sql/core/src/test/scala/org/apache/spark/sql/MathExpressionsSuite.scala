@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -262,9 +264,9 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   test("unhex") {
     val data = Seq(("1C", "737472696E67")).toDF("a", "b")
     checkAnswer(data.select(unhex('a)), Row(Array[Byte](28.toByte)))
-    checkAnswer(data.select(unhex('b)), Row("string".getBytes))
+    checkAnswer(data.select(unhex('b)), Row("string".getBytes(StandardCharsets.UTF_8)))
     checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
-    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes))
+    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes(StandardCharsets.UTF_8)))
     checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))
     checkAnswer(data.selectExpr("""unhex("G123")"""), Row(null))
   }

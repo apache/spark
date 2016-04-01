@@ -30,10 +30,9 @@ class CommandBuilderUtils {
   static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
-  static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
 
   /** The set of known JVM vendors. */
-  static enum JavaVendor {
+  enum JavaVendor {
     Oracle, IBM, OpenJDK, Unknown
   };
 
@@ -147,7 +146,7 @@ class CommandBuilderUtils {
    * Output: [ "ab cd", "efgh", "i \" j" ]
    */
   static List<String> parseOptionString(String s) {
-    List<String> opts = new ArrayList<String>();
+    List<String> opts = new ArrayList<>();
     StringBuilder opt = new StringBuilder();
     boolean inOpt = false;
     boolean inSingleQuote = false;
@@ -350,4 +349,29 @@ class CommandBuilderUtils {
       return Integer.parseInt(version[1]);
     }
   }
+
+  /**
+   * Find the location of the Spark jars dir, depending on whether we're looking at a build
+   * or a distribution directory.
+   */
+  static String findJarsDir(String sparkHome, String scalaVersion, boolean failIfNotFound) {
+    // TODO: change to the correct directory once the assembly build is changed.
+    File libdir;
+    if (new File(sparkHome, "RELEASE").isFile()) {
+      libdir = new File(sparkHome, "lib");
+      checkState(!failIfNotFound || libdir.isDirectory(),
+        "Library directory '%s' does not exist.",
+        libdir.getAbsolutePath());
+    } else {
+      libdir = new File(sparkHome, String.format("assembly/target/scala-%s", scalaVersion));
+      if (!libdir.isDirectory()) {
+        checkState(!failIfNotFound,
+          "Library directory '%s' does not exist; make sure Spark is built.",
+          libdir.getAbsolutePath());
+        libdir = null;
+      }
+    }
+    return libdir != null ? libdir.getAbsolutePath() : null;
+  }
+
 }

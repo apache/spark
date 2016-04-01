@@ -18,6 +18,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
+import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
@@ -25,7 +26,6 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.codahale.metrics.Counter
-import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -140,8 +140,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
 
-    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
-    "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
+    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd"
+    // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
+    // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
@@ -216,8 +217,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         val expectedFile = {
           new File(logDir, entry.getName)
         }
-        val expected = Files.toString(expectedFile, Charsets.UTF_8)
-        val actual = new String(ByteStreams.toByteArray(zipStream), Charsets.UTF_8)
+        val expected = Files.toString(expectedFile, StandardCharsets.UTF_8)
+        val actual = new String(ByteStreams.toByteArray(zipStream), StandardCharsets.UTF_8)
         actual should be (expected)
         filesCompared += 1
       }

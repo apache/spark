@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.HashSet
 
-import org.apache.spark.{Accumulator, AccumulatorParam, Logging}
+import org.apache.spark.{Accumulator, AccumulatorParam}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.internal.SQLConf
 
@@ -38,6 +40,13 @@ import org.apache.spark.sql.internal.SQLConf
  * }}}
  */
 package object debug {
+
+  /** Helper function to evade the println() linter. */
+  private def debugPrint(msg: String): Unit = {
+    // scalastyle:off println
+    println(msg)
+    // scalastyle:on println
+  }
 
   /**
    * Augments [[SQLContext]] with debug methods.
@@ -60,15 +69,44 @@ package object debug {
           visited += new TreeNodeRef(s)
           DebugNode(s)
       }
-      logDebug(s"Results returned: ${debugPlan.execute().count()}")
+      debugPrint(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
         case d: DebugNode => d.dumpStats()
         case _ =>
       }
     }
+
+    /**
+     * Prints to stdout all the generated code found in this plan (i.e. the output of each
+     * WholeStageCodegen subtree).
+     */
+    def debugCodegen(): Unit = {
+      debugPrint(debugCodegenString())
+    }
+
+    /** Visible for testing. */
+    def debugCodegenString(): String = {
+      val plan = query.queryExecution.executedPlan
+      val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegen]()
+      plan transform {
+        case s: WholeStageCodegen =>
+          codegenSubtrees += s
+          s
+        case s => s
+      }
+      var output = s"Found ${codegenSubtrees.size} WholeStageCodegen subtrees.\n"
+      for ((s, i) <- codegenSubtrees.toSeq.zipWithIndex) {
+        output += s"== Subtree ${i + 1} / ${codegenSubtrees.size} ==\n"
+        output += s
+        output += "\nGenerated code:\n"
+        val (_, source) = s.doCodeGen()
+        output += s"${CodeFormatter.format(source)}\n"
+      }
+      output
+    }
   }
 
-  private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
+  private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
     implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {
@@ -86,21 +124,22 @@ package object debug {
     /**
      * A collection of metrics for each column of output.
      * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
-     *        causing the wrong data to be projected.
+     *                     causing the wrong data to be projected.
      */
     case class ColumnMetrics(
-        elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
+      elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
+
     val tupleCount: Accumulator[Int] = sparkContext.accumulator[Int](0)
 
     val numColumns: Int = child.output.size
     val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
-      logDebug(s"== ${child.simpleString} ==")
-      logDebug(s"Tuples output: ${tupleCount.value}")
-      child.output.zip(columnStats).foreach { case(attr, metric) =>
+      debugPrint(s"== ${child.simpleString} ==")
+      debugPrint(s"Tuples output: ${tupleCount.value}")
+      child.output.zip(columnStats).foreach { case (attr, metric) =>
         val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
-        logDebug(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
+        debugPrint(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }
 
@@ -108,6 +147,7 @@ package object debug {
       child.execute().mapPartitions { iter =>
         new Iterator[InternalRow] {
           def hasNext: Boolean = iter.hasNext
+
           def next(): InternalRow = {
             val currentRow = iter.next()
             tupleCount += 1
@@ -123,6 +163,18 @@ package object debug {
           }
         }
       }
+    }
+
+    override def upstreams(): Seq[RDD[InternalRow]] = {
+      child.asInstanceOf[CodegenSupport].upstreams()
+    }
+
+    override def doProduce(ctx: CodegenContext): String = {
+      child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    }
+
+    override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+      consume(ctx, input)
     }
   }
 }

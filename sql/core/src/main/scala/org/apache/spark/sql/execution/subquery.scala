@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{ExprId, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -62,12 +62,12 @@ case class ScalarSubquery(
 /**
  * Convert the subquery from logical plan into executed plan.
  */
-case class PlanSubqueries(sqlContext: SQLContext) extends Rule[SparkPlan] {
+case class PlanSubqueries(sessionState: SessionState) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
-        val sparkPlan = sqlContext.planner.plan(ReturnAnswer(subquery.query)).next()
-        val executedPlan = sqlContext.prepareForExecution.execute(sparkPlan)
+        val sparkPlan = sessionState.planner.plan(ReturnAnswer(subquery.query)).next()
+        val executedPlan = sessionState.prepareForExecution.execute(sparkPlan)
         ScalarSubquery(executedPlan, subquery.exprId)
     }
   }

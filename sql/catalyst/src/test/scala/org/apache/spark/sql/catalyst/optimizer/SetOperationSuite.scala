@@ -32,7 +32,7 @@ class SetOperationSuite extends PlanTest {
       Batch("Union Pushdown", Once,
         CombineUnions,
         SetOperationPushDown,
-        SimplifyFilters) :: Nil
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)

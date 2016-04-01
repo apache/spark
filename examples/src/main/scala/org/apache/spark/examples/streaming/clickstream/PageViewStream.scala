@@ -69,7 +69,7 @@ object PageViewStream {
                                       .groupByKey()
     val errorRatePerZipCode = statusesPerZipCode.map{
       case(zip, statuses) =>
-        val normalCount = statuses.filter(_ == 200).size
+        val normalCount = statuses.count(_ == 200)
         val errorCount = statuses.size - normalCount
         val errorRatio = errorCount.toFloat / statuses.size
         if (errorRatio > 0.05) {

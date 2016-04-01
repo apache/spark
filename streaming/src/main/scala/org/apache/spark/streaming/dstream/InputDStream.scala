@@ -23,7 +23,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 import org.apache.spark.streaming.scheduler.RateController
-import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.Utils
 
 /**

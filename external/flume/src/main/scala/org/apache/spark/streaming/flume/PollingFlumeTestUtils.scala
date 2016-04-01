@@ -17,12 +17,12 @@
 
 package org.apache.spark.streaming.flume
 
+import java.nio.charset.StandardCharsets
 import java.util.{Collections, List => JList, Map => JMap}
 import java.util.concurrent._
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.base.Charsets.UTF_8
 import org.apache.flume.event.EventBuilder
 import org.apache.flume.Context
 import org.apache.flume.channel.MemoryChannel
@@ -193,7 +193,8 @@ private[flume] class PollingFlumeTestUtils {
         val tx = channel.getTransaction
         tx.begin()
         for (j <- 0 until eventsPerBatch) {
-          channel.put(EventBuilder.withBody(s"${channel.getName}-$t".getBytes(UTF_8),
+          channel.put(EventBuilder.withBody(
+            s"${channel.getName}-$t".getBytes(StandardCharsets.UTF_8),
             Collections.singletonMap(s"test-$t", "header")))
           t += 1
         }

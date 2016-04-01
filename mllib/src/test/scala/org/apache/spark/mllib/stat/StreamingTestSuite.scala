@@ -164,7 +164,7 @@ class StreamingTestSuite extends SparkFunSuite with TestSuiteBase {
 
     // number of batches seen so far does not exceed testWindow, expect counts to continue growing
     for (i <- 0 until testWindow) {
-      assert(outputCounts.drop(2 * i).take(2).forall(_ == (i + 1) * pointsPerBatch / 2))
+      assert(outputCounts.slice(2 * i, 2 * i + 2).forall(_ == (i + 1) * pointsPerBatch / 2))
     }
 
     // number of batches seen exceeds testWindow, expect counts to be constant

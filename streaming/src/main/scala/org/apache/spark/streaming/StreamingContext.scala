@@ -35,6 +35,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.SerializationDebugger
@@ -299,7 +300,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a input stream from TCP source hostname:port. Data is received using
-   * a TCP socket and the receive bytes it interepreted as object using the given
+   * a TCP socket and the receive bytes it interpreted as object using the given
    * converter.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data

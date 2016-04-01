@@ -36,7 +36,9 @@ object StronglyConnectedComponents {
    * @return a graph with vertex attributes containing the smallest vertex id in each SCC
    */
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int): Graph[VertexId, ED] = {
-    require(numIter > 0, s"Number of iterations ${numIter} must be greater than 0.")
+    require(numIter > 0, s"Number of iterations must be greater than 0," +
+      s" but got ${numIter}")
+
     // the graph we update with final SCC ids, and the graph we return at the end
     var sccGraph = graph.mapVertices { case (vid, _) => vid }
     // graph we are going to work with in our iterations

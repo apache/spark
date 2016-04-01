@@ -446,7 +446,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    *                   remember the partitioner despite the key being changed.
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
-   * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
+   * @param rememberPartitioner Whether to remember the partitioner object in the generated RDDs.
    * @tparam S State type
    */
   def updateStateByKey[S: ClassTag](
@@ -490,7 +490,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    *                   remember the  partitioner despite the key being changed.
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
-   * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
+   * @param rememberPartitioner Whether to remember the partitioner object in the generated RDDs.
    * @param initialRDD initial state value of each key.
    * @tparam S State type
    */

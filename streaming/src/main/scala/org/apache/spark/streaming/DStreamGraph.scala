@@ -21,7 +21,7 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.util.Utils
@@ -160,7 +160,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       require(batchDuration != null, "Batch duration has not been set")
       // assert(batchDuration >= Milliseconds(100), "Batch duration of " + batchDuration +
       // " is very low")
-      require(getOutputStreams().size > 0, "No output operations registered, so nothing to execute")
+      require(getOutputStreams().nonEmpty, "No output operations registered, so nothing to execute")
     }
   }
 

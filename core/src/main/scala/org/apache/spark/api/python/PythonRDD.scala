@@ -19,6 +19,7 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
+import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, Collections, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -26,7 +27,6 @@ import scala.collection.mutable
 import scala.language.existentials
 import scala.util.control.NonFatal
 
-import com.google.common.base.Charsets.UTF_8
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{InputFormat, JobConf, OutputFormat}
@@ -36,6 +36,7 @@ import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -58,7 +59,7 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = new PythonRunner(func, bufferSize, reuse_worker)
+    val runner = new PythonRunner(Seq(func), bufferSize, reuse_worker, false)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
 }
@@ -80,14 +81,18 @@ private[spark] case class PythonFunction(
  * A helper class to run Python UDFs in Spark.
  */
 private[spark] class PythonRunner(
-    func: PythonFunction,
+    funcs: Seq[PythonFunction],
     bufferSize: Int,
-    reuse_worker: Boolean)
+    reuse_worker: Boolean,
+    rowBased: Boolean)
   extends Logging {
 
-  private val envVars = func.envVars
-  private val pythonExec = func.pythonExec
-  private val accumulator = func.accumulator
+  // All the Python functions should have the same exec, version and envvars.
+  private val envVars = funcs.head.envVars
+  private val pythonExec = funcs.head.pythonExec
+  private val pythonVer = funcs.head.pythonVer
+
+  private val accumulator = funcs.head.accumulator // TODO: support accumulator in multiple UDF
 
   def compute(
       inputIterator: Iterator[_],
@@ -165,7 +170,7 @@ private[spark] class PythonRunner(
               val exLength = stream.readInt()
               val obj = new Array[Byte](exLength)
               stream.readFully(obj)
-              throw new PythonException(new String(obj, UTF_8),
+              throw new PythonException(new String(obj, StandardCharsets.UTF_8),
                 writerThread.exception.getOrElse(null))
             case SpecialLengths.END_OF_DATA_SECTION =>
               // We've finished the data section of the output, but we can still
@@ -227,10 +232,8 @@ private[spark] class PythonRunner(
 
     @volatile private var _exception: Exception = null
 
-    private val pythonVer = func.pythonVer
-    private val pythonIncludes = func.pythonIncludes
-    private val broadcastVars = func.broadcastVars
-    private val command = func.command
+    private val pythonIncludes = funcs.flatMap(_.pythonIncludes.asScala).toSet
+    private val broadcastVars = funcs.flatMap(_.broadcastVars.asScala)
 
     setDaemon(true)
 
@@ -255,13 +258,13 @@ private[spark] class PythonRunner(
         // sparkFilesDir
         PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
         // Python includes (*.zip and *.egg files)
-        dataOut.writeInt(pythonIncludes.size())
-        for (include <- pythonIncludes.asScala) {
+        dataOut.writeInt(pythonIncludes.size)
+        for (include <- pythonIncludes) {
           PythonRDD.writeUTF(include, dataOut)
         }
         // Broadcast variables
         val oldBids = PythonRDD.getWorkerBroadcasts(worker)
-        val newBids = broadcastVars.asScala.map(_.id).toSet
+        val newBids = broadcastVars.map(_.id).toSet
         // number of different broadcasts
         val toRemove = oldBids.diff(newBids)
         val cnt = toRemove.size + newBids.diff(oldBids).size
@@ -271,7 +274,7 @@ private[spark] class PythonRunner(
           dataOut.writeLong(- bid - 1)  // bid >= 0
           oldBids.remove(bid)
         }
-        for (broadcast <- broadcastVars.asScala) {
+        for (broadcast <- broadcastVars) {
           if (!oldBids.contains(broadcast.id)) {
             // send new broadcast
             dataOut.writeLong(broadcast.id)
@@ -281,8 +284,12 @@ private[spark] class PythonRunner(
         }
         dataOut.flush()
         // Serialized command:
-        dataOut.writeInt(command.length)
-        dataOut.write(command)
+        dataOut.writeInt(if (rowBased) 1 else 0)
+        dataOut.writeInt(funcs.length)
+        funcs.foreach { f =>
+          dataOut.writeInt(f.command.length)
+          dataOut.write(f.command)
+        }
         // Data values
         PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
@@ -624,7 +631,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    val bytes = str.getBytes(UTF_8)
+    val bytes = str.getBytes(StandardCharsets.UTF_8)
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)
   }
@@ -817,7 +824,7 @@ private[spark] object PythonRDD extends Logging {
 
 private
 class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
-  override def call(arr: Array[Byte]) : String = new String(arr, UTF_8)
+  override def call(arr: Array[Byte]) : String = new String(arr, StandardCharsets.UTF_8)
 }
 
 /**

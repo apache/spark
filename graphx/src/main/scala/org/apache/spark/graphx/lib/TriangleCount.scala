@@ -20,7 +20,6 @@ package org.apache.spark.graphx.lib
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.PartitionStrategy.EdgePartition2D
 
 /**
  * Compute the number of triangles passing through each vertex.
@@ -70,7 +69,7 @@ object TriangleCount {
       graph.collectNeighborIds(EdgeDirection.Either).mapValues { (vid, nbrs) =>
         val set = new VertexSet(nbrs.length)
         var i = 0
-        while (i < nbrs.size) {
+        while (i < nbrs.length) {
           // prevent self cycle
           if (nbrs(i) != vid) {
             set.add(nbrs(i))

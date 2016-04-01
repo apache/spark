@@ -19,6 +19,7 @@ package org.apache.spark.deploy
 
 import java.io._
 import java.net.URL
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ListBuffer
@@ -31,8 +32,9 @@ import scala.sys.process._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -348,7 +350,8 @@ private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile
 
   def readState() {
     try {
-      val masterStream = new InputStreamReader(new URL("http://%s:8080/json".format(ip)).openStream)
+      val masterStream = new InputStreamReader(
+        new URL("http://%s:8080/json".format(ip)).openStream, StandardCharsets.UTF_8)
       val json = JsonMethods.parse(masterStream)
 
       val workers = json \ "workers"

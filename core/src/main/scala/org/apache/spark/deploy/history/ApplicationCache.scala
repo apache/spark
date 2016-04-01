@@ -28,7 +28,7 @@ import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 import org.eclipse.jetty.servlet.FilterHolder
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Clock
@@ -87,7 +87,7 @@ private[history] class ApplicationCache(
   /**
    * The cache of applications.
    *
-   * Tagged as `protected` so as to allow subclasses in tests to accesss it directly
+   * Tagged as `protected` so as to allow subclasses in tests to access it directly
    */
   protected val appCache: LoadingCache[CacheKey, CacheEntry] = {
     CacheBuilder.newBuilder()
@@ -447,7 +447,7 @@ private[history] class CacheMetrics(prefix: String) extends Source {
 private[history] trait ApplicationCacheOperations {
 
   /**
-   * Get the application UI and the probe neededed to see if it has been updated.
+   * Get the application UI and the probe needed to see if it has been updated.
    * @param appId application ID
    * @param attemptId attempt ID
    * @return If found, the Spark UI and any history information to be used in the cache
@@ -590,7 +590,7 @@ private[history] object ApplicationCacheCheckFilterRelay extends Logging {
   // name of the attempt ID entry in the filter configuration. Optional.
   val ATTEMPT_ID = "attemptId"
 
-  // namer of the filter to register
+  // name of the filter to register
   val FILTER_NAME = "org.apache.spark.deploy.history.ApplicationCacheCheckFilter"
 
   /** the application cache to relay requests to */
