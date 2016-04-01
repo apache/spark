@@ -60,15 +60,7 @@ public abstract class BufferedRowIterator {
   /**
    * Initializes from array of iterators of InternalRow.
    */
-  public abstract void init(Iterator<InternalRow> iters[]);
-
-  /**
-   * Initializes from array of iterators of InternalRow.
-   */
-  public void init(int index, Iterator<InternalRow> iters[]) {
-    partitionIndex = index;
-    init(iters);
-  }
+  public abstract void init(int index, Iterator<InternalRow> iters[]);
 
   /**
    * Append a row to currentRows.
