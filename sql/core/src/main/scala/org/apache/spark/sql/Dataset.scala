@@ -2066,9 +2066,9 @@ class Dataset[T] private[sql](
    * of a wide transformation (e.g. join with different partitioners), to avoid
    * recomputing the input Dataset should be cached first.
    */
-  def toLocalIterator(): Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
+  def toLocalIterator(): java.util.Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
     withNewExecutionId {
-      queryExecution.executedPlan.executeToIterator().map(boundTEncoder.fromRow)
+      queryExecution.executedPlan.executeToIterator().map(boundTEncoder.fromRow).asJava
     }
   }
 
