@@ -891,16 +891,15 @@ private[execution] object AggregateProcessor {
     // partition size attribute reference, i.e., `SizeBasedWindowFunction.n`. Here we must collect
     // the singleton instance created on driver side instead of using executor side
     // `SizeBasedWindowFunction.n` to avoid binding failure caused by mismatching expression ID.
-    val partitionSize = {
+    val partitionSize: Option[AttributeReference] = {
       val aggs = functions.flatMap(_.collectFirst { case f: SizeBasedWindowFunction => f })
-      aggs.headOption.map(_.n).getOrElse(SizeBasedWindowFunction.n)
+      aggs.headOption.map(_.n)
     }
 
     // Check if there are any SizeBasedWindowFunctions. If there are, we add the partition size to
     // the aggregation buffer. Note that the ordinal of the partition size value will always be 0.
-    val trackPartitionSize = functions.exists(_.isInstanceOf[SizeBasedWindowFunction])
-    if (trackPartitionSize) {
-      aggBufferAttributes += partitionSize
+    partitionSize.foreach { n =>
+      aggBufferAttributes += n
       initialValues += NoOp
       updateExpressions += NoOp
     }
@@ -931,7 +930,7 @@ private[execution] object AggregateProcessor {
     // Create the projections.
     val initialProjection = newMutableProjection(
       initialValues,
-      Seq(partitionSize))()
+      partitionSize.toSeq)()
     val updateProjection = newMutableProjection(
       updateExpressions,
       aggBufferAttributes ++ inputAttributes)()
@@ -946,7 +945,7 @@ private[execution] object AggregateProcessor {
       updateProjection,
       evaluateProjection,
       imperatives.toArray,
-      trackPartitionSize)
+      partitionSize.isDefined)
   }
 }
 
