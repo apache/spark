@@ -352,7 +352,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "show_create_table_index",
     "show_create_table_partitioned",
     "show_create_table_serde",
-    "show_create_table_view"
+    "show_create_table_view",
+
+    // Index commands are not supported
+    "drop_index",
+    "drop_index_removes_partition_dirs",
+    "alter_index"
   )
 
   /**
@@ -369,7 +374,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter3",
     "alter4",
     "alter5",
-    "alter_index",
     "alter_merge_2",
     "alter_partition_format_loc",
     "alter_partition_with_whitelist",
@@ -496,8 +500,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "distinct_stats",
     "drop_database_removes_partition_dirs",
     "drop_function",
-    "drop_index",
-    "drop_index_removes_partition_dirs",
     "drop_multi_partitions",
     "drop_partitions_filter",
     "drop_partitions_filter2",
