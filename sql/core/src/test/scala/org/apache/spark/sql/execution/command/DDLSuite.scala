@@ -341,6 +341,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET SERDE 'whatever' WITH SERDEPROPERTIES ('x' = 'y')")
     }
+    // set table serde is not supported for datasource tables
+    catalog.alterTable(catalog.getTable(tableIdent).copy(
+      properties = Map("spark.sql.sources.provider" -> "csv")))
+    val e = intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 SET SERDE 'whatever'")
+    }
+    assert(e.getMessage.contains("datasource"))
   }
 
   test("alter table: bucketing is not supported") {

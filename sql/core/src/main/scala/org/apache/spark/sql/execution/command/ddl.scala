@@ -308,6 +308,11 @@ case class AlterTableSerDeProperties(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
     val table = catalog.getTable(tableName)
+    // Do not support setting serde for datasource tables
+    if (serdeClassName.isDefined && table.properties.contains("spark.sql.sources.provider")) {
+      throw new AnalysisException(
+        "alter table serde is not supported for datasource tables")
+    }
     val newTable = table.withNewStorage(
       serde = serdeClassName.orElse(table.storage.serde),
       serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
