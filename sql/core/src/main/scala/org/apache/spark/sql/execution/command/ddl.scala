@@ -186,18 +186,18 @@ case class DescribeDatabase(
 case class CreateFunction(
     databaseName: Option[String],
     functionName: String,
-    alias: String,
+    className: String,
     resources: Seq[(String, String)],
     isTemp: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val func = FunctionIdentifier(functionName, databaseName)
-    val catalogFunc = CatalogFunction(func, alias, resources)
+    val catalogFunc = CatalogFunction(func, className, resources)
     if (isTemp) {
-      val info = new ExpressionInfo(alias, functionName)
+      val info = new ExpressionInfo(className, functionName)
       val builder =
-        sqlContext.sessionState.functionRegistry.makeFunctionBuilder(functionName, alias)
+        sqlContext.sessionState.functionRegistry.makeFunctionBuilder(functionName, className)
       sqlContext.sessionState.catalog.createTempFunction(
         functionName, info, builder, ignoreIfExists = false)
     } else {
