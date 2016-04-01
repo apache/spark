@@ -35,7 +35,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite {
   }
 
   private def testBatchTermination(intervalMs: Long): Unit = {
-    @volatile var batchCounts = 0
+    var batchCounts = 0
     val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(intervalMs))
     processingTimeExecutor.execute(() => {
       batchCounts += 1
