@@ -317,11 +317,13 @@ private[orc] case class OrcTableScan(
       classOf[OrcInputFormat]
         .asInstanceOf[Class[_ <: MapRedInputFormat[NullWritable, Writable]]]
 
+    // Creating HadoopRDD directly to avoid closure cleaning and threadump withScope
     val rdd = new HadoopRDD(sqlContext.sparkContext,
       conf.asInstanceOf[JobConf],
       inputFormatClass,
       classOf[NullWritable],
-      classOf[Writable], sqlContext.sparkContext.defaultMinPartitions)
+      classOf[Writable],
+      sqlContext.sparkContext.defaultMinPartitions)
 
     val wrappedConf = new SerializableConfiguration(conf)
 
