@@ -105,6 +105,9 @@ exportMethods("arrange",
               "write.parquet",
               "write.text")
 
+exportMethods("lapply","lapplyPartition", "map","reduce")
+
+
 exportClasses("Column")
 
 exportMethods("%in%",
