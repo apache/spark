@@ -820,12 +820,11 @@ private[spark] class Client(
     }
 
     val driverOpts = sparkConf.get(DRIVER_JAVA_OPTIONS).orElse(sys.env.get("SPARK_JAVA_OPTS"))
-
     // Validate the driver specific options and add only if running in cluster mode
     driverOpts.foreach { opts =>
       if (opts.contains("-Xmx")) {
-        val msg = s"spark.driver.extraJavaOptions is not allowed to specify max heap memory settings (was '$opts')." +
-          " Use spark.driver.memory instead."
+        val msg = s"${DRIVER_JAVA_OPTIONS.key} is not allowed to specify max heap memory settings "+
+          s"(was '$opts'). Use spark.driver.memory instead."
         throw new SparkException(msg)
       }
       if (isClusterMode) {
@@ -843,16 +842,15 @@ private[spark] class Client(
       if (sparkConf.get(AM_JAVA_OPTIONS).isDefined) {
         logWarning(s"${AM_JAVA_OPTIONS.key} will not take effect in cluster mode")
       }
-
     } else {
       // Validate and include yarn am specific java options in yarn-client mode.
       sparkConf.get(AM_JAVA_OPTIONS).foreach { opts =>
         if (opts.contains("-Dspark")) {
-          val msg = s"spark.yarn.am.extraJavaOptions is not allowed to set Spark options (was '$opts')."
+          val msg = s"${AM_JAVA_OPTIONS.key} is not allowed to set Spark options (was '$opts')."
           throw new SparkException(msg)
         }
         if (opts.contains("-Xmx")) {
-          val msg = s"spark.yarn.am.extraJavaOptions is not allowed to specify max heap memory settings" +
+          val msg = s"${AM_JAVA_OPTIONS.key} is not allowed to specify max heap memory settings " +
             s"(was '$opts'). Use spark.yarn.am.memory instead."
           throw new SparkException(msg)
         }

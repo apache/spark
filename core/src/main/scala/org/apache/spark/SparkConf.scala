@@ -435,7 +435,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val driverLibraryPathKey = "spark.driver.extraLibraryPath"
     val sparkExecutorInstances = "spark.executor.instances"
 
-
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
       val warning =
