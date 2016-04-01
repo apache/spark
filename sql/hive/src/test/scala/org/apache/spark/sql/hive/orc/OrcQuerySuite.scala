@@ -26,6 +26,8 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -397,6 +399,43 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         checkPredicate('a < 1 || 'a > 8, List(9).map(Row(_, null)))
         checkPredicate(!('a > 3), List(1, 3).map(Row(_, null)))
         checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
+      }
+    }
+  }
+
+  test("SPARK-14070 Use ORC data source for SQL queries on ORC tables") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        HiveContext.CONVERT_METASTORE_ORC.key -> "true") {
+        val path = dir.getCanonicalPath
+
+        withTable("dummy_orc") {
+          withTempTable("single") {
+            sqlContext.sql(
+              s"""CREATE TABLE dummy_orc(key INT, value STRING)
+                  |STORED AS ORC
+                  |LOCATION '$path'
+               """.stripMargin)
+
+            val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
+            singleRowDF.registerTempTable("single")
+
+            sqlContext.sql(
+              s"""INSERT INTO TABLE dummy_orc
+                  |SELECT key, value FROM single
+               """.stripMargin)
+
+            val df = sqlContext.sql("SELECT * FROM dummy_orc WHERE key=0")
+            checkAnswer(df, singleRowDF)
+
+            val queryExecution = df.queryExecution
+            queryExecution.analyzed.collectFirst {
+              case _: LogicalRelation => ()
+            }.getOrElse {
+              fail(s"Expecting the query plan to have LogicalRelation, but got:\n$queryExecution")
+            }
+          }
+        }
       }
     }
   }

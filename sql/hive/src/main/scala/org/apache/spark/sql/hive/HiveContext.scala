@@ -155,6 +155,13 @@ class HiveContext private[hive](
     getConf(CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
 
   /**
+   * When true, enables an experimental feature where metastore tables that use the Orc SerDe
+   * are automatically converted to use the Spark SQL ORC table scan, instead of the Hive
+   * SerDe.
+   */
+  protected[sql] def convertMetastoreOrc: Boolean = getConf(CONVERT_METASTORE_ORC)
+
+  /**
    * When true, a table created by a Hive CTAS statement (no USING clause) will be
    * converted to a data source table, using the data source set by spark.sql.sources.default.
    * The table in CTAS statement will be converted when it meets any of the following conditions:
@@ -441,6 +448,11 @@ private[hive] object HiveContext extends Logging {
     doc = "When true, also tries to merge possibly different but compatible Parquet schemas in " +
       "different Parquet data files. This configuration is only effective " +
       "when \"spark.sql.hive.convertMetastoreParquet\" is true.")
+
+  val CONVERT_METASTORE_ORC = booleanConf("spark.sql.hive.convertMetastoreOrc",
+    defaultValue = Some(true),
+    doc = "When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
+      "the built in support.")
 
   val CONVERT_CTAS = booleanConf("spark.sql.hive.convertCTAS",
     defaultValue = Some(false),
