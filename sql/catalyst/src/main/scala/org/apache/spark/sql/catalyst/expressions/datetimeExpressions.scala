@@ -391,13 +391,14 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
       case StringType if right.foldable =>
         val sdf = classOf[SimpleDateFormat].getName
         val fString = if (constFormat == null) null else constFormat.toString
-        val formatter = ctx.freshName("formatter")
         if (fString == null) {
           s"""
             boolean ${ev.isNull} = true;
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           """
         } else {
+          val formatter = ctx.freshName("sdf")
+          ctx.addMutableState(sdf, formatter, s"""$formatter = null;""")
           val eval1 = left.gen(ctx)
           s"""
             ${eval1.code}
@@ -405,7 +406,9 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
-                $sdf $formatter = new $sdf("$fString");
+                if ($formatter == null) {
+                  $formatter = new $sdf("$fString");
+                }
                 ${ev.value} =
                   $formatter.parse(${eval1.value}.toString()).getTime() / 1000L;
               } catch (java.lang.Throwable e) {
@@ -416,11 +419,17 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
         }
       case StringType =>
         val sdf = classOf[SimpleDateFormat].getName
+        val formatter = ctx.freshName("sdf")
+        ctx.addMutableState(sdf, formatter, s"""$formatter = null;""")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
+              if ($formatter == null ||
+                  !$formatter.toPattern().equals("$format.toString()")) {
+                $formatter = new $sdf("$format.toString()");
+              }
               ${ev.value} =
-                (new $sdf($format.toString())).parse($string.toString()).getTime() / 1000L;
+                $formatter.parse($string.toString()).getTime() / 1000L;
             } catch (java.lang.Throwable e) {
               ${ev.isNull} = true;
             }
@@ -512,6 +521,8 @@ case class FromUnixTime(sec: Expression, format: Expression)
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         """
       } else {
+        val sdfTerm = ctx.freshName("sdf")
+        ctx.addMutableState(sdf, sdfTerm, s"""$sdfTerm = null;""")
         val t = left.gen(ctx)
         s"""
           ${t.code}
@@ -519,7 +530,10 @@ case class FromUnixTime(sec: Expression, format: Expression)
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
             try {
-              ${ev.value} = UTF8String.fromString(new $sdf("${constFormat.toString}").format(
+              if ($sdfTerm == null) {
+                $sdfTerm = new $sdf("${constFormat.toString}");
+              }
+              ${ev.value} = UTF8String.fromString($sdfTerm.format(
                 new java.util.Date(${t.value} * 1000L)));
             } catch (java.lang.Throwable e) {
               ${ev.isNull} = true;
@@ -528,10 +542,16 @@ case class FromUnixTime(sec: Expression, format: Expression)
         """
       }
     } else {
+      val sdfTerm = ctx.freshName("sdf")
+      ctx.addMutableState(sdf, sdfTerm, s"""$sdfTerm = null;""")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          ${ev.value} = UTF8String.fromString((new $sdf($f.toString())).format(
+          if ($sdfTerm == null ||
+              !$sdfTerm.toPattern().equals("$f")) {
+            $sdfTerm = new $sdf("$f");
+          }
+          ${ev.value} = UTF8String.fromString($sdfTerm.format(
             new java.util.Date($seconds * 1000L)));
         } catch (java.lang.Throwable e) {
           ${ev.isNull} = true;
