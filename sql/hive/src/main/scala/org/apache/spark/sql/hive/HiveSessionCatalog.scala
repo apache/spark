@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 
-class HiveSessionCatalog(
+private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
     client: HiveClient,
     context: HiveContext,
@@ -202,9 +202,19 @@ class HiveSessionCatalog(
           val functionName = name.toLowerCase
           // TODO: This may not really work for current_user because current_user is not evaluated
           // with session info.
-          val functionInfo =
-            Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-              throw new AnalysisException(s"Undefined Hive UDF: $name"))
+          // We do not need to use executionHive at here because we only load
+          // Hive's builtin functions, which do not need current db.
+          val functionInfo = {
+            try {
+              Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
+                throw new AnalysisException(s"Undefined Hive UDF: $name"))
+            } catch {
+              // If HiveFunctionRegistry.getFunctionInfo throws an exception,
+              // we are failing to load a Hive builtin function, which means that
+              // the given function is not a Hive builtin function.
+              case NonFatal(e) => throw new AnalysisException(s"Undefined Hive UDF: $name")
+            }
+          }
           val className = functionInfo.getFunctionClass.getName
           val builder = makeFunctionBuilder(functionName, className)
           // Put this Hive built-in function to our function registry.
@@ -215,4 +225,20 @@ class HiveSessionCatalog(
         }
     }
   }
+
+  // Pre-load a few commonly used Hive built-in functions.
+  HiveSessionCatalog.preloadedHiveBuiltinFunctions.foreach {
+    case (functionName, clazz) =>
+      val builder = makeFunctionBuilder(functionName, clazz)
+      val info = new ExpressionInfo(clazz.getCanonicalName, functionName)
+      createTempFunction(functionName, info, builder, ignoreIfExists = false)
+  }
+}
+
+private[sql] object HiveSessionCatalog {
+  // This is the list of Hive's built-in functions that are commonly used and we want to
+  // pre-load when we create the FunctionRegistry.
+  val preloadedHiveBuiltinFunctions =
+    ("collect_set", classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDAFCollectSet]) ::
+    ("collect_list", classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDAFCollectList]) :: Nil
 }

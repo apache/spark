@@ -363,7 +363,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Index commands are not supported
     "drop_index",
     "drop_index_removes_partition_dirs",
-    "alter_index"
+    "alter_index",
+
+    // We do not support macro for now.
+    // TODO: throw an exception if a user is trying to create a macro.
+    "macro"
   )
 
   /**
@@ -733,7 +737,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_file_with_space_in_the_name",
     "loadpart1",
     "louter_join_ppr",
-    "macro",
     "mapjoin_distinct",
     "mapjoin_filter_on_outerjoin",
     "mapjoin_mapjoin",
