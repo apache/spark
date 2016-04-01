@@ -428,6 +428,28 @@ private[hive] class HiveClientImpl(
     Option(hivePartition).map(fromHivePartition)
   }
 
+  /**
+   * Returns the partition names from hive metastore for a given table in a database.
+   */
+  override def getPartitionNames(
+      db: String,
+      table: String,
+      range: Short): Seq[String] = withHiveState {
+    client.getPartitionNames(db, table, -1).asScala
+  }
+
+  /**
+   * Returns the partition names that matches the partition spec for a given table in a database.
+   * When no match is found, an empty Sequence is returned.
+   */
+  override def getPartitionNames(
+      db: String,
+      table: String,
+      spec: ExternalCatalog.TablePartitionSpec,
+      range: Short): Seq[String] = withHiveState {
+    client.getPartitionNames(db, table, spec.asJava, -1).asScala
+  }
+
   override def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table)
     shim.getAllPartitions(client, hiveTable).map(fromHivePartition)

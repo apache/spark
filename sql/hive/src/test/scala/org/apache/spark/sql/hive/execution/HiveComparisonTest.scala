@@ -175,7 +175,7 @@ abstract class HiveComparisonTest
           .filterNot(_ == "")
       case _: HiveNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
-      case _: DescribeTableCommand =>
+      case _: DescribeTableCommand | ShowColumnsCommand(_) =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
