@@ -97,7 +97,7 @@ trait NamedExpression extends Expression {
     }
 }
 
-abstract class Attribute extends LeafExpression with NamedExpression {
+abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {
 
   override def references: AttributeSet = AttributeSet(this)
 
