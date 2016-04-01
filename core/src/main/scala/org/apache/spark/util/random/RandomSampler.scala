@@ -186,7 +186,7 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
  * @tparam T item type
  */
 @DeveloperApi
-class PoissonSampler[T: ClassTag](
+class PoissonSampler[T](
     fraction: Double,
     useGapSamplingIfPossible: Boolean) extends RandomSampler[T, T] {
 

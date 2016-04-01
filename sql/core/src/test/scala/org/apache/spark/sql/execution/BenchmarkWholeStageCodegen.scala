@@ -85,6 +85,31 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     */
   }
 
+  ignore("range/sample/sum") {
+    val N = 500 << 20
+    runBenchmark("range/sample/sum", N) {
+      sqlContext.range(N).sample(true, 0.01).groupBy().sum().collect()
+    }
+    /*
+    Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    range/sample/sum codegen=false         53888 / 56592          9.7         102.8       1.0X
+    range/sample/sum codegen=true          41614 / 42607         12.6          79.4       1.3X
+    */
+
+    runBenchmark("range/sample/sum", N) {
+      sqlContext.range(N).sample(false, 0.01).groupBy().sum().collect()
+    }
+    /*
+    Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    range/sample/sum codegen=false         12982 / 13384         40.4          24.8       1.0X
+    range/sample/sum codegen=true            7074 / 7383         74.1          13.5       1.8X
+    */
+  }
+
   ignore("stat functions") {
     val N = 100L << 20
 
