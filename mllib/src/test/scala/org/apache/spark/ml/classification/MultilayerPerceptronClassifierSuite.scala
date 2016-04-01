@@ -43,12 +43,29 @@ class MultilayerPerceptronClassifierSuite
     ).toDF("features", "label")
   }
 
+  test("Input Validation") {
+    val mlpc = new MultilayerPerceptronClassifier()
+    intercept[IllegalArgumentException] {
+      mlpc.setLayers(Array[Int]())
+    }
+    intercept[IllegalArgumentException] {
+      mlpc.setLayers(Array[Int](1))
+    }
+    intercept[IllegalArgumentException] {
+      mlpc.setLayers(Array[Int](0, 1))
+    }
+    intercept[IllegalArgumentException] {
+      mlpc.setLayers(Array[Int](1, 0))
+    }
+    mlpc.setLayers(Array[Int](1, 1))
+  }
+
   test("XOR function learning as binary classification problem with two outputs.") {
     val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
       .setBlockSize(1)
-      .setSeed(11L)
+      .setSeed(123L)
       .setMaxIter(100)
     val model = trainer.fit(dataset)
     val result = model.transform(dataset)
@@ -58,7 +75,29 @@ class MultilayerPerceptronClassifierSuite
     }
   }
 
-  // TODO: implement a more rigorous test
+  test("Test setWeights by training restart") {
+    val dataFrame = sqlContext.createDataFrame(Seq(
+      (Vectors.dense(0.0, 0.0), 0.0),
+      (Vectors.dense(0.0, 1.0), 1.0),
+      (Vectors.dense(1.0, 0.0), 1.0),
+      (Vectors.dense(1.0, 1.0), 0.0))
+    ).toDF("features", "label")
+    val layers = Array[Int](2, 5, 2)
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(12L)
+      .setMaxIter(1)
+      .setTol(1e-6)
+    val initialWeights = trainer.fit(dataFrame).weights
+    trainer.setWeights(initialWeights.copy)
+    val weights1 = trainer.fit(dataFrame).weights
+    trainer.setWeights(initialWeights.copy)
+    val weights2 = trainer.fit(dataFrame).weights
+    assert(weights1 ~== weights2 absTol 10e-5,
+      "Training should produce the same weights given equal initial weights and number of steps")
+  }
+
   test("3 class classification with 2 hidden layers") {
     val nPoints = 1000
 
