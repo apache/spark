@@ -73,6 +73,7 @@ class SessionCatalog(
   /**
    * Format table name, taking into account case sensitivity.
    */
+  // TODO: Should we use it for temp function name?
   protected[this] def formatTableName(name: String): String = {
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase
   }
@@ -457,6 +458,7 @@ class SessionCatalog(
    * If a database is specified in `name`, this will return the function in that database.
    * If no database is specified, this will return the function in the current database.
    */
+  // TODO: have a better name. This method is actually for fetching the metadata of a function.
   def getFunction(name: FunctionIdentifier): CatalogFunction = {
     val db = name.database.getOrElse(currentDb)
     externalCatalog.getFunction(db, name.funcName)
@@ -467,11 +469,17 @@ class SessionCatalog(
    *
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
-    try {
-      getFunction(name) != null
-    } catch {
-      case _: NoSuchFunctionException => false
-      case _: AnalysisException => false // HiveExternalCatalog wraps all exceptions with it.
+    if (functionRegistry.functionExists(name.unquotedString)) {
+      // This function exists in the FunctionRegistry.
+      true
+    } else {
+      // Need to check if this function exists in the metastore.
+      try {
+        getFunction(name) != null
+      } catch {
+        case _: NoSuchFunctionException => false
+        case _: AnalysisException => false // HiveExternalCatalog wraps all exceptions with it.
+      }
     }
   }
 
@@ -541,9 +549,24 @@ class SessionCatalog(
    * Note: This is currently only used for temporary functions.
    */
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    // TODO: if the function is not in function registry. It needs to load the function from
-    // the external catalog and loads resources.
-    functionRegistry.lookupFunction(name, children)
+    // TODO: Right now, the name can be qualified or not qualified.
+    // It will be better to get a FunctionIdentifier.
+    // TODO: Right now, we assume that name is not qualified!
+    val qualifiedName = FunctionIdentifier(name, Some(currentDb)).unquotedString
+    if (functionRegistry.functionExists(name)) {
+      functionRegistry.lookupFunction(name, children)
+    } else if (functionRegistry.functionExists(qualifiedName)) {
+      functionRegistry.lookupFunction(qualifiedName, children)
+    } else {
+      // The function has not been loaded to the function registry, which means
+      // that the function is a permanent function.
+      val catalogFunction = externalCatalog.getFunction(currentDb, name)
+      assert(qualifiedName == catalogFunction.identifier.unquotedString)
+      loadFunctionResources(catalogFunction.resources)
+      val info = new ExpressionInfo(catalogFunction.className, qualifiedName)
+      val builder = makeFunctionBuilder(qualifiedName, catalogFunction.className)
+      createTempFunction(qualifiedName, info, builder, ignoreIfExists = false)
+    }
   }
 
   /**

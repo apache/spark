@@ -183,6 +183,7 @@ case class DescribeDatabase(
  *            is referenced for the first time by a session.
  * isTemp: indicates if it is a temporary function.
  */
+// TODO: Use Seq[FunctionResource] instead of Seq[(String, String)] for resources.
 case class CreateFunction(
     databaseName: Option[String],
     functionName: String,
@@ -195,6 +196,13 @@ case class CreateFunction(
     val func = FunctionIdentifier(functionName, databaseName)
     val catalogFunc = CatalogFunction(func, className, resources)
     if (isTemp) {
+      if (databaseName.isDefined) {
+        throw new AnalysisException(
+          s"It is not allowed to provide database name when defining a temporary function. " +
+            s"However, database name ${databaseName.get} is provided..")
+      }
+      // We can overwrite the temp function definition.
+      sqlContext.sessionState.catalog.loadFunctionResources(resources)
       val info = new ExpressionInfo(className, functionName)
       val builder =
         sqlContext.sessionState.catalog.makeFunctionBuilder(functionName, className)
@@ -207,6 +215,7 @@ case class CreateFunction(
         throw new AnalysisException(
           s"Function '$functionName' already exists in database '$dbName'.")
       }
+      // This function will be loaded into the FunctionRegistry when a query uses it.
       sqlContext.sessionState.catalog.createFunction(catalogFunc)
     }
     Seq.empty[Row]

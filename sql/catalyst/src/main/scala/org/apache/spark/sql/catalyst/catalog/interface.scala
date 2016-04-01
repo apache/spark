@@ -159,6 +159,7 @@ abstract class ExternalCatalog {
    */
   def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
 
+  // TODO: getFunction should take a FunctionIdentifier.
   def getFunction(db: String, funcName: String): CatalogFunction
 
   def listFunctions(db: String, pattern: String): Seq[String]
