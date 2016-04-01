@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -54,7 +52,10 @@ abstract class NativeDDLCommand(val sql: String) extends RunnableCommand {
  * unless 'ifNotExists' is true.
  * The syntax of using this command in SQL is:
  * {{{
- *    CREATE DATABASE|SCHEMA [IF NOT EXISTS] database_name
+ *   CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
+ *     [COMMENT database_comment]
+ *     [LOCATION file_path]
+ *     [WITH DBPROPERTIES (property_name=property_value, ...)];
  * }}}
  */
 case class CreateDatabase(
