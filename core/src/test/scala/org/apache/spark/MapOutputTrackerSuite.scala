@@ -139,24 +139,19 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     slaveTracker.trackerEndpoint =
       slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
-    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
-
     masterTracker.registerShuffle(10, 1)
-    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
     intercept[FetchFailedException] { slaveTracker.getMapSizesByExecutorId(10, 0) }
-    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(1000L)))
-    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
     masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
       Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
+    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
     masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
     masterTracker.incrementEpoch()
@@ -192,7 +187,6 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val rpcCallContext = mock(classOf[RpcCallContext])
     when(rpcCallContext.senderAddress).thenReturn(senderAddress)
     masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(10))
-    // receiveAndReply async so need to wait
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
     verify(rpcCallContext).reply(any())
     verify(rpcCallContext, never()).sendFailure(any())
@@ -227,8 +221,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
 
     // Default size for broadcast in this testsuite is set to -1 so should not cause broadcast
     // to be used.
-    verify(rpcCallContext, timeout(5000).never()).reply(any())
-    verify(rpcCallContext, timeout(5000)).sendFailure(isA(classOf[SparkException]))
+    verify(rpcCallContext, timeout(30000)).sendFailure(isA(classOf[SparkException]))
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
     //    masterTracker.stop() // this throws an exception
@@ -300,8 +293,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(20))
       // should succeed since majority of data is broadcast and actual serialized
       // message size is small
-      verify(rpcCallContext, timeout(5000)).reply(any())
-      verify(rpcCallContext, timeout(5000).never()).sendFailure(any())
+      verify(rpcCallContext, timeout(30000)).reply(any())
       assert(1 == masterTracker.getNumCachedSerializedBroadcast)
       masterTracker.unregisterShuffle(20)
       assert(0 == masterTracker.getNumCachedSerializedBroadcast)

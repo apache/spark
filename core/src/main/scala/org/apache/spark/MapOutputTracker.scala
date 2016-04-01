@@ -572,7 +572,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
           cachedSerializedStatuses(shuffleId) = bytes
           if (null != bcast) cachedSerializedBroadcast(shuffleId) = bcast
         } else {
-          logInfo("epoch changed, not caching!")
+          logInfo("Epoch changed, not caching!")
           removeBroadcast(bcast)
         }
       }
