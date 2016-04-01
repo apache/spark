@@ -187,9 +187,10 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val rpcCallContext = mock(classOf[RpcCallContext])
     when(rpcCallContext.senderAddress).thenReturn(senderAddress)
     masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(10))
+    // Default size for broadcast in this testsuite is set to -1 so should not cause broadcast
+    // to be used.
+    verify(rpcCallContext, timeout(30000)).reply(any())
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
-    verify(rpcCallContext).reply(any())
-    verify(rpcCallContext, never()).sendFailure(any())
 
 //    masterTracker.stop() // this throws an exception
     rpcEnv.shutdown()
