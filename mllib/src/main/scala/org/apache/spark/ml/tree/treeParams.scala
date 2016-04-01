@@ -360,8 +360,7 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
 /**
  * Used for [[RandomForestParams]].
  * This is separated out from [[RandomForestParams]] because of an issue with the
- * [[org.apache.spark.ml.classification.RandomForestClassificationModel.numTrees]] method
- * conflicting with this Param in the Estimator.
+ * `numTrees` method conflicting with this Param in the Estimator.
  */
 private[ml] trait HasNumTrees extends Params {
 

@@ -175,21 +175,16 @@ final class RandomForestRegressionModel private[ml] (
     // TODO: When we add a generic Bagging class, handle transform there.  SPARK-7128
     // Predict average of tree predictions.
     // Ignore the weights since all are 1.0 for now.
-    _trees.map(_.rootNode.predictImpl(features).prediction).sum / _trees.length
+    _trees.map(_.rootNode.predictImpl(features).prediction).sum / getNumTrees
   }
 
   /**
    * Number of trees in ensemble
-   * @deprecated  Use getNumTrees instead.  This method will be removed in 2.1.0
+   * @deprecated  Use [[getNumTrees]] instead.  This method will be removed in 2.1.0
    */
   // TODO: Once this is removed, then this class can inherit from RandomForestRegressorParams
   @deprecated("Use getNumTrees instead.  This method will be removed in 2.1.0.", "2.0.0")
   val numTrees: Int = trees.length
-
-  /**
-   * Number of trees in ensemble
-   */
-  val getNumTrees: Int = trees.length
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
@@ -198,7 +193,7 @@ final class RandomForestRegressionModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"RandomForestRegressionModel (uid=$uid) with ${_trees.length} trees"
+    s"RandomForestRegressionModel (uid=$uid) with $getNumTrees trees"
   }
 
   /**
@@ -240,7 +235,7 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
     override protected def saveImpl(path: String): Unit = {
       val extraMetadata: JObject = Map(
         "numFeatures" -> instance.numFeatures,
-        "numTrees" -> instance._trees.length)
+        "numTrees" -> instance.getNumTrees)
       EnsembleModelReadWrite.saveImpl(instance, path, sqlContext, extraMetadata)
     }
   }
@@ -257,7 +252,7 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
         EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
 
-      val trees = treesData.map { case (treeMetadata, root) =>
+      val trees: Array[DecisionTreeRegressionModel] = treesData.map { case (treeMetadata, root) =>
         val tree =
           new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
         DefaultParamsReader.getAndSetParams(tree, treeMetadata)

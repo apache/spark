@@ -220,16 +220,12 @@ final class RandomForestClassificationModel private[ml] (
 
   /**
    * Number of trees in ensemble
-   * @deprecated  Use getNumTrees instead.  This method will be removed in 2.1.0
+   *
+   * @deprecated  Use [[getNumTrees]] instead.  This method will be removed in 2.1.0
    */
   // TODO: Once this is removed, then this class can inherit from RandomForestClassifierParams
   @deprecated("Use getNumTrees instead.  This method will be removed in 2.1.0.", "2.0.0")
   val numTrees: Int = trees.length
-
-  /**
-   * Number of trees in ensemble
-   */
-  val getNumTrees: Int = trees.length
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
@@ -239,7 +235,7 @@ final class RandomForestClassificationModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"RandomForestClassificationModel (uid=$uid) with ${_trees.length} trees"
+    s"RandomForestClassificationModel (uid=$uid) with $getNumTrees trees"
   }
 
   /**
@@ -284,7 +280,7 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
       val extraMetadata: JObject = Map(
         "numFeatures" -> instance.numFeatures,
         "numClasses" -> instance.numClasses,
-        "numTrees" -> instance._trees.length)
+        "numTrees" -> instance.getNumTrees)
       EnsembleModelReadWrite.saveImpl(instance, path, sqlContext, extraMetadata)
     }
   }
@@ -303,11 +299,12 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
 
-      val trees = treesData.map { case (treeMetadata, root) =>
-        val tree =
-          new DecisionTreeClassificationModel(treeMetadata.uid, root, numFeatures, numClasses)
-        DefaultParamsReader.getAndSetParams(tree, treeMetadata)
-        tree
+      val trees: Array[DecisionTreeClassificationModel] = treesData.map {
+        case (treeMetadata, root) =>
+          val tree =
+            new DecisionTreeClassificationModel(treeMetadata.uid, root, numFeatures, numClasses)
+          DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+          tree
       }
 
       val model = new RandomForestClassificationModel(metadata.uid, trees, numFeatures, numClasses)
