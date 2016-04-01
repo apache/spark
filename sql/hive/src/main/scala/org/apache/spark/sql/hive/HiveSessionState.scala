@@ -55,6 +55,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
+        catalog.OrcConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
         python.ExtractPythonUDFs ::
