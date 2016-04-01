@@ -20,6 +20,7 @@ import warnings
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
+from pyspark.ml.base import HasNumFeaturesModel
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel, \
     RandomForestParams, TreeEnsembleModels, TreeEnsembleParams
@@ -214,7 +215,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
 
-class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class LogisticRegressionModel(HasNumFeaturesModel, JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -548,6 +549,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> model2 = DecisionTreeClassificationModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
     True
+    >>> model.numFeatures
+    1
 
     .. versionadded:: 1.4.0
     """
@@ -597,7 +600,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
+class DecisionTreeClassificationModel(HasNumFeaturesModel, DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -680,6 +683,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> model2 = RandomForestClassificationModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
     True
+    >>> model.numFeatures == model2.numFeatures
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -728,7 +733,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return RandomForestClassificationModel(java_model)
 
 
-class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable,
+                                      HasNumFeaturesModel):
     """
     .. note:: Experimental
 
@@ -820,6 +826,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     True
     >>> model.trees
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    >>> model.numFeatures == model2.numFeatures
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -883,7 +891,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.lossType)
 
 
-class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable, HasNumFeaturesModel):
     """
     .. note:: Experimental
 
@@ -969,6 +977,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> result = model3.transform(test0).head()
     >>> result.prediction
     0.0
+    >>> model.numFeatures == model2.numFeatures
+    2
 
     .. versionadded:: 1.5.0
     """
@@ -1041,7 +1051,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable, HasNumFeaturesModel):
     """
     .. note:: Experimental
 
@@ -1119,6 +1129,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     >>> model3.weights != model2.weights
     True
     >>> model3.layers == model.layers
+    True
+    >>> model.numFeatures == model2.numFeatures
     True
 
     .. versionadded:: 1.6.0
@@ -1242,7 +1254,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.initialWeights)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable,
+                                              HasNumFeaturesModel):
     """
     .. note:: Experimental
 

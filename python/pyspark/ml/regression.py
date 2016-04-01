@@ -18,6 +18,7 @@
 import warnings
 
 from pyspark import since, keyword_only
+from pyspark.ml.base import HasNumFeaturesModel
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
@@ -90,6 +91,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     True
     >>> model.intercept == model2.intercept
     True
+    >>> model.numFeatures == model2.numFeatures
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -128,7 +131,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return LinearRegressionModel(java_model)
 
 
-class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable, HasNumFeaturesModel):
     """
     .. note:: Experimental
 
@@ -678,6 +681,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     True
     >>> model.transform(test1).head().variance
     0.0
+    >>> model.numFeatures
+    1
 
     .. versionadded:: 1.4.0
     """
@@ -799,7 +804,8 @@ class TreeEnsembleModels(JavaModel):
 
 
 @inherit_doc
-class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
+class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable,
+                                  HasNumFeaturesModel):
     """
     .. note:: Experimental
 
@@ -872,6 +878,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model2 = RandomForestRegressionModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
     True
+    >>> model.numFeatures == model2.numFeatures
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -921,7 +929,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable, HasNumFeaturesModel):
     """
     .. note:: Experimental
 
@@ -996,6 +1004,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     True
     >>> model.trees
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    >>> model.numFeatures == model2.numFeatures
 
     .. versionadded:: 1.4.0
     """
@@ -1063,7 +1072,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable, HasNumFeaturesModel):
     """
     .. note:: Experimental
 
