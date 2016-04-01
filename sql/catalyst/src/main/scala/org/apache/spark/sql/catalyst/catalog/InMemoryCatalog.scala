@@ -48,7 +48,7 @@ class InMemoryCatalog extends ExternalCatalog {
   private val catalog = new scala.collection.mutable.HashMap[String, DatabaseDesc]
 
   private def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
-    val regex = pattern.replaceAll(".\\*", "\\*").replaceAll("\\*", ".*").r
+    val regex = pattern.replaceAll("\\.\\*", "\\*").replaceAll("\\*", "\\.\\*").r
     names.filter { funcName => regex.pattern.matcher(funcName).matches() }
   }
 
