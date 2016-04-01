@@ -22,12 +22,13 @@ import java.io.{File, IOException}
 import org.scalatest.Suite
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.DataFrame
 
-trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
+trait DefaultReadWriteTest extends TempDirectory with Logging { self: Suite =>
 
   /**
    * Checks "overwrite" option and params.

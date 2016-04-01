@@ -185,31 +185,21 @@ class RandomForestClassifierSuite
 
   test("read/write") {
     def checkModelData(
-                        model: RandomForestClassificationModel,
-                        model2: RandomForestClassificationModel): Unit = {
+        model: RandomForestClassificationModel,
+        model2: RandomForestClassificationModel): Unit = {
       TreeTests.checkEqual(model, model2)
       assert(model.numFeatures === model2.numFeatures)
       assert(model.numClasses === model2.numClasses)
     }
 
-    val rf = new RandomForestClassifier()
+    val rf = new RandomForestClassifier().setNumTrees(2)
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
 
-    // Categorical splits with tree depth 2
-    val categoricalData: DataFrame =
-      TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
-    testEstimatorAndModelReadWrite(rf, categoricalData, allParamSettings, checkModelData)
-
-    // Continuous splits with tree depth 2
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings, checkModelData)
-
-    // Continuous splits with tree depth 0
-    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings ++ Map("maxDepth" -> 0),
-      checkModelData)
   }
 }
 

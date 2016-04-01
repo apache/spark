@@ -17,15 +17,14 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.tree.RandomForestModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
+import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -144,9 +143,9 @@ object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifi
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
-  *
-  * @param _trees  Decision trees in the ensemble.
- *               Warning: These have null parents.
+ *
+ * @param _trees  Decision trees in the ensemble.
+ *                Warning: These have null parents.
  */
 @Since("1.4.0")
 @Experimental
@@ -158,12 +157,12 @@ final class RandomForestClassificationModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
   with RandomForestClassifierParams with TreeEnsembleModel with MLWritable with Serializable {
 
-  require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
+  require(_trees.nonEmpty, "RandomForestClassificationModel requires at least 1 tree.")
 
   /**
    * Construct a random forest classification model, with all trees weighted equally.
-    *
-    * @param trees  Component trees
+   *
+   * @param trees  Component trees
    */
   private[ml] def this(
       trees: Array[DecisionTreeClassificationModel],
@@ -175,7 +174,7 @@ final class RandomForestClassificationModel private[ml] (
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
-  private lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
+  private lazy val _treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)
 
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
@@ -226,7 +225,7 @@ final class RandomForestClassificationModel private[ml] (
 
   @Since("1.4.0")
   override def toString: String = {
-    s"RandomForestClassificationModel (uid=$uid) with $numTrees trees"
+    s"RandomForestClassificationModel (uid=$uid) with ${_trees.length} trees"
   }
 
   /**
@@ -250,15 +249,14 @@ final class RandomForestClassificationModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter =
     new RandomForestClassificationModel.RandomForestClassificationModelWriter(this)
-
-  @Since("2.0.0")
-  override def read: MLReader =
-    new RandomForestClassificationModel.RandomForestClassificationModelReader(this)
 }
 
 @Since("2.0.0")
 object RandomForestClassificationModel extends MLReadable[RandomForestClassificationModel] {
 
+  @Since("2.0.0")
+  override def read: MLReader[RandomForestClassificationModel] =
+    new RandomForestClassificationModelReader
 
   @Since("2.0.0")
   override def load(path: String): RandomForestClassificationModel = super.load(path)
@@ -268,41 +266,41 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
+      // Note: numTrees is not currently used, but could be nice to store for fast querying.
       val extraMetadata: JObject = Map(
         "numFeatures" -> instance.numFeatures,
-        "numClasses" -> instance.numClasses)
-      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
-      for(treeIndex <- 1 to instance.getNumTrees) {
-        val (nodeData, _) = NodeData.build(instance.trees(treeIndex).rootNode, treeIndex, 0)
-        val dataPath = new Path(path, "data" + treeIndex).toString
-        sqlContext.createDataFrame(nodeData).write.parquet(dataPath)
-      }
+        "numClasses" -> instance.numClasses,
+        "numTrees" -> instance._trees.length)
+      EnsembleModelReadWrite.saveImpl(instance, path, sqlContext, extraMetadata)
     }
   }
 
-  private class RandomForestClassificationModelReader(instance: RandomForestClassificationModel)
+  private class RandomForestClassificationModelReader
     extends MLReader[RandomForestClassificationModel] {
 
     /** Checked against metadata when loading model */
     private val className = classOf[RandomForestClassificationModel].getName
+    private val treeClassName = classOf[DecisionTreeClassificationModel].getName
 
     override def load(path: String): RandomForestClassificationModel = {
       implicit val format = DefaultFormats
-      implicit val root: Array[DecisionTreeClassificationModel] = _
-      var metadata: DefaultParamsReader.Metadata = null
-      for(treeIndex <- 1 to instance.getNumTrees) {
-        val dataPath = new Path(path, "data" + treeIndex).toString
-        metadata = DefaultParamsReader.loadMetadata(dataPath, sc, className)
-        root :+ loadTreeNodes(path, metadata, sqlContext)
-      }
+      val (metadata: Metadata, treesData: Array[(Metadata, Node)]) =
+        EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
-      val model = new RandomForestClassificationModel(metadata.uid, root, numFeatures, numClasses)
+
+      val trees = treesData.map { case (treeMetadata, root) =>
+        val tree =
+          new DecisionTreeClassificationModel(treeMetadata.uid, root, numFeatures, numClasses)
+        DefaultParamsReader.getAndSetParams(tree, treeMetadata)
+        tree
+      }
+
+      val model = new RandomForestClassificationModel(metadata.uid, trees, numFeatures, numClasses)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }
-
 
   /** (private[ml]) Convert a model from the old API */
   private[ml] def fromOld(

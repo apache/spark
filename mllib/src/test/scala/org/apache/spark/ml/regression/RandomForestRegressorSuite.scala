@@ -19,7 +19,7 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -101,32 +101,21 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
 
   test("read/write") {
     def checkModelData(
-                        model: RandomForestRegressionModel,
-                        model2: RandomForestRegressionModel): Unit = {
+        model: RandomForestRegressionModel,
+        model2: RandomForestRegressionModel): Unit = {
       TreeTests.checkEqual(model, model2)
       assert(model.numFeatures === model2.numFeatures)
     }
 
-    val rf = new RandomForestRegressor()
+    val rf = new RandomForestRegressor().setNumTrees(2)
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
-    val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
+    val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "variance")
 
-    // Categorical splits with tree depth 2
-    val categoricalData: DataFrame =
-      TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
-    testEstimatorAndModelReadWrite(rf, categoricalData, allParamSettings, checkModelData)
-
-    // Continuous splits with tree depth 2
     val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings, checkModelData)
-
-    // Continuous splits with tree depth 0
-    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings ++ Map("maxDepth" -> 0),
-      checkModelData)
   }
-
 }
 
 private object RandomForestRegressorSuite extends SparkFunSuite {
