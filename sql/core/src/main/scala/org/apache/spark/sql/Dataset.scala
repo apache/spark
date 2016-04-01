@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -2053,6 +2054,21 @@ class Dataset[T] private[sql](
       withCallback("collect", toDF())(_ => execute())
     } else {
       execute()
+    }
+  }
+
+  /**
+   * Return an iterator that contains all of [[Row]]s in this [[Dataset]].
+   *
+   * The iterator will consume as much memory as the largest partition in this [[Dataset]].
+   *
+   * Note: this results in multiple Spark jobs, and if the input Dataset is the result
+   * of a wide transformation (e.g. join with different partitioners), to avoid
+   * recomputing the input Dataset should be cached first.
+   */
+  def toLocalIterator(): Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
+    withNewExecutionId {
+      queryExecution.executedPlan.executeToIterator().map(boundTEncoder.fromRow)
     }
   }
 

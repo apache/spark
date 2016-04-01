@@ -222,7 +222,7 @@ private[hive] class SparkExecuteStatementOperation(
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          result.rdd.toLocalIterator
+          result.toLocalIterator
         } else {
           result.collect().iterator
         }
