@@ -89,6 +89,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PruneFilters,
       EliminateSorts,
       SimplifyCasts,
+      CastPushDown,
       SimplifyCaseConversionExpressions,
       EliminateSerialization) ::
     Batch("Decimal Optimizations", FixedPoint(100),
@@ -1169,6 +1170,24 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Cast(e, dataType) if e.dataType == dataType => e
+  }
+}
+
+/**
+ * Pushes [[Cast]]s beneath [[CaseWhen]] and [[If]] expressions.
+ */
+object CastPushDown extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case Cast(CaseWhen(branches, elseValue), dataType) =>
+      CaseWhen(
+        branches.map { case (condition, value) =>
+          (condition, Cast(value, dataType))
+        },
+        elseValue.map { value =>
+          Cast(value, dataType)
+        })
+    case Cast(If(condition, trueValue, falseValue), dataType) =>
+      If(condition, Cast(trueValue, dataType), Cast(falseValue, dataType))
   }
 }
 
