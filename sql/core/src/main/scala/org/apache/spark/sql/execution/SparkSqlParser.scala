@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.{AbstractSqlParser, AstBuilder, ParseException}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -395,112 +395,37 @@ class SparkSqlAstBuilder extends AstBuilder {
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
-  /**
-   * Create an [[AlterTableStorageProperties]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table CLUSTERED BY (col, ...) [SORTED BY (col, ...)] INTO n BUCKETS;
-   * }}}
-   */
+  // TODO: don't even bother parsing alter table commands related to bucketing and skewing
+
   override def visitBucketTable(ctx: BucketTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableStorageProperties(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitBucketSpec(ctx.bucketSpec))(
-      command(ctx))
+    throw new AnalysisException(
+      "Unsupported operation: ALTER TABLE ... CLUSTERED BY ... INTO N BUCKETS")
   }
 
-  /**
-   * Create an [[AlterTableNotClustered]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table NOT CLUSTERED;
-   * }}}
-   */
   override def visitUnclusterTable(ctx: UnclusterTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableNotClustered(visitTableIdentifier(ctx.tableIdentifier))(command(ctx))
+    throw new AnalysisException("Unsupported operation: ALTER TABLE ... NOT CLUSTERED")
   }
 
-  /**
-   * Create an [[AlterTableNotSorted]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table NOT SORTED;
-   * }}}
-   */
   override def visitUnsortTable(ctx: UnsortTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableNotSorted(visitTableIdentifier(ctx.tableIdentifier))(command(ctx))
+    throw new AnalysisException("Unsupported operation: ALTER TABLE ... NOT SORTED")
   }
 
-  /**
-   * Create an [[AlterTableSkewed]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table SKEWED BY (col1, col2)
-   *   ON ((col1_value, col2_value) [, (col1_value, col2_value), ...])
-   *   [STORED AS DIRECTORIES];
-   * }}}
-   */
   override def visitSkewTable(ctx: SkewTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = visitTableIdentifier(ctx.tableIdentifier)
-    val (cols, values, storedAsDirs) = visitSkewSpec(ctx.skewSpec)
-    AlterTableSkewed(table, cols, values, storedAsDirs)(command(ctx))
+    throw new AnalysisException("Unsupported operation: ALTER TABLE ... SKEWED BY ...")
   }
 
-  /**
-   * Create an [[AlterTableNotSorted]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table NOT SKEWED;
-   * }}}
-   */
   override def visitUnskewTable(ctx: UnskewTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableNotSkewed(visitTableIdentifier(ctx.tableIdentifier))(command(ctx))
+    throw new AnalysisException("Unsupported operation: ALTER TABLE ... NOT SKEWED")
   }
 
-  /**
-   * Create an [[AlterTableNotStoredAsDirs]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table NOT STORED AS DIRECTORIES
-   * }}}
-   */
   override def visitUnstoreTable(ctx: UnstoreTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableNotStoredAsDirs(visitTableIdentifier(ctx.tableIdentifier))(command(ctx))
+    throw new AnalysisException(
+      "Unsupported operation: ALTER TABLE ... NOT STORED AS DIRECTORIES")
   }
 
-  /**
-   * Create an [[AlterTableSkewedLocation]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table SET SKEWED LOCATION (col1="loc1" [, (col2, col3)="loc2", ...] );
-   * }}}
-   */
   override def visitSetTableSkewLocations(
       ctx: SetTableSkewLocationsContext): LogicalPlan = withOrigin(ctx) {
-    val skewedMap = ctx.skewedLocationList.skewedLocation.asScala.flatMap {
-      slCtx =>
-        val location = string(slCtx.STRING)
-        if (slCtx.constant != null) {
-          Seq(visitStringConstant(slCtx.constant) -> location)
-        } else {
-          // TODO this is similar to what was in the original implementation. However this does not
-          // make to much sense to me since we should be storing a tuple of values (not column
-          // names) for which we want a dedicated storage location.
-          visitConstantList(slCtx.constantList).map(_ -> location)
-        }
-    }.toMap
-
-    AlterTableSkewedLocation(
-      visitTableIdentifier(ctx.tableIdentifier),
-      skewedMap)(
-      command(ctx))
+    throw new AnalysisException("Unsupported operation: ALTER TABLE ... SET SKEWED LOCATION ...")
   }
 
   /**

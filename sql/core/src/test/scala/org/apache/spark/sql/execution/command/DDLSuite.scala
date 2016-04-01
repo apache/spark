@@ -50,6 +50,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  private def assertUnsupported(query: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(query)
+    }
+    assert(e.getMessage.toLowerCase.contains("unsupported"))
+  }
+
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(CatalogDatabase("dbx", "", "", Map()), ignoreIfExists = false)
   }
@@ -334,6 +341,30 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET SERDE 'whatever' WITH SERDEPROPERTIES ('x' = 'y')")
     }
+  }
+
+  test("alter table: bucketing is not supported") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    assertUnsupported("ALTER TABLE dbx.tab1 CLUSTERED BY (blood, lemon, grape) INTO 11 BUCKETS")
+    assertUnsupported("ALTER TABLE dbx.tab1 CLUSTERED BY (fuji) SORTED BY (grape) INTO 5 BUCKETS")
+    assertUnsupported("ALTER TABLE dbx.tab1 NOT CLUSTERED")
+    assertUnsupported("ALTER TABLE dbx.tab1 NOT SORTED")
+  }
+
+  test("alter table: skew is not supported") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    assertUnsupported("ALTER TABLE dbx.tab1 SKEWED BY (dt, country) ON " +
+      "(('2008-08-08', 'us'), ('2009-09-09', 'uk'), ('2010-10-10', 'cn'))")
+    assertUnsupported("ALTER TABLE dbx.tab1 SKEWED BY (dt, country) ON " +
+      "(('2008-08-08', 'us'), ('2009-09-09', 'uk')) STORED AS DIRECTORIES")
+    assertUnsupported("ALTER TABLE dbx.tab1 NOT SKEWED")
+    assertUnsupported("ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES")
   }
 
 }

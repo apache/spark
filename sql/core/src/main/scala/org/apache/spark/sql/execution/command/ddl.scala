@@ -317,41 +317,6 @@ case class AlterTableSerDeProperties(
 
 }
 
-case class AlterTableStorageProperties(
-    tableName: TableIdentifier,
-    buckets: BucketSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableNotClustered(
-    tableName: TableIdentifier)(sql: String) extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableNotSorted(
-    tableName: TableIdentifier)(sql: String) extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableSkewed(
-    tableName: TableIdentifier,
-    // e.g. (dt, country)
-    skewedCols: Seq[String],
-    // e.g. ('2008-08-08', 'us), ('2009-09-09', 'uk')
-    skewedValues: Seq[Seq[String]],
-    storedAsDirs: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging {
-
-  require(skewedValues.forall(_.size == skewedCols.size),
-    "number of columns in skewed values do not match number of skewed columns provided")
-}
-
-case class AlterTableNotSkewed(
-    tableName: TableIdentifier)(sql: String) extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableNotStoredAsDirs(
-    tableName: TableIdentifier)(sql: String) extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableSkewedLocation(
-    tableName: TableIdentifier,
-    skewedMap: Map[String, String])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
 /**
  * Add Partition in ALTER TABLE/VIEW: add the table/view partitions.
  * 'partitionSpecsAndLocs': the syntax of ALTER VIEW is identical to ALTER TABLE,
