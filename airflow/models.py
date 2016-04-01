@@ -2275,11 +2275,13 @@ class DAG(LoggingMixin):
         """
         Returns a list of the subdag objects associated to this DAG
         """
-        # Late import to prevent circular imports
-        from airflow.operators import SubDagOperator
+        # Check SubDag for class but don't check class directly, see
+        # https://github.com/airbnb/airflow/issues/1168
         l = []
         for task in self.tasks:
-            if isinstance(task, SubDagOperator):
+            if (
+                    task.__class__.__name__ == 'SubDagOperator' and
+                    hasattr(task, 'subdag')):
                 l.append(task.subdag)
                 l += task.subdag.subdags
         return l
