@@ -288,7 +288,7 @@ private[spark] abstract class YarnSchedulerBackend(
             context.reply(false)
         }
 
-      case RetrieveMaxExecutorId =>
+      case RetrieveLastAllocatedExecutorId =>
         context.reply(currentExecutorIdCounter)
     }
 

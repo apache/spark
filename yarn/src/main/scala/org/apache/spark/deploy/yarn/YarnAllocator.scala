@@ -37,7 +37,7 @@ import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveMaxExecutorId
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -91,11 +91,14 @@ private[yarn] class YarnAllocator(
    * already created before. So, we should initialize the `executorIdCounter` by getting
    * the max executorId from driver.
    *
+   * And this situation of executorId conflict is just in yarn client mode, so this is an issue
+   * in yarn client mode. For more details, can check in jira.
+   *
    * @see SPARK-12864
    */
-  private var executorIdCounter: Int = {
-    driverRef.askWithRetry[Int](RetrieveMaxExecutorId) + 1
-  }
+  private var executorIdCounter: Int =
+    driverRef.askWithRetry[Int](RetrieveLastAllocatedExecutorId)
+
   @volatile private var numExecutorsFailed = 0
 
   @volatile private var targetNumExecutors =

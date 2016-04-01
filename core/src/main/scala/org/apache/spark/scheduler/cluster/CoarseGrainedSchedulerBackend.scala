@@ -158,8 +158,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
             executorDataMap.put(executorId, data)
-            if (currentExecutorIdCounter < Integer.parseInt(executorId)) {
-              currentExecutorIdCounter = Integer.parseInt(executorId)
+            if (currentExecutorIdCounter < executorId.toInt) {
+              currentExecutorIdCounter = executorId.toInt
             }
             if (numPendingExecutors > 0) {
               numPendingExecutors -= 1
