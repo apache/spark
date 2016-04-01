@@ -25,7 +25,7 @@ import org.apache.spark.SparkFunSuite
 class CSVParserSuite extends SparkFunSuite {
 
   private def readAll(iter: Iterator[String]) = {
-    val reader = new StringIteratorReader(iter, "\n")
+    val reader = new StringIteratorReader(iter)
     var c: Int = -1
     val read = new scala.collection.mutable.StringBuilder()
     do {
@@ -36,11 +36,8 @@ class CSVParserSuite extends SparkFunSuite {
     read.dropRight(1).toString()
   }
 
-  private def readBufAll(
-      iter: Iterator[String],
-      bufSize: Int,
-      rowSeparator: String = "\n") = {
-    val reader = new StringIteratorReader(iter, rowSeparator)
+  private def readBufAll(iter: Iterator[String], bufSize: Int) = {
+    val reader = new StringIteratorReader(iter)
     val cbuf = new Array[Char](bufSize)
     val read = new scala.collection.mutable.StringBuilder()
 
@@ -73,7 +70,7 @@ class CSVParserSuite extends SparkFunSuite {
   }
 
   test("Hygiene") {
-    val reader = new StringIteratorReader(List("").toIterator, "\n")
+    val reader = new StringIteratorReader(List("").toIterator)
     assert(reader.ready === true)
     assert(reader.markSupported === false)
     intercept[IllegalArgumentException] { reader.skip(1) }
@@ -122,15 +119,6 @@ class CSVParserSuite extends SparkFunSuite {
     val output = input.mkString("\n") ++ "\n"
     for(i <- 1 to output.length + 5) {
       val read = readBufAll(input.toIterator, 1)
-      assert(read === output)
-    }
-  }
-
-  test("Buffer Embedded new line with different line separator") {
-    val input = List("This is a string", "This is another string", "Small\r\n", "", "\"quoted\"")
-    val output = input.mkString("\r\n") ++ "\r\n"
-    for(i <- 1 to output.length + 5) {
-      val read = readBufAll(input.toIterator, 1, "\r\n")
       assert(read === output)
     }
   }

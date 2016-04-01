@@ -104,14 +104,13 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val headers = requiredSchema.fields.map(_.name)
 
     val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
-    // TODO: It won't work for non-ascii compatible encoding as treating `rowSeparator` as a utf-8
-    conf.set("textinputformat.record.delimiter", csvOptions.rowSeparator)
     val broadcastedConf = sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
 
     (file: PartitionedFile) => {
       val lineIterator = {
         val conf = broadcastedConf.value.value
-        new HadoopFileLinesReader(file, conf).map { line =>
+        val recordDelimiter = csvOptions.rowSeparator.getBytes(csvOptions.charset)
+        new HadoopFileLinesReader(file, conf, recordDelimiter).map { line =>
           new String(line.getBytes, 0, line.getLength, csvOptions.charset)
         }
       }
