@@ -282,7 +282,7 @@ class SessionCatalog(
   def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
     val dbTables =
       externalCatalog.listTables(db, pattern).map { t => TableIdentifier(t, Some(db)) }
-    val regex = pattern.replaceAll("\\*", ".*").r
+    val regex = pattern.replaceAll(".\\*", "\\*").replaceAll("\\*", ".*").r
     val _tempTables = tempTables.keys.toSeq
       .filter { t => regex.pattern.matcher(t).matches() }
       .map { t => TableIdentifier(t) }
