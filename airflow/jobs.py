@@ -704,10 +704,10 @@ class BackfillJob(BaseJob):
             include_adhoc=False,
             donot_pickle=False,
             ignore_dependencies=False,
+            ignore_first_depends_on_past=False,
             pool=None,
             *args, **kwargs):
         self.dag = dag
-        dag.override_start_date(start_date)
         self.dag_id = dag.dag_id
         self.bf_start_date = start_date
         self.bf_end_date = end_date
@@ -715,6 +715,7 @@ class BackfillJob(BaseJob):
         self.include_adhoc = include_adhoc
         self.donot_pickle = donot_pickle
         self.ignore_dependencies = ignore_dependencies
+        self.ignore_first_depends_on_past = ignore_first_depends_on_past
         self.pool = pool
         super(BackfillJob, self).__init__(*args, **kwargs)
 
@@ -877,29 +878,29 @@ class LocalTaskJob(BaseJob):
             self,
             task_instance,
             ignore_dependencies=False,
+            ignore_depends_on_past=False,
             force=False,
             mark_success=False,
             pickle_id=None,
-            task_start_date=None,
             pool=None,
             *args, **kwargs):
         self.task_instance = task_instance
         self.ignore_dependencies = ignore_dependencies
+        self.ignore_depends_on_past=ignore_depends_on_past
         self.force = force
         self.pool = pool
         self.pickle_id = pickle_id
         self.mark_success = mark_success
-        self.task_start_date = task_start_date
         super(LocalTaskJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
         command = self.task_instance.command(
             raw=True,
             ignore_dependencies=self.ignore_dependencies,
+            ignore_depends_on_past=self.ignore_depends_on_past,
             force=self.force,
             pickle_id=self.pickle_id,
             mark_success=self.mark_success,
-            task_start_date=self.task_start_date,
             job_id=self.id,
             pool=self.pool,
         )
