@@ -38,6 +38,8 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
+import org.slf4j.bridge.SLF4JBridgeHandler
+
 import org.apache.spark.{Partition => SparkPartition, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
@@ -53,7 +55,6 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{AtomicType, DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
-import org.slf4j.bridge.SLF4JBridgeHandler
 
 private[sql] class DefaultSource
   extends FileFormat
