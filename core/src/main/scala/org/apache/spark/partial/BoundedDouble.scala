@@ -24,10 +24,12 @@ class BoundedDouble(val mean: Double, val confidence: Double, val low: Double, v
   override def toString(): String =
     "BoundedDouble(%.3f, %.3f, %.3f, %.3f)".format(mean, confidence, low, high)
 
-  override def hashCode:Int =
+  override def hashCode: Int =
     this.mean.hashCode ^ this.confidence.hashCode ^ this.low.hashCode ^ this.high.hashCode
 
-  /** Note that consistent with Double, any NaN value will make equality false **/
+  /**
+    * Note that consistent with Double, any NaN value will make equality false
+    */
   override def equals(that: Any): Boolean =
     that match {
       case that: BoundedDouble => {

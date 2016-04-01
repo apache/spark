@@ -64,11 +64,12 @@ private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
         val confFactor = if (counter.count > 100) {
           new NormalDistribution().inverseCumulativeProbability(1 - (1 - confidence) / 2)
         } else {
-          // note that if this goes to 0, TDistribution will throw an exception. Hence special casing 1 above. 
+          // note that if this goes to 0, TDistribution will throw an exception.
+          // Hence special casing 1 above.
           val degreesOfFreedom = (counter.count - 1).toInt
           new TDistribution(degreesOfFreedom).inverseCumulativeProbability(1 - (1 - confidence) / 2)
         }
-        
+
         val low = sumEstimate - confFactor * sumStdev
         val high = sumEstimate + confFactor * sumStdev
         new BoundedDouble(sumEstimate, confidence, low, high)

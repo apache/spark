@@ -36,22 +36,13 @@ class SumEvaluatorSuite extends SparkFunSuite with SharedSparkContext {
     //execute
     val res = evaluator.currentResult()
     // 38.0 - 7.1E-15 because that's how the maths shakes out
-    val target_mean =  38.0 - 7.1E-15
-    // Version to test everything except mean
-    val ancillary_res = new BoundedDouble(target_mean, res.confidence, res.low, res.high)
-    // mean result to test
-    val mean_diff = (res.mean - target_mean).abs
-    
-
+    val targetMean =  38.0 - 7.1E-15
+ 
     //Sanity check that equality works on BoundedDouble
     assert(new BoundedDouble(2.0, 0.95, 1.1, 1.2) == new BoundedDouble(2.0, 0.95, 1.1, 1.2))
+
     // actual test
-
-    // Use ancillary_res as the result to check everything except the mean
-    assert(ancillary_res == new BoundedDouble(target_mean, 0.950, Double.NegativeInfinity, Double.PositiveInfinity))
-
-    // check that mean is within expected tolerance of expectation
-    assert(mean_diff < Double.MinPositiveValue)
+    assert(res == new BoundedDouble(targetMean, 0.950, Double.NegativeInfinity, Double.PositiveInfinity))
   }
 
   test("correct handling of count 0") {
@@ -82,7 +73,7 @@ class SumEvaluatorSuite extends SparkFunSuite with SharedSparkContext {
 
     //execute
     val res = evaluator.currentResult()
-    //assert
+    //assert - note semantics of == in face of NaN
     assert(res.mean.isNaN)
     assert(res.confidence == 0.95)
     assert(res.low == Double.NegativeInfinity)
@@ -103,15 +94,14 @@ class SumEvaluatorSuite extends SparkFunSuite with SharedSparkContext {
     val res = evaluator.currentResult()
 
     // These vals because that's how the maths shakes out
-    val target_mean =  78.0
-    val target_low = -117.617 + 2.732357258139473E-5
-    val target_high = 273.617 - 2.7323572624027292E-5
+    val targetMean =  78.0
+    val targetLow = -117.617 + 2.732357258139473E-5
+    val targetHigh = 273.617 - 2.7323572624027292E-5
+    val target = new BoundedDouble(targetMean, 0.95, targetLow, targetHigh)
     
 
     // check that values are within expected tolerance of expectation
-    assert((res.mean - target_mean).abs < Double.MinPositiveValue)
-    assert((res.low - target_low).abs < Double.MinPositiveValue)
-    assert((res.high - target_high).abs < Double.MinPositiveValue)
+    assert(res == target)
   }
 
 }
