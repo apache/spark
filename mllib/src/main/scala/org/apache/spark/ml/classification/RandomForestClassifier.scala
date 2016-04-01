@@ -17,11 +17,16 @@
 
 package org.apache.spark.ml.classification
 
+import org.apache.hadoop.fs.Path
+import org.json4s.{DefaultFormats, JObject}
+import org.json4s.JsonDSL._
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
+import org.apache.spark.ml.tree._
+import org.apache.spark.ml.tree.RandomForestModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
-import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -43,7 +48,7 @@ import org.apache.spark.sql.functions._
 final class RandomForestClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
-  with RandomForestParams with TreeClassifierParams {
+  with RandomForestClassifierParams with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("rfc"))
@@ -120,7 +125,7 @@ final class RandomForestClassifier @Since("1.4.0") (
 
 @Since("1.4.0")
 @Experimental
-object RandomForestClassifier {
+object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifier] {
   /** Accessor for supported impurity settings: entropy, gini */
   @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
@@ -129,6 +134,9 @@ object RandomForestClassifier {
   @Since("1.4.0")
   final val supportedFeatureSubsetStrategies: Array[String] =
     RandomForestParams.supportedFeatureSubsetStrategies
+
+  @Since("2.0.0")
+  override def load(path: String): RandomForestClassifier = super.load(path)
 }
 
 /**
@@ -136,7 +144,8 @@ object RandomForestClassifier {
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
- * @param _trees  Decision trees in the ensemble.
+  *
+  * @param _trees  Decision trees in the ensemble.
  *               Warning: These have null parents.
  */
 @Since("1.4.0")
@@ -147,13 +156,14 @@ final class RandomForestClassificationModel private[ml] (
     @Since("1.6.0") override val numFeatures: Int,
     @Since("1.5.0") override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
-  with TreeEnsembleModel with Serializable {
+  with RandomForestClassifierParams with TreeEnsembleModel with MLWritable with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
   /**
    * Construct a random forest classification model, with all trees weighted equally.
-   * @param trees  Component trees
+    *
+    * @param trees  Component trees
    */
   private[ml] def this(
       trees: Array[DecisionTreeClassificationModel],
@@ -236,12 +246,66 @@ final class RandomForestClassificationModel private[ml] (
   private[ml] def toOld: OldRandomForestModel = {
     new OldRandomForestModel(OldAlgo.Classification, _trees.map(_.toOld))
   }
+
+  @Since("2.0.0")
+  override def write: MLWriter =
+    new RandomForestClassificationModel.RandomForestClassificationModelWriter(this)
+
+  @Since("2.0.0")
+  override def read: MLReader =
+    new RandomForestClassificationModel.RandomForestClassificationModelReader(this)
 }
 
-private[ml] object RandomForestClassificationModel {
+@Since("2.0.0")
+object RandomForestClassificationModel extends MLReadable[RandomForestClassificationModel] {
+
+
+  @Since("2.0.0")
+  override def load(path: String): RandomForestClassificationModel = super.load(path)
+
+  private[RandomForestClassificationModel]
+  class RandomForestClassificationModelWriter(instance: RandomForestClassificationModel)
+    extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      val extraMetadata: JObject = Map(
+        "numFeatures" -> instance.numFeatures,
+        "numClasses" -> instance.numClasses)
+      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+      for(treeIndex <- 1 to instance.getNumTrees) {
+        val (nodeData, _) = NodeData.build(instance.trees(treeIndex).rootNode, treeIndex, 0)
+        val dataPath = new Path(path, "data" + treeIndex).toString
+        sqlContext.createDataFrame(nodeData).write.parquet(dataPath)
+      }
+    }
+  }
+
+  private class RandomForestClassificationModelReader(instance: RandomForestClassificationModel)
+    extends MLReader[RandomForestClassificationModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[RandomForestClassificationModel].getName
+
+    override def load(path: String): RandomForestClassificationModel = {
+      implicit val format = DefaultFormats
+      implicit val root: Array[DecisionTreeClassificationModel] = _
+      var metadata: DefaultParamsReader.Metadata = null
+      for(treeIndex <- 1 to instance.getNumTrees) {
+        val dataPath = new Path(path, "data" + treeIndex).toString
+        metadata = DefaultParamsReader.loadMetadata(dataPath, sc, className)
+        root :+ loadTreeNodes(path, metadata, sqlContext)
+      }
+      val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
+      val numClasses = (metadata.metadata \ "numClasses").extract[Int]
+      val model = new RandomForestClassificationModel(metadata.uid, root, numFeatures, numClasses)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
 
   /** (private[ml]) Convert a model from the old API */
-  def fromOld(
+  private[ml] def fromOld(
       oldModel: OldRandomForestModel,
       parent: RandomForestClassifier,
       categoricalFeatures: Map[Int, Int],

@@ -383,6 +383,12 @@ private[spark] object RandomForestParams {
     Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
 }
 
+private[ml] trait RandomForestClassifierParams
+  extends RandomForestParams with TreeClassifierParams
+
+private[ml] trait RandomForestRegressorParams
+  extends RandomForestParams with TreeRegressorParams
+
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
  *
