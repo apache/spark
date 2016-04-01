@@ -41,6 +41,7 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
+        PushPredicateThroughWindow,
         CollapseProject) :: Nil
   }
 
@@ -680,5 +681,141 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("Window: predicate push down -- basic") {
+    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a > 1)
+    val correctAnswer = testRelation.select('a, 'b, 'c)
+      .where('a > 1).window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: predicate push down -- predicates with compound predicate using only one column") {
+    val winExpr =
+      windowExpr(count('b), windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a * 3 > 15)
+    val correctAnswer = testRelation.select('a, 'b, 'c)
+      .where('a * 3 > 15)
+      .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: predicate push down -- multi window expressions with the same window spec") {
+    val winSpec = windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr1 = windowExpr(count('b), winSpec)
+    val winExpr2 = windowExpr(sum('b), winSpec)
+    val originalQuery = testRelation
+      .select('a, 'b, 'c, winExpr1.as('window1), winExpr2.as('window2)).where('a > 1)
+
+    val correctAnswer = testRelation.select('a, 'b, 'c)
+      .where('a > 1)
+      .window(winExpr1.as('window1) :: winExpr2.as('window2) :: Nil,
+        'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window1, 'window2).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: predicate push down -- multi window specification - 1") {
+    // order by clauses are different between winSpec1 and winSpec2
+    val winSpec1 = windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr1 = windowExpr(count('b), winSpec1)
+    val winSpec2 = windowSpec('a.attr :: 'b.attr :: Nil, 'a.asc :: Nil, UnspecifiedFrame)
+    val winExpr2 = windowExpr(count('b), winSpec2)
+    val originalQuery = testRelation
+      .select('a, 'b, 'c, winExpr1.as('window1), winExpr2.as('window2)).where('a > 1)
+
+    val correctAnswer1 = testRelation.select('a, 'b, 'c)
+      .where('a > 1)
+      .window(winExpr1.as('window1) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .window(winExpr2.as('window2) :: Nil, 'a.attr :: 'b.attr :: Nil, 'a.asc :: Nil)
+      .select('a, 'b, 'c, 'window1, 'window2).analyze
+
+    val correctAnswer2 = testRelation.select('a, 'b, 'c)
+      .where('a > 1)
+      .window(winExpr2.as('window2) :: Nil, 'a.attr :: 'b.attr :: Nil, 'a.asc :: Nil)
+      .window(winExpr1.as('window1) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window1, 'window2).analyze
+
+    val optimizedQuery = Optimize.execute(originalQuery.analyze)
+    try {
+      comparePlans(optimizedQuery, correctAnswer1)
+    } catch {
+      case ae: Throwable => comparePlans(optimizedQuery, correctAnswer2)
+    }
+  }
+
+  test("Window: predicate push down -- multi window specification - 2") {
+    // partitioning clauses are different between winSpec1 and winSpec2
+    val winSpec1 = windowSpec('a.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr1 = windowExpr(count('b), winSpec1)
+    val winSpec2 = windowSpec('b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr2 = windowExpr(count('a), winSpec2)
+    val originalQuery = testRelation
+      .select('a, winExpr1.as('window1), 'b, 'c, winExpr2.as('window2)).where('b > 1)
+
+    val correctAnswer1 = testRelation.select('a, 'b, 'c)
+      .window(winExpr1.as('window1) :: Nil, 'a.attr :: Nil, 'b.asc :: Nil)
+      .where('b > 1)
+      .window(winExpr2.as('window2) :: Nil, 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'window1, 'b, 'c, 'window2).analyze
+
+    val correctAnswer2 = testRelation.select('a, 'b, 'c)
+      .window(winExpr2.as('window2) :: Nil, 'b.attr :: Nil, 'b.asc :: Nil)
+      .window(winExpr1.as('window1) :: Nil, 'a.attr :: Nil, 'b.asc :: Nil)
+      .where('b > 1)
+      .select('a, 'window1, 'b, 'c, 'window2).analyze
+
+    val optimizedQuery = Optimize.execute(originalQuery.analyze)
+    try {
+      comparePlans(optimizedQuery, correctAnswer1)
+    } catch {
+      case ae: Throwable => comparePlans(optimizedQuery, correctAnswer2)
+    }
+  }
+
+  test("Window: no predicate push down -- predicates are not from partitioning keys") {
+    val winExpr =
+      windowExpr(count('b), windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('c > 1)
+    val correctAnswer = testRelation.select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .where('c > 1).select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: no predicate push down -- predicates with multiple partitioning columns") {
+    val winExpr =
+      windowExpr(count('b), windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a + 'b > 1)
+    val correctAnswer = testRelation.select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .where('a + 'b > 1).select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("Window: no predicate push down -- compound partition key") {
+    val winSpec = windowSpec('a.attr + 'b.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a > 1)
+
+    val winSpecAnalyzed = windowSpec('_w0.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExprAnalyzed = windowExpr(count('b), winSpecAnalyzed)
+    val correctAnswer = testRelation.select('a, 'b, 'c, ('a + 'b).as("_w0"))
+      .window(winExprAnalyzed.as('window) :: Nil, '_w0 :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .where('a > 1).select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
 }
