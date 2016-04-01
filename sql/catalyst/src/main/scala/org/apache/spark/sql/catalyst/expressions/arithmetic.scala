@@ -24,7 +24,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 
-case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class UnaryMinus(child: Expression) extends UnaryExpression
+    with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -58,7 +59,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInp
   override def sql: String = s"(-${child.sql})"
 }
 
-case class UnaryPositive(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class UnaryPositive(child: Expression)
+    extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
   override def prettyName: String = "positive"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
@@ -79,7 +81,8 @@ case class UnaryPositive(child: Expression) extends UnaryExpression with Expects
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric value",
   extended = "> SELECT _FUNC_('-1');\n1")
-case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Abs(child: Expression)
+    extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
@@ -123,7 +126,7 @@ private[sql] object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
-case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -152,7 +155,8 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 }
 
-case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Subtract(left: Expression, right: Expression)
+    extends BinaryArithmetic with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -181,7 +185,8 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
   }
 }
 
-case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Multiply(left: Expression, right: Expression)
+    extends BinaryArithmetic with NullIntolerant {
 
   override def inputType: AbstractDataType = NumericType
 
@@ -193,7 +198,8 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
-case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Divide(left: Expression, right: Expression)
+    extends BinaryArithmetic with NullIntolerant {
 
   override def inputType: AbstractDataType = NumericType
 
@@ -269,7 +275,8 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   }
 }
 
-case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Remainder(left: Expression, right: Expression)
+    extends BinaryArithmetic with NullIntolerant {
 
   override def inputType: AbstractDataType = NumericType
 
@@ -457,7 +464,7 @@ case class MinOf(left: Expression, right: Expression)
   override def symbol: String = "min"
 }
 
-case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def toString: String = s"pmod($left, $right)"
 
