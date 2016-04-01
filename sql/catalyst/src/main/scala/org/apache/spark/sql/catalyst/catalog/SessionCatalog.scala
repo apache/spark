@@ -272,6 +272,22 @@ class SessionCatalog(
   }
 
   /**
+   * Return whether a table with the specified name is a temporary table.
+   *
+   * Note: The temporary table cache is checked only when database is not
+   * explicitly specified.
+   */
+  def isTemporaryTable(name: TableIdentifier): Boolean = {
+    val db = name.database.getOrElse(currentDb)
+    val table = formatTableName(name.table)
+    if (!name.database.isDefined && tempTables.contains(table)) {
+      true
+    } else {
+      false // it's a not a temporary table
+    }
+  }
+
+  /**
    * List all tables in the specified database, including temporary tables.
    */
   def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")

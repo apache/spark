@@ -93,6 +93,23 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * A command for users to list the properties for a table.
+   * If propertyKey is specified, the value for the propertyKey
+   * is returned. If propertyKey is not specified, all the keys
+   * and their corresponding values are returned.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW TBLPROPERTIES table_name[('propertyKey')];
+   * }}}
+   */
+  override def visitShowTblProperties(
+      ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
+    ShowTablePropertiesCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.key).map(_.STRING).map(string))
+  }
+
+  /**
    * Create a [[RefreshTable]] logical plan.
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {

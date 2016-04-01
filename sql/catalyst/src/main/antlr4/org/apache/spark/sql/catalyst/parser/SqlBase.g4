@@ -116,6 +116,8 @@ statement
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
+    | SHOW TBLPROPERTIES table=tableIdentifier
+        ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
