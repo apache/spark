@@ -58,7 +58,7 @@ private[r] object SparkRWrappers {
       maxIter: Double,
       k: Double,
       columns: Array[String]): PipelineModel = {
-    val assembler = new VectorAssembler().setInputCols(columns)
+    val assembler = new VectorAssembler().setInputCols(columns).setOutputCol("features")
     val kMeans = new KMeans()
       .setInitMode(initMode)
       .setMaxIter(maxIter.toInt)
