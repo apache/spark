@@ -22,7 +22,9 @@ import java.io.File
 import org.apache.hadoop.hive.conf.HiveConf
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
@@ -211,5 +213,79 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       rowRDD.collect().toSeq)
 
     sql("DROP TABLE hiveTableWithStructValue")
+  }
+
+  test("Reject partitioning that does not match table") {
+    sqlContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
+    sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
+    val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd"))
+        .toDF("id", "data", "part")
+
+    intercept[AnalysisException] {
+      // cannot partition by 2 fields when there is only one in the table definition
+      data.write.partitionBy("part", "data").insertInto("partitioned")
+    }
+  }
+
+  test("Test partition mode = strict") {
+    sqlContext.conf.unsetConf("hive.exec.dynamic.partition.mode")
+    sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
+    val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd"))
+        .toDF("id", "data", "part")
+
+    intercept[SparkException] {
+      data.write.insertInto("partitioned")
+    }
+  }
+
+  test("Detect table partitioning") {
+    sqlContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
+
+    sql("CREATE TABLE source (id bigint, data string, part string)")
+    val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd")).toDF()
+
+    data.write.insertInto("source")
+    checkAnswer(sql("SELECT * FROM source"), data.collect().toSeq)
+
+    sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
+    // this will pick up the output partitioning from the table definition
+    sqlContext.table("source").write.insertInto("partitioned")
+
+    checkAnswer(sql("SELECT * FROM partitioned"), data.collect().toSeq)
+
+    sqlContext.conf.unsetConf("hive.exec.dynamic.partition.mode")
+  }
+
+  test("Detect table partitioning with correct partition order") {
+    sqlContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
+
+    sql("CREATE TABLE source (id bigint, part2 string, part1 string, data string)")
+    val data = (1 to 10).map(i => (i, if ((i % 2) == 0) "even" else "odd", "p", s"data-$i"))
+        .toDF("id", "part2", "part1", "data")
+
+    data.write.insertInto("source")
+    checkAnswer(sql("SELECT * FROM source"), data.collect().toSeq)
+
+    // the original data with part1 and part2 at the end
+    val expected = data.select("id", "data", "part1", "part2")
+
+    sql(
+      """CREATE TABLE partitioned (id bigint, data string)
+        |PARTITIONED BY (part1 string, part2 string)""".stripMargin)
+    sqlContext.table("source").write.insertInto("partitioned")
+
+    checkAnswer(sql("SELECT * FROM partitioned"), expected.collect().toSeq)
+
+    sqlContext.conf.unsetConf("hive.exec.dynamic.partition.mode")
+  }
+
+  test("InsertIntoTable#resolved should include dynamic partitions") {
+    sqlContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
+    sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
+    val data = (1 to 10).map(i => (i.toLong, s"data-$i")).toDF("id", "data")
+
+    val logical = InsertIntoTable(sqlContext.table("partitioned").logicalPlan,
+      Map("part" -> None), data.logicalPlan, overwrite = false, ifNotExists = false)
+    assert(!logical.resolved, "Should not resolve: missing partition data")
   }
 }
