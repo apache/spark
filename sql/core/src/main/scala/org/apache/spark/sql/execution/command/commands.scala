@@ -247,7 +247,7 @@ case class ExplainCommand(
     val queryExecution = sqlContext.executePlan(logicalPlan)
     var outputString = if (extended) queryExecution.toString else queryExecution.simpleString
     if (codegen) {
-      outputString += "\n\n" + codegenString(queryExecution.executedPlan)
+      outputString = codegenString(queryExecution.executedPlan)
     }
     outputString.split("\n").map(Row(_))
   } catch { case cause: TreeNodeException[_] =>
