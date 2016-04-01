@@ -349,8 +349,7 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
       s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}",
     (value: String) =>
       RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
-      || (try { value.toInt > 0 } catch { case _ : Throwable => false })
-      || (try { value.toDouble > 0.0 || value.toDouble <= 1.0} catch { case _ : Throwable => false }))
+      || value.matches("^(?:[1-9]\\d*|0\\.\\d*[1-9]\\d*\\d*|1\\.0+)$"))
 
   setDefault(featureSubsetStrategy -> "auto")
 

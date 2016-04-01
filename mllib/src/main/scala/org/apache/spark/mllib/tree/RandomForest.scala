@@ -76,10 +76,10 @@ private class RandomForest (
   strategy.assertValid()
   require(numTrees > 0, s"RandomForest requires numTrees > 0, but was given numTrees = $numTrees.")
   require(RandomForest.supportedFeatureSubsetStrategies.contains(featureSubsetStrategy)
-    || (try { featureSubsetStrategy.toInt > 0 } catch { case _ : Throwable => false })
-    || (try { featureSubsetStrategy.toDouble > 0.0 || featureSubsetStrategy.toDouble <= 1.0} catch { case _ : Throwable => false }),
+    || featureSubsetStrategy.matches("^(?:[1-9]\\d*|0\\.\\d*[1-9]\\d*\\d*|1\\.0+)$"),
     s"RandomForest given invalid featureSubsetStrategy: $featureSubsetStrategy." +
-    s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}, (0.0-1.0], [1-n].")
+    s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}," +
+    s" (0.0-1.0], [1-n].")
 
   /**
    * Method to train a decision tree model over an RDD

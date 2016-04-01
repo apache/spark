@@ -27,6 +27,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDTSuite, EnsembleTestHelper}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, GiniCalculator}
+import org.apache.spark.mllib.tree.model.RandomForestModel
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.collection.OpenHashMap
@@ -506,6 +507,25 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     TreeEnsembleModel.normalizeMapValues(map)
     val expected = Map(0 -> 1.0 / 3.0, 2 -> 2.0 / 3.0)
     assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
+  }
+
+  test("options for feature subset size in RandomForest - SPARK-3724") {
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+    val rdd = sc.parallelize(arr)
+    val numTrees = 1
+
+    val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 2,
+      numClasses = 2, categoricalFeaturesInfo = Map.empty[Int, Int],
+      useNodeIdCache = true)
+
+    // Both options should be the same as 17 == 50 * 0.34
+    val rf1 = RandomForest.run(rdd, strategy, numTrees = numTrees,
+      featureSubsetStrategy = "17", seed = 123)
+    val rf2 = RandomForest.run(rdd, strategy, numTrees = numTrees,
+      featureSubsetStrategy = "0.34", seed = 123)
+    val model1 = new RandomForestModel(strategy.algo, rf1.map(_.toOld))
+    val model2 = new RandomForestModel(strategy.algo, rf2.map(_.toOld))
+    assert(model1.toDebugString == model2.toDebugString)
   }
 
 }
