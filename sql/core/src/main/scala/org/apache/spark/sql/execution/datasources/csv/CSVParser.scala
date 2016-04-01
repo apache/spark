@@ -123,7 +123,7 @@ private[sql] class BulkCsvReader(
     headers: Seq[String])
   extends CsvReader(params, headers) with Iterator[Array[String]] {
 
-  private val reader = new StringIteratorReader(iter)
+  private val reader = new StringIteratorReader(iter, params.rowSeparator)
   parser.beginParsing(reader)
   private var nextRecord = parser.parseNext()
 
@@ -151,12 +151,18 @@ private[sql] class BulkCsvReader(
   * parsed and needs the newlines to be present
   * @param iter iterator over RDD[String]
   */
-private class StringIteratorReader(val iter: Iterator[String]) extends java.io.Reader {
+private class StringIteratorReader(
+    iter: Iterator[String],
+    rowSeparator: String) extends java.io.Reader {
 
   private var next: Long = 0
   private var length: Long = 0  // length of input so far
   private var start: Long = 0
   private var str: String = null   // current string from iter
+  // TODO: For non-ascii compatible encodings, this would not work.
+  private val sep = rowSeparator.getBytes(StandardCharsets.UTF_8)
+  private val sepLength = rowSeparator.getBytes(StandardCharsets.UTF_8).length
+  private var sepIndex = 0
 
   /**
     * fetch next string from iter, if done with current one
@@ -167,7 +173,8 @@ private class StringIteratorReader(val iter: Iterator[String]) extends java.io.R
       if (iter.hasNext) {
         str = iter.next()
         start = length
-        length += (str.length + 1) // allowance for newline removed by SparkContext.textFile()
+        // allowance for newline removed by SparkContext.textFile()
+        length += (str.length + sepLength)
       } else {
         str = null
       }
@@ -184,7 +191,14 @@ private class StringIteratorReader(val iter: Iterator[String]) extends java.io.R
     } else {
       val cur = next - start
       next += 1
-      if (cur == str.length) '\n' else str.charAt(cur.toInt)
+      if (cur == str.length && sepIndex < sepLength) {
+        val n = sep(sepIndex)
+        sepIndex += 1
+        if (sepIndex == sepLength) sepIndex = 0
+        n
+      } else {
+        str.charAt(cur.toInt)
+      }
     }
   }
 
@@ -204,12 +218,7 @@ private class StringIteratorReader(val iter: Iterator[String]) extends java.io.R
         n = -1
       } else {
         n = Math.min(length - next, len).toInt // lesser of amount of input available or buf size
-        if (n == length - next) {
-          str.getChars((next - start).toInt, (next - start + n - 1).toInt, cbuf, off)
-          cbuf(off + n - 1) = '\n'
-        } else {
-          str.getChars((next - start).toInt, (next - start + n).toInt, cbuf, off)
-        }
+        (str + rowSeparator).getChars((next - start).toInt, (next - start + n).toInt, cbuf, off)
         next += n
         if (n < len) {
           val m = read(cbuf, off + n, len - n)  // have more space, fetch more input from iter

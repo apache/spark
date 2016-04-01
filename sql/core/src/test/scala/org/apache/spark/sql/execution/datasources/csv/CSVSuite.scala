@@ -34,6 +34,7 @@ import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val carsFile = "cars.csv"
+  private val carsWindowsFiles = "cars-windows.csv"
   private val carsMalformedFile = "cars-malformed.csv"
   private val carsFile8859 = "cars_iso-8859-1.csv"
   private val carsTsvFile = "cars.tsv"
@@ -163,6 +164,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     // scalastyle:on
 
     verifyCars(sqlContext.table("carsTable"), withHeader = true)
+  }
+
+  test("test rowSeparator option with windows newlines.") {
+    val cars = sqlContext
+      .read
+      .format("csv")
+      .option("header", "true")
+      .option("rowSeparator", "\r\n")
+      .load(testFile(carsWindowsFiles))
+
+    verifyCars(cars, withHeader = true)
   }
 
   test("test aliases sep and encoding for delimiter and charset") {
