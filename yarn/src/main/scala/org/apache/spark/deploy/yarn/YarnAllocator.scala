@@ -342,8 +342,14 @@ private[yarn] class YarnAllocator(
       nodes: Array[String],
       racks: Array[String]): ContainerRequest = {
     nodeLabelConstructor.map { constructor =>
+      val labelExp = if ((racks != null && (!racks.isEmpty))
+        || (nodes != null && (!nodes.isEmpty))) {
+        null
+      } else {
+        labelExpression.orNull
+      }
       constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
-        labelExpression.orNull)
+        labelExp)
     }.getOrElse(new ContainerRequest(resource, nodes, racks, RM_REQUEST_PRIORITY))
   }
 

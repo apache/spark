@@ -88,7 +88,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     override def equals(other: Any): Boolean = false
   }
 
-  def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
+  def createAllocator(
+    maxExecutors: Int = 5,
+    executorNodeLabel: Option[String] = None): YarnAllocator = {
     val args = Array(
       "--executor-cores", "5",
       "--executor-memory", "2048",
@@ -96,6 +98,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       "--class", "SomeClass")
     val sparkConfClone = sparkConf.clone()
     sparkConfClone.set("spark.executor.instances", maxExecutors.toString)
+    executorNodeLabel.foreach(sparkConfClone.set("spark.yarn.executor.nodeLabelExpression", _))
     new YarnAllocator(
       "not used",
       mock(classOf[RpcEndpointRef]),
@@ -272,5 +275,23 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val pmemMsg = memLimitExceededLogMessage(diagnostics, PMEM_EXCEEDED_PATTERN)
     assert(vmemMsg.contains("5.8 GB of 4.2 GB virtual memory used."))
     assert(pmemMsg.contains("2.1 MB of 2 GB physical memory used."))
+  }
+
+  test("request executors with locality") {
+    val handler = createAllocator(1, Some("label"))
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (1)
+
+    handler.requestTotalExecutorsWithPreferredLocalities(3, 20, Map(("host1", 10), ("host2", 20)))
+    handler.updateResourceRequests()
+    handler.getPendingAllocate.size should be (3)
+
+    val container = createContainer("host1")
+    handler.handleAllocatedContainers(Array(container))
+
+    handler.getNumExecutorsRunning should be (1)
+    handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
+    handler.allocatedHostToContainersMap.get("host1").get should contain (container.getId)
   }
 }
