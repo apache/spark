@@ -44,25 +44,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * returns a constraint of the form `isNotNull(a)`
    */
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
-    var isNotNullConstraints = Set.empty[Expression]
-
-    // First, we propagate constraints if the condition consists of equality and ranges. For all
-    // other cases, we return an empty set of constraints
-    constraints.foreach {
-      case EqualTo(l, r) =>
-        isNotNullConstraints ++= Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThan(l, r) =>
-        isNotNullConstraints ++= Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThanOrEqual(l, r) =>
-        isNotNullConstraints ++= Set(IsNotNull(l), IsNotNull(r))
-      case LessThan(l, r) =>
-        isNotNullConstraints ++= Set(IsNotNull(l), IsNotNull(r))
-      case LessThanOrEqual(l, r) =>
-        isNotNullConstraints ++= Set(IsNotNull(l), IsNotNull(r))
-      case Not(EqualTo(l, r)) =>
-        isNotNullConstraints ++= Set(IsNotNull(l), IsNotNull(r))
-      case _ => // No inference
-    }
+    // First, we propagate constraints from the null intolerant expressions.
+    var isNotNullConstraints: Set[Expression] =
+      constraints.flatMap(scanNullIntolerantExpr).map(IsNotNull(_))
 
     // Second, we infer additional constraints from non-nullable attributes that are part of the
     // operator's output
@@ -70,6 +54,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull).toSet
 
     isNotNullConstraints -- constraints
+  }
+
+  /**
+   * Recursively explores the expressions which are null intolerant and returns all attributes
+   * in these expressions.
+   */
+  private def scanNullIntolerantExpr(expr: Expression): Seq[Attribute] = expr match {
+    case a: Attribute => Seq(a)
+    case _: NullIntolerant | IsNotNull(_: NullIntolerant) =>
+      expr.children.flatMap(scanNullIntolerantExpr)
+    case _ => Seq.empty[Attribute]
   }
 
   /**

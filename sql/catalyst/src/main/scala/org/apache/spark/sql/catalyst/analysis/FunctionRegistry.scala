@@ -308,6 +308,7 @@ object FunctionRegistry {
     expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
+    expression[TimeWindow]("window"),
 
     // collection functions
     expression[ArrayContains]("array_contains"),
