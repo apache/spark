@@ -67,7 +67,7 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    */
   lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
+    new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::

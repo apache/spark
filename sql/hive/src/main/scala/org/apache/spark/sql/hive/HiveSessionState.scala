@@ -52,7 +52,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    * An analyzer that uses the Hive metastore.
    */
   override lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
+    new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.CreateTables ::
@@ -69,7 +69,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = new HiveSqlParser(functionRegistry)
+  override lazy val sqlParser: ParserInterface = HiveSqlParser
 
   /**
    * Planner that takes into account Hive-specific strategies.

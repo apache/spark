@@ -16,19 +16,19 @@
  */
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
+
 import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.parse.EximUtil
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -41,8 +41,8 @@ import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 /**
  * Concrete parser for HiveQl statements.
  */
-class HiveSqlParser(functionRegistry: FunctionRegistry) extends AbstractSqlParser {
-  val astBuilder = new HiveSqlAstBuilder(functionRegistry)
+object HiveSqlParser extends AbstractSqlParser {
+  val astBuilder = new HiveSqlAstBuilder
 
   override protected def nativeCommand(sqlText: String): LogicalPlan = {
     HiveNativeCommand(sqlText)
@@ -52,7 +52,7 @@ class HiveSqlParser(functionRegistry: FunctionRegistry) extends AbstractSqlParse
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class HiveSqlAstBuilder(functionRegistry: FunctionRegistry) extends SparkSqlAstBuilder {
+class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   import ParserUtils._
 
   /**
@@ -273,11 +273,7 @@ class HiveSqlAstBuilder(functionRegistry: FunctionRegistry) extends SparkSqlAstB
       name: String,
       expressions: Seq[Expression],
       ctx: LateralViewContext): Generator = {
-    val func = functionRegistry.lookupFunction(name, expressions)
-    func match {
-      case g: Generator => g
-      case _ => throw new ParseException(s"Couldn't find Generator function '$name'", ctx)
-    }
+    UnresolvedGenerator(name, expressions)
   }
 
   /**

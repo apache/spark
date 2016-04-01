@@ -433,6 +433,12 @@ class SessionCatalog(
    */
   def dropFunction(name: FunctionIdentifier): Unit = {
     val db = name.database.getOrElse(currentDb)
+    val qualified = name.copy(database = Some(db)).unquotedString
+    if (functionRegistry.functionExists(qualified)) {
+      // If we have loaded this function into FunctionRegistry,
+      // also drop it from there.
+      functionRegistry.dropFunction(qualified)
+    }
     externalCatalog.dropFunction(db, name.funcName)
   }
 
@@ -560,12 +566,15 @@ class SessionCatalog(
     } else {
       // The function has not been loaded to the function registry, which means
       // that the function is a permanent function.
+      // We need to first put the function in FunctionRegistry.
       val catalogFunction = externalCatalog.getFunction(currentDb, name)
       assert(qualifiedName == catalogFunction.identifier.unquotedString)
       loadFunctionResources(catalogFunction.resources)
       val info = new ExpressionInfo(catalogFunction.className, qualifiedName)
       val builder = makeFunctionBuilder(qualifiedName, catalogFunction.className)
       createTempFunction(qualifiedName, info, builder, ignoreIfExists = false)
+      // Now, we need to create the Expression.
+      functionRegistry.lookupFunction(qualifiedName, children)
     }
   }
 

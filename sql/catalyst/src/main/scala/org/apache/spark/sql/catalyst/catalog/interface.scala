@@ -146,6 +146,7 @@ abstract class ExternalCatalog {
 
   def createFunction(db: String, funcDefinition: CatalogFunction): Unit
 
+  // TODO: dropFunction should also take a FunctionIdentifier.
   def dropFunction(db: String, funcName: String): Unit
 
   def renameFunction(db: String, oldName: String, newName: String): Unit

@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{errors, TableIdentifier}
+import org.apache.spark.sql.catalyst.{InternalRow, errors, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{ExprCode, CodegenContext, CodegenFallback}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -131,6 +131,30 @@ object UnresolvedAttribute {
     nameParts += tmp.mkString
     nameParts.toSeq
   }
+}
+
+case class UnresolvedGenerator(
+    name: String,
+    children: Seq[Expression]) extends Generator {
+
+  override def elementTypes: Seq[(DataType, Boolean, String)] =
+    throw new UnresolvedException(this, "elementTypes")
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override lazy val resolved = false
+
+  override def prettyName: String = name
+  override def toString: String = s"'$name(${children.mkString(", ")})"
+
+  override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  override def terminate(): TraversableOnce[InternalRow] =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 }
 
 case class UnresolvedFunction(
