@@ -298,6 +298,27 @@ class InMemoryCatalog extends ExternalCatalog {
     catalog(db).tables(table).partitions(spec)
   }
 
+  /**
+   * Returns the partition names from catalog for a given table in a database.
+   * Currently returns empty sequence for [[InMemoryCatalog]].
+   */
+  def getPartitionNames(db: String, table: String, range: Short): Seq[String] = {
+    Seq.empty[String]
+  }
+
+  /**
+   * Returns the partition names that matche the partition spec for a given table in a database.
+   * When no match is found, an empty Sequence is returned.
+   * Currently returns empty sequence for [[InMemoryCatalog]]
+   */
+  def getPartitionNames(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec,
+      range: Short): Seq[String] = {
+    Seq.empty[String]
+  }
+
   override def listPartitions(
       db: String,
       table: String): Seq[CatalogTablePartition] = synchronized {

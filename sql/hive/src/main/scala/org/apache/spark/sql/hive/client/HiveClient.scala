@@ -150,6 +150,21 @@ private[hive] trait HiveClient {
     }
   }
 
+  /**
+   * Returns the partition names from hive metastore for a given table in a database.
+   */
+  def getPartitionNames(db: String, table: String, range: Short): Seq[String]
+
+  /**
+   * Returns the partition names that matches the partition spec for a given table in a database.
+   * When no match is found, an empty Sequence is returned.
+   */
+  def getPartitionNames(
+      db: String,
+      table: String,
+      spec: ExternalCatalog.TablePartitionSpec,
+      range: Short): Seq[String]
+
   /** Returns the specified partition or None if it does not exist. */
   final def getPartitionOption(
       db: String,

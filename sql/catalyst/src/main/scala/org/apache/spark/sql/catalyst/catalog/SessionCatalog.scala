@@ -471,6 +471,25 @@ class SessionCatalog(
   }
 
   /**
+   * Returns the partition names from catalog for a given table in a database.
+   */
+  def getPartitionNames(db: String, table: String, range: Short): Seq[String] = {
+    externalCatalog.getPartitionNames(db, table, range)
+  }
+
+  /**
+   * Returns the partition names that matche the partition spec for a given table in a database.
+   * When no match is found, an empty Sequence is returned.
+   */
+  def getPartitionNames(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec,
+      range: Short): Seq[String] = {
+    externalCatalog.getPartitionNames(db, table, spec, range)
+  }
+
+  /**
    * List all partitions in a table, assuming it exists.
    * If no database is specified, assume the table is in the current database.
    */

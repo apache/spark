@@ -283,10 +283,35 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     client.getPartition(db, table, spec)
   }
 
+  /**
+   * Returns the partition names from hive metastore for a given table in a database.
+   */
   override def listPartitions(
       db: String,
       table: String): Seq[CatalogTablePartition] = withClient {
     client.getAllPartitions(db, table)
+  }
+
+  /**
+   * Returns the partition names from hive metastore for a given table in a database.
+   */
+  override def getPartitionNames(
+      db: String,
+      table: String,
+      range: Short): Seq[String] = withClient {
+    client.getPartitionNames(db, table, range)
+  }
+
+  /**
+   * Returns the partition names that matches the partition spec for a given table in a database.
+   * When no match is found, an empty Sequence is returned.
+   */
+  override def getPartitionNames(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec,
+      range: Short): Seq[String] = withClient {
+    client.getPartitionNames(db, table, spec, range)
   }
 
   // --------------------------------------------------------------------------

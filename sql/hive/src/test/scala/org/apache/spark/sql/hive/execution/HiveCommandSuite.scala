@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -36,12 +37,22 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |STORED AS PARQUET
         |TBLPROPERTIES('prop1Key'="prop1Val", '`prop2Key`'="prop2Val")
       """.stripMargin)
+     sql("CREATE TABLE parquet_tab3(col1 int, `col 2` int)")
+     sql("CREATE TABLE parquet_tab4 (price int, qty int) partitioned by (year int, month int)")
+     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month=1) SELECT 1,1")
+     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month=2) SELECT 2,2")
+     sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month=2) SELECT 3,3")
+     sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month=3) SELECT 3,3")
+     sql("CREATE VIEW parquet_view1 as select * from parquet_tab4")
   }
 
   override protected def afterAll(): Unit = {
     try {
       sql("DROP TABLE IF EXISTS parquet_tab1")
       sql("DROP TABLE IF EXISTS parquet_tab2")
+      sql("DROP TABLE IF EXISTS parquet_tab3")
+      sql("DROP TABLE IF EXISTS parquet_tab4")
+      sql("DROP VIEW IF EXISTS parquet_view1")
     } finally {
       super.afterAll()
     }
@@ -245,6 +256,105 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
       }
       hiveContext.sessionState.hadoopConf.set("fs.default.name", originalFsName)
+    }
+  }
+
+  test("show columns") {
+    checkAnswer(
+      sql("SHOW COLUMNS IN parquet_tab3"),
+      Row("col1") :: Row("col 2") :: Nil)
+
+    checkAnswer(
+      sql("SHOW COLUMNS IN default.parquet_tab3"),
+      Row("col1") :: Row("col 2") :: Nil)
+
+    checkAnswer(
+      sql("SHOW COLUMNS IN parquet_tab3 FROM default"),
+      Row("col1") :: Row("col 2") :: Nil)
+
+    checkAnswer(
+      sql("SHOW COLUMNS IN parquet_tab4 IN default"),
+      Row("price") :: Row("qty") :: Row("year") :: Row("month") :: Nil)
+
+    val message = intercept[NoSuchTableException] {
+      sql("SHOW COLUMNS IN badtable FROM default")
+    }.getMessage
+    assert(message.contains("Table badtable not found in database"))
+  }
+
+  test("show partitions - show everything") {
+    checkAnswer(
+      sql("show partitions parquet_tab4"),
+      Row("year=2015/month=1") ::
+        Row("year=2015/month=2") ::
+        Row("year=2016/month=2") ::
+        Row("year=2016/month=3") :: Nil)
+
+    checkAnswer(
+      sql("show partitions default.parquet_tab4"),
+      Row("year=2015/month=1") ::
+        Row("year=2015/month=2") ::
+        Row("year=2016/month=2") ::
+        Row("year=2016/month=3") :: Nil)
+  }
+
+  test("show partitions - filter") {
+    checkAnswer(
+      sql("show partitions default.parquet_tab4 PARTITION(year=2015)"),
+      Row("year=2015/month=1") ::
+        Row("year=2015/month=2") :: Nil)
+
+    checkAnswer(
+      sql("show partitions default.parquet_tab4 PARTITION(year=2015, month=1)"),
+      Row("year=2015/month=1") :: Nil)
+
+    checkAnswer(
+      sql("show partitions default.parquet_tab4 PARTITION(month=2)"),
+      Row("year=2015/month=2") ::
+        Row("year=2016/month=2") :: Nil)
+  }
+
+  test("show partitions - empty row") {
+    withTempTable("parquet_temp") {
+      sql(
+        """
+          |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
+          |USING org.apache.spark.sql.parquet.DefaultSource
+        """.stripMargin)
+      // An empty sequence of row is returned for session temporary table.
+      checkAnswer(sql("SHOW PARTITIONS parquet_temp"), Nil)
+      val message1 = intercept[AnalysisException] {
+        sql("SHOW PARTITIONS parquet_tab3")
+      }.getMessage
+      assert(message1.contains("is not a partitioned table"))
+
+      val message2 = intercept[AnalysisException] {
+        sql("SHOW PARTITIONS parquet_tab4 PARTITION(abcd=2015, xyz=1)")
+      }.getMessage
+      assert(message2.contains("Partition spec (abcd -> 2015, xyz -> 1) contains " +
+        "non-partition columns"))
+
+      val message3 = intercept[AnalysisException] {
+        sql("SHOW PARTITIONS parquet_view1")
+      }.getMessage
+      assert(message3.contains("Operation not allowed: view or index table"))
+    }
+  }
+
+  test("show partitions - datasource") {
+    import sqlContext.implicits._
+    withTable("part_datasrc") {
+      val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+      df.write
+        .partitionBy("a")
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("part_datasrc")
+
+      val message1 = intercept[AnalysisException] {
+        sql("SHOW PARTITIONS part_datasrc")
+      }.getMessage
+      assert(message1.contains("Operation not allowed: datasource table"))
     }
   }
 }
