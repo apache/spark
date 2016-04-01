@@ -19,6 +19,8 @@ import sys
 if sys.version > '3':
     basestring = str
 
+from py4j.java_collections import JavaArray
+
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.param.shared import *
@@ -1721,7 +1723,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
-        defaultStopWords = list(stopWordsObj.English())
+        defaultStopWords = stopWordsObj.English()
         self._setDefault(stopWords=defaultStopWords, caseSensitive=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1751,7 +1753,10 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         """
         Get the stopwords.
         """
-        return self.getOrDefault(self.stopWords)
+        stopwords = self.getOrDefault(self.stopWords)
+        if isinstance(stopwords, JavaArray):
+            stopwords = list(stopwords)
+        return stopwords
 
     @since("1.6.0")
     def setCaseSensitive(self, value):

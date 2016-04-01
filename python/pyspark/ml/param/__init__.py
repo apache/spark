@@ -26,6 +26,8 @@ import copy
 import numpy as np
 import warnings
 
+from py4j.java_gateway import JavaObject
+
 from pyspark import since
 from pyspark.ml.util import Identifiable
 from pyspark.mllib.linalg import DenseVector, Vector
@@ -445,7 +447,7 @@ class Params(Identifiable):
         """
         for param, value in kwargs.items():
             p = getattr(self, param)
-            if value is not None:
+            if value is not None and not isinstance(value, JavaObject):
                 try:
                     value = p.typeConverter(value)
                 except TypeError as e:
