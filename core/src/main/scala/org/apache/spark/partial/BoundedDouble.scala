@@ -40,6 +40,4 @@ class BoundedDouble(val mean: Double, val confidence: Double, val low: Double, v
       }
       case _ => false
     }
-
-
 }
