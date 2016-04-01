@@ -29,8 +29,8 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
 
-    val outputDir = Utils.createTempDir("stream.output").getCanonicalPath
-    val checkpointDir = Utils.createTempDir("stream.checkpoint").getCanonicalPath
+    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
     val query =
       df.write
