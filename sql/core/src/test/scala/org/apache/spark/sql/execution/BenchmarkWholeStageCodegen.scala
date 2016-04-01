@@ -88,61 +88,26 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   ignore("range/sample/sum") {
     val N = 500 << 20
     runBenchmark("range/sample/sum", N) {
-      sqlContext.range(N).sample(true, 0.8).groupBy().sum().collect()
+      sqlContext.range(N).sample(true, 0.01).groupBy().sum().collect()
     }
     /*
-    Intel(R) Core(TM) i7-5557U CPU @ 3.10GHz
+    Westmere E56xx/L56xx/X56xx (Nehalem-C)
     range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    range/sample/sum codegen=false         55656 / 56490          9.4         106.2       1.0X
-    range/sample/sum codegen=true          35423 / 35758         14.8          67.6       1.6X
+    range/sample/sum codegen=false         53888 / 56592          9.7         102.8       1.0X
+    range/sample/sum codegen=true          41614 / 42607         12.6          79.4       1.3X
     */
 
     runBenchmark("range/sample/sum", N) {
-      sqlContext.range(N).sample(false, 0.8).groupBy().sum().collect()
+      sqlContext.range(N).sample(false, 0.01).groupBy().sum().collect()
     }
     /*
-    Intel(R) Core(TM) i7-5557U CPU @ 3.10GHz
+    Westmere E56xx/L56xx/X56xx (Nehalem-C)
     range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    range/sample/sum codegen=false         16460 / 17161         31.9          31.4       1.0X
-    range/sample/sum codegen=true            4081 / 5390        128.5           7.8       4.0X
+    range/sample/sum codegen=false         12982 / 13384         40.4          24.8       1.0X
+    range/sample/sum codegen=true            7074 / 7383         74.1          13.5       1.8X
     */
-  }
-
-  ignore("sort merge join/sample") {
-    val N = 2 << 20
-    runBenchmark("sort merge join", N) {
-      val df1 = sqlContext.range(N)
-        .selectExpr(s"(id * 15485863) % ${N*10} as k1")
-      val df2 = sqlContext.range(N)
-        .selectExpr(s"(id * 15485867) % ${N*10} as k2")
-      df1.join(df2, col("k1") === col("k2")).sample(true, 0.8).count()
-    }
-
-    /**
-    Westmere E56xx/L56xx/X56xx (Nehalem-C)
-    sort merge join:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    sort merge join codegen=false            6925 / 7130          0.3        3301.9       1.0X
-    sort merge join codegen=true             6584 / 6876          0.3        3139.5       1.1X
-      */
-
-    runBenchmark("sort merge join", N) {
-      val df1 = sqlContext.range(N)
-        .selectExpr(s"(id * 15485863) % ${N*10} as k1")
-      val df2 = sqlContext.range(N)
-        .selectExpr(s"(id * 15485867) % ${N*10} as k2")
-      df1.join(df2, col("k1") === col("k2")).sample(false, 0.8).count()
-    }
-
-    /**
-    Westmere E56xx/L56xx/X56xx (Nehalem-C)
-    sort merge join:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    sort merge join codegen=false            6787 / 6939          0.3        3236.2       1.0X
-    sort merge join codegen=true             6623 / 6774          0.3        3158.1       1.0X
-      */
   }
 
   ignore("stat functions") {
