@@ -39,17 +39,21 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
  */
 class SessionCatalog(
     externalCatalog: ExternalCatalog,
+    functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: CatalystConf) {
   import ExternalCatalog._
 
-  def this(externalCatalog: ExternalCatalog, functionRegistry: FunctionRegistry) {
-    this(externalCatalog, functionRegistry, new SimpleCatalystConf(true))
+  def this(
+      externalCatalog: ExternalCatalog,
+      functionRegistry: FunctionRegistry,
+      conf: CatalystConf) {
+    this(externalCatalog, new DummyFunctionResourceLoader, functionRegistry, conf)
   }
 
   // For testing only.
   def this(externalCatalog: ExternalCatalog) {
-    this(externalCatalog, new SimpleFunctionRegistry)
+    this(externalCatalog, new SimpleFunctionRegistry, new SimpleCatalystConf(true))
   }
 
   protected[this] val tempTables = new mutable.HashMap[String, LogicalPlan]
@@ -574,4 +578,15 @@ class SessionCatalog(
     throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
   }
 
+  /**
+   * Loads resources such as JARs and Files to SQLContext.
+   */
+  def loadFunctionResources(resources: Seq[(String, String)]): Unit = {
+    resources.map(r => (r._1.toLowerCase, r._2)).foreach {
+      case (resourceType, uri) =>
+        val functionResource =
+          FunctionResource(FunctionResourceType.fromString(resourceType), uri)
+        functionResourceLoader.loadResource(functionResource)
+    }
+  }
 }

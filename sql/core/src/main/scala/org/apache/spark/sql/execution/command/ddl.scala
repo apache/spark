@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogFunction}
+import org.apache.spark.sql.catalyst.catalog.{FunctionResource, CatalogDatabase, CatalogFunction}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, ExpressionInfo}
 import org.apache.spark.sql.execution.datasources.BucketSpec

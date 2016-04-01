@@ -51,7 +51,12 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Internal catalog for managing table and database states.
    */
-  lazy val catalog = new SessionCatalog(ctx.externalCatalog, functionRegistry, conf)
+  lazy val catalog =
+    new SessionCatalog(
+      ctx.externalCatalog,
+      ctx.functionResourceLoader,
+      functionRegistry,
+      conf)
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -111,21 +116,5 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
    */
   lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
-
-  /**
-   * Loads resource to SQLContext.
-   */
-  def loadResource(resource: Resource): Unit = {
-    resource.resourceType.toLowerCase match {
-      case "jar" => ctx.addJar(resource.path)
-      case _ => ctx.sparkContext.addFile(resource.path)
-    }
-  }
-
-  /**
-   * Loads resources such as JARs and Files to SQLContext.
-   */
-  def loadResources(resources: Seq[Resource]): Unit = resources.foreach(loadResource(_))
 }
 
-case class Resource(resourceType: String, path: String)

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.execution.{python, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.execution.HiveSqlParser
-import org.apache.spark.sql.internal.{Resource, SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
 /**
@@ -39,7 +39,13 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    * Internal catalog for managing table and database states.
    */
   override lazy val catalog = {
-    new HiveSessionCatalog(ctx.hiveCatalog, ctx.metadataHive, ctx, functionRegistry, conf)
+    new HiveSessionCatalog(
+      ctx.hiveCatalog,
+      ctx.metadataHive,
+      ctx,
+      ctx.functionResourceLoader,
+      functionRegistry,
+      conf)
   }
 
   /**
@@ -93,19 +99,6 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
           DefaultJoin
         )
       }
-    }
-  }
-
-  /**
-   * Loads resource to SQLContext.
-   */
-  override def loadResource(resource: Resource): Unit = {
-    resource.resourceType.toLowerCase match {
-      case "jar" =>
-        super.loadResource(resource)
-      case _ =>
-        ctx.runSqlHive(s"ADD FILE ${resource.path}")
-        super.loadResource(resource)
     }
   }
 }

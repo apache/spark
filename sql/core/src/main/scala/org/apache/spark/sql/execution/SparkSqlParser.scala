@@ -290,6 +290,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         case "jar" | "file" | "archive" =>
           resourceType -> string(resource.STRING)
         case other =>
+          // We keep this case because the error message is better than ResourceType.fromString
           throw new ParseException(s"Resource Type '$resourceType' is not supported.", ctx)
       }
     }

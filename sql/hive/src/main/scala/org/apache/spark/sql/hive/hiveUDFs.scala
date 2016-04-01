@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client.HiveClientImpl
-import org.apache.spark.sql.internal.Resource
 import org.apache.spark.sql.types._
 
 private[hive] case class HiveSimpleUDF(
