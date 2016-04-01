@@ -928,6 +928,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!store.diskStore.contains("list3"), "list3 was in disk store")
     assert(!store.diskStore.contains("list4"), "list4 was in disk store")
     assert(!store.diskStore.contains("list5"), "list5 was in disk store")
+
+    // remove block - list2 should be removed from disk
+    val updatedBlocks6 = getUpdatedBlocks {
+      store.removeBlock(
+        "list2", tellMaster = true)
+    }
+    assert(updatedBlocks6.size === 1)
+    assert(updatedBlocks6.head._1 === TestBlockId("list2"))
+    assert(updatedBlocks6.head._2.storageLevel == StorageLevel.NONE)
+    assert(!store.diskStore.contains("list2"), "list2 was in disk store")
   }
 
   test("query block statuses") {

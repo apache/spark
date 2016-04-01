@@ -592,6 +592,11 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-14205][SQL] remove trait Queryable
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.Dataset")
+      ) ++ Seq(
+        // [SPARK-11262][ML] Unit test for gradient, loss layers, memory management
+        // for multilayer perceptron.
+        // This class is marked as `private`.
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.ann.SoftmaxFunction")
       )
     case v if v.startsWith("1.6") =>
       Seq(

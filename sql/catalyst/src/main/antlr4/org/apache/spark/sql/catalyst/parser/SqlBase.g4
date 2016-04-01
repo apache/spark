@@ -57,10 +57,11 @@ statement
         (AS? query)?                                                   #createTable
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq?)?                     #analyze
-    | ALTER TABLE from=tableIdentifier RENAME TO to=tableIdentifier    #renameTable
-    | ALTER TABLE tableIdentifier
+    | ALTER (TABLE | VIEW) from=tableIdentifier
+        RENAME TO to=tableIdentifier                                   #renameTable
+    | ALTER (TABLE | VIEW) tableIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
-    | ALTER TABLE tableIdentifier
+    | ALTER (TABLE | VIEW) tableIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
@@ -76,12 +77,16 @@ statement
         SET SKEWED LOCATION skewedLocationList                         #setTableSkewLocations
     | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
+    | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
+        partitionSpec+                                                 #addTablePartition
     | ALTER TABLE tableIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER TABLE from=tableIdentifier
         EXCHANGE partitionSpec WITH TABLE to=tableIdentifier           #exchangeTablePartition
     | ALTER TABLE tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
+    | ALTER VIEW tableIdentifier
+        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE tableIdentifier ARCHIVE partitionSpec                #archiveTablePartition
     | ALTER TABLE tableIdentifier UNARCHIVE partitionSpec              #unarchiveTablePartition
     | ALTER TABLE tableIdentifier partitionSpec?
@@ -109,7 +114,8 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN explainOption* statement                                 #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
-        (LIKE (qualifiedName | pattern=STRING))?                       #showTables
+        (LIKE? pattern=STRING)?                                        #showTables
+    | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
@@ -133,15 +139,6 @@ hiveNativeCommands
     | DELETE FROM tableIdentifier (WHERE booleanExpression)?
     | TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
-    | ALTER VIEW from=tableIdentifier AS? RENAME TO to=tableIdentifier
-    | ALTER VIEW from=tableIdentifier AS?
-        SET TBLPROPERTIES tablePropertyList
-    | ALTER VIEW from=tableIdentifier AS?
-        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList
-    | ALTER VIEW from=tableIdentifier AS?
-        ADD (IF NOT EXISTS)? partitionSpecLocation+
-    | ALTER VIEW from=tableIdentifier AS?
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?
     | DROP VIEW (IF EXISTS)? qualifiedName
     | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
     | START TRANSACTION (transactionMode (',' transactionMode)*)?
@@ -149,7 +146,7 @@ hiveNativeCommands
     | ROLLBACK WORK?
     | SHOW PARTITIONS tableIdentifier partitionSpec?
     | DFS .*?
-    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | LOCK | UNLOCK | MSCK | LOAD) .*?
+    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | MSCK | LOAD) .*?
     ;
 
 unsupportedHiveNativeCommands
@@ -169,6 +166,13 @@ unsupportedHiveNativeCommands
     | kw1=SHOW kw2=TRANSACTIONS
     | kw1=SHOW kw2=INDEXES
     | kw1=SHOW kw2=LOCKS
+    | kw1=CREATE kw2=INDEX
+    | kw1=DROP kw2=INDEX
+    | kw1=ALTER kw2=INDEX
+    | kw1=LOCK kw2=TABLE
+    | kw1=LOCK kw2=DATABASE
+    | kw1=UNLOCK kw2=TABLE
+    | kw1=UNLOCK kw2=DATABASE
     ;
 
 createTableHeader
@@ -622,7 +626,7 @@ number
     ;
 
 nonReserved
-    : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS
+    : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | DATABASES
     | ADD
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY | STRUCT
     | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
@@ -643,7 +647,7 @@ nonReserved
     | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
     | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
-    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEXES | LOCKS | OPTION
+    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION
     ;
 
 SELECT: 'SELECT';
@@ -840,6 +844,7 @@ OUTPUTFORMAT: 'OUTPUTFORMAT';
 INPUTDRIVER: 'INPUTDRIVER';
 OUTPUTDRIVER: 'OUTPUTDRIVER';
 DATABASE: 'DATABASE' | 'SCHEMA';
+DATABASES: 'DATABASES' | 'SCHEMAS';
 DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';
 METADATA: 'METADATA';
@@ -863,6 +868,7 @@ ROLES: 'ROLES';
 COMPACTIONS: 'COMPACTIONS';
 PRINCIPALS: 'PRINCIPALS';
 TRANSACTIONS: 'TRANSACTIONS';
+INDEX: 'INDEX';
 INDEXES: 'INDEXES';
 LOCKS: 'LOCKS';
 OPTION: 'OPTION';
