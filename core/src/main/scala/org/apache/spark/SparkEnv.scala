@@ -285,8 +285,10 @@ object SparkEnv extends Logging {
       }
     }
 
+    val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
+
     val mapOutputTracker = if (isDriver) {
-      new MapOutputTrackerMaster(conf)
+      new MapOutputTrackerMaster(conf, broadcastManager, isLocal)
     } else {
       new MapOutputTrackerWorker(conf)
     }
@@ -325,8 +327,6 @@ object SparkEnv extends Logging {
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
       serializerManager, conf, memoryManager, mapOutputTracker, shuffleManager,
       blockTransferService, securityManager, numUsableCores)
-
-    val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
