@@ -95,6 +95,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set("spark.app.id", "test")
       .set("spark.kryoserializer.buffer", "1m")
       .set("spark.test.useCompressedOops", "true")
+      .set("spark.storage.memoryFraction", "1")
+      .set("spark.storage.safetyFraction", "1")
       .set("spark.storage.unrollFraction", "0.4")
       .set("spark.storage.unrollMemoryThreshold", "512")
 

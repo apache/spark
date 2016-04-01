@@ -61,7 +61,8 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
+    val memManager =
+      new StaticMemoryManager(conf, numCores = 1, totalHeapMemory = maxMem, totalOffHeapMemory = 0)
     val serializerManager = new SerializerManager(serializer, conf)
     val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
@@ -262,7 +263,8 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
     val failableTransfer = mock(classOf[BlockTransferService]) // this wont actually work
     when(failableTransfer.hostName).thenReturn("some-hostname")
     when(failableTransfer.port).thenReturn(1000)
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, 10000, numCores = 1)
+    val memManager =
+      new StaticMemoryManager(conf, numCores = 1, totalHeapMemory = 10000, totalOffHeapMemory = 0)
     val serializerManager = new SerializerManager(serializer, conf)
     val failableStore = new BlockManager("failable-store", rpcEnv, master, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, 0)

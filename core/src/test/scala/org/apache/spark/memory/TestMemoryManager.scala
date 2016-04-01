@@ -39,10 +39,19 @@ class TestMemoryManager(conf: SparkConf)
       grant
     }
   }
+
+  override protected val maxHeapExecutionMemory: Long = Long.MaxValue
+  override protected val maxOffHeapExecutionMemory: Long = Long.MaxValue
+  override protected val unevictableOffHeapStorageMemory: Long = Long.MaxValue
+  override val maxHeapStorageMemory: Long = Long.MaxValue
+  override protected val unevictableHeapStorageMemory: Long = Long.MaxValue
+  override protected val maxOffHeapStorageMemory: Long = Long.MaxValue
+
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      memoryMode: MemoryMode): Boolean = true
+      memoryMode: MemoryMode,
+      maxBytesToAttemptToFreeViaEviction: Long): Boolean = true
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
@@ -54,7 +63,6 @@ class TestMemoryManager(conf: SparkConf)
       memoryMode: MemoryMode): Unit = {
     available += numBytes
   }
-  override def maxOnHeapStorageMemory: Long = Long.MaxValue
 
   private var oomOnce = false
   private var available = Long.MaxValue

@@ -24,7 +24,6 @@ import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
 
 class StaticMemoryManagerSuite extends MemoryManagerSuite {
-  private val conf = new SparkConf().set("spark.storage.unrollFraction", "0.4")
 
   /**
    * Make a [[StaticMemoryManager]] and a [[MemoryStore]] with limited class dependencies.
@@ -32,11 +31,15 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
   private def makeThings(
       maxExecutionMem: Long,
       maxStorageMem: Long): (StaticMemoryManager, MemoryStore) = {
-    val mm = new StaticMemoryManager(
-      conf,
-      maxOnHeapExecutionMemory = maxExecutionMem,
-      maxOnHeapStorageMemory = maxStorageMem,
-      numCores = 1)
+    val totalHeapMemory = maxExecutionMem + maxStorageMem
+    val conf = new SparkConf()
+      .set("spark.storage.unrollFraction", "0.4")
+      .set("spark.storage.memoryFraction", (1.0 * maxStorageMem / totalHeapMemory).toString)
+      .set("spark.shuffle.memoryFraction", (1.0 * maxExecutionMem / totalHeapMemory).toString)
+      .set("spark.storage.safetyFraction", "1")
+      .set("spark.shuffle.safetyFraction", "1")
+      .set("spark.testing.memory", totalHeapMemory.toString)
+    val mm = new StaticMemoryManager(conf, numCores = 1)
     val ms = makeMemoryStore(mm)
     (mm, ms)
   }
@@ -44,25 +47,25 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
   override protected def createMemoryManager(
       maxOnHeapExecutionMemory: Long,
       maxOffHeapExecutionMemory: Long): StaticMemoryManager = {
-    new StaticMemoryManager(
-      conf.clone
-        .set("spark.memory.fraction", "1")
-        .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
-        .set("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString),
-      maxOnHeapExecutionMemory = maxOnHeapExecutionMemory,
-      maxOnHeapStorageMemory = 0,
-      numCores = 1)
+    val conf = new SparkConf()
+      .set("spark.shuffle.memoryFraction", "1")
+      .set("spark.shuffle.safetyFraction", "1")
+      .set("spark.storage.memoryFraction", "0")
+      .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
+      .set("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString)
+    new StaticMemoryManager(conf, numCores = 1)
   }
 
   test("basic execution memory") {
     val maxExecutionMem = 1000L
     val taskAttemptId = 0L
-    val (mm, _) = makeThings(maxExecutionMem, Long.MaxValue)
+    val (mm, _) = makeThings(maxExecutionMem, 1000L)
     val memoryMode = MemoryMode.ON_HEAP
     assert(mm.executionMemoryUsed === 0L)
     assert(mm.acquireExecutionMemory(10L, taskAttemptId, memoryMode) === 10L)
     assert(mm.executionMemoryUsed === 10L)
     assert(mm.acquireExecutionMemory(100L, taskAttemptId, memoryMode) === 100L)
+    assert(mm.executionMemoryUsed === 110L)
     // Acquire up to the max
     assert(mm.acquireExecutionMemory(1000L, taskAttemptId, memoryMode) === 890L)
     assert(mm.executionMemoryUsed === maxExecutionMem)
@@ -74,14 +77,15 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.acquireExecutionMemory(1L, taskAttemptId, memoryMode) === 1L)
     assert(mm.executionMemoryUsed === 201L)
     // Release beyond what was acquired
-    mm.releaseExecutionMemory(maxExecutionMem, taskAttemptId, memoryMode)
-    assert(mm.executionMemoryUsed === 0L)
+    intercept[IllegalArgumentException] {
+      mm.releaseExecutionMemory(maxExecutionMem, taskAttemptId, memoryMode)
+    }
   }
 
   test("basic storage memory") {
     val maxStorageMem = 1000L
     val dummyBlock = TestBlockId("you can see the world you brought to live")
-    val (mm, ms) = makeThings(Long.MaxValue, maxStorageMem)
+    val (mm, ms) = makeThings(1000L, maxStorageMem)
     val memoryMode = MemoryMode.ON_HEAP
     assert(mm.storageMemoryUsed === 0L)
     assert(mm.acquireStorageMemory(dummyBlock, 10L, memoryMode))
@@ -119,8 +123,9 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 1L)
     // Release beyond what was acquired
-    mm.releaseStorageMemory(100L, memoryMode)
-    assert(mm.storageMemoryUsed === 0L)
+    intercept[IllegalArgumentException] {
+      mm.releaseStorageMemory(100L, memoryMode)
+    }
   }
 
   test("execution and storage isolation") {
@@ -155,7 +160,7 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
   test("unroll memory") {
     val maxStorageMem = 1000L
     val dummyBlock = TestBlockId("lonely water")
-    val (mm, ms) = makeThings(Long.MaxValue, maxStorageMem)
+    val (mm, ms) = makeThings(1000L, maxStorageMem)
     val memoryMode = MemoryMode.ON_HEAP
     assert(mm.acquireUnrollMemory(dummyBlock, 100L, memoryMode))
     when(ms.currentUnrollMemory).thenReturn(100L)
@@ -183,8 +188,9 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assertEvictBlocksToFreeSpaceCalled(ms, 100L)
     assert(mm.storageMemoryUsed === 900L)
     // Release beyond what was acquired
-    mm.releaseUnrollMemory(maxStorageMem, memoryMode)
-    assert(mm.storageMemoryUsed === 0L)
+    intercept[IllegalArgumentException] {
+      mm.releaseUnrollMemory(maxStorageMem, memoryMode)
+    }
   }
 
 }

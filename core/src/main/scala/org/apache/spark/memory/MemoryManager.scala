@@ -38,8 +38,8 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
 private[spark] abstract class MemoryManager(
     conf: SparkConf,
     numCores: Int,
-    totalHeapMemory: Long,
-    totalOffHeapMemory: Long) extends Logging {
+    val totalHeapMemory: Long,
+    val totalOffHeapMemory: Long) extends Logging {
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
@@ -62,12 +62,35 @@ private[spark] abstract class MemoryManager(
     offHeapExecutionMemoryUsedForTask.values.sum
   }
 
-  protected def maxHeapExecutionMemory: Long
-  protected def maxOffHeapExecutionMemory: Long
-  def maxHeapStorageMemory: Long
-  protected def maxOffHeapStorageMemory: Long
-  protected def unevictableHeapStorageMemory: Long
-  protected def unevictableOffHeapStorageMemory: Long
+  protected val maxHeapExecutionMemory: Long
+  protected val maxOffHeapExecutionMemory: Long
+  val maxHeapStorageMemory: Long
+  protected val maxOffHeapStorageMemory: Long
+  protected val unevictableHeapStorageMemory: Long
+  protected val unevictableOffHeapStorageMemory: Long
+
+  private def assertInvariants(): Unit = {
+    assert(freeHeapMemory >= 0)
+    assert(freeHeapMemory <= totalHeapMemory)
+    assert(freeOffHeapMemory >= 0)
+    assert(freeOffHeapMemory <= totalOffHeapMemory,
+      s"freeOffHeapMemory=$freeOffHeapMemory > totalHeapMemory=$totalHeapMemory")
+    assert(
+      heapStorageMemoryUsed + heapExecutionMemoryUsed
+        == totalHeapMemory - freeHeapMemory, "heap memory was not conserved")
+    assert(
+      offHeapStorageMemoryUsed + offHeapExecutionMemoryUsed
+        == totalOffHeapMemory - freeOffHeapMemory, "off-heap memory was not conserved")
+  }
+
+  // Initial invariants:
+  assert(maxHeapExecutionMemory <= totalHeapMemory, s"$maxHeapExecutionMemory, $totalHeapMemory")
+  assert(maxHeapStorageMemory <= totalHeapMemory)
+  assert(maxOffHeapExecutionMemory <= totalOffHeapMemory)
+  assert(maxOffHeapStorageMemory <= totalOffHeapMemory)
+  assert(unevictableHeapStorageMemory <= maxHeapStorageMemory)
+  assert(unevictableOffHeapStorageMemory <= maxOffHeapStorageMemory)
+  assertInvariants()
 
   private var _memoryStore: MemoryStore = _
   def memoryStore: MemoryStore = {
@@ -96,25 +119,31 @@ private[spark] abstract class MemoryManager(
       memoryMode: MemoryMode,
       maxBytesToAttemptToFreeViaEviction: Long = Long.MaxValue): Boolean = synchronized {
     assert(numBytes >= 0)
+    assertInvariants()
 
-    def maxStorageMemory = memoryMode match {
+    val maxStorageMemory = memoryMode match {
       case MemoryMode.ON_HEAP => maxHeapStorageMemory
       case MemoryMode.OFF_HEAP => maxOffHeapStorageMemory
     }
 
-    // Fail fast if fulfilling this request would cause us to exceed our storage memory limits:
     if (numBytes > maxStorageMemory) {
       return false
     }
 
     def freeMemory = memoryMode match {
-      case MemoryMode.ON_HEAP => freeHeapMemory
-      case MemoryMode.OFF_HEAP => freeOffHeapMemory
+      case MemoryMode.ON_HEAP =>
+        math.min(freeHeapMemory, maxHeapStorageMemory - heapStorageMemoryUsed)
+      case MemoryMode.OFF_HEAP =>
+        math.min(freeOffHeapMemory, maxOffHeapStorageMemory - offHeapStorageMemoryUsed)
     }
 
     def acquire(size: Long) = memoryMode match {
-      case MemoryMode.ON_HEAP => freeHeapMemory -= size
-      case MemoryMode.OFF_HEAP => freeOffHeapMemory -= size
+      case MemoryMode.ON_HEAP =>
+        freeHeapMemory -= size
+        heapStorageMemoryUsed += size
+      case MemoryMode.OFF_HEAP =>
+        freeOffHeapMemory -= size
+        offHeapStorageMemoryUsed += size
     }
 
     // First, attempt to fulfill as much of the request as possible using free memory
@@ -123,28 +152,32 @@ private[spark] abstract class MemoryManager(
       acquire(acquired)
       acquired
     }
+    assertInvariants()
     // Next, acquire the remaining memory by evicting blocks
     var success: Boolean = false
     try {
-      val numBytesToFree = numBytes - freeMemoryAcquired
+      val extraMemoryNeeded = numBytes - freeMemoryAcquired
       // TODO: Once we support off-heap caching, this will need to change:
-      if (numBytesToFree > 0
-          && numBytesToFree <= maxBytesToAttemptToFreeViaEviction
+      if (extraMemoryNeeded > 0
+          && maxBytesToAttemptToFreeViaEviction > 0
           && memoryMode == MemoryMode.ON_HEAP) {
-        memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree)
+        memoryStore.evictBlocksToFreeSpace(
+          Some(blockId),
+          math.min(extraMemoryNeeded, maxBytesToAttemptToFreeViaEviction))
       }
       // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
       // back into this StorageMemoryPool in order to free memory, so the free memory counters
       // should have been updated.
-      if (numBytesToFree <= freeMemory) {
-        acquire(numBytesToFree)
+      success = extraMemoryNeeded == 0 || freeMemory >= extraMemoryNeeded
+      if (extraMemoryNeeded > 0 && freeMemory >= extraMemoryNeeded) {
+        acquire(extraMemoryNeeded)
       }
-      success = true
     } finally {
       if (!success) {
         releaseStorageMemory(freeMemoryAcquired, memoryMode)
       }
     }
+    assertInvariants()
     success
   }
 
@@ -182,6 +215,7 @@ private[spark] abstract class MemoryManager(
       taskAttemptId: Long,
       memoryMode: MemoryMode): Long = synchronized {
     require(numBytes > 0, s"invalid number of bytes requested: $numBytes")
+    assertInvariants()
 
     val poolName = memoryMode match {
       case MemoryMode.ON_HEAP => "execution memory"
@@ -193,9 +227,16 @@ private[spark] abstract class MemoryManager(
       case MemoryMode.OFF_HEAP => offHeapExecutionMemoryUsedForTask
     }
 
+    val totalMemory = memoryMode match {
+      case MemoryMode.ON_HEAP => totalHeapMemory
+      case MemoryMode.OFF_HEAP => totalOffHeapMemory
+    }
+
     def memoryFree = memoryMode match {
-      case MemoryMode.ON_HEAP => math.min(freeHeapMemory, maxHeapExecutionMemory)
-      case MemoryMode.OFF_HEAP => math.min(freeOffHeapMemory, maxOffHeapExecutionMemory)
+      case MemoryMode.ON_HEAP =>
+        math.min(freeHeapMemory, maxHeapExecutionMemory - heapExecutionMemoryUsed)
+      case MemoryMode.OFF_HEAP =>
+        math.min(freeOffHeapMemory, maxOffHeapExecutionMemory - offHeapExecutionMemoryUsed)
     }
 
     def maxExecutionMemory = memoryMode match {
@@ -206,8 +247,10 @@ private[spark] abstract class MemoryManager(
     def totalExecutionMemoryUsed = executionMemoryForTask.values.sum
 
     def unevictableStorageMemory = memoryMode match {
-      case MemoryMode.ON_HEAP => unevictableHeapStorageMemory
-      case MemoryMode.OFF_HEAP => unevictableOffHeapStorageMemory
+      case MemoryMode.ON_HEAP =>
+        math.min(heapStorageMemoryUsed, unevictableHeapStorageMemory)
+      case MemoryMode.OFF_HEAP =>
+        math.min(offHeapStorageMemoryUsed, unevictableOffHeapStorageMemory)
     }
 
     def evictableStorageMemory = memoryMode match {
@@ -235,7 +278,7 @@ private[spark] abstract class MemoryManager(
 
       // If there is not enough free memory, see whether we can reclaim some by evicting cached
       // blocks:
-      if (numBytes > memoryFree && numBytes <= evictableStorageMemory) {
+      if (numBytes > memoryFree && numBytes - memoryFree <= evictableStorageMemory) {
         val extraMemoryNeeded = numBytes - memoryFree
         val spaceFreedByEviction = {
           // Once we support off-heap caching, this will need to change:
@@ -254,7 +297,7 @@ private[spark] abstract class MemoryManager(
 
       // Maximum amount of execution memory that can be used.
       // This is used to compute the upper bound of how much memory each task can occupy.
-      val maxPoolSize = math.min(maxExecutionMemory, totalHeapMemory - unevictableStorageMemory)
+      val maxPoolSize = math.min(maxExecutionMemory, totalMemory - unevictableStorageMemory)
       val maxMemoryPerTask = maxPoolSize / numActiveTasks
       val minMemoryPerTask = totalExecutionMemoryUsed / (2 * numActiveTasks)
 
@@ -270,7 +313,12 @@ private[spark] abstract class MemoryManager(
         logInfo(s"TID $taskAttemptId waiting for at least 1/2N of $poolName to be free")
         wait()
       } else {
+        memoryMode match {
+          case MemoryMode.ON_HEAP => freeHeapMemory -= toGrant
+          case MemoryMode.OFF_HEAP => freeOffHeapMemory -= toGrant
+        }
         executionMemoryForTask(taskAttemptId) += toGrant
+        assertInvariants()
         return toGrant
       }
     }
@@ -285,6 +333,7 @@ private[spark] abstract class MemoryManager(
       numBytes: Long,
       taskAttemptId: Long,
       memoryMode: MemoryMode): Unit = synchronized {
+    assertInvariants()
     memoryMode match {
       case MemoryMode.ON_HEAP =>
         val curMem = heapExecutionMemoryUsedForTask.getOrElse(taskAttemptId, 0L)
@@ -312,6 +361,7 @@ private[spark] abstract class MemoryManager(
         freeOffHeapMemory += numBytes
     }
     notifyAll() // Notify waiters in acquireExecutionMemory() that memory has been freed
+    assertInvariants()
   }
 
   /**
@@ -320,10 +370,12 @@ private[spark] abstract class MemoryManager(
    * @return the number of bytes freed.
    */
   private[memory] def releaseAllExecutionMemoryForTask(taskAttemptId: Long): Long = synchronized {
+    assertInvariants()
     val heapUsage = heapExecutionMemoryUsedForTask.getOrElse(taskAttemptId, 0L)
     val offHeapUsage = offHeapExecutionMemoryUsedForTask.getOrElse(taskAttemptId, 0L)
     releaseExecutionMemory(heapUsage, taskAttemptId, MemoryMode.ON_HEAP)
     releaseExecutionMemory(offHeapUsage, taskAttemptId, MemoryMode.OFF_HEAP)
+    assertInvariants()
     heapUsage + offHeapUsage
   }
 
@@ -331,9 +383,10 @@ private[spark] abstract class MemoryManager(
    * Release N bytes of storage memory.
    */
   def releaseStorageMemory(numBytes: Long, memoryMode: MemoryMode): Unit = synchronized {
+    assertInvariants()
     memoryMode match {
       case MemoryMode.ON_HEAP =>
-        require(numBytes <= offHeapStorageMemoryUsed,
+        require(numBytes <= heapStorageMemoryUsed,
           s"Attempted to release $numBytes bytes of storage " +
             s"memory when we only have $heapStorageMemoryUsed bytes")
         heapStorageMemoryUsed -= numBytes
@@ -345,16 +398,19 @@ private[spark] abstract class MemoryManager(
         offHeapStorageMemoryUsed -= numBytes
         freeOffHeapMemory += numBytes
     }
+    assertInvariants()
   }
 
   /**
    * Release all storage memory acquired.
    */
   final def releaseAllStorageMemory(): Unit = synchronized {
-    freeHeapMemory = heapStorageMemoryUsed
+    assertInvariants()
+    freeHeapMemory += heapStorageMemoryUsed
     heapStorageMemoryUsed = 0
     freeOffHeapMemory += offHeapStorageMemoryUsed
     offHeapStorageMemoryUsed = 0
+    assertInvariants()
   }
 
   /**

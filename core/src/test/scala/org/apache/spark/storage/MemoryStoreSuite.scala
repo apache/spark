@@ -41,6 +41,8 @@ class MemoryStoreSuite
 
   var conf: SparkConf = new SparkConf(false)
     .set("spark.test.useCompressedOops", "true")
+    .set("spark.storage.memoryFraction", "1")
+    .set("spark.storage.safetyFraction", "1")
     .set("spark.storage.unrollFraction", "0.4")
     .set("spark.storage.unrollMemoryThreshold", "512")
 
@@ -62,7 +64,8 @@ class MemoryStoreSuite
   }
 
   def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
+    val memManager =
+      new StaticMemoryManager(conf, numCores = 1, totalHeapMemory = maxMem, totalOffHeapMemory = 0)
     val blockInfoManager = new BlockInfoManager
     val blockEvictionHandler = new BlockEvictionHandler {
       var memoryStore: MemoryStore = _
