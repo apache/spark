@@ -116,7 +116,6 @@ class ColumnPruningSuite extends PlanTest {
           Seq('a, 'b, 'c, 'aa.int, 'gid.int),
           input)).analyze
     val optimized = Optimize.execute(query)
-
     val expected =
       Aggregate(
         Seq('aa, 'gid),
