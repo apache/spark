@@ -416,8 +416,14 @@ class SchedulerJob(BaseJob):
                     # Migrating from previous version
                     # make the past 5 runs active
                     next_run_date = dag.date_range(latest_run, -5)[0]
+                    if dag.start_date:
+                        next_run_date = max(next_run_date, dag.start_date)
                 else:
-                    next_run_date = min([t.start_date for t in dag.tasks])
+                    task_start_dates = [t.start_date for t in dag.tasks]
+                    if task_start_dates:
+                        next_run_date = min(task_start_dates)
+                    else:
+                        next_run_date = None
             elif dag.schedule_interval != '@once':
                 next_run_date = dag.following_schedule(last_scheduled_run)
 
@@ -508,7 +514,6 @@ class SchedulerJob(BaseJob):
                 self.logger.debug('Firing task: {}'.format(ti))
                 executor.queue_task_instance(ti, pickle_id=pickle_id)
 
-
         # Releasing the lock
         self.logger.debug("Unlocking DAG (scheduler_lock)")
         db_dag = (
@@ -522,8 +527,7 @@ class SchedulerJob(BaseJob):
 
         session.close()
 
-    @provide_session
-    def process_events(self, executor, dagbag, session):
+    def process_events(self, executor, dagbag):
         """
         Respond to executor events.
 
@@ -841,10 +845,12 @@ class BackfillJob(BaseJob):
                                 t.are_dependencies_met(
                                     ignore_depends_on_past=True)
                                 for t in tasks_to_run.values()):
-                            msg += (' Some of the tasks that were unable to '
-                            'run have depends_on_past=True. Try running the '
-                            'backfill with ignore_first_depends_on_past=True '
-                            '(or -I from the command line).')
+                            msg += (
+                                ' Some of the tasks that were unable to '
+                                'run have depends_on_past=True. Try running '
+                                'the backfill with '
+                                'ignore_first_depends_on_past=True '
+                                '(or -I from the command line).')
                         self.logger.error(msg)
                         deadlocked = True
                         wont_run.extend(could_not_run)
@@ -963,7 +969,7 @@ class LocalTaskJob(BaseJob):
             *args, **kwargs):
         self.task_instance = task_instance
         self.ignore_dependencies = ignore_dependencies
-        self.ignore_depends_on_past=ignore_depends_on_past
+        self.ignore_depends_on_past = ignore_depends_on_past
         self.force = force
         self.pool = pool
         self.pickle_id = pickle_id

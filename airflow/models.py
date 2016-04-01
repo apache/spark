@@ -647,8 +647,11 @@ class TaskInstance(Base):
         cmd += "--local " if local else ""
         cmd += "--pool {pool} " if pool else ""
         cmd += "--raw " if raw else ""
-        if not pickle_id and dag and dag.full_filepath:
-            cmd += "-sd DAGS_FOLDER/{dag.filepath} "
+        if not pickle_id and dag:
+            if dag.full_filepath != dag.filepath:
+                cmd += "-sd DAGS_FOLDER/{dag.filepath} "
+            elif dag.full_filepath:
+                cmd += "-sd {dag.full_filepath}"
         return cmd.format(**locals())
 
     @property
@@ -1043,13 +1046,11 @@ class TaskInstance(Base):
                 not self.are_dependencies_met(
                     session=session,
                     ignore_depends_on_past=ignore_depends_on_past,
-                    verbose=True)
-                ):
+                    verbose=True)):
             logging.warning("Dependencies not met yet")
         elif (
                 self.state == State.UP_FOR_RETRY and
-                not self.ready_for_retry()
-                ):
+                not self.ready_for_retry()):
             next_run = (self.end_date + task.retry_delay).isoformat()
             logging.info(
                 "Not ready for retry yet. " +
@@ -2386,9 +2387,7 @@ class DAG(LoggingMixin):
             any(ti.state in State.unfinished() for ti in task_instances) and
             # AND none of them have dependencies met...
             all(not ti.are_dependencies_met() for ti in task_instances
-                if ti.state in State.unfinished())
-            )
-
+                if ti.state in State.unfinished()))
 
         for run in active_runs:
             self.logger.info("Checking state for {}".format(run))
@@ -2425,8 +2424,7 @@ class DAG(LoggingMixin):
                             if t.state in State.unfinished()) and
                         # AND none of their dependencies are met
                         all(not t.are_dependencies_met() for t in tis
-                            if t.state in State.unfinished())
-                        ):
+                            if t.state in State.unfinished())):
                     self.logger.info(
                         'Deadlock; marking run {} failed'.format(run))
                     run.state = State.FAILED
