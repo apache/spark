@@ -120,8 +120,8 @@ class HiveSessionCatalog(
     metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
   }
 
-  override def makeFunctionBuilder(funcName: String, funcClassName: String): FunctionBuilder = {
-    makeFunctionBuilder(funcName, Utils.classForName(funcClassName))
+  override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
+    makeFunctionBuilder(funcName, Utils.classForName(className))
   }
 
   /**
