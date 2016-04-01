@@ -370,13 +370,13 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     pattern match {
       case Some(p) =>
         try {
-          catalog.listFunctions(database, p).map{f: FunctionIdentifier => Row(f.name)}
+          catalog.listFunctions(database, p).map { f => Row(f.name) }
         } catch {
           // probably will failed in the regex that user provided, then returns empty row.
           case _: Throwable => Seq.empty[Row]
         }
       case None =>
-        catalog.listFunctions(database, ".*").map{f: FunctionIdentifier => Row(f.name)}
+        catalog.listFunctions(database, ".*").map { f => Row(f.name) }
     }
   }
 }
