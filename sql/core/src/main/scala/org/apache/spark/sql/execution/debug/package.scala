@@ -102,9 +102,6 @@ package object debug {
     def debugCodegen(): Unit = {
       debugPrint(codegenString(query.queryExecution.executedPlan))
     }
-
-    /** Visible for testing. */
-    def debugCodegenString(): String = codegenString(query.queryExecution.executedPlan)
   }
 
   private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode with CodegenSupport {
