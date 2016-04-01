@@ -747,6 +747,8 @@ class BackfillJob(BaseJob):
         succeeded = []
         started = []
         wont_run = []
+        could_not_run = set()
+
         for task in self.dag.tasks:
             if (not self.include_adhoc) and task.adhoc:
                 continue
@@ -758,26 +760,62 @@ class BackfillJob(BaseJob):
                 tasks_to_run[ti.key] = ti
 
         # Triggering what is ready to get triggered
-        while tasks_to_run:
+        deadlocked = False
+        while tasks_to_run and not deadlocked:
+
             for key, ti in list(tasks_to_run.items()):
                 ti.refresh_from_db()
-                if ti.state in (
-                        State.SUCCESS, State.SKIPPED) and key in tasks_to_run:
+                ignore_depends_on_past = (
+                    self.ignore_first_depends_on_past and
+                    ti.execution_date == (start_date or ti.start_date))
+
+                # Did the task finish without failing? -- then we're done
+                if (
+                        ti.state in (State.SUCCESS, State.SKIPPED) and
+                        key in tasks_to_run):
                     succeeded.append(key)
                     tasks_to_run.pop(key)
-                elif ti.state in (State.RUNNING, State.QUEUED):
-                    continue
-                elif ti.is_runnable(flag_upstream_failed=True):
+
+                # Is the task runnable? -- the run it
+                elif ti.is_queueable(
+                        include_queued=True,
+                        ignore_depends_on_past=ignore_depends_on_past,
+                        flag_upstream_failed=True):
                     executor.queue_task_instance(
                         ti,
                         mark_success=self.mark_success,
-                        task_start_date=self.bf_start_date,
                         pickle_id=pickle_id,
                         ignore_dependencies=self.ignore_dependencies,
+                        ignore_depends_on_past=ignore_depends_on_past,
                         pool=self.pool)
                     ti.state = State.RUNNING
                     if key not in started:
                         started.append(key)
+                    if ti in could_not_run:
+                        could_not_run.remove(ti)
+
+                # if the task is not runnable and has no state indicating why
+                # (like FAILED or UP_FOR_RETRY), then it's just not ready
+                # to run. If the set of tasks that aren't ready ever equals
+                # the set of tasks to run, then the backfill is deadlocked
+                elif ti.state is None:
+                    could_not_run.add(ti)
+                    if could_not_run == set(tasks_to_run.values()):
+                        msg = 'BackfillJob is deadlocked: no tasks can be run.'
+                        if any(
+                                t.are_dependencies_met() !=
+                                t.are_dependencies_met(
+                                    ignore_depends_on_past=True)
+                                for t in tasks_to_run.values()):
+                            msg += (' Some of the tasks that were unable to '
+                            'run have depends_on_past=True. Try running the '
+                            'backfill with ignore_first_depends_on_past=True '
+                            '(or -I from the command line).')
+                        self.logger.error(msg)
+                        deadlocked = True
+                        wont_run.extend(could_not_run)
+                        tasks_to_run.clear()
+
             self.heartbeat()
             executor.heartbeat()
 
@@ -818,9 +856,14 @@ class BackfillJob(BaseJob):
                 elif ti.state == State.SUCCESS and state == State.SUCCESS:
                     succeeded.append(key)
                     tasks_to_run.pop(key)
+                elif state == State.SUCCESS and key in could_not_run:
+                    continue
                 # executor reports success but task does not -- this is weird
                 elif (
-                        ti.state not in (State.SUCCESS, State.QUEUED) and
+                        ti.state not in (
+                            State.SUCCESS,
+                            State.QUEUED,
+                            State.UP_FOR_RETRY) and
                         state == State.SUCCESS):
                     self.logger.error(
                         "The airflow run command failed "
