@@ -905,8 +905,13 @@ private[hive] case class MetastoreRelation(
 
     val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
     tTable.setSd(sd)
-    sd.setCols(table.schema.map(toHiveColumn).asJava)
-    tTable.setPartitionKeys(table.partitionColumns.map(toHiveColumn).asJava)
+
+    // Note: In Hive the schema and partition columns must be disjoint sets
+    val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
+      table.partitionColumnNames.contains(c.getName)
+    }
+    sd.setCols(schema.asJava)
+    tTable.setPartitionKeys(partCols.asJava)
 
     table.storage.locationUri.foreach(sd.setLocation)
     table.storage.inputFormat.foreach(sd.setInputFormat)

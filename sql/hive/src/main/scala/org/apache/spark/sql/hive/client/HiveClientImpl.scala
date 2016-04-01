@@ -299,6 +299,10 @@ private[hive] class HiveClientImpl(
       tableName: String): Option[CatalogTable] = withHiveState {
     logDebug(s"Looking up $dbName.$tableName")
     Option(client.getTable(dbName, tableName, false)).map { h =>
+      // Note: Hive separates partition columns and the schema, but for us the
+      // partition columns are part of the schema
+      val partCols = h.getPartCols.asScala.map(fromHiveColumn)
+      val schema = h.getCols.asScala.map(fromHiveColumn) ++ partCols
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
@@ -307,9 +311,12 @@ private[hive] class HiveClientImpl(
           case HiveTableType.INDEX_TABLE => CatalogTableType.INDEX_TABLE
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIRTUAL_VIEW
         },
-        schema = h.getCols.asScala.map(fromHiveColumn),
-        partitionColumns = h.getPartCols.asScala.map(fromHiveColumn),
-        sortColumns = Seq(),
+        schema = schema,
+        partitionColumnNames = partCols.map(_.name),
+        sortColumnNames = Seq(), // TODO: populate this
+        bucketColumnNames = h.getBucketCols.asScala,
+        skewColumnNames = h.getSkewedColNames.asScala,
+        skewColumnValues = h.getSkewedColValues.asScala.map(_.asScala),
         numBuckets = h.getNumBuckets,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
@@ -665,9 +672,16 @@ private[hive] class HiveClientImpl(
       case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
       case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
     })
-    hiveTable.setFields(table.schema.map(toHiveColumn).asJava)
-    hiveTable.setPartCols(table.partitionColumns.map(toHiveColumn).asJava)
+    // Note: In Hive the schema and partition columns must be disjoint sets
+    val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
+      table.partitionColumnNames.contains(c.getName)
+    }
+    hiveTable.setFields(schema.asJava)
+    hiveTable.setPartCols(partCols.asJava)
     // TODO: set sort columns here too
+    hiveTable.setBucketCols(table.bucketColumnNames.asJava)
+    hiveTable.setSkewedColNames(table.skewColumnNames.asJava)
+    hiveTable.setSkewedColValues(table.skewColumnValues.map(_.asJava).asJava)
     hiveTable.setOwner(conf.getUser)
     hiveTable.setNumBuckets(table.numBuckets)
     hiveTable.setCreateTime((table.createTime / 1000).toInt)

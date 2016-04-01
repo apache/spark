@@ -172,11 +172,13 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
         logWarning("SKEWED BY ... ON ... [STORED AS DIRECTORIES] clause is ignored.")
       }
 
-      // Create the schema.
-      val schema = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns(_, _.toLowerCase))
-
       // Get the column by which the table is partitioned.
       val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns(_))
+
+      // Note: Hive requires partition columns to be distinct from the schema, so we need
+      // to include the partition columns here explicitly
+      val schema =
+        Option(ctx.columns).toSeq.flatMap(visitCatalogColumns(_, _.toLowerCase)) ++ partitionCols
 
       // Create the storage.
       def format(fmt: ParserRuleContext): CatalogStorageFormat = {
@@ -204,7 +206,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
         identifier = table,
         tableType = tableType,
         schema = schema,
-        partitionColumns = partitionCols,
+        partitionColumnNames = partitionCols.map(_.name),
         storage = storage,
         properties = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
         // TODO support the sql text - have a proper location for this!

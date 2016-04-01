@@ -218,14 +218,34 @@ case class CatalogTable(
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
-    partitionColumns: Seq[CatalogColumn] = Seq.empty,
-    sortColumns: Seq[CatalogColumn] = Seq.empty,
+    partitionColumnNames: Seq[String] = Seq.empty,
+    sortColumnNames: Seq[String] = Seq.empty,
+    bucketColumnNames: Seq[String] = Seq.empty,
+    // e.g. (date, country)
+    skewColumnNames: Seq[String] = Seq.empty,
+    // e.g. ('2008-08-08', 'us), ('2009-09-09', 'uk')
+    skewColumnValues: Seq[Seq[String]] = Seq.empty,
     numBuckets: Int = 0,
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = System.currentTimeMillis,
     properties: Map[String, String] = Map.empty,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None) {
+
+  // Verify that the provided columns are part of the schema
+  private val colNames = schema.map(_.name).toSet
+  private def requireSubsetOfSchema(cols: Seq[String], colType: String): Unit = {
+    require(cols.toSet.subsetOf(colNames), s"$colType columns (${cols.mkString(", ")}) " +
+      s"must be a subset of schema (${colNames.mkString(", ")}) in table '$identifier'")
+  }
+  requireSubsetOfSchema(partitionColumnNames, "partition")
+  requireSubsetOfSchema(sortColumnNames, "sort")
+  requireSubsetOfSchema(bucketColumnNames, "bucket")
+  requireSubsetOfSchema(skewColumnNames, "skew")
+
+  /** Columns this table is partitioned by. */
+  def partitionColumns: Seq[CatalogColumn] =
+    schema.filter { c => partitionColumnNames.contains(c.name) }
 
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
