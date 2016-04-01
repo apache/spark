@@ -353,9 +353,8 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
  * A command for users to list all of the registered functions.
  * The syntax of using this command in SQL is:
  * {{{
- *    SHOW FUNCTIONS
+ *    SHOW FUNCTIONS (LIKE? (qualifiedName | pattern))?
  * }}}
- * TODO currently we are simply ignore the db
  */
 case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
