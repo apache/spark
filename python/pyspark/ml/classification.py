@@ -18,6 +18,7 @@
 import warnings
 
 from pyspark import since
+from pyspark.ml.base import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param import TypeConverters
@@ -200,7 +201,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
 
-class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class LogisticRegressionModel(HasNumFeaturesModel, JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by LogisticRegression.
 
@@ -324,6 +325,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> model2 = DecisionTreeClassificationModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
     True
+    >>> model.numFeatures
+    1
 
     .. versionadded:: 1.4.0
     """
@@ -373,7 +376,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
+class DecisionTreeClassificationModel(HasNumFeaturesModel, DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by DecisionTreeClassifier.
 
@@ -439,6 +442,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> model.numFeatures
+    1
 
     .. versionadded:: 1.4.0
     """
@@ -487,7 +492,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return RandomForestClassificationModel(java_model)
 
 
-class RandomForestClassificationModel(TreeEnsembleModels):
+class RandomForestClassificationModel(HasNumFeaturesModel, TreeEnsembleModels):
     """
     Model fitted by RandomForestClassifier.
 
@@ -540,6 +545,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> model.numFeatures
+    1
 
     .. versionadded:: 1.4.0
     """
@@ -604,7 +611,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.lossType)
 
 
-class GBTClassificationModel(TreeEnsembleModels):
+class GBTClassificationModel(HasNumFeaturesModel, TreeEnsembleModels):
     """
     Model fitted by GBTClassifier.
 
@@ -675,6 +682,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     True
     >>> model.theta == model2.theta
     True
+    >>> model.numFeatures
+    2
 
     .. versionadded:: 1.5.0
     """
@@ -749,7 +758,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class NaiveBayesModel(HasNumFeaturesModel, JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by NaiveBayes.
 
@@ -817,6 +826,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     True
     >>> model.weights == model2.weights
     True
+    >>> model.numFeatures
+    2
 
     .. versionadded:: 1.6.0
     """
@@ -894,7 +905,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class MultilayerPerceptronClassificationModel(HasNumFeaturesModel, JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 

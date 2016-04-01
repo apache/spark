@@ -116,3 +116,17 @@ class Model(Transformer):
     """
 
     __metaclass__ = ABCMeta
+
+
+class HasNumFeaturesModel:
+    """
+    Provides getter of the number of features especially for model class
+    It should be mixin with JavaModel.
+    """
+    @property
+    @since("1.7.0")
+    def numFeatures(self):
+        """
+        The number of features used to train the model.
+        """
+        return self._call_java("numFeatures")
