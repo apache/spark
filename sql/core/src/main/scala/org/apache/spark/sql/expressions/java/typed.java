@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.debug
+package org.apache.spark.sql.expressions.java;
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.Dataset;
 
-class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
+/**
+ * :: Experimental ::
+ * Type-safe functions available for {@link Dataset} operations in Java.
+ *
+ * Scala users should use {@link org.apache.spark.sql.expressions.scala.typed}.
+ *
+ * @since 2.0.0
+ */
+@Experimental
+public class typed {
 
-  test("DataFrame.debug()") {
-    testData.debug()
-  }
-
-  test("debugCodegen") {
-    val res = codegenString(sqlContext.range(10).groupBy("id").count().queryExecution.executedPlan)
-    assert(res.contains("Subtree 1 / 2"))
-    assert(res.contains("Subtree 2 / 2"))
-    assert(res.contains("Object[]"))
-  }
 }
