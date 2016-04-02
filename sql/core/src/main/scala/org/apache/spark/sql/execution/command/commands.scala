@@ -437,7 +437,7 @@ case class ShowCreateTableCommand(
   // The result of SHOW CREATE TABLE is the whole string of DDL command
   override val output: Seq[Attribute] = {
     val schema = StructType(
-      StructField("DDL", StringType, nullable = false):: Nil)
+      StructField("Result", StringType, nullable = false):: Nil)
     schema.toAttributes
   }
 
