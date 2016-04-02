@@ -36,6 +36,7 @@ private[ml] trait PredictorParams extends Params
 
   /**
    * Validates and transforms the input schema with the provided param map.
+   *
    * @param schema input schema
    * @param fitting whether this is in fitting
    * @param featuresDataType  SQL DataType for FeaturesType.
@@ -49,8 +50,7 @@ private[ml] trait PredictorParams extends Params
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
-      // TODO: Allow other numeric types
-      SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+      SchemaUtils.checkNumericType(schema, $(labelCol))
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
@@ -121,9 +121,8 @@ abstract class Predictor[
    * and put it in an RDD with strong types.
    */
   protected def extractLabeledPoints(dataset: DataFrame): RDD[LabeledPoint] = {
-    dataset.select($(labelCol), $(featuresCol)).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
+    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+      case Row(label: Double, features: Vector) => LabeledPoint(label, features)
     }
   }
 }

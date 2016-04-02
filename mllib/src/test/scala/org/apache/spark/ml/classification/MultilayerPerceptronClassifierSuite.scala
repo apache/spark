@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
@@ -161,5 +162,16 @@ class MultilayerPerceptronClassifierSuite
     val newMlpModel = testDefaultReadWrite(mlpModel, testParams = true)
     assert(newMlpModel.layers === mlpModel.layers)
     assert(newMlpModel.weights === mlpModel.weights)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val layers = Array(3, 2)
+    val mpc = new MultilayerPerceptronClassifier().setLayers(layers).setMaxIter(1)
+    MLTestingUtils.checkNumericTypes[
+        MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier](
+      mpc, isClassification = true, sqlContext) { (expected, actual) =>
+        assert(expected.layers === actual.layers)
+        assert(expected.weights === actual.weights)
+      }
   }
 }

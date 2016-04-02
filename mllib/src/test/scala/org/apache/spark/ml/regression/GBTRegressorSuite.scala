@@ -29,7 +29,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.util.Utils
 
-
 /**
  * Test suite for [[GBTRegressor]].
  */
@@ -110,7 +109,14 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)
+  }
 
+  test("should support all NumericType labels and not support other types") {
+    val gbt = new GBTRegressor().setMaxDepth(1)
+    MLTestingUtils.checkNumericTypes[GBTRegressionModel, GBTRegressor](
+      gbt, isClassification = false, sqlContext) { (expected, actual) =>
+        TreeTests.checkEqual(expected, actual)
+      }
   }
 
   // TODO: Reinstate test once runWithValidation is implemented  SPARK-7132

@@ -74,7 +74,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(ovaModel)
 
-    assert(ovaModel.models.size === numClasses)
+    assert(ovaModel.models.length === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
 
     // check for label metadata in prediction col
@@ -223,6 +223,20 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val ovaModel = ova.fit(dataset)
     val newOvaModel = testDefaultReadWrite(ovaModel, testParams = false)
     checkModelData(ovaModel, newOvaModel)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val ovr = new OneVsRest().setClassifier(new LogisticRegression().setMaxIter(1))
+    MLTestingUtils.checkNumericTypes[OneVsRestModel, OneVsRest](
+      ovr, isClassification = true, sqlContext) { (expected, actual) =>
+        val expectedModels = expected.models.map(m => m.asInstanceOf[LogisticRegressionModel])
+        val actualModels = actual.models.map(m => m.asInstanceOf[LogisticRegressionModel])
+        assert(expectedModels.length === actualModels.length)
+        expectedModels.zip(actualModels).foreach { case (e, a) =>
+          assert(e.intercept === a.intercept)
+          assert(e.coefficients.toArray === a.coefficients.toArray)
+        }
+      }
   }
 }
 

@@ -27,8 +27,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 
 class DecisionTreeClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -176,7 +175,7 @@ class DecisionTreeClassifierSuite
   }
 
   test("Multiclass classification tree with 10-ary (ordered) categorical features," +
-      " with just enough bins") {
+    " with just enough bins") {
     val rdd = categoricalDataPointsForMulticlassForOrderedFeaturesRDD
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
@@ -273,7 +272,7 @@ class DecisionTreeClassifierSuite
     ))
     val df = TreeTests.setMetadata(data, Map(0 -> 1), 2)
     val dt = new DecisionTreeClassifier().setMaxDepth(3)
-    val model = dt.fit(df)
+    dt.fit(df)
   }
 
   test("Use soft prediction for binary classification with ordered categorical features") {
@@ -333,6 +332,14 @@ class DecisionTreeClassifierSuite
     assert(mostImportantFeature === 1)
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val dt = new DecisionTreeClassifier().setMaxDepth(1)
+    MLTestingUtils.checkNumericTypes[DecisionTreeClassificationModel, DecisionTreeClassifier](
+      dt, isClassification = true, sqlContext) { (expected, actual) =>
+        TreeTests.checkEqual(expected, actual)
+      }
   }
 
   /////////////////////////////////////////////////////////////////////////////

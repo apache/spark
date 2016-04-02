@@ -90,7 +90,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
     } else {
       lit(1.0)
     }
-    dataset.select(col($(labelCol)), f, w).rdd.map {
+    dataset.select(col($(labelCol)).cast(DoubleType), f, w).rdd.map {
       case Row(label: Double, feature: Double, weight: Double) =>
         (label, feature, weight)
     }
@@ -106,7 +106,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
       schema: StructType,
       fitting: Boolean): StructType = {
     if (fitting) {
-      SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+      SchemaUtils.checkNumericType(schema, $(labelCol))
       if (hasWeightCol) {
         SchemaUtils.checkColumnType(schema, $(weightCol), DoubleType)
       } else {

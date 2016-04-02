@@ -347,6 +347,15 @@ class AFTSurvivalRegressionSuite
     }
   }
 
+  test("should support all NumericType labels") {
+    val aft = new AFTSurvivalRegression().setMaxIter(1)
+    MLTestingUtils.checkNumericTypes[AFTSurvivalRegressionModel, AFTSurvivalRegression](
+      aft, isClassification = false, sqlContext) { (expected, actual) =>
+        assert(expected.intercept === actual.intercept)
+        assert(expected.coefficients === actual.coefficients)
+      }
+  }
+
   test("read/write") {
     def checkModelData(
         model: AFTSurvivalRegressionModel,

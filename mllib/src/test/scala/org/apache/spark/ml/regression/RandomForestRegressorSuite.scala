@@ -94,6 +94,14 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     assert(importances.toArray.forall(_ >= 0.0))
   }
 
+  test("should support all NumericType labels and not support other types") {
+    val rf = new RandomForestRegressor().setMaxDepth(1)
+    MLTestingUtils.checkNumericTypes[RandomForestRegressionModel, RandomForestRegressor](
+      rf, isClassification = false, sqlContext) { (expected, actual) =>
+        TreeTests.checkEqual(expected, actual)
+      }
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////

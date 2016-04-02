@@ -31,7 +31,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.util.Utils
 
-
 /**
  * Test suite for [[GBTClassifier]].
  */
@@ -100,6 +99,14 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val gbt = new GBTClassifier().setMaxDepth(1)
+    MLTestingUtils.checkNumericTypes[GBTClassificationModel, GBTClassifier](
+      gbt, isClassification = true, sqlContext) { (expected, actual) =>
+        TreeTests.checkEqual(expected, actual)
+      }
   }
 
   // TODO: Reinstate test once runWithValidation is implemented   SPARK-7132

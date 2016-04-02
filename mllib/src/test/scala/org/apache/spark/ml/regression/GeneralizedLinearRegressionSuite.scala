@@ -982,6 +982,16 @@ class GeneralizedLinearRegressionSuite
     testEstimatorAndModelReadWrite(glr, datasetPoissonLog,
       GeneralizedLinearRegressionSuite.allParamSettings, checkModelData)
   }
+
+  test("should support all NumericType labels and not support other types") {
+    val glr = new GeneralizedLinearRegression().setMaxIter(1)
+    MLTestingUtils.checkNumericTypes[
+        GeneralizedLinearRegressionModel, GeneralizedLinearRegression](
+      glr, isClassification = false, sqlContext) { (expected, actual) =>
+        assert(expected.intercept === actual.intercept)
+        assert(expected.coefficients === actual.coefficients)
+      }
+  }
 }
 
 object GeneralizedLinearRegressionSuite {
@@ -1023,7 +1033,7 @@ object GeneralizedLinearRegressionSuite {
     generator.setSeed(seed)
 
     (0 until nPoints).map { _ =>
-      val features = Vectors.dense(coefficients.indices.map { rndElement(_) }.toArray)
+      val features = Vectors.dense(coefficients.indices.map(rndElement).toArray)
       val eta = BLAS.dot(Vectors.dense(coefficients), features) + intercept
       val mu = link match {
         case "identity" => eta
