@@ -164,7 +164,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-
   private def baseRdd(
       sqlContext: SQLContext,
       options: CSVOptions,
