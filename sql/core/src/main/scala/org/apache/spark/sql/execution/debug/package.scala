@@ -48,6 +48,25 @@ package object debug {
     // scalastyle:on println
   }
 
+  def codegenString(plan: SparkPlan): String = {
+    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegen]()
+    plan transform {
+      case s: WholeStageCodegen =>
+        codegenSubtrees += s
+        s
+      case s => s
+    }
+    var output = s"Found ${codegenSubtrees.size} WholeStageCodegen subtrees.\n"
+    for ((s, i) <- codegenSubtrees.toSeq.zipWithIndex) {
+      output += s"== Subtree ${i + 1} / ${codegenSubtrees.size} ==\n"
+      output += s
+      output += "\nGenerated code:\n"
+      val (_, source) = s.doCodeGen()
+      output += s"${CodeFormatter.format(source)}\n"
+    }
+    output
+  }
+
   /**
    * Augments [[SQLContext]] with debug methods.
    */
@@ -81,28 +100,7 @@ package object debug {
      * WholeStageCodegen subtree).
      */
     def debugCodegen(): Unit = {
-      debugPrint(debugCodegenString())
-    }
-
-    /** Visible for testing. */
-    def debugCodegenString(): String = {
-      val plan = query.queryExecution.executedPlan
-      val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegen]()
-      plan transform {
-        case s: WholeStageCodegen =>
-          codegenSubtrees += s
-          s
-        case s => s
-      }
-      var output = s"Found ${codegenSubtrees.size} WholeStageCodegen subtrees.\n"
-      for ((s, i) <- codegenSubtrees.toSeq.zipWithIndex) {
-        output += s"== Subtree ${i + 1} / ${codegenSubtrees.size} ==\n"
-        output += s
-        output += "\nGenerated code:\n"
-        val (_, source) = s.doCodeGen()
-        output += s"${CodeFormatter.format(source)}\n"
-      }
-      output
+      debugPrint(codegenString(query.queryExecution.executedPlan))
     }
   }
 
@@ -123,6 +121,7 @@ package object debug {
 
     /**
      * A collection of metrics for each column of output.
+     *
      * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
      *                     causing the wrong data to be projected.
      */

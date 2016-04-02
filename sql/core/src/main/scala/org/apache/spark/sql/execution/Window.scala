@@ -874,7 +874,8 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
  * processor class.
  */
 private[execution] object AggregateProcessor {
-  def apply(functions: Array[Expression],
+  def apply(
+      functions: Array[Expression],
       ordinal: Int,
       inputAttributes: Seq[Attribute],
       newMutableProjection: (Seq[Expression], Seq[Attribute]) => () => MutableProjection):
@@ -885,11 +886,20 @@ private[execution] object AggregateProcessor {
     val evaluateExpressions = mutable.Buffer.fill[Expression](ordinal)(NoOp)
     val imperatives = mutable.Buffer.empty[ImperativeAggregate]
 
+    // SPARK-14244: `SizeBasedWindowFunction`s are firstly created on driver side and then
+    // serialized to executor side. These functions all reference a global singleton window
+    // partition size attribute reference, i.e., `SizeBasedWindowFunction.n`. Here we must collect
+    // the singleton instance created on driver side instead of using executor side
+    // `SizeBasedWindowFunction.n` to avoid binding failure caused by mismatching expression ID.
+    val partitionSize: Option[AttributeReference] = {
+      val aggs = functions.flatMap(_.collectFirst { case f: SizeBasedWindowFunction => f })
+      aggs.headOption.map(_.n)
+    }
+
     // Check if there are any SizeBasedWindowFunctions. If there are, we add the partition size to
     // the aggregation buffer. Note that the ordinal of the partition size value will always be 0.
-    val trackPartitionSize = functions.exists(_.isInstanceOf[SizeBasedWindowFunction])
-    if (trackPartitionSize) {
-      aggBufferAttributes += SizeBasedWindowFunction.n
+    partitionSize.foreach { n =>
+      aggBufferAttributes += n
       initialValues += NoOp
       updateExpressions += NoOp
     }
@@ -920,7 +930,7 @@ private[execution] object AggregateProcessor {
     // Create the projections.
     val initialProjection = newMutableProjection(
       initialValues,
-      Seq(SizeBasedWindowFunction.n))()
+      partitionSize.toSeq)()
     val updateProjection = newMutableProjection(
       updateExpressions,
       aggBufferAttributes ++ inputAttributes)()
@@ -935,7 +945,7 @@ private[execution] object AggregateProcessor {
       updateProjection,
       evaluateProjection,
       imperatives.toArray,
-      trackPartitionSize)
+      partitionSize.isDefined)
   }
 }
 
