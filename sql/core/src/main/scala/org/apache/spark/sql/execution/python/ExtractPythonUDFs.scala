@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.SparkPlan
