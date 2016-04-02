@@ -28,7 +28,6 @@ trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
   protected val hiveContext: TestHiveContext = TestHive
   protected val hiveSqlParser = hiveContext.sessionState.sqlParser
 
-
   protected override def afterAll(): Unit = {
     try {
       hiveContext.reset()

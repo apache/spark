@@ -133,9 +133,12 @@ object UnresolvedAttribute {
   }
 }
 
-case class UnresolvedGenerator(
-    name: String,
-    children: Seq[Expression]) extends Generator {
+/**
+ * Represents an unresolved generator, which will be created by the parser for
+ * the [[org.apache.spark.sql.catalyst.plans.logical.Generate]] operator.
+ * The analyzer will resolve this generator.
+ */
+case class UnresolvedGenerator(name: String, children: Seq[Expression]) extends Generator {
 
   override def elementTypes: Seq[(DataType, Boolean, String)] =
     throw new UnresolvedException(this, "elementTypes")

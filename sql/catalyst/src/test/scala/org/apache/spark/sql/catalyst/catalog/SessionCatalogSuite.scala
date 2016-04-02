@@ -689,9 +689,13 @@ class SessionCatalogSuite extends SparkFunSuite {
     val info2 = new ExpressionInfo("tempFunc2", "temp2")
     catalog.createTempFunction("temp1", info1, tempFunc1, ignoreIfExists = false)
     catalog.createTempFunction("temp2", info2, tempFunc2, ignoreIfExists = false)
-    assert(catalog.getTempFunction("temp1") == Some(tempFunc1))
-    assert(catalog.getTempFunction("temp2") == Some(tempFunc2))
-    assert(catalog.getTempFunction("temp3") == None)
+    val arguments = Seq(Literal(1), Literal(2), Literal(3))
+    assert(catalog.lookupFunction("temp1", arguments) === Literal(1))
+    assert(catalog.lookupFunction("temp2", arguments) === Literal(3))
+    // Temporary function does not exist.
+    intercept[AnalysisException] {
+      catalog.lookupFunction("temp3", arguments)
+    }
     val tempFunc3 = (e: Seq[Expression]) => Literal(e.size)
     val info3 = new ExpressionInfo("tempFunc3", "temp1")
     // Temporary function already exists
@@ -700,7 +704,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
     // Temporary function is overridden
     catalog.createTempFunction("temp1", info3, tempFunc3, ignoreIfExists = true)
-    assert(catalog.getTempFunction("temp1") == Some(tempFunc3))
+    assert(catalog.lookupFunction("temp1", arguments) === Literal(arguments.length))
   }
 
   test("drop function") {
@@ -732,9 +736,12 @@ class SessionCatalogSuite extends SparkFunSuite {
     val info = new ExpressionInfo("tempFunc", "func1")
     val tempFunc = (e: Seq[Expression]) => e.head
     catalog.createTempFunction("func1", info, tempFunc, ignoreIfExists = false)
-    assert(catalog.getTempFunction("func1") == Some(tempFunc))
+    val arguments = Seq(Literal(1), Literal(2), Literal(3))
+    assert(catalog.lookupFunction("func1", arguments) === Literal(1))
     catalog.dropTempFunction("func1", ignoreIfNotExists = false)
-    assert(catalog.getTempFunction("func1") == None)
+    intercept[AnalysisException] {
+      catalog.lookupFunction("func1", arguments)
+    }
     intercept[AnalysisException] {
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
     }
@@ -771,91 +778,6 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.dropTempFunction("func1", ignoreIfNotExists = false)
     intercept[AnalysisException] {
       catalog.lookupFunction("func1", Seq(Literal(1), Literal(2), Literal(3)))
-    }
-  }
-
-  test("rename function") {
-    val externalCatalog = newBasicCatalog()
-    val sessionCatalog = new SessionCatalog(externalCatalog)
-    val newName = "funcky"
-    assert(sessionCatalog.getFunction(
-      FunctionIdentifier("func1", Some("db2"))) == newFunc("func1", Some("db2")))
-    assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func1"))
-    sessionCatalog.renameFunction(
-      FunctionIdentifier("func1", Some("db2")), FunctionIdentifier(newName, Some("db2")))
-    assert(sessionCatalog.getFunction(
-      FunctionIdentifier(newName, Some("db2"))) == newFunc(newName, Some("db2")))
-    assert(externalCatalog.listFunctions("db2", "*").toSet == Set(newName))
-    // Rename function without explicitly specifying database
-    sessionCatalog.setCurrentDatabase("db2")
-    sessionCatalog.renameFunction(FunctionIdentifier(newName), FunctionIdentifier("func1"))
-    assert(sessionCatalog.getFunction(
-      FunctionIdentifier("func1")) == newFunc("func1", Some("db2")))
-    assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func1"))
-    // Renaming "db2.func1" to "db1.func2" should fail because databases don't match
-    intercept[AnalysisException] {
-      sessionCatalog.renameFunction(
-        FunctionIdentifier("func1", Some("db2")), FunctionIdentifier("func2", Some("db1")))
-    }
-  }
-
-  test("rename function when database/function does not exist") {
-    val catalog = new SessionCatalog(newBasicCatalog())
-    intercept[AnalysisException] {
-      catalog.renameFunction(
-        FunctionIdentifier("func1", Some("does_not_exist")),
-        FunctionIdentifier("func5", Some("does_not_exist")))
-    }
-    intercept[AnalysisException] {
-      catalog.renameFunction(
-        FunctionIdentifier("does_not_exist", Some("db2")),
-        FunctionIdentifier("x", Some("db2")))
-    }
-  }
-
-  test("rename temp function") {
-    val externalCatalog = newBasicCatalog()
-    val sessionCatalog = new SessionCatalog(externalCatalog)
-    val info = new ExpressionInfo("tempFunc", "func1")
-    val tempFunc = (e: Seq[Expression]) => e.head
-    sessionCatalog.createTempFunction("func1", info, tempFunc, ignoreIfExists = false)
-    sessionCatalog.setCurrentDatabase("db2")
-    // If a database is specified, we'll always rename the function in that database
-    sessionCatalog.renameFunction(
-      FunctionIdentifier("func1", Some("db2")), FunctionIdentifier("func3", Some("db2")))
-    assert(sessionCatalog.getTempFunction("func1") == Some(tempFunc))
-    assert(sessionCatalog.getTempFunction("func3") == None)
-    assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func3"))
-    // If no database is specified, we'll first rename temporary functions
-    sessionCatalog.createFunction(newFunc("func1", Some("db2")))
-    sessionCatalog.renameFunction(FunctionIdentifier("func1"), FunctionIdentifier("func4"))
-    assert(sessionCatalog.getTempFunction("func4") == Some(tempFunc))
-    assert(sessionCatalog.getTempFunction("func1") == None)
-    assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func1", "func3"))
-    // Then, if no such temporary function exist, rename the function in the current database
-    sessionCatalog.renameFunction(FunctionIdentifier("func1"), FunctionIdentifier("func5"))
-    assert(sessionCatalog.getTempFunction("func5") == None)
-    assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func3", "func5"))
-  }
-
-  test("alter function") {
-    val catalog = new SessionCatalog(newBasicCatalog())
-    assert(catalog.getFunction(FunctionIdentifier("func1", Some("db2"))).className == funcClass)
-    catalog.alterFunction(newFunc("func1", Some("db2")).copy(className = "muhaha"))
-    assert(catalog.getFunction(FunctionIdentifier("func1", Some("db2"))).className == "muhaha")
-    // Alter function without explicitly specifying database
-    catalog.setCurrentDatabase("db2")
-    catalog.alterFunction(newFunc("func1").copy(className = "derpy"))
-    assert(catalog.getFunction(FunctionIdentifier("func1")).className == "derpy")
-  }
-
-  test("alter function when database/function does not exist") {
-    val catalog = new SessionCatalog(newBasicCatalog())
-    intercept[AnalysisException] {
-      catalog.alterFunction(newFunc("func5", Some("does_not_exist")))
-    }
-    intercept[AnalysisException] {
-      catalog.alterFunction(newFunc("funcky", Some("db2")))
     }
   }
 

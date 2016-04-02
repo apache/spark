@@ -73,7 +73,6 @@ class SessionCatalog(
   /**
    * Format table name, taking into account case sensitivity.
    */
-  // TODO: Should we use it for temp function name?
   protected[this] def formatTableName(name: String): String = {
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase
   }
@@ -443,22 +442,6 @@ class SessionCatalog(
   }
 
   /**
-   * Alter a metastore function whose name that matches the one specified in `funcDefinition`.
-   *
-   * If no database is specified in `funcDefinition`, assume the function is in the
-   * current database.
-   *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
-   */
-  def alterFunction(funcDefinition: CatalogFunction): Unit = {
-    val db = funcDefinition.identifier.database.getOrElse(currentDb)
-    val newFuncDefinition = funcDefinition.copy(
-      identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db)))
-    externalCatalog.alterFunction(db, newFuncDefinition)
-  }
-
-  /**
    * Retrieve the metadata of a metastore function.
    *
    * If a database is specified in `name`, this will return the function in that database.
@@ -493,15 +476,6 @@ class SessionCatalog(
   // | Methods that interact with temporary and metastore functions |
   // ----------------------------------------------------------------
 
-
-  /**
-   * Return a temporary function. For testing only.
-   */
-  private[catalog] def getTempFunction(name: String): Option[FunctionBuilder] = {
-    // TODO: Why do we need this?
-    functionRegistry.lookupFunctionBuilder(name)
-  }
-
   /**
    * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
    *
@@ -517,10 +491,10 @@ class SessionCatalog(
    * Loads resources such as JARs and Files to SQLContext.
    */
   def loadFunctionResources(resources: Seq[(String, String)]): Unit = {
-    resources.map(r => (r._1.toLowerCase, r._2)).foreach {
+    resources.foreach {
       case (resourceType, uri) =>
         val functionResource =
-          FunctionResource(FunctionResourceType.fromString(resourceType), uri)
+          FunctionResource(FunctionResourceType.fromString(resourceType.toLowerCase), uri)
         functionResourceLoader.loadResource(functionResource)
     }
   }
@@ -550,35 +524,6 @@ class SessionCatalog(
     if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
       throw new AnalysisException(
         s"Temporary function '$name' cannot be dropped because it does not exist!")
-    }
-  }
-
-  /**
-   * Rename a function.
-   *
-   * If a database is specified in `oldName`, this will rename the function in that database.
-   * If no database is specified, this will first attempt to rename a temporary function with
-   * the same name, then, if that does not exist, rename the function in the current database.
-   *
-   * This assumes the database specified in `oldName` matches the one specified in `newName`.
-   */
-  def renameFunction(oldName: FunctionIdentifier, newName: FunctionIdentifier): Unit = {
-    if (oldName.database != newName.database) {
-      throw new AnalysisException("rename does not support moving functions across databases")
-    }
-    val db = oldName.database.getOrElse(currentDb)
-    val oldBuilder = functionRegistry.lookupFunctionBuilder(oldName.funcName)
-    if (oldName.database.isDefined || oldBuilder.isEmpty) {
-      externalCatalog.renameFunction(db, oldName.funcName, newName.funcName)
-    } else {
-      val oldExpressionInfo = functionRegistry.lookupFunction(oldName.funcName).get
-      val newExpressionInfo = new ExpressionInfo(
-        oldExpressionInfo.getClassName,
-        newName.funcName,
-        oldExpressionInfo.getUsage,
-        oldExpressionInfo.getExtended)
-      functionRegistry.dropFunction(oldName.funcName)
-      functionRegistry.registerFunction(newName.funcName, newExpressionInfo, oldBuilder.get)
     }
   }
 

@@ -103,4 +103,5 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
       }
     }
   }
+
 }
