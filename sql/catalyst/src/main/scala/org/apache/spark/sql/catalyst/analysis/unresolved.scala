@@ -320,7 +320,7 @@ case class UnresolvedAlias(child: Expression, aliasName: Option[String] = None)
 case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq[Attribute])
   extends UnaryExpression with Unevaluable with NonSQLExpression {
   // The input attributes used to resolve deserializer expression must be all resolved.
-  require(inputAttributes.forall(_.resolved), "Unresolved attributes found when constructing LocalRelation.")
+  require(inputAttributes.forall(_.resolved), "Input attributes must all be resolved.")
 
   override def child: Expression = deserializer
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
