@@ -169,15 +169,31 @@ case class ScalaUDF(
   lazy val outputEncoder: ExpressionEncoder[Row] =
       RowEncoder(StructType(StructField("_c0", dataType) :: Nil))
 
-  lazy val reflectedFunc = runtimeMirror(function.getClass.getClassLoader).reflect(function)
+  // scalastyle:off
+  lazy val convertedFunc = children.size match {
+    case 0 => function.asInstanceOf[Function0[Any]]
+    case 1 => function.asInstanceOf[Function1[Any, Any]]
+    case 2 => function.asInstanceOf[Function2[Any, Any, Any]]
+    case 3 => function.asInstanceOf[Function3[Any, Any, Any, Any]]
+    case 4 => function.asInstanceOf[Function4[Any, Any, Any, Any, Any]]
+    case 5 => function.asInstanceOf[Function5[Any, Any, Any, Any, Any, Any]]
+    case 6 => function.asInstanceOf[Function6[Any, Any, Any, Any, Any, Any, Any]]
+    case 7 => function.asInstanceOf[Function7[Any, Any, Any, Any, Any, Any, Any, Any]]
+    case 8 => function.asInstanceOf[Function8[Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    case 9 => function.asInstanceOf[Function9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    case 10 => function.asInstanceOf[Function10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+  }
+  // scalastyle:on
+
+  lazy val reflectedFunc =
+    runtimeMirror(convertedFunc.getClass.getClassLoader).reflect(convertedFunc)
   lazy val applyMethods = reflectedFunc.symbol.typeSignature.member(newTermName("apply"))
     .asTerm.alternatives
-  lazy val invokeMethod = (reflectedFunc.reflectMethod(applyMethods(0).asMethod).apply _)
-    .asInstanceOf[Seq[Any] => Any]
+  lazy val invokeMethod = reflectedFunc.reflectMethod(applyMethods(0).asMethod).apply _
 
   override def eval(input: InternalRow): Any = {
     val projected = InternalRow.fromSeq(children.map(_.eval(input)))
-    val cRow: Row = inputEncoder.fromRow(projected)
+    val cRow = inputEncoder.fromRow(projected)
 
     try {
       val callRet = invokeMethod(cRow.toSeq)
