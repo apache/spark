@@ -781,7 +781,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(this, ShowTablesCommand(None))
+    Dataset.ofRows(this, ShowTablesCommand(None, None))
   }
 
   /**
@@ -793,7 +793,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName)))
+    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName), None))
   }
 
   /**
