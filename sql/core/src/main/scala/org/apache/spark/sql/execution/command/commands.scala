@@ -28,9 +28,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -237,15 +237,22 @@ case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
       Seq(AttributeReference("plan", StringType, nullable = true)()),
-    extended: Boolean = false)
+    extended: Boolean = false,
+    codegen: Boolean = false)
   extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
   override def run(sqlContext: SQLContext): Seq[Row] = try {
     // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
     val queryExecution = sqlContext.executePlan(logicalPlan)
-    val outputString = if (extended) queryExecution.toString else queryExecution.simpleString
-
+    val outputString =
+      if (codegen) {
+        codegenString(queryExecution.executedPlan)
+      } else if (extended) {
+        queryExecution.toString
+      } else {
+        queryExecution.simpleString
+      }
     outputString.split("\n").map(Row(_))
   } catch { case cause: TreeNodeException[_] =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))

@@ -27,7 +27,7 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("debugCodegen") {
-    val res = sqlContext.range(10).groupBy("id").count().debugCodegenString()
+    val res = codegenString(sqlContext.range(10).groupBy("id").count().queryExecution.executedPlan)
     assert(res.contains("Subtree 1 / 2"))
     assert(res.contains("Subtree 2 / 2"))
     assert(res.contains("Object[]"))
