@@ -88,7 +88,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case array: ArrayType => classOf[ArrayColumnAccessor].getName
         case t: MapType => classOf[MapColumnAccessor].getName
       }
-      ctx.addMutableState(accessorCls, accessorName, s"$accessorName = null;")
+      ctx.addMutableState(accessorCls, accessorName, "")
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>
@@ -113,6 +113,42 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       }
       (createCode, extract + patch)
     }.unzip
+
+    /*
+     * 200 = 6000 bytes / 30 (up to 30 bytes per one call))
+     * the maximum byte code size to be compiled for HotSpot is 8000.
+     * We should keep less than 8000
+     */
+    val numberOfStatementsThreshold = 200
+    val (initializerAccessorCalls, extractorCalls) =
+      if (initializeAccessors.length <= numberOfStatementsThreshold) {
+        (initializeAccessors.mkString("\n"), extractors.mkString("\n"))
+      } else {
+        val groupedAccessorsItr = initializeAccessors.grouped(numberOfStatementsThreshold)
+        val groupedExtractorsItr = extractors.grouped(numberOfStatementsThreshold)
+        var groupedAccessorsLength = 0
+        groupedAccessorsItr.zipWithIndex.map { case (body, i) =>
+          groupedAccessorsLength += 1
+          val funcName = s"accessors$i"
+          val funcCode = s"""
+             |private void $funcName() {
+             |  ${body.mkString("\n")}
+             |}
+           """.stripMargin
+          ctx.addNewFunction(funcName, funcCode)
+        }
+        groupedExtractorsItr.zipWithIndex.map { case (body, i) =>
+          val funcName = s"extractors$i"
+          val funcCode = s"""
+             |private void $funcName() {
+             |  ${body.mkString("\n")}
+             |}
+           """.stripMargin
+          ctx.addNewFunction(funcName, funcCode)
+        }
+        ((0 to groupedAccessorsLength - 1).map { i => s"accessors$i();" }.mkString("\n"),
+         (0 to groupedAccessorsLength - 1).map { i => s"extractors$i();" }.mkString("\n"))
+      }
 
     val code = s"""
       import java.nio.ByteBuffer;
@@ -149,8 +185,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.nativeOrder = ByteOrder.nativeOrder();
           this.buffers = new byte[${columnTypes.length}][];
           this.mutableRow = new MutableUnsafeRow(rowWriter);
-
-          ${ctx.initMutableStates()}
         }
 
         public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
@@ -158,6 +192,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.columnTypes = columnTypes;
           this.columnIndexes = columnIndexes;
         }
+
+        ${ctx.declareAddedFunctions()}
 
         public boolean hasNext() {
           if (currentRow < numRowsInBatch) {
@@ -173,7 +209,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           for (int i = 0; i < columnIndexes.length; i ++) {
             buffers[i] = batch.buffers()[columnIndexes[i]];
           }
-          ${initializeAccessors.mkString("\n")}
+          ${initializerAccessorCalls}
 
           return hasNext();
         }
@@ -182,7 +218,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           currentRow += 1;
           bufferHolder.reset();
           rowWriter.zeroOutNullBytes();
-          ${extractors.mkString("\n")}
+          ${extractorCalls}
           unsafeRow.setTotalSize(bufferHolder.totalSize());
           return unsafeRow;
         }
