@@ -76,6 +76,7 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
     val copied = new GaussianMixtureModel(uid, parentModel)
+    setParent(this.parent)
     copyValues(copied, extra)
   }
 
@@ -271,6 +272,7 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  * Summary of GaussianMixture.
  */
 @Since("2.0.0")
+@Experimental
 class GaussianMixtureSummary private[clustering] (
     @Since("2.0.0") @transient val predictions: DataFrame,
     @Since("2.0.0") val predictionCol: String,
