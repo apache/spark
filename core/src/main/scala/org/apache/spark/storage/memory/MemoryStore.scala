@@ -455,16 +455,16 @@ private[spark] class MemoryStore(
   }
 
   /**
-    * Try to evict blocks to free up a given amount of space to store a particular block.
-    * Can fail if either the block is bigger than our memory or it would require replacing
-    * another block from the same RDD (which leads to a wasteful cyclic replacement pattern for
-    * RDDs that don't fit into memory that we want to avoid).
-    *
-    * @param blockId the ID of the block we are freeing space for, if any
-    * @param space the size of this block
-    * @param memoryMode the type of memory to free (on- or off-heap)
-    * @return the amount of memory (in bytes) freed by eviction
-    */
+   * Try to evict blocks to free up a given amount of space to store a particular block.
+   * Can fail if either the block is bigger than our memory or it would require replacing
+   * another block from the same RDD (which leads to a wasteful cyclic replacement pattern for
+   * RDDs that don't fit into memory that we want to avoid).
+   *
+   * @param blockId the ID of the block we are freeing space for, if any
+   * @param space the size of this block
+   * @param memoryMode the type of memory to free (on- or off-heap)
+   * @return the amount of memory (in bytes) freed by eviction
+   */
   private[spark] def evictBlocksToFreeSpace(
       blockId: Option[BlockId],
       space: Long,

@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.csv
 import org.apache.spark.SparkFunSuite
 
 /**
-  * test cases for StringIteratorReader
-  */
+ * test cases for StringIteratorReader
+ */
 class CSVParserSuite extends SparkFunSuite {
 
   private def readAll(iter: Iterator[String]) = {
