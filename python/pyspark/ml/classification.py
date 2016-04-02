@@ -15,22 +15,18 @@
 # limitations under the License.
 #
 
+import operator
 import warnings
 
-import operator
-import uuid
-
-from pyspark import since
 from pyspark.ml import Estimator, Model
-from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
-from pyspark.ml.param import TypeConverters
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import (
     RandomForestParams, TreeEnsembleParams, DecisionTreeModel, TreeEnsembleModels)
+from pyspark.ml.util import *
+from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.mllib.common import inherit_doc
 from pyspark.sql.functions import udf, when
-from pyspark.sql.types import ArrayType, MapType, IntegerType, DoubleType
+from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
 
 __all__ = ['LogisticRegression', 'LogisticRegressionModel',
@@ -38,7 +34,8 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel',
            'GBTClassifier', 'GBTClassificationModel',
            'RandomForestClassifier', 'RandomForestClassificationModel',
            'NaiveBayes', 'NaiveBayesModel',
-           'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel']
+           'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
+           'OneVsRest', 'OneVsRestModel']
 
 
 @inherit_doc
@@ -923,16 +920,17 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sc.parallelize([
-    ...     Row(label=1.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, features=Vectors.sparse(1, [], []))]).toDF()
+    ...     Row(label=0.0, features=Vectors.dense(1.0, 0.8)),
+    ...     Row(label=1.0, features=Vectors.sparse(2, [], [])),
+    ...     Row(label=2.0, features=Vectors.dense(0.5, 0.5))]).toDF()
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr).setPredictionCol("indexed")
     >>> model = ovr.fit(df)
-    >>> model.models[0].weights
-    >>> model.models[0].coefficients
-    >>> model.models[0].intercept
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
-    >>> model.transform(test0).show()
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0))]).toDF()
+    >>> model.transform(test0).head().indexed
+    1.0
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
+    >>> model.transform(test1).head().indexed
     0.0
 
     .. versionadded:: 2.0.0
@@ -965,7 +963,7 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     @since("2.0.0")
     def setClassifier(self, value):
         """
-        Sets the value of :py:attr:`estimator`.
+        Sets the value of :py:attr:`classifier`.
         """
         self._paramMap[self.classifier] = value
         return self
@@ -985,7 +983,7 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         multiclassLabeled = dataset.select(labelCol, featureCol)
 
         # persist if underlying dataset is not persistent.
-        handlePersistence =\
+        handlePersistence = \
             dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
@@ -1007,32 +1005,32 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         if handlePersistence:
             multiclassLabeled.unpersist()
 
-        return OneVsRestModel(models=models)
+        return OneVsRestModel(models=models)\
+            .setFeaturesCol(self.getFeaturesCol())\
+            .setLabelCol(self.getLabelCol())\
+            .setPredictionCol(self.getPredictionCol())
 
-    # @since("2.0.0")
-    # def copy(self, extra=None):
-    #     """
-    #     Creates a copy of this instance with a randomly generated uid
-    #     and some extra params. This copies creates a deep copy of
-    #     the embedded paramMap, and copies the embedded and extra parameters over.
+    @since("2.0.0")
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies creates a deep copy of
+        the embedded paramMap, and copies the embedded and extra parameters over.
 
-    #     :param extra: Extra parameters to copy to the new instance
-    #     :return: Copy of this instance
-    #     """
-    #     if extra is None:
-    #         extra = dict()
-    #     newCV = Params.copy(self, extra)
-    #     if self.isSet(self.estimator):
-    #         newCV.setEstimator(self.getEstimator().copy(extra))
-    #     # estimatorParamMaps remain the same
-    #     if self.isSet(self.evaluator):
-    #         newCV.setEvaluator(self.getEvaluator().copy(extra))
-    #     return newCV
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        newOVR = Params.copy(self, extra)
+        if self.isSet(self.classifier):
+            newOVR.setClassifier(self.getClassifier().copy(extra))
+        return newOVR
 
 
 class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     """
-    Model produced by [[OneVsRest]].
+    Model fitted by OneVsRest.
     This stores the models resulting from training k binary classifiers: one for each class.
     Each example is scored against all k models, and the model with the highest score
     is picked to label the example.
@@ -1055,7 +1053,7 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
 
         # persist if underlying dataset is not persistent.
-        handlePersistence =\
+        handlePersistence = \
             dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
         if handlePersistence:
             newDataset.persist(StorageLevel.MEMORY_AND_DISK)
@@ -1086,26 +1084,26 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
         # output the index of the classifier with highest confidence as prediction
         labelUDF = udf(
-            lambda predictions: float(max(enumerate(predictions), key=operator.itemgetter(1))[0]))
+            lambda predictions: float(max(enumerate(predictions), key=operator.itemgetter(1))[0]),
+            DoubleType())
 
         # output label and label metadata as prediction
         return aggregatedDataset.withColumn(
             self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])).drop(accColName)
 
-    # @since("1.4.0")
-    # def copy(self, extra=None):
-    #     """
-    #     Creates a copy of this instance with a randomly generated uid
-    #     and some extra params. This copies the underlying bestModel,
-    #     creates a deep copy of the embedded paramMap, and
-    #     copies the embedded and extra parameters over.
+    @since("2.0.0")
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies creates a deep copy of
+        the embedded paramMap, and copies the embedded and extra parameters over.
 
-    #     :param extra: Extra parameters to copy to the new instance
-    #     :return: Copy of this instance
-    #     """
-    #     if extra is None:
-    #         extra = dict()
-    #     return OneVsRestModel(self.models.copy(extra))
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        return OneVsRestModel([model.copy(extra) for model in self.models.copy(extra)])
 
 
 if __name__ == "__main__":
