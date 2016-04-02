@@ -102,7 +102,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("SPARK-14251: EXPLAIN CODEGEN command") {
+  test("EXPLAIN CODEGEN command") {
     checkExistence(sql("EXPLAIN CODEGEN SELECT 1"), true,
       "WholeStageCodegen",
       "Generated code:",
