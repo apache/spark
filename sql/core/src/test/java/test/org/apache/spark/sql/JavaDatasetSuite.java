@@ -37,7 +37,6 @@ import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
-import org.apache.spark.sql.expressions.Aggregator;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
@@ -383,59 +382,6 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> ds =
       context.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
-  }
-
-  @Test
-  public void testTypedAggregation() {
-    Encoder<Tuple2<String, Integer>> encoder = Encoders.tuple(Encoders.STRING(), Encoders.INT());
-    List<Tuple2<String, Integer>> data =
-      Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
-    Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
-
-    KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupByKey(
-      new MapFunction<Tuple2<String, Integer>, String>() {
-        @Override
-        public String call(Tuple2<String, Integer> value) throws Exception {
-          return value._1();
-        }
-      },
-      Encoders.STRING());
-
-    Dataset<Tuple2<String, Integer>> agged =
-      grouped.agg(new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
-
-    Dataset<Tuple2<String, Integer>> agged2 = grouped.agg(
-      new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()))
-      .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
-    Assert.assertEquals(
-      Arrays.asList(
-        new Tuple2<>("a", 3),
-        new Tuple2<>("b", 3)),
-      agged2.collectAsList());
-  }
-
-  static class IntSumOf extends Aggregator<Tuple2<String, Integer>, Integer, Integer> {
-
-    @Override
-    public Integer zero() {
-      return 0;
-    }
-
-    @Override
-    public Integer reduce(Integer l, Tuple2<String, Integer> t) {
-      return l + t._2();
-    }
-
-    @Override
-    public Integer merge(Integer b1, Integer b2) {
-      return b1 + b2;
-    }
-
-    @Override
-    public Integer finish(Integer reduction) {
-      return reduction;
-    }
   }
 
   public static class KryoSerializable {
