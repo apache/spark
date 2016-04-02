@@ -2232,7 +2232,7 @@ object functions {
 
   /**
    * Splits str around pattern (pattern is a regular expression).
-   * NOTE: pattern is a string represent the regular expression.
+   * NOTE: pattern is a string representation of the regular expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2267,9 +2267,9 @@ object functions {
 
   /**
    * Translate any character in the src by a character in replaceString.
-   * The characters in replaceString is corresponding to the characters in matchingString.
-   * The translate will happen when any character in the string matching with the character
-   * in the matchingString.
+   * The characters in replaceString correspond to the characters in matchingString.
+   * The translate will happen when any character in the string matches the character
+   * in the `matchingString`.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2692,7 +2692,7 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns true if the array contain the value
+   * Returns true if the array contains `value`
    * @group collection_funcs
    * @since 1.5.0
    */
@@ -2920,7 +2920,7 @@ object functions {
 
   /**
    * Defines a user-defined function (UDF) using a Scala closure. For this variant, the caller must
-   * specifcy the output data type, and there is no automatic input type coercion.
+   * specify the output data type, and there is no automatic input type coercion.
    *
    * @param f  A closure in Scala
    * @param dataType  The output data type of the UDF

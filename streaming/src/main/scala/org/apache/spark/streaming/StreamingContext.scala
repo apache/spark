@@ -132,7 +132,7 @@ class StreamingContext private[streaming] (
       "both SparkContext and checkpoint as null")
   }
 
-  private[streaming] val isCheckpointPresent = (_cp != null)
+  private[streaming] val isCheckpointPresent: Boolean = _cp != null
 
   private[streaming] val sc: SparkContext = {
     if (_sc != null) {
@@ -213,8 +213,8 @@ class StreamingContext private[streaming] (
   def sparkContext: SparkContext = sc
 
   /**
-   * Set each DStreams in this context to remember RDDs it generated in the last given duration.
-   * DStreams remember RDDs only for a limited duration of time and releases them for garbage
+   * Set each DStream in this context to remember RDDs it generated in the last given duration.
+   * DStreams remember RDDs only for a limited duration of time and release them for garbage
    * collection. This method allows the developer to specify how long to remember the RDDs (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
@@ -282,13 +282,14 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create a input stream from TCP source hostname:port. Data is received using
+   * Creates an input stream from TCP source hostname:port. Data is received using
    * a TCP socket and the receive bytes is interpreted as UTF8 encoded `\n` delimited
    * lines.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
+   * @see [[socketStream]]
    */
   def socketTextStream(
       hostname: String,
@@ -299,7 +300,7 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create a input stream from TCP source hostname:port. Data is received using
+   * Creates an input stream from TCP source hostname:port. Data is received using
    * a TCP socket and the receive bytes it interpreted as object using the given
    * converter.
    * @param hostname      Hostname to connect to for receiving data
@@ -860,7 +861,7 @@ private class StreamingContextPythonHelper {
    */
   def tryRecoverFromCheckpoint(checkpointPath: String): Option[StreamingContext] = {
     val checkpointOption = CheckpointReader.read(
-      checkpointPath, new SparkConf(), SparkHadoopUtil.get.conf, false)
+      checkpointPath, new SparkConf(), SparkHadoopUtil.get.conf, ignoreReadError = false)
     checkpointOption.map(new StreamingContext(null, _, null))
   }
 }
