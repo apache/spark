@@ -219,6 +219,7 @@ case class CatalogTable(
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
     partitionColumns: Seq[CatalogColumn] = Seq.empty,
+    bucketColumns: Seq[String] = Seq.empty,
     sortColumns: Seq[CatalogColumn] = Seq.empty,
     numBuckets: Int = 0,
     createTime: Long = System.currentTimeMillis,

@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, FunctionResourceLoader, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -240,6 +240,136 @@ private[sql] class HiveSessionCatalog(
       val builder = makeFunctionBuilder(functionName, clazz)
       val info = new ExpressionInfo(clazz.getCanonicalName, functionName)
       createTempFunction(functionName, info, builder, ignoreIfExists = false)
+  }
+
+  /**
+   * Generate Create table DDL string for the specified tableIdentifier
+   * that is from Hive metastore
+   */
+  override def generateTableDDL(name: TableIdentifier): String = {
+    val ct = this.getTable(name)
+    val sb = new StringBuilder("CREATE ")
+    val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
+
+    if (ct.tableType == CatalogTableType.VIRTUAL_VIEW) {
+      sb.append(" VIEW "+ct.qualifiedName+" AS " + ct.viewOriginalText.getOrElse(""))
+    } else {
+      // TEMPORARY keyword is not applicable for HIVE DDL from Spark SQL yet.
+      if (ct.tableType == CatalogTableType.EXTERNAL_TABLE) {
+        processedProperties += "EXTERNAL"
+        sb.append(" EXTERNAL TABLE " + ct.qualifiedName)
+      } else {
+        sb.append(" TABLE " + ct.qualifiedName)
+      }
+      // column list
+      val cols = ct.schema map { col =>
+        col.name + " " + col.dataType + (col.comment.getOrElse("") match {
+          case cmt: String if cmt.length > 0 => " COMMENT '" + escapeHiveCommand(cmt) + "'"
+          case _ => ""
+        })
+        // hive ddl does not honor NOT NULL, it is always default to be nullable
+      }
+      sb.append(cols.mkString("(", ", ", ")")+"\n")
+
+      // table comment
+      sb.append(" " +
+        ct.properties.getOrElse("comment", new String) match {
+        case tcmt: String if tcmt.trim.length > 0 =>
+          processedProperties += "comment"
+          " COMMENT '" + escapeHiveCommand(tcmt.trim) + "'\n"
+        case _ => ""
+      })
+
+      // partitions
+      val partCols = ct.partitionColumns map { col =>
+        col.name + " " + col.dataType + (col.comment.getOrElse("") match {
+          case cmt: String if cmt.length > 0 => " COMMENT '" + escapeHiveCommand(cmt) + "'"
+          case _ => ""
+        })
+      }
+      if (partCols != null && partCols.size > 0) {
+        sb.append(" PARTITIONED BY ")
+        sb.append(partCols.mkString("( ", ", ", " )")+"\n")
+      }
+
+      // sort bucket
+      if (ct.bucketColumns.size > 0) {
+        processedProperties += "SORTBUCKETCOLSPREFIX"
+        sb.append(" CLUSTERED BY ")
+        sb.append(ct.bucketColumns.mkString("( ", ", ", " )"))
+
+        // TODO sort columns don't have the the right scala types yet. need to adapt to Hive Order
+        if (ct.sortColumns.size > 0) {
+          sb.append(" SORTED BY ")
+          sb.append(ct.sortColumns.map(_.name).mkString("( ", ", ", " )"))
+        }
+        sb.append(" INTO " + ct.numBuckets + " BUCKETS\n")
+      }
+
+      // TODO CatalogTable does not implement skew spec yet
+      // skew spec
+      // TODO StorageHandler case is not handled yet, since CatalogTable does not have it yet
+      // row format
+      sb.append(" ROW FORMAT ")
+
+      val serdeProps = ct.storage.serdeProperties
+      val delimiterPrefixes =
+        Seq("FIELDS TERMINATED BY",
+          "COLLECTION ITEMS TERMINATED BY",
+          "MAP KEYS TERMINATED BY",
+          "LINES TERMINATED BY",
+          "NULL DEFINED AS")
+
+      val delimiters = Seq(
+        serdeProps.get("field.delim"),
+        serdeProps.get("colelction.delim"),
+        serdeProps.get("mapkey.delim"),
+        serdeProps.get("line.delim"),
+        serdeProps.get("serialization.null.format")).zipWithIndex
+
+      val delimiterStrs = delimiters collect {
+        case (Some(ch), i) =>
+          delimiterPrefixes(i) + " '" +
+            escapeHiveCommand(ch) +
+            "' "
+      }
+      if (delimiterStrs.size > 0){
+        sb.append("DELIMITED ")
+        sb.append(delimiterStrs.mkString(" ")+"\n")
+      }else{
+        sb.append("SERDE '")
+        sb.append(escapeHiveCommand(ct.storage.serde.getOrElse(""))+ "' \n")
+      }
+
+      sb.append("STORED AS INPUTFORMAT '" +
+        escapeHiveCommand(ct.storage.inputFormat.getOrElse("")) + "' \n")
+      sb.append("OUTPUTFORMAT  '" +
+        escapeHiveCommand(ct.storage.outputFormat.getOrElse(""))+"' \n")
+
+      // table location
+      sb.append("LOCATION '" +
+        escapeHiveCommand(ct.storage.locationUri.getOrElse(""))+"' \n")
+
+      // table properties
+      val propertPairs = ct.properties collect {
+        case (k, v) if !processedProperties.contains(k) =>
+          "'" + escapeHiveCommand(k) + "'='"+escapeHiveCommand(v)+"'"
+      }
+      if(propertPairs.size>0)
+        sb.append("TBLPROPERTIES " + propertPairs.mkString("( ", ", \n", " )")+"\n")
+
+    }
+    sb.toString()
+  }
+
+  private def escapeHiveCommand(str: String): String = {
+    str.map{c =>
+      if (c == '\'' || c == ';'){
+        '\\'
+      } else {
+        c
+      }
+    }
   }
 }
 

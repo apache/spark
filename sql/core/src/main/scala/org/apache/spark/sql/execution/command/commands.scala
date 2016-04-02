@@ -423,6 +423,33 @@ case class ShowTablePropertiesCommand(
 }
 
 /**
+ * A command for users to get the DDL of an existing table
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW CREATE TABLE tableIdentifier
+ * }}}
+ */
+case class ShowCreateTableCommand(
+    tableName: String,
+    databaseName: Option[String])
+  extends RunnableCommand{
+
+  // The result of SHOW CREATE TABLE is the whole string of DDL command
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("DDL", StringType, nullable = false):: Nil)
+    schema.toAttributes
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] ={
+    val catalog = sqlContext.sessionState.catalog
+    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
+    Seq(Row(catalog.generateTableDDL(TableIdentifier(tableName, databaseName))))
+  }
+
+}
+
+/**
  * A command for users to list all of the registered functions.
  * The syntax of using this command in SQL is:
  * {{{

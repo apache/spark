@@ -309,6 +309,7 @@ private[hive] class HiveClientImpl(
         },
         schema = h.getCols.asScala.map(fromHiveColumn),
         partitionColumns = h.getPartCols.asScala.map(fromHiveColumn),
+        bucketColumns = h.getTTable.getSd.getBucketCols.asScala.toSeq,
         sortColumns = Seq(),
         numBuckets = h.getNumBuckets,
         createTime = h.getTTable.getCreateTime.toLong * 1000,

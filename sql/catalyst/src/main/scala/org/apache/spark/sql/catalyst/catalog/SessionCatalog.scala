@@ -175,6 +175,14 @@ class SessionCatalog(
     externalCatalog.getTable(db, table)
   }
 
+  /**
+   * Generate Create table DDL string for the specified tableIdentifier
+   */
+  def generateTableDDL(name: TableIdentifier): String = {
+    val catalogTable = this.getTable(name)
+    "CREATE TABLE " + name.toString
+  }
+
   // -------------------------------------------------------------
   // | Methods that interact with temporary and metastore tables |
   // -------------------------------------------------------------
