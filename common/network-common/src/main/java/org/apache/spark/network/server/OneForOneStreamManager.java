@@ -32,8 +32,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
 
 /**
- * StreamManager which allows registration of an Iterator&lt;ManagedBuffer&gt;, which are individually
- * fetched as chunks by the client. Each registered buffer is one chunk.
+ * StreamManager which allows registration of an Iterator&lt;ManagedBuffer&gt;, which are
+ * individually fetched as chunks by the client. Each registered buffer is one chunk.
  */
 public class OneForOneStreamManager extends StreamManager {
   private final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);

@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.parser.CatalystQl
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
+import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -905,6 +905,17 @@ object functions {
   }
 
   /**
+   * Creates a new map column. The input columns must be grouped as key-value pairs, e.g.
+   * (key1, value1, key2, value2, ...). The key columns must all have the same data type, and can't
+   * be null. The value columns must all have the same data type.
+   *
+   * @group normal_funcs
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
+
+  /**
    * Marks a DataFrame as small enough for use in broadcast joins.
    *
    * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
@@ -917,7 +928,7 @@ object functions {
    * @since 1.5.0
    */
   def broadcast(df: DataFrame): DataFrame = {
-    Dataset.newDataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
+    Dataset.ofRows(df.sqlContext, BroadcastHint(df.logicalPlan))
   }
 
   /**
@@ -1161,8 +1172,7 @@ object functions {
    * @group normal_funcs
    */
   def expr(expr: String): Column = {
-    val parser = SQLContext.getActive().map(_.sessionState.sqlParser).getOrElse(new CatalystQl())
-    Column(parser.parseExpression(expr))
+    Column(SparkSqlParser.parseExpression(expr))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

@@ -23,8 +23,9 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.vectorized.AggregateHashMap
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -42,7 +43,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val sc = SparkContext.getOrCreate(conf)
   lazy val sqlContext = SQLContext.getOrCreate(sc)
 
-  def runBenchmark(name: String, values: Int)(f: => Unit): Unit = {
+  def runBenchmark(name: String, values: Long)(f: => Unit): Unit = {
     val benchmark = new Benchmark(name, values)
 
     Seq(false, true).foreach { enabled =>
@@ -57,7 +58,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
   // These benchmark are skipped in normal build
   ignore("range/filter/sum") {
-    val N = 500 << 20
+    val N = 500L << 20
     runBenchmark("rang/filter/sum", N) {
       sqlContext.range(N).filter("(id & 1) = 1").groupBy().sum().collect()
     }
@@ -71,7 +72,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("range/limit/sum") {
-    val N = 500 << 20
+    val N = 500L << 20
     runBenchmark("range/limit/sum", N) {
       sqlContext.range(N).limit(1000000).groupBy().sum().collect()
     }
@@ -85,7 +86,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("stat functions") {
-    val N = 100 << 20
+    val N = 100L << 20
 
     runBenchmark("stddev", N) {
       sqlContext.range(N).groupBy().agg("id" -> "stddev").collect()
@@ -184,11 +185,29 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /**
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Join w 2 longs:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Join w 2 longs:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Join w 2 longs codegen=false              7877 / 8358         13.3          75.1       1.0X
-    Join w 2 longs codegen=true               3877 / 3937         27.0          37.0       2.0X
+    Join w 2 longs codegen=false           12725 / 13158          8.2         121.4       1.0X
+    Join w 2 longs codegen=true              6044 / 6771         17.3          57.6       2.1X
       */
+
+    val dim4 = broadcast(sqlContext.range(M)
+      .selectExpr("cast(id/10 as long) as k1", "cast(id/10 as long) as k2"))
+
+    runBenchmark("Join w 2 longs duplicated", N) {
+      sqlContext.range(N).join(dim4,
+        (col("id") bitwiseAND M) === col("k1") && (col("id") bitwiseAND M) === col("k2"))
+        .count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Join w 2 longs:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    Join w 2 longs duplicated codegen=false 13066 / 13710          8.0         124.6       1.0X
+    Join w 2 longs duplicated codegen=true    7122 / 7277         14.7          67.9       1.8X
+     */
+
     runBenchmark("outer join w long", N) {
       sqlContext.range(N).join(dim, (col("id") bitwiseAND M) === col("k"), "left").count()
     }
@@ -247,7 +266,27 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       */
   }
 
-  ignore("rube") {
+  ignore("shuffle hash join") {
+    val N = 4 << 20
+    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+    sqlContext.setConf("spark.sql.autoBroadcastJoinThreshold", "10000000")
+    sqlContext.setConf("spark.sql.join.preferSortMergeJoin", "false")
+    runBenchmark("shuffle hash join", N) {
+      val df1 = sqlContext.range(N).selectExpr(s"id as k1")
+      val df2 = sqlContext.range(N / 5).selectExpr(s"id * 3 as k2")
+      df1.join(df2, col("k1") === col("k2")).count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    shuffle hash join:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    shuffle hash join codegen=false          1168 / 1902          3.6         278.6       1.0X
+    shuffle hash join codegen=true            850 / 1196          4.9         202.8       1.4X
+     */
+  }
+
+  ignore("cube") {
     val N = 5 << 20
 
     runBenchmark("cube", N) {
@@ -418,25 +457,49 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
             value.setInt(0, value.getInt(0) + 1)
             i += 1
           } else {
-            loc.putNewKey(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+            loc.append(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
               value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
           }
         }
       }
     }
 
+    benchmark.addCase("Aggregate HashMap") { iter =>
+      var i = 0
+      val numKeys = 65536
+      val schema = new StructType()
+        .add("key", LongType)
+        .add("value", LongType)
+      val map = new AggregateHashMap(schema)
+      while (i < numKeys) {
+        val idx = map.findOrInsert(i.toLong)
+        map.batch.column(1).putLong(map.buckets(idx),
+          map.batch.column(1).getLong(map.buckets(idx)) + 1)
+        i += 1
+      }
+      var s = 0
+      i = 0
+      while (i < N) {
+        if (map.find(i % 100000) != -1) {
+          s += 1
+        }
+        i += 1
+      }
+    }
+
     /**
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     BytesToBytesMap:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    hash                                      651 /  678         80.0          12.5       1.0X
-    fast hash                                 336 /  343        155.9           6.4       1.9X
-    arrayEqual                                417 /  428        125.0           8.0       1.6X
-    Java HashMap (Long)                       145 /  168         72.2          13.8       0.8X
-    Java HashMap (two ints)                   157 /  164         66.8          15.0       0.8X
-    Java HashMap (UnsafeRow)                  538 /  573         19.5          51.3       0.2X
-    BytesToBytesMap (off Heap)               2594 / 2664         20.2          49.5       0.2X
-    BytesToBytesMap (on Heap)                2693 / 2989         19.5          51.4       0.2X
+    hash                                      112 /  116         93.2          10.7       1.0X
+    fast hash                                  65 /   69        160.9           6.2       1.7X
+    arrayEqual                                 66 /   69        159.1           6.3       1.7X
+    Java HashMap (Long)                       137 /  182         76.3          13.1       0.8X
+    Java HashMap (two ints)                   182 /  230         57.8          17.3       0.6X
+    Java HashMap (UnsafeRow)                  511 /  565         20.5          48.8       0.2X
+    BytesToBytesMap (off Heap)                481 /  515         21.8          45.9       0.2X
+    BytesToBytesMap (on Heap)                 529 /  600         19.8          50.5       0.2X
+    Aggregate HashMap                          56 /   62        187.9           5.3       2.0X
       */
     benchmark.run()
   }
@@ -463,6 +526,27 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     collect 1 million                         439 /  654          2.4         418.7       1.0X
     collect 2 millions                        961 / 1907          1.1         916.4       0.5X
     collect 4 millions                       3193 / 3895          0.3        3044.7       0.1X
+     */
+  }
+
+  ignore("collect limit") {
+    val N = 1 << 20
+
+    val benchmark = new Benchmark("collect limit", N)
+    benchmark.addCase("collect limit 1 million") { iter =>
+      sqlContext.range(N * 4).limit(N).collect()
+    }
+    benchmark.addCase("collect limit 2 millions") { iter =>
+      sqlContext.range(N * 4).limit(N * 2).collect()
+    }
+    benchmark.run()
+
+    /**
+    model name      : Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    collect limit:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    collect limit 1 million                   833 / 1284          1.3         794.4       1.0X
+    collect limit 2 millions                 3348 / 4005          0.3        3193.3       0.2X
      */
   }
 }

@@ -45,8 +45,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val df = sql(sqlString)
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
-      case j: LeftSemiJoinHash => j
       case j: BroadcastHashJoin => j
+      case j: ShuffledHashJoin => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
       case j: SortMergeJoin => j
@@ -63,7 +63,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
       Seq(
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
         ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
@@ -184,7 +184,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("big inner join, 4 matches per row") {
-    val bigData = testData.unionAll(testData).unionAll(testData).unionAll(testData)
+    val bigData = testData.union(testData).union(testData).union(testData)
     val bigDataX = bigData.as("x")
     val bigDataY = bigData.as("y")
 
@@ -329,8 +329,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= 4).registerTempTable("left")
-    upperCaseData.where('N >= 3).registerTempTable("right")
+    upperCaseData.where('N <= 4).registerTempTable("`left`")
+    upperCaseData.where('N >= 3).registerTempTable("`right`")
 
     val left = UnresolvedRelation(TableIdentifier("left"), None)
     val right = UnresolvedRelation(TableIdentifier("right"), None)
@@ -434,7 +434,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash])
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[ShuffledHashJoin])
       ).foreach {
         case (query, joinClass) => assertJoin(query, joinClass)
       }
@@ -460,7 +460,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
-          classOf[LeftSemiJoinHash]),
+          classOf[ShuffledHashJoin]),
         ("SELECT * FROM testData LEFT SEMI JOIN testData2",
           classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2",

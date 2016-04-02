@@ -157,14 +157,6 @@ object SparkEnv extends Logging {
   }
 
   /**
-   * Returns the ThreadLocal SparkEnv.
-   */
-  @deprecated("Use SparkEnv.get instead", "1.2.0")
-  def getThreadLocal: SparkEnv = {
-    env
-  }
-
-  /**
    * Create a SparkEnv for the driver.
    */
   private[spark] def createDriverEnv(
@@ -331,7 +323,7 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
-      serializer, conf, memoryManager, mapOutputTracker, shuffleManager,
+      serializerManager, conf, memoryManager, mapOutputTracker, shuffleManager,
       blockTransferService, securityManager, numUsableCores)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)

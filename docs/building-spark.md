@@ -98,8 +98,11 @@ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 # Apache Hadoop 2.4.X or 2.5.X
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=VERSION -DskipTests clean package
 
-Versions of Hadoop after 2.5.X may or may not work with the -Phadoop-2.4 profile (they were
-released after this version of Spark).
+# Apache Hadoop 2.6.X
+mvn -Pyarn -Phadoop-2.6 -Dhadoop.version=2.6.0 -DskipTests clean package
+
+# Apache Hadoop 2.7.X and later
+mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=VERSION -DskipTests clean package
 
 # Different versions of HDFS and YARN.
 mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests clean package
@@ -140,10 +143,10 @@ It's possible to build Spark sub-modules using the `mvn -pl` option.
 For instance, you can build the Spark Streaming module using:
 
 {% highlight bash %}
-mvn -pl :spark-streaming_2.10 clean install
+mvn -pl :spark-streaming_2.11 clean install
 {% endhighlight %}
 
-where `spark-streaming_2.10` is the `artifactId` as defined in `streaming/pom.xml` file.
+where `spark-streaming_2.11` is the `artifactId` as defined in `streaming/pom.xml` file.
 
 # Continuous Compilation
 
@@ -177,14 +180,14 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 
 Running only Java 8 tests and nothing else.
 
-    mvn install -DskipTests -Pjava8-tests
+    mvn install -DskipTests
+    mvn -pl :java8-tests_2.11 test
 
 or
 
-    sbt -Pjava8-tests java8-tests/test
+    sbt java8-tests/test
 
-Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`.
-For these tests to run your system must have a JDK 8 installation.
+Java 8 tests are automatically enabled when a Java 8 JDK is detected.
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
 
 # Building for PySpark on YARN

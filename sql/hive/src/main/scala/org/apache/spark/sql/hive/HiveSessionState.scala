@@ -18,10 +18,11 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.execution.{python, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.hive.execution.HiveSqlParser
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
@@ -35,16 +36,18 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   }
 
   /**
-   * A metadata catalog that points to the Hive metastore.
-   */
-  override lazy val catalog = new HiveMetastoreCatalog(ctx.metadataHive, ctx) with OverrideCatalog
-
-  /**
    * Internal catalog for managing functions registered by the user.
    * Note that HiveUDFs will be overridden by functions registered in this context.
    */
   override lazy val functionRegistry: FunctionRegistry = {
     new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive)
+  }
+
+  /**
+   * Internal catalog for managing table and database states.
+   */
+  override lazy val catalog = {
+    new HiveSessionCatalog(ctx.hiveCatalog, ctx.metadataHive, ctx, functionRegistry, conf)
   }
 
   /**
@@ -61,14 +64,14 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(PreWriteCheck(catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
 
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = new HiveQl(conf)
+  override lazy val sqlParser: ParserInterface = HiveSqlParser
 
   /**
    * Planner that takes into account Hive-specific strategies.

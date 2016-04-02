@@ -237,3 +237,6 @@ class AccumulableInfo private[spark](
     val name: String,
     val update: Option[String],
     val value: String)
+
+class VersionInfo private[spark](
+  val spark: String)

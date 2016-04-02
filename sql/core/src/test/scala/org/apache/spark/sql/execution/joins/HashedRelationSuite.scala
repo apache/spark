@@ -19,51 +19,16 @@ package org.apache.spark.sql.execution.joins
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.collection.CompactBuffer
 
 class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
-
-  // Key is simply the record itself
-  private val keyProjection = new Projection {
-    override def apply(row: InternalRow): InternalRow = row
-  }
-
-  test("GeneralHashedRelation") {
-    val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
-    val hashed = HashedRelation(data.iterator, keyProjection)
-    assert(hashed.isInstanceOf[GeneralHashedRelation])
-
-    assert(hashed.get(data(0)) === CompactBuffer[InternalRow](data(0)))
-    assert(hashed.get(data(1)) === CompactBuffer[InternalRow](data(1)))
-    assert(hashed.get(InternalRow(10)) === null)
-
-    val data2 = CompactBuffer[InternalRow](data(2))
-    data2 += data(2)
-    assert(hashed.get(data(2)) === data2)
-  }
-
-  test("UniqueKeyHashedRelation") {
-    val data = Array(InternalRow(0), InternalRow(1), InternalRow(2))
-    val hashed = HashedRelation(data.iterator, keyProjection)
-    assert(hashed.isInstanceOf[UniqueKeyHashedRelation])
-
-    assert(hashed.get(data(0)) === CompactBuffer[InternalRow](data(0)))
-    assert(hashed.get(data(1)) === CompactBuffer[InternalRow](data(1)))
-    assert(hashed.get(data(2)) === CompactBuffer[InternalRow](data(2)))
-    assert(hashed.get(InternalRow(10)) === null)
-
-    val uniqHashed = hashed.asInstanceOf[UniqueKeyHashedRelation]
-    assert(uniqHashed.getValue(data(0)) === data(0))
-    assert(uniqHashed.getValue(data(1)) === data(1))
-    assert(uniqHashed.getValue(data(2)) === data(2))
-    assert(uniqHashed.getValue(InternalRow(10)) === null)
-  }
 
   test("UnsafeHashedRelation") {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
@@ -106,10 +71,17 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("test serialization empty hash map") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new StaticMemoryManager(
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
+    val binaryMap = new BytesToBytesMap(taskMemoryManager, 1, 1)
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
-    val hashed = new UnsafeHashedRelation(
-      new java.util.HashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
+    val hashed = new UnsafeHashedRelation(1, binaryMap)
     hashed.writeExternal(out)
     out.flush()
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))

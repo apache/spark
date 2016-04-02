@@ -24,11 +24,11 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
-import org.apache.spark.sql.catalyst.parser.SimpleParserConf
 import org.apache.spark.sql.catalyst.plans.logical.Generate
+import org.apache.spark.sql.hive.execution.HiveSqlParser
 
 class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
-  val parser = new HiveQl(SimpleParserConf())
+  val parser = HiveSqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
@@ -54,8 +54,8 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val (desc, exists) = extractTableDesc(s1)
     assert(exists)
-    assert(desc.name.database == Some("mydb"))
-    assert(desc.name.table == "page_view")
+    assert(desc.identifier.database == Some("mydb"))
+    assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
@@ -100,8 +100,8 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val (desc, exists) = extractTableDesc(s2)
     assert(exists)
-    assert(desc.name.database == Some("mydb"))
-    assert(desc.name.table == "page_view")
+    assert(desc.identifier.database == Some("mydb"))
+    assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
@@ -127,8 +127,8 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
     val (desc, exists) = extractTableDesc(s3)
     assert(exists == false)
-    assert(desc.name.database == None)
-    assert(desc.name.table == "page_view")
+    assert(desc.identifier.database == None)
+    assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
@@ -162,8 +162,8 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
                |   ORDER BY key, value""".stripMargin
     val (desc, exists) = extractTableDesc(s5)
     assert(exists == false)
-    assert(desc.name.database == None)
-    assert(desc.name.table == "ctas2")
+    assert(desc.identifier.database == None)
+    assert(desc.identifier.table == "ctas2")
     assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])

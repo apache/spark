@@ -22,9 +22,10 @@ import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -138,8 +139,12 @@ private[sql] case class DataSourceScan(
     case _ => false
   }
 
-  private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+  private[sql] override lazy val metrics = if (canProcessBatches()) {
+    Map("numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
+      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+  } else {
+    Map("numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+  }
 
   val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
@@ -169,6 +174,17 @@ private[sql] case class DataSourceScan(
     }
   }
 
+  private def canProcessBatches(): Boolean = {
+    relation match {
+      case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] &&
+        SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED) &&
+        SQLContext.getActive().get.conf.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED) =>
+        true
+      case _ =>
+        false
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val unsafeRow = if (outputUnsafeRows) {
       rdd
@@ -195,19 +211,42 @@ private[sql] case class DataSourceScan(
     rdd :: Nil
   }
 
+  private def genCodeColumnVector(ctx: CodegenContext, columnVar: String, ordinal: String,
+    dataType: DataType, nullable: Boolean): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+    val value = ctx.getValue(columnVar, dataType, ordinal)
+    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
+    val valueVar = ctx.freshName("value")
+    val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
+    val code = s"/* ${toCommentSafeString(str)} */\n" + (if (nullable) {
+      s"""
+        boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
+        $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
+    } else {
+      s"$javaType ${valueVar} = $value;"
+    }).trim
+    ExprCode(code, isNullVar, valueVar)
+  }
+
   // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
   // never requires UnsafeRow as input.
   override protected def doProduce(ctx: CodegenContext): String = {
     val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
+    val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
     val input = ctx.freshName("input")
     val idx = ctx.freshName("batchIdx")
+    val rowidx = ctx.freshName("rowIdx")
     val batch = ctx.freshName("batch")
     // PhysicalRDD always just has one input
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
     ctx.addMutableState("int", idx, s"$idx = 0;")
+    val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
+    val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
+      ctx.addMutableState(columnVectorClz, name, s"$name = null;")
+      s"$name = ${batch}.column($i);" }
 
-    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
     val numOutputRows = metricTerm(ctx, "numOutputRows")
 
@@ -217,66 +256,89 @@ private[sql] case class DataSourceScan(
     // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
     // here which path to use. Fix this.
 
+    val exprRows =
+        output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, x._1.nullable))
     ctx.INPUT_ROW = row
     ctx.currentVars = null
-    val columns1 = exprs.map(_.gen(ctx))
-    val scanBatches = ctx.freshName("processBatches")
-    ctx.addNewFunction(scanBatches,
-      s"""
-      | private void $scanBatches() throws java.io.IOException {
-      |  while (true) {
-      |     int numRows = $batch.numRows();
-      |     if ($idx == 0) $numOutputRows.add(numRows);
-      |
-      |     while (!shouldStop() && $idx < numRows) {
-      |       InternalRow $row = $batch.getRow($idx++);
-      |       ${consume(ctx, columns1).trim}
-      |     }
-      |     if (shouldStop()) return;
-      |
-      |     if (!$input.hasNext()) {
-      |       $batch = null;
-      |       break;
-      |     }
-      |     $batch = ($columnarBatchClz)$input.next();
-      |     $idx = 0;
-      |   }
-      | }""".stripMargin)
-
-    ctx.INPUT_ROW = row
-    ctx.currentVars = null
-    val columns2 = exprs.map(_.gen(ctx))
+    val columnsRowInput = exprRows.map(_.gen(ctx))
     val inputRow = if (outputUnsafeRows) row else null
     val scanRows = ctx.freshName("processRows")
     ctx.addNewFunction(scanRows,
       s"""
-       | private void $scanRows(InternalRow $row) throws java.io.IOException {
-       |   boolean firstRow = true;
-       |   while (!shouldStop() && (firstRow || $input.hasNext())) {
-       |     if (firstRow) {
-       |       firstRow = false;
-       |     } else {
-       |       $row = (InternalRow) $input.next();
-       |     }
-       |     $numOutputRows.add(1);
-       |     ${consume(ctx, columns2, inputRow).trim}
-       |   }
-       | }""".stripMargin)
+         | private void $scanRows(InternalRow $row) throws java.io.IOException {
+         |   boolean firstRow = true;
+         |   while (!shouldStop() && (firstRow || $input.hasNext())) {
+         |     if (firstRow) {
+         |       firstRow = false;
+         |     } else {
+         |       $row = (InternalRow) $input.next();
+         |     }
+         |     $numOutputRows.add(1);
+         |     ${consume(ctx, columnsRowInput, inputRow).trim}
+         |   }
+         | }""".stripMargin)
 
-    val value = ctx.freshName("value")
-    s"""
-       | if ($batch != null) {
-       |   $scanBatches();
-       | } else if ($input.hasNext()) {
-       |   Object $value = $input.next();
-       |   if ($value instanceof $columnarBatchClz) {
-       |     $batch = ($columnarBatchClz)$value;
-       |     $scanBatches();
-       |   } else {
-       |     $scanRows((InternalRow) $value);
-       |   }
-       | }
-     """.stripMargin
+    // Timers for how long we spent inside the scan. We can only maintain this when using batches,
+    // otherwise the overhead is too high.
+    if (canProcessBatches()) {
+      val scanTimeMetric = metricTerm(ctx, "scanTime")
+      val getBatchStart = ctx.freshName("scanStart")
+      val scanTimeTotalNs = ctx.freshName("scanTime")
+      ctx.currentVars = null
+      val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
+        genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable) }
+      val scanBatches = ctx.freshName("processBatches")
+      ctx.addMutableState("long", scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
+
+      ctx.addNewFunction(scanBatches,
+        s"""
+        | private void $scanBatches() throws java.io.IOException {
+        |  while (true) {
+        |     int numRows = $batch.numRows();
+        |     if ($idx == 0) {
+        |       ${columnAssigns.mkString("", "\n", "\n")}
+        |       $numOutputRows.add(numRows);
+        |     }
+        |
+        |     while (!shouldStop() && $idx < numRows) {
+        |       int $rowidx = $idx++;
+        |       ${consume(ctx, columnsBatchInput).trim}
+        |     }
+        |     if (shouldStop()) return;
+        |
+        |     long $getBatchStart = System.nanoTime();
+        |     if (!$input.hasNext()) {
+        |       $batch = null;
+        |       $scanTimeMetric.add($scanTimeTotalNs / (1000 * 1000));
+        |       break;
+        |     }
+        |     $batch = ($columnarBatchClz)$input.next();
+        |     $scanTimeTotalNs += System.nanoTime() - $getBatchStart;
+        |     $idx = 0;
+        |   }
+        | }""".stripMargin)
+
+      val value = ctx.freshName("value")
+      s"""
+         | if ($batch != null) {
+         |   $scanBatches();
+         | } else if ($input.hasNext()) {
+         |   Object $value = $input.next();
+         |   if ($value instanceof $columnarBatchClz) {
+         |     $batch = ($columnarBatchClz)$value;
+         |     $scanBatches();
+         |   } else {
+         |     $scanRows((InternalRow) $value);
+         |   }
+         | }
+       """.stripMargin
+    } else {
+      s"""
+         |if ($input.hasNext()) {
+         |  $scanRows((InternalRow) $input.next());
+         |}
+       """.stripMargin
+    }
   }
 }
 
