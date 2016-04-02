@@ -1054,17 +1054,11 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         initUDF = udf(lambda _: [], ArrayType(DoubleType()))
         newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
 
-        newDataset.show()
-
         # persist if underlying dataset is not persistent.
         handlePersistence =\
             dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
         if handlePersistence:
             newDataset.persist(StorageLevel.MEMORY_AND_DISK)
-
-        def updateDict(predictions, i, prediction):
-            predictions[i] = prediction[1]
-            return predictions
 
         # update the accumulator column with the result of prediction of models
         aggregatedDataset = newDataset
@@ -1075,7 +1069,7 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
             # add temporary column to store intermediate scores and update
             tmpColName = "mbc$tmp" + str(uuid.uuid4())
             updateUDF = udf(
-                lambda predictions, prediction: predictions + [prediction[1]],
+                lambda predictions, prediction: predictions + [prediction.tolist()[1]],
                 ArrayType(DoubleType()))
             transformedDataset = model.transform(aggregatedDataset).select(*columns)
             updatedDataset = transformedDataset.withColumn(
@@ -1084,19 +1078,19 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
             newColumns = origCols + [tmpColName]
 
             # switch out the intermediate column with the accumulator column
-            updatedDataset.select(*newColumns).withColumnRenamed(tmpColName, accColName)
-            aggregatedDataset = updatedDataset
+            aggregatedDataset = updatedDataset\
+                .select(*newColumns).withColumnRenamed(tmpColName, accColName)
 
         if handlePersistence:
             newDataset.unpersist()
 
-        return aggregatedDataset
         # output the index of the classifier with highest confidence as prediction
-        # labelUDF = udf(lambda predictions: float(max(predictions, key=predictions.get)))
+        labelUDF = udf(
+            lambda predictions: float(max(enumerate(predictions), key=operator.itemgetter(1))[0]))
 
         # output label and label metadata as prediction
-        # return aggregatedDataset.withColumn(
-        #     self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])).drop(accColName)
+        return aggregatedDataset.withColumn(
+            self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])).drop(accColName)
 
     # @since("1.4.0")
     # def copy(self, extra=None):
