@@ -42,12 +42,12 @@ object CSVRelation extends Logging {
       firstLine: String,
       params: CSVOptions): RDD[Array[String]] = {
     // If header is set, make sure firstLine is materialized before sending to executors.
-    file.mapPartitionsWithIndex({
-      case (split, iter) => new BulkCsvReader(
+    file.mapPartitions { iter =>
+      new BulkCsvReader(
         if (params.headerFlag) iter.filterNot(_ == firstLine) else iter,
         params,
         headers = header)
-    }, true)
+    }
   }
 
   def csvParser(
