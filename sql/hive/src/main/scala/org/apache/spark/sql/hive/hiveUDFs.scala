@@ -107,7 +107,9 @@ private[hive] class HiveFunctionRegistry(
           // If there is any other error, we throw an AnalysisException.
           val errorMessage = s"No handler for Hive udf ${functionInfo.getFunctionClass} " +
             s"because: ${throwable.getMessage}."
-          throw new AnalysisException(errorMessage)
+          val analysisException = new AnalysisException(errorMessage)
+          analysisException.setStackTrace(throwable.getStackTrace)
+          throw analysisException
       }
     }
   }
