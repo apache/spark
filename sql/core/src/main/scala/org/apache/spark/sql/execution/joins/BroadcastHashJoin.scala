@@ -32,7 +32,7 @@ import org.apache.spark.util.collection.CompactBuffer
 /**
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
  * being constructed, a Spark job is asynchronously started to calculate the values for the
- * broadcasted relation.  This data is then placed in a Spark broadcast variable.  The streamed
+ * broadcast relation.  This data is then placed in a Spark broadcast variable.  The streamed
  * relation is not shuffled.
  */
 case class BroadcastHashJoin(

@@ -83,7 +83,7 @@ abstract class DStream[T: ClassTag] (
 
   // RDDs generated, marked as private[streaming] so that testsuites can access it
   @transient
-  private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
+  private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]]()
 
   // Time zero for the DStream
   private[streaming] var zeroTime: Time = null
@@ -269,7 +269,7 @@ abstract class DStream[T: ClassTag] (
       checkpointDuration == null || rememberDuration > checkpointDuration,
       s"The remember duration for ${this.getClass.getSimpleName} has been set to " +
         s" $rememberDuration which is not more than the checkpoint interval" +
-        s" ($checkpointDuration). Please set it to higher than $checkpointDuration."
+        s" ($checkpointDuration). Please set it to a value higher than $checkpointDuration."
     )
 
     dependencies.foreach(_.validateAtStart())
@@ -277,7 +277,7 @@ abstract class DStream[T: ClassTag] (
     logInfo(s"Slide time = $slideDuration")
     logInfo(s"Storage level = ${storageLevel.description}")
     logInfo(s"Checkpoint interval = $checkpointDuration")
-    logInfo(s"Remember duration = $rememberDuration")
+    logInfo(s"Remember interval = $rememberDuration")
     logInfo(s"Initialized and validated $this")
   }
 
@@ -535,7 +535,7 @@ abstract class DStream[T: ClassTag] (
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(s"${this.getClass().getSimpleName}.readObject used")
     ois.defaultReadObject()
-    generatedRDDs = new HashMap[Time, RDD[T]] ()
+    generatedRDDs = new HashMap[Time, RDD[T]]()
   }
 
   // =======================================================================

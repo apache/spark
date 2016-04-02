@@ -70,7 +70,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
         // Try to get the parent RDD
         parent.getOrCompute(validTime) match {
           case Some(parentRDD) => {   // If parent RDD exists, then compute as usual
-            computeUsingPreviousRDD (parentRDD, prevStateRDD)
+            computeUsingPreviousRDD(parentRDD, prevStateRDD)
           }
           case None => {    // If parent RDD does not exist
 
@@ -98,15 +98,15 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
                 // and then apply the update function
                 val updateFuncLocal = updateFunc
                 val finalFunc = (iterator: Iterator[(K, Iterable[V])]) => {
-                  updateFuncLocal (iterator.map (tuple => (tuple._1, tuple._2.toSeq, None)))
+                  updateFuncLocal(iterator.map(tuple => (tuple._1, tuple._2.toSeq, None)))
                 }
 
-                val groupedRDD = parentRDD.groupByKey (partitioner)
-                val sessionRDD = groupedRDD.mapPartitions (finalFunc, preservePartitioning)
+                val groupedRDD = parentRDD.groupByKey(partitioner)
+                val sessionRDD = groupedRDD.mapPartitions(finalFunc, preservePartitioning)
                 // logDebug("Generating state RDD for time " + validTime + " (first)")
-                Some (sessionRDD)
+                Some(sessionRDD)
               }
-              case Some (initialStateRDD) => {
+              case Some(initialStateRDD) => {
                 computeUsingPreviousRDD(parentRDD, initialStateRDD)
               }
             }

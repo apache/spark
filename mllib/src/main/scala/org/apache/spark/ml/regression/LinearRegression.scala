@@ -58,7 +58,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  * The specific squared error loss function used is:
  *   L = 1/2n ||A coefficients - y||^2^
  *
- * This support multiple types of regularization:
+ * This supports multiple types of regularization:
  *  - none (a.k.a. ordinary least squares)
  *  - L2 (ridge regression)
  *  - L1 (Lasso)
