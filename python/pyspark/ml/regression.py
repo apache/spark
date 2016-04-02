@@ -515,7 +515,8 @@ class TreeEnsembleModels(JavaModel):
 
 
 @inherit_doc
-class DecisionTreeRegressionModel(HasNumFeaturesModel, DecisionTreeModel, JavaMLWritable, JavaMLReadable):
+class DecisionTreeRegressionModel(HasNumFeaturesModel, DecisionTreeModel, JavaMLWritable,
+                                  JavaMLReadable):
     """
     Model fitted by DecisionTreeRegressor.
 

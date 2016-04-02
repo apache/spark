@@ -376,7 +376,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(HasNumFeaturesModel, DecisionTreeModel, JavaMLWritable, JavaMLReadable):
+class DecisionTreeClassificationModel(HasNumFeaturesModel, DecisionTreeModel, JavaMLWritable,
+                                      JavaMLReadable):
     """
     Model fitted by DecisionTreeClassifier.
 
@@ -905,7 +906,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassificationModel(HasNumFeaturesModel, JavaModel, JavaMLWritable, JavaMLReadable):
+class MultilayerPerceptronClassificationModel(HasNumFeaturesModel, JavaModel, JavaMLWritable,
+                                              JavaMLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
