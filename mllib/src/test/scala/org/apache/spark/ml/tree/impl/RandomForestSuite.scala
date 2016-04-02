@@ -423,6 +423,13 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     checkFeatureSubsetStrategy(numTrees = 1, "log2",
       (math.log(numFeatures) / math.log(2)).ceil.toInt)
     checkFeatureSubsetStrategy(numTrees = 1, "onethird", (numFeatures / 3.0).ceil.toInt)
+    checkFeatureSubsetStrategy(numTrees = 1, "0.1", (0.1 * numFeatures).ceil.toInt)
+    checkFeatureSubsetStrategy(numTrees = 1, "0.5", (0.5 * numFeatures).ceil.toInt)
+    checkFeatureSubsetStrategy(numTrees = 1, "1.0", (1.0 * numFeatures).ceil.toInt)
+    checkFeatureSubsetStrategy(numTrees = 1, "1", 1)
+    checkFeatureSubsetStrategy(numTrees = 1, "2", 2)
+    checkFeatureSubsetStrategy(numTrees = 1, numFeatures.toString, numFeatures)
+    checkFeatureSubsetStrategy(numTrees = 1, (numFeatures * 2).toString, numFeatures)
 
     checkFeatureSubsetStrategy(numTrees = 2, "all", numFeatures)
     checkFeatureSubsetStrategy(numTrees = 2, "auto", math.sqrt(numFeatures).ceil.toInt)
@@ -430,6 +437,13 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     checkFeatureSubsetStrategy(numTrees = 2, "log2",
       (math.log(numFeatures) / math.log(2)).ceil.toInt)
     checkFeatureSubsetStrategy(numTrees = 2, "onethird", (numFeatures / 3.0).ceil.toInt)
+    checkFeatureSubsetStrategy(numTrees = 2, "0.1", (0.1 * numFeatures).ceil.toInt)
+    checkFeatureSubsetStrategy(numTrees = 2, "0.5", (0.5 * numFeatures).ceil.toInt)
+    checkFeatureSubsetStrategy(numTrees = 2, "1.0", (1.0 * numFeatures).ceil.toInt)
+    checkFeatureSubsetStrategy(numTrees = 2, "1", 1)
+    checkFeatureSubsetStrategy(numTrees = 2, "2", 2)
+    checkFeatureSubsetStrategy(numTrees = 2, numFeatures.toString, numFeatures)
+    checkFeatureSubsetStrategy(numTrees = 2, (numFeatures * 2).toString, numFeatures)
   }
 
   test("Binary classification with continuous features: subsampling features") {
@@ -507,25 +521,6 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     TreeEnsembleModel.normalizeMapValues(map)
     val expected = Map(0 -> 1.0 / 3.0, 2 -> 2.0 / 3.0)
     assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
-  }
-
-  test("options for feature subset size in RandomForest - SPARK-3724") {
-    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
-    val rdd = sc.parallelize(arr)
-    val numTrees = 1
-
-    val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 2,
-      numClasses = 2, categoricalFeaturesInfo = Map.empty[Int, Int],
-      useNodeIdCache = true)
-
-    // Both options should be the same as 17 == 50 * 0.34
-    val rf1 = RandomForest.run(rdd, strategy, numTrees = numTrees,
-      featureSubsetStrategy = "17", seed = 123)
-    val rf2 = RandomForest.run(rdd, strategy, numTrees = numTrees,
-      featureSubsetStrategy = "0.34", seed = 123)
-    val model1 = new RandomForestModel(strategy.algo, rf1.map(_.toOld))
-    val model2 = new RandomForestModel(strategy.algo, rf2.map(_.toOld))
-    assert(model1.toDebugString == model2.toDebugString)
   }
 
 }

@@ -83,9 +83,9 @@ public class JavaRandomForestRegressorSuite implements Serializable {
     for (double featureSubsetFraction = 0.1; featureSubsetFraction <= 1.0; featureSubsetFraction += 0.1) {
       rf.setFeatureSubsetStrategy(Double.toString(featureSubsetFraction));
     }
-    for (int featureSubsetNumber = 1; featureSubsetNumber <= 100; featureSubsetNumber++) {
-      rf.setFeatureSubsetStrategy(Integer.toString(featureSubsetNumber));
-    }
+    rf.setFeatureSubsetStrategy("1");
+    rf.setFeatureSubsetStrategy("100");
+    rf.setFeatureSubsetStrategy("1000");
     RandomForestRegressionModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);

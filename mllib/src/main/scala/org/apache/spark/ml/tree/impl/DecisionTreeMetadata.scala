@@ -191,7 +191,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
       case "sqrt" => math.sqrt(numFeatures).ceil.toInt
       case "log2" => math.max(1, (math.log(numFeatures) / math.log(2)).ceil.toInt)
       case "onethird" => (numFeatures / 3.0).ceil.toInt
-      case isIntRegex(number) => if (number.toInt > numFeatures) numFeatures else number.toInt
+      case isIntRegex(number) => if (BigInt(number) > numFeatures) numFeatures else number.toInt
       case isFractionRegex(fraction) => (fraction.toDouble * numFeatures).ceil.toInt
     }
 
