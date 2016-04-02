@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, FunctionResourceLoader, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, FunctionResourceLoader, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -246,15 +246,13 @@ private[sql] class HiveSessionCatalog(
    * Generate Create table DDL string for the specified tableIdentifier
    * that is from Hive metastore
    */
-  override def generateTableDDL(name: TableIdentifier): String = {
-    val ct = this.getTable(name)
+  override def generateHiveDDL(ct: CatalogTable): String = {
     val sb = new StringBuilder("CREATE ")
     val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
 
     if (ct.tableType == CatalogTableType.VIRTUAL_VIEW) {
       sb.append(" VIEW "+ct.qualifiedName+" AS " + ct.viewOriginalText.getOrElse(""))
     } else {
-      // TEMPORARY keyword is not applicable for HIVE DDL from Spark SQL yet.
       if (ct.tableType == CatalogTableType.EXTERNAL_TABLE) {
         processedProperties += "EXTERNAL"
         sb.append(" EXTERNAL TABLE " + ct.qualifiedName)
@@ -360,6 +358,28 @@ private[sql] class HiveSessionCatalog(
 
     }
     sb.toString()
+  }
+
+  private def generateDataSourceDDL(ct: CatalogTable): String = {
+    val sb = new StringBuilder("CREATE TABLE " + ct.qualifiedName)
+    // TODO will continue on generating Datasource syntax DDL
+    // will remove generateHiveDDL once it is done.
+    generateHiveDDL(ct)
+  }
+
+  /**
+   * Generate Create table DDL string for the specified tableIdentifier
+   * that is from Hive metastore
+   */
+  override def generateTableDDL(name: TableIdentifier): String = {
+    val ct = this.getTable(name)
+    if(ct.properties.get("spark.sql.sources.provider") == None){
+      // CREATE [TEMPORARY] TABLE <tablename> ... ROW FORMAT.. TBLPROPERTIES (...)
+      generateHiveDDL(ct)
+    }else{
+      // CREATE [TEMPORARY] TABLE <tablename> .... USING .... OPTIONS (...)
+      generateDataSourceDDL(ct)
+    }
   }
 
   private def escapeHiveCommand(str: String): String = {

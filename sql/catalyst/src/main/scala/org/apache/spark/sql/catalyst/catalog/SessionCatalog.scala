@@ -179,8 +179,8 @@ class SessionCatalog(
    * Generate Create table DDL string for the specified tableIdentifier
    */
   def generateTableDDL(name: TableIdentifier): String = {
-    val catalogTable = this.getTable(name)
-    "CREATE TABLE " + name.toString
+    throw new AnalysisException(
+      "SHOW CREATE TABLE command is not supported for temporary tables created in SQLContext.")
   }
 
   // -------------------------------------------------------------

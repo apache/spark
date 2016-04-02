@@ -20,10 +20,8 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.{AnalysisException, Row, QueryTest}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
-/**
- * Created by xwu0226 on 4/1/16.
- */
 class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton  {
   test("show create table - hive table - no row format"){
     withTable("t1"){
@@ -139,6 +137,50 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           |create temporary table t1(c1 int, c2 string)
         """.stripMargin)
       sql("show create table t1").show(false)
+    }
+  }
+
+  test("show create table -- datasource table"){
+    withTable("t_datasource"){
+      sql("select 1, 'abc'").write.saveAsTable("t_datasource")
+      sql("show create table t_datasource").show(false)
+    }
+  }
+
+  test("show create table -- partitioned"){
+    val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
+    withTable("t_datasource"){
+      val df = sqlContext.read.json(jsonFilePath)
+      df.write.format("json").saveAsTable("t_datasource")
+      sql("show create table t_datasource").show(false)
+    }
+  }
+
+  test("show create table -- USING and OPTIONS") {
+    val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
+    withTable("jsonTable") {
+      sql(
+        s"""CREATE TABLE jsonTable
+           |USING org.apache.spark.sql.json.DefaultSource
+           |OPTIONS (
+           |  path '$jsonFilePath'
+           |)
+         """.stripMargin)
+      sql("show create table jsonTable").show(false)
+    }
+  }
+
+  test("show create table -- USING and OPTIONS with column definition") {
+    val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
+    withTable("jsonTable") {
+      sql(
+        s"""CREATE TABLE jsonTable (c1 string, c2 string, c3 int)
+           |USING org.apache.spark.sql.json.DefaultSource
+           |OPTIONS (
+           |  path '$jsonFilePath'
+           |)
+         """.stripMargin)
+      sql("show create table jsonTable").show(false)
     }
   }
 }
