@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
 import java.util.*;
 
 import org.apache.commons.lang.NotImplementedException;
@@ -235,53 +236,93 @@ public final class ColumnarBatch {
     }
 
     @Override
+    public void update(int ordinal, Object value) {
+      if (value == null) {
+        setNullAt(ordinal);
+      } else {
+        DataType dt = columns[ordinal].dataType();
+        if (dt instanceof BooleanType) {
+          setBoolean(ordinal, (boolean) value);
+        } else if (dt instanceof IntegerType) {
+          setInt(ordinal, (int) value);
+        } else if (dt instanceof ShortType) {
+          setShort(ordinal, (short) value);
+        } else if (dt instanceof LongType) {
+          setLong(ordinal, (long) value);
+        } else if (dt instanceof FloatType) {
+          setFloat(ordinal, (float) value);
+        } else if (dt instanceof DoubleType) {
+          setDouble(ordinal, (double) value);
+        } else if (dt instanceof DecimalType) {
+          DecimalType t = (DecimalType) dt;
+          setDecimal(ordinal, Decimal.apply((BigDecimal) value, t.precision(), t.scale()),
+              t.precision());
+        } else {
+          throw new NotImplementedException("Datatype not supported " + dt);
+        }
+      }
+    }
+
+    @Override
     public void setNullAt(int ordinal) {
+      assert (!columns[ordinal].isConstant);
       columns[ordinal].putNull(rowId);
     }
 
     @Override
-    public void update(int ordinal, Object value) {
-      throw new NotImplementedException();
-    }
-
-    @Override
     public void setBoolean(int ordinal, boolean value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
       columns[ordinal].putBoolean(rowId, value);
     }
 
     @Override
     public void setByte(int ordinal, byte value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
       columns[ordinal].putByte(rowId, value);
     }
 
     @Override
     public void setShort(int ordinal, short value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
       columns[ordinal].putShort(rowId, value);
     }
 
     @Override
     public void setInt(int ordinal, int value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
       columns[ordinal].putInt(rowId, value);
     }
 
     @Override
     public void setLong(int ordinal, long value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
       columns[ordinal].putLong(rowId, value);
     }
 
     @Override
     public void setFloat(int ordinal, float value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
       columns[ordinal].putFloat(rowId, value);
     }
 
     @Override
     public void setDouble(int ordinal, double value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
       columns[ordinal].putDouble(rowId, value);
     }
 
     @Override
     public void setDecimal(int ordinal, Decimal value, int precision) {
-      throw new NotImplementedException();
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putDecimal(rowId, value, precision);
     }
   }
 
