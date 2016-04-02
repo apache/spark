@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.impl
+package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.mllib.tree.impurity._
 
@@ -86,6 +86,7 @@ private[spark] class DTStatsAggregator(
 
   /**
    * Get an [[ImpurityCalculator]] for a given (node, feature, bin).
+   *
    * @param featureOffset  This is a pre-computed (node, feature) offset
    *                           from [[getFeatureOffset]].
    */
@@ -118,6 +119,7 @@ private[spark] class DTStatsAggregator(
   /**
    * Faster version of [[update]].
    * Update the stats for a given (feature, bin), using the given label.
+   *
    * @param featureOffset  This is a pre-computed feature offset
    *                           from [[getFeatureOffset]].
    */
@@ -138,6 +140,7 @@ private[spark] class DTStatsAggregator(
 
   /**
    * For a given feature, merge the stats for two bins.
+   *
    * @param featureOffset  This is a pre-computed feature offset
    *                           from [[getFeatureOffset]].
    * @param binIndex  The other bin is merged into this bin.

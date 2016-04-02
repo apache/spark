@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.util.random.PoissonSampler
+import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryNode with CodegenSupport {
@@ -223,8 +223,11 @@ case class Sample(
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: SparkPlan) extends UnaryNode {
+    child: SparkPlan) extends UnaryNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
+
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (withReplacement) {
@@ -237,6 +240,63 @@ case class Sample(
         seed)
     } else {
       child.execute().randomSampleWithRange(lowerBound, upperBound, seed)
+    }
+  }
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val sampler = ctx.freshName("sampler")
+
+    if (withReplacement) {
+      val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
+      val initSampler = ctx.freshName("initSampler")
+      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
+        s"$initSampler();")
+
+      ctx.addNewFunction(initSampler,
+        s"""
+          | private void $initSampler() {
+          |   $sampler = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
+          |   java.util.Random random = new java.util.Random(${seed}L);
+          |   long randomSeed = random.nextLong();
+          |   int loopCount = 0;
+          |   while (loopCount < partitionIndex) {
+          |     randomSeed = random.nextLong();
+          |     loopCount += 1;
+          |   }
+          |   $sampler.setSeed(randomSeed);
+          | }
+         """.stripMargin.trim)
+
+      val samplingCount = ctx.freshName("samplingCount")
+      s"""
+         | int $samplingCount = $sampler.sample();
+         | while ($samplingCount-- > 0) {
+         |   $numOutput.add(1);
+         |   ${consume(ctx, input)}
+         | }
+       """.stripMargin.trim
+    } else {
+      val samplerClass = classOf[BernoulliCellSampler[UnsafeRow]].getName
+      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
+        s"""
+          | $sampler = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
+          | $sampler.setSeed(${seed}L + partitionIndex);
+         """.stripMargin.trim)
+
+      s"""
+         | if ($sampler.sample() == 0) continue;
+         | $numOutput.add(1);
+         | ${consume(ctx, input)}
+       """.stripMargin.trim
     }
   }
 }
@@ -320,11 +380,7 @@ case class Range(
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
-      |   if ($input.hasNext()) {
-      |     initRange(((InternalRow) $input.next()).getInt(0));
-      |   } else {
-      |     return;
-      |   }
+      |   initRange(partitionIndex);
       | }
       |
       | while (!$overflow && $checkEnd) {
