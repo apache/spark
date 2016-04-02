@@ -43,10 +43,10 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
 
   test("fault tolerance stress test") {
     val numRecords = 10000
-    val inputDir = Utils.createTempDir("stream.input").getCanonicalPath
-    val stagingDir = Utils.createTempDir("stream.staging").getCanonicalPath
-    val outputDir = Utils.createTempDir("stream.output").getCanonicalPath
-    val checkpoint = Utils.createTempDir("stream.checkpoint").getCanonicalPath
+    val inputDir = Utils.createTempDir(namePrefix = "stream.input").getCanonicalPath
+    val stagingDir = Utils.createTempDir(namePrefix = "stream.staging").getCanonicalPath
+    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val checkpoint = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
     @volatile
     var continue = true

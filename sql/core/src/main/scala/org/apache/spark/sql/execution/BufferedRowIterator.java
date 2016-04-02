@@ -36,6 +36,8 @@ public abstract class BufferedRowIterator {
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
   private long startTimeNs = System.nanoTime();
 
+  protected int partitionIndex = -1;
+
   public boolean hasNext() throws IOException {
     if (currentRows.isEmpty()) {
       processNext();
@@ -58,7 +60,7 @@ public abstract class BufferedRowIterator {
   /**
    * Initializes from array of iterators of InternalRow.
    */
-  public abstract void init(Iterator<InternalRow> iters[]);
+  public abstract void init(int index, Iterator<InternalRow> iters[]);
 
   /**
    * Append a row to currentRows.
