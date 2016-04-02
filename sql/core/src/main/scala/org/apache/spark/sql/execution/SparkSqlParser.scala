@@ -853,4 +853,11 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
     ctx.constant.asScala.map(visitStringConstant)
   }
+
+  /**
+   * DropTable: not supported in SQL Context
+   */
+  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
+    throw new ParseException(s"DROP TABLE is not supported in SQLContext.", ctx)
+  }
 }
