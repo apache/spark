@@ -105,7 +105,7 @@ class BackfillJobTest(unittest.TestCase):
 
         # run with timeout because this creates an infinite loop if not
         # caught
-        with timeout(seconds=15):
+        with timeout(seconds=30):
             job.run()
 
         ti = TI(
