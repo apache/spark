@@ -251,8 +251,8 @@ case class SpecifiedWindowFrame(
   }
 
   override def toString: String = frameType match {
-    case RowFrame => s"ROWS BETWEEN $frameStart AND $frameEnd ${excludeSpec.toString}"
-    case RangeFrame => s"RANGE BETWEEN $frameStart AND $frameEnd ${excludeSpec.toString}"
+    case RowFrame => s"ROWS BETWEEN $frameStart AND $frameEnd $excludeSpec"
+    case RangeFrame => s"RANGE BETWEEN $frameStart AND $frameEnd $excludeSpec"
   }
 }
 
@@ -287,12 +287,16 @@ sealed trait ExcludeType
 /** Represent the type of Excluding Current Row  */
 case object ExcludeCurrentRow extends ExcludeType
 
-/** Specifies excluding the current row and all rows that are tied with it.
-  *  Ties occur when there is a match on the order column or columns*/
+/**
+ * Specifies excluding the current row and all rows that are tied with it.
+ * Ties occur when there is a match on the order column or columns
+ */
 case object ExcludeGroup extends ExcludeType
 
-/** Specifies excluding all rows that are tied with the current row (peer rows),
-  * but retaining the current row.*/
+/**
+ * Specifies excluding all rows that are tied with the current row (peer rows),
+ * but retaining the current row.
+ */
 case object ExcludeTies extends ExcludeType
 
 /** Specifies not excluding any rows. This value is the default if you specify no exclusion. */
@@ -311,9 +315,7 @@ case class ExcludeClause (
   }
 }
 object ExcludeClause {
-  def defaultExclude: ExcludeClause = {
-    ExcludeClause(ExcludeNoOthers)
-  }
+  def defaultExclude: ExcludeClause = ExcludeClause(ExcludeNoOthers)
 }
 
 case class UnresolvedWindowExpression(

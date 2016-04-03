@@ -98,7 +98,7 @@ trait CheckAnalysis extends PredicateHelper {
           case w @ WindowExpression(_: OffsetWindowFunction, WindowSpecDefinition(_, order,
                SpecifiedWindowFrame(frame,
                  FrameBoundary(l),
-                 FrameBoundary(h),_)))
+                 FrameBoundary(h), _)))
              if order.isEmpty || frame != RowFrame || l != h =>
             failAnalysis("An offset window function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")

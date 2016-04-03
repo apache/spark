@@ -566,9 +566,7 @@ private[execution] class ExternalRowBuffer(sorter: UnsafeExternalSorter, numFiel
     new ExternalRowBuffer(sorter, numFields)
   }
 
-  def reset(): Unit = {
-    // not implemented
-  }
+  def reset(): Unit = {/* no-op*/}
 }
 
 /**
@@ -747,23 +745,28 @@ private[execution] final class SlidingWindowFunctionFrame(
       val next = iter.next()
       excludeSpec.excludeType match{
         case ExcludeCurrentRow if (inputLowIndex + progress == index) =>
+          // The buffer is the sliding frame now and to exclude current row
+          // out of the calculation, just to make sure the currently traversed
+          // row has the same index as the current row of the input
           shouldUpdate = false
         case ExcludeGroup if excludeSpec.valueOrdering.compare(
           excludeSpec.toBeCompared(next).copy(),
           excludeSpec.toBeCompared(current).copy()) == 0 =>
+          // To exclude the group, any row from the current frame
+          // with the same value of the order by spec as the current row of input
+          // will be excluded
           shouldUpdate = false
         case ExcludeTies if excludeSpec.valueOrdering.compare(
           excludeSpec.toBeCompared(next).copy(),
           excludeSpec.toBeCompared(current).copy()) == 0 =>
+          // while excluding the rows that are in the same group of the current row
+          // keep the row that is exactly the current row
           if (inputLowIndex + progress == index) {
             shouldUpdate = true
            } else{
             shouldUpdate = false
           }
-        case _ =>
-          // in non exclude case, only recalculate and updat ewhen the buffer changes
-          // if (bufferUpdated)
-            shouldUpdate = true
+        case _ => shouldUpdate = true
       }
       progress += 1
       if(shouldUpdate)
@@ -895,7 +898,6 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
   /** The rows within current group */
   private[this] val buffer = new util.ArrayDeque[InternalRow]()
 
-
   /** Prepare the frame for calculating a new partition. */
   override def prepare(rows: RowBuffer): Unit = {
     input = rows
@@ -934,9 +936,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
             }
             // every current row will have different calculation
             bufferUpdated = true
-
         }
-
       case ExcludeGroup =>
         while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) < 0 ){
           val leftRow = excludeSpec.toBeCompared(nextRow).copy
@@ -978,7 +978,6 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
           inputIndex += 1
         }
         bufferUpdated = true
-
       case _ =>
         // Add all rows to the aggregates for which the input row value is equal to or less than
         // the output row upper bound.
