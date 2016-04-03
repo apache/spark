@@ -253,7 +253,7 @@ case class ExplainCommand(
       } else {
         queryExecution.simpleString
       }
-    outputString.split("\n").map(Row(_))
+    Seq(Row(outputString))
   } catch { case cause: TreeNodeException[_] =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }

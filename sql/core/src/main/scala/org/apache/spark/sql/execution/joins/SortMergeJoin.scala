@@ -256,9 +256,9 @@ case class SortMergeJoin(
   }
 
   /**
-    * Generate a function to scan both left and right to find a match, returns the term for
-    * matched one row from left side and buffered rows from right side.
-    */
+   * Generate a function to scan both left and right to find a match, returns the term for
+   * matched one row from left side and buffered rows from right side.
+   */
   private def genScanner(ctx: CodegenContext): (String, String) = {
     // Create class member for next row from both sides.
     val leftRow = ctx.freshName("leftRow")
@@ -341,12 +341,12 @@ case class SortMergeJoin(
   }
 
   /**
-    * Creates variables for left part of result row.
-    *
-    * In order to defer the access after condition and also only access once in the loop,
-    * the variables should be declared separately from accessing the columns, we can't use the
-    * codegen of BoundReference here.
-    */
+   * Creates variables for left part of result row.
+   *
+   * In order to defer the access after condition and also only access once in the loop,
+   * the variables should be declared separately from accessing the columns, we can't use the
+   * codegen of BoundReference here.
+   */
   private def createLeftVars(ctx: CodegenContext, leftRow: String): Seq[ExprCode] = {
     ctx.INPUT_ROW = leftRow
     left.output.zipWithIndex.map { case (a, i) =>
@@ -370,9 +370,9 @@ case class SortMergeJoin(
   }
 
   /**
-    * Creates the variables for right part of result row, using BoundReference, since the right
-    * part are accessed inside the loop.
-    */
+   * Creates the variables for right part of result row, using BoundReference, since the right
+   * part are accessed inside the loop.
+   */
   private def createRightVar(ctx: CodegenContext, rightRow: String): Seq[ExprCode] = {
     ctx.INPUT_ROW = rightRow
     right.output.zipWithIndex.map { case (a, i) =>
@@ -381,12 +381,12 @@ case class SortMergeJoin(
   }
 
   /**
-    * Splits variables based on whether it's used by condition or not, returns the code to create
-    * these variables before the condition and after the condition.
-    *
-    * Only a few columns are used by condition, then we can skip the accessing of those columns
-    * that are not used by condition also filtered out by condition.
-    */
+   * Splits variables based on whether it's used by condition or not, returns the code to create
+   * these variables before the condition and after the condition.
+   *
+   * Only a few columns are used by condition, then we can skip the accessing of those columns
+   * that are not used by condition also filtered out by condition.
+   */
   private def splitVarsByCondition(
       attributes: Seq[Attribute],
       variables: Seq[ExprCode]): (String, String) = {

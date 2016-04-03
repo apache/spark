@@ -517,9 +517,10 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     ssc.remember(duration)
   }
 
-  /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
-    * receiving system events related to streaming.
-    */
+  /**
+   * Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+   * receiving system events related to streaming.
+   */
   def addStreamingListener(streamingListener: StreamingListener) {
     ssc.addStreamingListener(streamingListener)
   }

@@ -38,8 +38,8 @@ import org.apache.spark.util.SerializableConfiguration
 import org.apache.spark.util.collection.BitSet
 
 /**
-  * Provides access to CSV data from pure SQL statements.
-  */
+ * Provides access to CSV data from pure SQL statements.
+ */
 class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "csv"

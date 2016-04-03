@@ -731,9 +731,9 @@ class Analyzer(
     }
 
     /**
-      * Add the missing attributes into projectList of Project/Window or aggregateExpressions of
-      * Aggregate.
-      */
+     * Add the missing attributes into projectList of Project/Window or aggregateExpressions of
+     * Aggregate.
+     */
     private def addMissingAttr(plan: LogicalPlan, missingAttrs: AttributeSet): LogicalPlan = {
       if (missingAttrs.isEmpty) {
         return plan
@@ -765,9 +765,9 @@ class Analyzer(
     }
 
     /**
-      * Resolve the expression on a specified logical plan and it's child (recursively), until
-      * the expression is resolved or meet a non-unary node or Subquery.
-      */
+     * Resolve the expression on a specified logical plan and it's child (recursively), until
+     * the expression is resolved or meet a non-unary node or Subquery.
+     */
     @tailrec
     private def resolveExpressionRecursively(expr: Expression, plan: LogicalPlan): Expression = {
       val resolved = resolveExpression(expr, plan)
@@ -1405,8 +1405,8 @@ class Analyzer(
   }
 
   /**
-    * Check and add order to [[AggregateWindowFunction]]s.
-    */
+   * Check and add order to [[AggregateWindowFunction]]s.
+   */
   object ResolveWindowOrder extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformExpressions {
@@ -1496,8 +1496,8 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
 }
 
 /**
-  * Removes [[Union]] operators from the plan if it just has one child.
-  */
+ * Removes [[Union]] operators from the plan if it just has one child.
+ */
 object EliminateUnions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Union(children) if children.size == 1 => children.head

@@ -365,7 +365,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "drop_index_removes_partition_dirs",
     "alter_index",
 
-    // We do not support macro for now.
+    // Macro commands are not supported
     "macro"
   )
 
