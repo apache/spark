@@ -40,8 +40,7 @@ sealed trait WindowSpec
 case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frameSpecification: WindowFrame)
-  extends Expression with WindowSpec with Unevaluable {
+    frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable {
 
   def validate: Option[String] = frameSpecification match {
     case UnspecifiedFrame =>
@@ -60,12 +59,16 @@ case class WindowSpecDefinition(
         }
       }
 
-      (frame.frameType, frame.frameStart, frame.frameEnd) match {
-        case (RangeFrame, vp: ValuePreceding, _) => checkValueBasedBoundaryForRangeFrame()
-        case (RangeFrame, vf: ValueFollowing, _) => checkValueBasedBoundaryForRangeFrame()
-        case (RangeFrame, _, vp: ValuePreceding) => checkValueBasedBoundaryForRangeFrame()
-        case (RangeFrame, _, vf: ValueFollowing) => checkValueBasedBoundaryForRangeFrame()
-        case (_, _, _) => None
+      (frame.frameType, frame.frameStart, frame.frameEnd, frame.excludeSpec.excludeType) match {
+        case (RangeFrame, vp: ValuePreceding, _, _) => checkValueBasedBoundaryForRangeFrame()
+        case (RangeFrame, vf: ValueFollowing, _, _) => checkValueBasedBoundaryForRangeFrame()
+        case (RangeFrame, _, vp: ValuePreceding, _) => checkValueBasedBoundaryForRangeFrame()
+        case (RangeFrame, _, vf: ValueFollowing, _) => checkValueBasedBoundaryForRangeFrame()
+        case (_, _, _, ExcludeGroup) if orderSpec.length == 0 =>
+          Some("EXCLUDE GROUP clause requires an ordered window frame.")
+        case (_, _, _, ExcludeTies) if orderSpec.length == 0 =>
+          Some("EXCLUDE TIES clause requires an ordered window frame.")
+        case (_, _, _, _) => None
       }
     }
   }
@@ -304,9 +307,7 @@ case object ExcludeNoOthers extends ExcludeType
 
 /**
  * Exclude clause within window framing clause.
- * e.g.: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW
- * This clause allow users to exclude certain rows from the window function calculation
- * on the current row.
+ *
  * 'EXCLUDE CURRENT ROW' means the current row for which the window function is calculated
  * is excluded from the current fame.
  * 'EXCLUDE GROUP' means that the nearby rows that match the current row with respect to
@@ -316,6 +317,8 @@ case object ExcludeNoOthers extends ExcludeType
  * 'EXCLUDE NO OTHERS' means not excluding any rows from the calculation. This is the
  * default behavior. Exclude types, GROUP and TIES, requires ORDER BY clause in the window
  * specification clause.
+ * For example, users want to exclude current row from a sliding range framing:
+ * RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING EXCLUDE CURRENT ROW
  * @param excludeType The type of exclusion as defined above
  * @param valueOrdering The ordering operator that does the value comparison between 2 rows
  * @param toBeCompared The projection of the orderby expression from a row

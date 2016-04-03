@@ -1827,7 +1827,7 @@ class Analyzer(
       case logical: LogicalPlan => logical transformExpressions {
         // Exclude clause only applies to WindowAggregation functions
         case WindowExpression(wf: WindowFunction,
-        WindowSpecDefinition(_, _, SpecifiedWindowFrame(_, _ ,_ , es)))
+        WindowSpecDefinition(_, _, SpecifiedWindowFrame(_, _, _, es)))
           if es.excludeType != ExcludeNoOthers && notSupportForExclude(wf) =>
           failAnalysis(s"Window function ${wf.getClass} does not support exclude clause")
         case WindowExpression(wf: WindowFunction,
@@ -1846,6 +1846,14 @@ class Analyzer(
     }
   }
 
+  /**
+   * Exclude clause does not support
+   * RowNumberLike: ROW_NUMER()
+   * RankLike: RANK(), DENSE_RANK(), CUME_DIST(), etc.
+   * OffsetWindowFunctions: Lead(), Lag()
+   * @param wf
+   * @return
+   */
   private def notSupportForExclude(wf: WindowFunction): Boolean =
     wf.isInstanceOf[RowNumberLike] ||
       wf.isInstanceOf[RankLike] || wf.isInstanceOf[OffsetWindowFunction]

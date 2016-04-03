@@ -1072,22 +1072,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case SqlBaseParser.ROWS => RowFrame
       }
 
-      val excludeSpec = Option(frame.exclude).map{excludeClause =>
+      val excludeSpec = Option(frame.exclude).map { excludeClause =>
         excludeClause.excludeType.getType match {
-          case SqlBaseParser.CURRENT =>
-            ExcludeClause(ExcludeCurrentRow)
-          case SqlBaseParser.GROUP if order.isEmpty =>
-            throw new ParseException(
-              "For EXCLUDE GROUP clause, order by column(s) need to be specified", ctx)
-          case SqlBaseParser.GROUP  =>
-            ExcludeClause(ExcludeGroup)
-          case SqlBaseParser.TIES  if order.isEmpty =>
-            throw new ParseException(
-              "For EXCLUDE TIES clause, order by column(s) need to be specified", ctx)
-          case SqlBaseParser.TIES  =>
-            ExcludeClause(ExcludeTies)
-          case SqlBaseParser.NO  =>
-            ExcludeClause(ExcludeNoOthers)
+          case SqlBaseParser.CURRENT => ExcludeClause(ExcludeCurrentRow)
+          case SqlBaseParser.GROUP  => ExcludeClause(ExcludeGroup)
+          case SqlBaseParser.TIES  => ExcludeClause(ExcludeTies)
+          case SqlBaseParser.NO  => ExcludeClause(ExcludeNoOthers)
         }
       }
 
