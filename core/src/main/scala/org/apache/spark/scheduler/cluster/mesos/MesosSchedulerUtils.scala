@@ -283,11 +283,11 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    *  are separated by ':'. The ':' implies equality (for singular values) and "is one of" for
    *  multiple values (comma separated). For example:
    *  {{{
-   *  parseConstraintString("tachyon:true;zone:us-east-1a,us-east-1b")
+   *  parseConstraintString("os:centos7;zone:us-east-1a,us-east-1b")
    *  // would result in
    *  <code>
    *  Map(
-   *    "tachyon" -> Set("true"),
+   *    "os" -> Set("centos7"),
    *    "zone":   -> Set("us-east-1a", "us-east-1b")
    *  )
    *  }}}
