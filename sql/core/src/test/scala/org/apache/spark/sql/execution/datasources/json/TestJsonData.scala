@@ -214,11 +214,11 @@ private[json] trait TestJsonData {
       """{"a": {"b": 1}}""" ::
       """{"a": []}""" :: Nil)
 
-  def doubleRecords: RDD[String] =
+  def floatingValuesRecords: RDD[String] =
     sqlContext.sparkContext.parallelize(
       s"""{"a": 0.${"0" * 38}1, "b": 0.01}""" :: Nil)
 
-  def decimalRecords: RDD[String] =
+  def bigIntegerRecords: RDD[String] =
     sqlContext.sparkContext.parallelize(
       s"""{"a": 1${"0" * 38}, "b": 92233720368547758070}""" :: Nil)
 
