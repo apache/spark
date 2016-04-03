@@ -97,15 +97,16 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param relativeError The relative target precision to achieve (>= 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
-   * @return the approximate quantiles at the given probabilities
+   * @return the approximate quantiles at the given probabilities of each column
    *
    * @since 2.0.0
    */
   def approxQuantile(
       cols: Array[String],
       probabilities: Array[Double],
-      relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df, cols, probabilities, relativeError).head.toArray
+      relativeError: Double): Array[Array[Double]] = {
+    StatFunctions.multipleApproxQuantiles(df, cols, probabilities, relativeError)
+      .map(_.toArray).toArray
   }
 
   /**
