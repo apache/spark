@@ -707,7 +707,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   def isExplanation(result: DataFrame): Boolean = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.contains("== Physical Plan ==")
+    explanation.head.startsWith("== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a DataFrame") {
