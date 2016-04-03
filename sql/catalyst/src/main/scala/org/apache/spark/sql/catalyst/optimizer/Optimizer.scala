@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
 
 /**
-  * Abstract class all optimizers should inherit of, contains the standard batches (extending
-  * Optimizers can override this.
-  */
+ * Abstract class all optimizers should inherit of, contains the standard batches (extending
+ * Optimizers can override this.
+ */
 abstract class Optimizer extends RuleExecutor[LogicalPlan] {
   def batches: Seq[Batch] = {
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
@@ -111,11 +111,11 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
 }
 
 /**
-  * Non-abstract representation of the standard Spark optimizing strategies
-  *
-  * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
-  * specific rules go to the subclasses
-  */
+ * Non-abstract representation of the standard Spark optimizing strategies
+ *
+ * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
+ * specific rules go to the subclasses
+ */
 object DefaultOptimizer extends Optimizer
 
 /**
@@ -962,21 +962,21 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
 }
 
 /**
-  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
-  * one condition.
-  *
-  * The order of joins will not be changed if all of them already have at least one condition.
-  */
+ * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
+ * one condition.
+ *
+ * The order of joins will not be changed if all of them already have at least one condition.
+ */
 object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
-    * Join a list of plans together and push down the conditions into them.
-    *
-    * The joined plan are picked from left to right, prefer those has at least one join condition.
-    *
-    * @param input a list of LogicalPlans to join.
-    * @param conditions a list of condition for join.
-    */
+   * Join a list of plans together and push down the conditions into them.
+   *
+   * The joined plan are picked from left to right, prefer those has at least one join condition.
+   *
+   * @param input a list of LogicalPlans to join.
+   * @param conditions a list of condition for join.
+   */
   @tailrec
   def createOrderedJoin(input: Seq[LogicalPlan], conditions: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)

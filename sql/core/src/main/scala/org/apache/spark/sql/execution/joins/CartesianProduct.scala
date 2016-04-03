@@ -28,10 +28,10 @@ import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
-  * An optimized CartesianRDD for UnsafeRow, which will cache the rows from second child RDD,
-  * will be much faster than building the right partition for every row in left RDD, it also
-  * materialize the right RDD (in case of the right RDD is nondeterministic).
-  */
+ * An optimized CartesianRDD for UnsafeRow, which will cache the rows from second child RDD,
+ * will be much faster than building the right partition for every row in left RDD, it also
+ * materialize the right RDD (in case of the right RDD is nondeterministic).
+ */
 private[spark]
 class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numFieldsOfRight: Int)
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {

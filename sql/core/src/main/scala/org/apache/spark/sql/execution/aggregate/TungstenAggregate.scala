@@ -266,8 +266,8 @@ case class TungstenAggregate(
   private var sorterTerm: String = _
 
   /**
-    * This is called by generated Java class, should be public.
-    */
+   * This is called by generated Java class, should be public.
+   */
   def createHashMap(): UnsafeFixedWidthAggregationMap = {
     // create initialized aggregate buffer
     val initExpr = declFunctions.flatMap(f => f.initialValues)
@@ -286,15 +286,15 @@ case class TungstenAggregate(
   }
 
   /**
-    * This is called by generated Java class, should be public.
-    */
+   * This is called by generated Java class, should be public.
+   */
   def createUnsafeJoiner(): UnsafeRowJoiner = {
     GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
   }
 
   /**
-    * Called by generated Java class to finish the aggregate and return a KVIterator.
-    */
+   * Called by generated Java class to finish the aggregate and return a KVIterator.
+   */
   def finishAggregate(
       hashMap: UnsafeFixedWidthAggregationMap,
       sorter: UnsafeKVExternalSorter): KVIterator[UnsafeRow, UnsafeRow] = {
@@ -372,8 +372,8 @@ case class TungstenAggregate(
   }
 
   /**
-    * Generate the code for output.
-    */
+   * Generate the code for output.
+   */
   private def generateResultCode(
       ctx: CodegenContext,
       keyTerm: String,

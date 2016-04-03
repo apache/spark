@@ -38,9 +38,9 @@ class ElementwiseProduct(override val uid: String)
   def this() = this(Identifiable.randomUID("elemProd"))
 
   /**
-    * the vector to multiply with input vectors
-    * @group param
-    */
+   * the vector to multiply with input vectors
+   * @group param
+   */
   val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
   /** @group setParam */

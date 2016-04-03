@@ -122,8 +122,8 @@ case class BroadcastHashJoin(
   }
 
   /**
-    * Returns a tuple of Broadcast of HashedRelation and the variable name for it.
-    */
+   * Returns a tuple of Broadcast of HashedRelation and the variable name for it.
+   */
   private def prepareBroadcast(ctx: CodegenContext): (Broadcast[HashedRelation], String) = {
     // create a name for HashedRelation
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
@@ -139,9 +139,9 @@ case class BroadcastHashJoin(
   }
 
   /**
-    * Returns the code for generating join key for stream side, and expression of whether the key
-    * has any null in it or not.
-    */
+   * Returns the code for generating join key for stream side, and expression of whether the key
+   * has any null in it or not.
+   */
   private def genStreamSideJoinKey(
       ctx: CodegenContext,
       input: Seq[ExprCode]): (ExprCode, String) = {
@@ -160,8 +160,8 @@ case class BroadcastHashJoin(
   }
 
   /**
-    * Generates the code for variable of build side.
-    */
+   * Generates the code for variable of build side.
+   */
   private def genBuildSideVars(ctx: CodegenContext, matched: String): Seq[ExprCode] = {
     ctx.currentVars = null
     ctx.INPUT_ROW = matched
@@ -188,8 +188,8 @@ case class BroadcastHashJoin(
   }
 
   /**
-    * Generates the code for Inner join.
-    */
+   * Generates the code for Inner join.
+   */
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
@@ -254,8 +254,8 @@ case class BroadcastHashJoin(
 
 
   /**
-    * Generates the code for left or right outer join.
-    */
+   * Generates the code for left or right outer join.
+   */
   private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)

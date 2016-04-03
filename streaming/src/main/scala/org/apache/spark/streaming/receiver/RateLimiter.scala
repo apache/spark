@@ -22,17 +22,18 @@ import com.google.common.util.concurrent.{RateLimiter => GuavaRateLimiter}
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 
-/** Provides waitToPush() method to limit the rate at which receivers consume data.
-  *
-  * waitToPush method will block the thread if too many messages have been pushed too quickly,
-  * and only return when a new message has been pushed. It assumes that only one message is
-  * pushed at a time.
-  *
-  * The spark configuration spark.streaming.receiver.maxRate gives the maximum number of messages
-  * per second that each receiver will accept.
-  *
-  * @param conf spark configuration
-  */
+/**
+ * Provides waitToPush() method to limit the rate at which receivers consume data.
+ *
+ * waitToPush method will block the thread if too many messages have been pushed too quickly,
+ * and only return when a new message has been pushed. It assumes that only one message is
+ * pushed at a time.
+ *
+ * The spark configuration spark.streaming.receiver.maxRate gives the maximum number of messages
+ * per second that each receiver will accept.
+ *
+ * @param conf spark configuration
+ */
 private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
 
   // treated as an upper limit

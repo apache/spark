@@ -109,9 +109,10 @@ private[sql] class CacheManager extends Logging {
     cachedData.remove(dataIndex)
   }
 
-  /** Tries to remove the data for the given [[Dataset]] from the cache
-    * if it's cached
-    */
+  /**
+   * Tries to remove the data for the given [[Dataset]] from the cache
+   * if it's cached
+   */
   private[sql] def tryUncacheQuery(
       query: Dataset[_],
       blocking: Boolean = true): Boolean = writeLock {

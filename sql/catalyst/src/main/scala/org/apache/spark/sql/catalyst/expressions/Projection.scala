@@ -136,9 +136,9 @@ object UnsafeProjection {
   }
 
   /**
-    * Same as other create()'s but allowing enabling/disabling subexpression elimination.
-    * TODO: refactor the plumbing and clean this up.
-    */
+   * Same as other create()'s but allowing enabling/disabling subexpression elimination.
+   * TODO: refactor the plumbing and clean this up.
+   */
   def create(
       exprs: Seq[Expression],
       inputSchema: Seq[Attribute],

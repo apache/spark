@@ -27,8 +27,8 @@ import org.apache.spark.mllib.feature.Word2VecModel
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
-  * Wrapper around Word2VecModel to provide helper methods in Python
-  */
+ * Wrapper around Word2VecModel to provide helper methods in Python
+ */
 private[python] class Word2VecModelWrapper(model: Word2VecModel) {
   def transform(word: String): Vector = {
     model.transform(word)

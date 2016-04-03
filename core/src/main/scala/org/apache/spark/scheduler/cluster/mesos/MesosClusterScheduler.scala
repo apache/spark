@@ -453,12 +453,12 @@ private[spark] class MesosClusterScheduler(
   }
 
   /**
-    * Escape args for Unix-like shells, unless already quoted by the user.
-    * Based on: http://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
-    * and http://www.grymoire.com/Unix/Quote.html
-    * @param value argument
-    * @return escaped argument
-    */
+   * Escape args for Unix-like shells, unless already quoted by the user.
+   * Based on: http://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
+   * and http://www.grymoire.com/Unix/Quote.html
+   * @param value argument
+   * @return escaped argument
+   */
   private[scheduler] def shellEscape(value: String): String = {
     val WrappedInQuotes = """^(".+"|'.+')$""".r
     val ShellSpecialChars = (""".*([ '<>&|\?\*;!#\\(\)"$`]).*""").r

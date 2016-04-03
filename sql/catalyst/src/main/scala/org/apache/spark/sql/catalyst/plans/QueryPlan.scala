@@ -122,8 +122,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
 
   /**
-    * The set of all attributes that are produced by this node.
-    */
+   * The set of all attributes that are produced by this node.
+   */
   def producedAttributes: AttributeSet = AttributeSet.empty
 
   /**

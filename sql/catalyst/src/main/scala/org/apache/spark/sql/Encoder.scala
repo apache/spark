@@ -140,27 +140,27 @@ object Encoders {
   def STRING: Encoder[java.lang.String] = ExpressionEncoder()
 
   /**
-    * An encoder for nullable decimal type.
-    * @since 1.6.0
-    */
+   * An encoder for nullable decimal type.
+   * @since 1.6.0
+   */
   def DECIMAL: Encoder[java.math.BigDecimal] = ExpressionEncoder()
 
   /**
-    * An encoder for nullable date type.
-    * @since 1.6.0
-    */
+   * An encoder for nullable date type.
+   * @since 1.6.0
+   */
   def DATE: Encoder[java.sql.Date] = ExpressionEncoder()
 
   /**
-    * An encoder for nullable timestamp type.
-    * @since 1.6.0
-    */
+   * An encoder for nullable timestamp type.
+   * @since 1.6.0
+   */
   def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
 
   /**
-    * An encoder for arrays of bytes.
-    * @since 1.6.1
-    */
+   * An encoder for arrays of bytes.
+   * @since 1.6.1
+   */
   def BINARY: Encoder[Array[Byte]] = ExpressionEncoder()
 
   /**

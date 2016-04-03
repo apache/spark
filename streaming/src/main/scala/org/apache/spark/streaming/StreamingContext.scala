@@ -497,9 +497,10 @@ class StreamingContext private[streaming] (
     new TransformedDStream[T](dstreams, sparkContext.clean(transformFunc))
   }
 
-  /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
-    * receiving system events related to streaming.
-    */
+  /**
+   * Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+   * receiving system events related to streaming.
+   */
   def addStreamingListener(streamingListener: StreamingListener) {
     scheduler.listenerBus.addListener(streamingListener)
   }

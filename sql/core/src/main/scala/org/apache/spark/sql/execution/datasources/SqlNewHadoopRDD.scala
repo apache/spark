@@ -168,10 +168,10 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       private[this] var reader: RecordReader[Void, V] = null
 
       /**
-        * If the format is ParquetInputFormat, try to create the optimized RecordReader. If this
-        * fails (for example, unsupported schema), try with the normal reader.
-        * TODO: plumb this through a different way?
-        */
+       * If the format is ParquetInputFormat, try to create the optimized RecordReader. If this
+       * fails (for example, unsupported schema), try with the normal reader.
+       * TODO: plumb this through a different way?
+       */
       if (enableVectorizedParquetReader &&
         format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
         val parquetReader: VectorizedParquetRecordReader = new VectorizedParquetRecordReader()

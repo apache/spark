@@ -797,9 +797,11 @@ class SparkILoop(
     // echo("Switched " + (if (old) "off" else "on") + " result printing.")
   }
 
-  /** Run one command submitted by the user.  Two values are returned:
-    * (1) whether to keep running, (2) the line to record for replay,
-    * if any. */
+  /**
+   * Run one command submitted by the user.  Two values are returned:
+   * (1) whether to keep running, (2) the line to record for replay,
+   * if any.
+   */
   private[repl] def command(line: String): Result = {
     if (line startsWith ":") {
       val cmd = line.tail takeWhile (x => !x.isWhitespace)
@@ -841,12 +843,13 @@ class SparkILoop(
   }
   import paste.{ ContinueString, PromptString }
 
-  /** Interpret expressions starting with the first line.
-    * Read lines until a complete compilation unit is available
-    * or until a syntax error has been seen.  If a full unit is
-    * read, go ahead and interpret it.  Return the full string
-    * to be recorded for replay, if any.
-    */
+  /**
+   * Interpret expressions starting with the first line.
+   * Read lines until a complete compilation unit is available
+   * or until a syntax error has been seen.  If a full unit is
+   * read, go ahead and interpret it.  Return the full string
+   * to be recorded for replay, if any.
+   */
   private def interpretStartingWith(code: String): Option[String] = {
     // signal completion non-completion input has been received
     in.completion.resetVerbosity()

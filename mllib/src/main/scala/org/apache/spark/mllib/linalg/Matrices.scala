@@ -123,14 +123,18 @@ sealed trait Matrix extends Serializable {
   @Since("1.4.0")
   def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
 
-  /** Map the values of this matrix using a function. Generates a new matrix. Performs the
-    * function on only the backing array. For example, an operation such as addition or
-    * subtraction will only be performed on the non-zero values in a `SparseMatrix`. */
+  /**
+   * Map the values of this matrix using a function. Generates a new matrix. Performs the
+   * function on only the backing array. For example, an operation such as addition or
+   * subtraction will only be performed on the non-zero values in a `SparseMatrix`.
+   */
   private[spark] def map(f: Double => Double): Matrix
 
-  /** Update all the values of this matrix using the function f. Performed in-place on the
-    * backing array. For example, an operation such as addition or subtraction will only be
-    * performed on the non-zero values in a `SparseMatrix`. */
+  /**
+   * Update all the values of this matrix using the function f. Performed in-place on the
+   * backing array. For example, an operation such as addition or subtraction will only be
+   * performed on the non-zero values in a `SparseMatrix`.
+   */
   private[mllib] def update(f: Double => Double): Matrix
 
   /**

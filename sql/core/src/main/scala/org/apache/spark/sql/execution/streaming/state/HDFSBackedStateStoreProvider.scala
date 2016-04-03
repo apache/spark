@@ -468,10 +468,10 @@ private[state] class HDFSBackedStateStoreProvider(
   }
 
   /**
-    * Clean up old snapshots and delta files that are not needed any more. It ensures that last
-    * few versions of the store can be recovered from the files, so re-executed RDD operations
-    * can re-apply updates on the past versions of the store.
-    */
+   * Clean up old snapshots and delta files that are not needed any more. It ensures that last
+   * few versions of the store can be recovered from the files, so re-executed RDD operations
+   * can re-apply updates on the past versions of the store.
+   */
   private[state] def cleanup(): Unit = {
     try {
       val files = fetchFiles()
