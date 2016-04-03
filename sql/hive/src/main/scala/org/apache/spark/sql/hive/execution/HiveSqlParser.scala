@@ -133,9 +133,11 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     }
   }
 
+  /**
+   * Create a [[CatalogStorageFormat]]. This is part of the [[CreateTableAsSelect]] command.
+   */
   override def visitCreateFileFormat(
       ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    // Create the predicate.
     if (ctx.storageHandler == null) {
       typedVisit[CatalogStorageFormat](ctx.fileFormat)
     } else {
