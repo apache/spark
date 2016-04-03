@@ -661,10 +661,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("script transform") {
     val e = intercept[RuntimeException] {
       sql(
-        """SELECT TRANSFORM (key, value)
-        |USING 'cat' AS (tKey, tValue)
-        |FROM testData
-      """.stripMargin).show()
+        """
+          |SELECT TRANSFORM (key, value)
+          |USING 'cat' AS (tKey, tValue)
+          |FROM testData
+        """.stripMargin).show()
     }
     assert(e.getMessage contains
       "Script Transform is not supported in SQLContext. Use a HiveContext instead.")
