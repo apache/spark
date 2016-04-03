@@ -37,13 +37,17 @@ import org.apache.spark.util.collection.CompactBuffer
  */
 private[execution] sealed trait HashedRelation {
   /**
-    * Returns matched rows.
-    */
+   * Returns matched rows.
+   *
+   * Returns null if there is no matched rows.
+   */
   def get(key: InternalRow): Iterator[InternalRow]
 
   /**
-    * Returns matched rows for a key that has only one column with LongType.
-    */
+   * Returns matched rows for a key that has only one column with LongType.
+   *
+   * Returns null if there is no matched rows.
+   */
   def get(key: Long): Iterator[InternalRow] = {
     throw new UnsupportedOperationException
   }
@@ -63,12 +67,12 @@ private[execution] sealed trait HashedRelation {
   /**
    * Returns true iff all the keys are unique.
    */
-  def allUnique: Boolean
+  def keyIsUnique: Boolean
 
   /**
    * Returns a read-only copy of this, to be safely used in current thread.
    */
-  def copy(): HashedRelation
+  def asReadOnlyCopy(): HashedRelation
 
   /**
     * Returns the size of used memory.
@@ -133,9 +137,9 @@ private[joins] class UnsafeHashedRelation(
 
   private[joins] def this() = this(0, null)  // Needed for serialization
 
-  override def allUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
+  override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
 
-  override def copy(): UnsafeHashedRelation = new UnsafeHashedRelation(numFields, binaryMap)
+  override def asReadOnlyCopy(): UnsafeHashedRelation = new UnsafeHashedRelation(numFields, binaryMap)
 
   override def getMemorySize: Long = {
     binaryMap.getTotalMemoryConsumption
@@ -335,9 +339,9 @@ private[joins] final class GeneralLongHashedRelation(
   // Needed for serialization (it is public to make Java serialization work)
   def this() = this(null)
 
-  override def allUnique: Boolean = false
+  override def keyIsUnique: Boolean = false
 
-  override def copy(): GeneralLongHashedRelation = new GeneralLongHashedRelation(hashTable)
+  override def asReadOnlyCopy(): GeneralLongHashedRelation = new GeneralLongHashedRelation(hashTable)
 
   override def get(key: Long): Iterator[InternalRow] = {
     val rows = hashTable.get(key)
@@ -389,9 +393,9 @@ private[joins] final class LongArrayRelation(
   // Needed for serialization (it is public to make Java serialization work)
   def this() = this(0, 0L, null, null, null)
 
-  override def allUnique: Boolean = true
+  override def keyIsUnique: Boolean = true
 
-  override def copy(): LongArrayRelation = {
+  override def asReadOnlyCopy(): LongArrayRelation = {
     new LongArrayRelation(numFields, start, offsets, sizes, bytes)
   }
 

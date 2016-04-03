@@ -111,10 +111,10 @@ trait HashJoin {
     sameTypes && key.length == 1 && key.head.dataType.isInstanceOf[LongType]
   }
 
-  protected def buildSideKeyGenerator: Projection =
+  protected def buildSideKeyGenerator(): Projection =
     UnsafeProjection.create(rewriteKeyExpr(buildKeys), buildPlan.output)
 
-  protected def streamSideKeyGenerator: UnsafeProjection =
+  protected def streamSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(rewriteKeyExpr(streamedKeys), streamedPlan.output)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
@@ -123,7 +123,7 @@ trait HashJoin {
     (r: InternalRow) => true
   }
 
-  protected def createResultProjection: (InternalRow) => InternalRow = {
+  protected def createResultProjection(): (InternalRow) => InternalRow = {
     if (joinType == LeftSemi) {
       UnsafeProjection.create(output, output)
     } else {
@@ -134,11 +134,11 @@ trait HashJoin {
     }
   }
 
-  protected def innerJoin(
+  private def innerJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
     val joinRow = new JoinedRow
-    val joinKeys = streamSideKeyGenerator
+    val joinKeys = streamSideKeyGenerator()
     streamIter.flatMap { srow =>
       joinRow.withLeft(srow)
       val matches = hashedRelation.get(joinKeys(srow))
@@ -150,36 +150,43 @@ trait HashJoin {
     }
   }
 
-  @transient private[this] lazy val nullRow = new GenericInternalRow(buildPlan.output.length)
+  private def outerJoin(
+      streamedIter: Iterator[InternalRow],
+    hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinedRow = new JoinedRow()
+    val keyGenerator = streamSideKeyGenerator()
+    val nullRow = new GenericInternalRow(buildPlan.output.length)
 
-  protected[this] def outerIterator(
-      joinedRow: JoinedRow,
-      buildIter: Iterator[InternalRow]): Iterator[InternalRow] = {
-    new RowIterator {
-      private var found = false
-      override def advanceNext(): Boolean = {
-        while (buildIter != null && buildIter.hasNext) {
-          val nextBuildRow = buildIter.next()
-          if (boundCondition(joinedRow.withRight(nextBuildRow))) {
+    streamedIter.flatMap { currentRow =>
+      val rowKey = keyGenerator(currentRow)
+      joinedRow.withLeft(currentRow)
+      val buildIter = hashedRelation.get(rowKey)
+      new RowIterator {
+        private var found = false
+        override def advanceNext(): Boolean = {
+          while (buildIter != null && buildIter.hasNext) {
+            val nextBuildRow = buildIter.next()
+            if (boundCondition(joinedRow.withRight(nextBuildRow))) {
+              found = true
+              return true
+            }
+          }
+          if (!found) {
+            joinedRow.withRight(nullRow)
             found = true
             return true
           }
+          false
         }
-        if (!found) {
-          joinedRow.withRight(nullRow)
-          found = true
-          return true
-        }
-        false
-      }
-      override def getRow: InternalRow = joinedRow
-    }.toScala
+        override def getRow: InternalRow = joinedRow
+      }.toScala
+    }
   }
 
-  protected def hashSemiJoin(
-    streamIter: Iterator[InternalRow],
-    hashedRelation: HashedRelation): Iterator[InternalRow] = {
-    val joinKeys = streamSideKeyGenerator
+  private def semiJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinKeys = streamSideKeyGenerator()
     val joinedRow = new JoinedRow
     streamIter.filter { current =>
       val key = joinKeys(current)
@@ -194,23 +201,14 @@ trait HashJoin {
       streamedIter: Iterator[InternalRow],
       hashed: HashedRelation,
       numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
-    val joinedRow = new JoinedRow()
-    val keyGenerator = streamSideKeyGenerator
 
     val joinedIter = joinType match {
       case Inner =>
         innerJoin(streamedIter, hashed)
-
       case LeftOuter | RightOuter =>
-        streamedIter.flatMap { currentRow =>
-          val rowKey = keyGenerator(currentRow)
-          joinedRow.withLeft(currentRow)
-          outerIterator(joinedRow, hashed.get(rowKey))
-        }
-
+        outerJoin(streamedIter, hashed)
       case LeftSemi =>
-        hashSemiJoin(streamedIter, hashed)
-
+        semiJoin(streamedIter, hashed)
       case x =>
         throw new IllegalArgumentException(
           s"BroadcastHashJoin should not take $x as the JoinType")

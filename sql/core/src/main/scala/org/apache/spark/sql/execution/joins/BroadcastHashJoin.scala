@@ -68,7 +68,7 @@ case class BroadcastHashJoin(
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     streamedPlan.execute().mapPartitions { streamedIter =>
-      val hashed = broadcastRelation.value.copy()
+      val hashed = broadcastRelation.value.asReadOnlyCopy()
       TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.getMemorySize)
       join(streamedIter, hashed, numOutputRows)
     }
@@ -104,7 +104,7 @@ case class BroadcastHashJoin(
     val clsName = broadcastRelation.value.getClass.getName
     ctx.addMutableState(clsName, relationTerm,
       s"""
-         | $relationTerm = (($clsName) $broadcast.value()).copy();
+         | $relationTerm = (($clsName) $broadcast.value()).asReadOnlyCopy();
          | incPeakExecutionMemory($relationTerm.getMemorySize());
        """.stripMargin)
     (broadcastRelation, relationTerm)
@@ -189,7 +189,7 @@ case class BroadcastHashJoin(
       case BuildLeft => buildVars ++ input
       case BuildRight => input ++ buildVars
     }
-    if (broadcastRelation.value.allUnique) {
+    if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -256,7 +256,7 @@ case class BroadcastHashJoin(
       case BuildLeft => buildVars ++ input
       case BuildRight => input ++ buildVars
     }
-    if (broadcastRelation.value.allUnique) {
+    if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -324,7 +324,7 @@ case class BroadcastHashJoin(
       ""
     }
 
-    if (broadcastRelation.value.allUnique) {
+    if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
