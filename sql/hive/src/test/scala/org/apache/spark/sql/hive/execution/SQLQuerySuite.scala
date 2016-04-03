@@ -68,7 +68,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext.implicits._
 
   test("UDTF") {
-    try {
+    withTempFunction("udtf_count2" -> true) {
       sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
       // The function source code can be found at:
       // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
@@ -85,13 +85,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(
         sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
         Row(3) :: Row(3) :: Nil)
-    } finally {
-      sql("DROP TEMPORARY FUNCTION udtf_count2")
     }
   }
 
   test("permanent UDTF") {
-    try {
+    withTempFunction("udtf_count_temp" -> false) {
       sql(
         s"""
           |CREATE FUNCTION udtf_count_temp
@@ -106,13 +104,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(
         sql("SELECT udtf_count_temp(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
         Row(3) :: Row(3) :: Nil)
-    } finally {
-      sql("DROP FUNCTION udtf_count_temp")
-      val errMsg = intercept[AnalysisException] {
-        sql("SELECT key, cc FROM src LATERAL VIEW udtf_count_temp(value) dd AS cc")
-      }.getMessage
-      assert(errMsg.contains("Undefined function"))
-      assert(errMsg.contains("udtf_count_temp"))
     }
   }
 
