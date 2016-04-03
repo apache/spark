@@ -32,10 +32,10 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.Benchmark
 
 /**
-  * Benchmark to measure whole stage codegen performance.
-  * To run this:
-  *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
-  */
+ * Benchmark to measure whole stage codegen performance.
+ * To run this:
+ *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
+ */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
     .set("spark.sql.shuffle.partitions", "1")

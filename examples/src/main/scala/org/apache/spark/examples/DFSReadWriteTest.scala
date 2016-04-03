@@ -25,16 +25,16 @@ import scala.io.Source._
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
-  * Simple test for reading and writing to a distributed
-  * file system.  This example does the following:
-  *
-  *   1. Reads local file
-  *   2. Computes word count on local file
-  *   3. Writes local file to a DFS
-  *   4. Reads the file back from the DFS
-  *   5. Computes word count on the file using Spark
-  *   6. Compares the word count results
-  */
+ * Simple test for reading and writing to a distributed
+ * file system.  This example does the following:
+ *
+ *   1. Reads local file
+ *   2. Computes word count on local file
+ *   3. Writes local file to a DFS
+ *   4. Reads the file back from the DFS
+ *   5. Computes word count on the file using Spark
+ *   6. Compares the word count results
+ */
 object DFSReadWriteTest {
 
   private var localFilePath: File = new File(".")
