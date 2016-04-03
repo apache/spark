@@ -133,6 +133,16 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     }
   }
 
+  override def visitCreateFileFormat(
+      ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    // Create the predicate.
+    if (ctx.storageHandler == null) {
+      typedVisit[CatalogStorageFormat](ctx.fileFormat)
+    } else {
+      typedVisit[CatalogStorageFormat](ctx.storageHandler)
+    }
+  }
+
   /**
    * Create a [[CreateTableAsSelect]] command.
    */
