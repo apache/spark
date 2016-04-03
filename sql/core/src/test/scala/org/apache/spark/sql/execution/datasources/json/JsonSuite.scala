@@ -773,43 +773,33 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("Infer big integers as doubles when it does not fit in decimal") {
+  test("Infer big integers correctly even when it does not fit in decimal") {
     val jsonDF = sqlContext.read
-      .json(doubleRecords)
-      .selectExpr("a", "c")
+      .json(decimalRecords)
 
-    // The values in `a` field will be doubles as they all do not fit in decimal. For `c` field,
-    // it will be also doubles as `9.223372036854776E19` can be a decimal but `2.0E38` becomes
-    // a double as it does not fit in decimal. It makes the type as double in this case.
+    // The value in `a` field will be a double as they all do not fit in decimal. For `b` field,
+    // it will be a decimal as `92233720368547758070`.
     val expectedSchema = StructType(
       StructField("a", DoubleType, true) ::
-      StructField("c", DoubleType, true):: Nil)
+      StructField("b", DecimalType(20, 0), true) :: Nil)
 
     assert(expectedSchema === jsonDF.schema)
-    checkAnswer(
-      jsonDF,
-      Seq(Row(1.0E38D, 9.223372036854776E19), Row(2.0E38D, 2.0E38D))
-    )
+    checkAnswer(jsonDF, Row(1.0E38D, BigDecimal("92233720368547758070")))
   }
 
   test("Infer floating-point values as doubles when it does not fit in decimal") {
     val jsonDF = sqlContext.read
       .option("prefersDecimal", "true")
       .json(doubleRecords)
-      .selectExpr("b", "d")
 
-    // The values in `b` field will be doubles as they all do not fit in decimal. For `d` field,
-    // it will be also doubles as `1.01D` can be a decimal but `0.01D` becomes
-    // a double as it does not fit in decimal. It makes the type as double in this case.
+    // The value in `a` field will be a double as they all do not fit in decimal. For `b` field,
+    // it will be a decimal as `0.01` by having a precision equal to the scale.
     val expectedSchema = StructType(
-      StructField("b", DoubleType, true) ::
-      StructField("d", DoubleType, true):: Nil)
+      StructField("a", DoubleType, true) ::
+      StructField("b", DecimalType(2, 2), true):: Nil)
 
     assert(expectedSchema === jsonDF.schema)
-    checkAnswer(
-      jsonDF,
-      Seq(Row(0.01D, 1.01D), Row(0.02D, 0.01D))
-    )
+    checkAnswer(jsonDF, Row(1.0E-39D, BigDecimal(0.01)))
   }
 
   test("Loading a JSON dataset from a text file with SQL") {
