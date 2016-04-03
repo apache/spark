@@ -77,6 +77,11 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     )
 
     checkAnswer(
+      sql("SHOW TBLPROPERTIES parquet_tab1(spark.sql.sources.provider)"),
+      Row("org.apache.spark.sql.parquet.DefaultSource") :: Nil
+    )
+
+    checkAnswer(
       sql("SHOW TBLPROPERTIES parquet_tab1")
         .filter(s"key = 'spark.sql.sources.schema.numParts'"),
       Row("spark.sql.sources.schema.numParts", "1") :: Nil

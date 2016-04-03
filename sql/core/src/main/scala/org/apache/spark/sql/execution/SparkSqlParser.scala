@@ -106,7 +106,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTablePropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.key).map(_.STRING).map(string))
+      Option(ctx.key).map(visitTablePropertyKey))
   }
 
   /**
@@ -238,14 +238,18 @@ class SparkSqlAstBuilder extends AstBuilder {
     ctx.tableProperty.asScala.map { property =>
       // A key can either be a String or a collection of dot separated elements. We need to treat
       // these differently.
-      val key = if (property.key.STRING != null) {
-        string(property.key.STRING)
-      } else {
-        property.key.getText
-      }
+      val key = visitTablePropertyKey(property.key)
       val value = Option(property.value).map(string).orNull
       key -> value
     }.toMap
+  }
+
+  override def visitTablePropertyKey(key: TablePropertyKeyContext): String = {
+    if (key.STRING != null) {
+      string(key.STRING)
+    } else {
+      key.getText
+    }
   }
 
   /**

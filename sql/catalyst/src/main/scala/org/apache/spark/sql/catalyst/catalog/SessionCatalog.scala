@@ -280,11 +280,7 @@ class SessionCatalog(
   def isTemporaryTable(name: TableIdentifier): Boolean = {
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
-    if (!name.database.isDefined && tempTables.contains(table)) {
-      true
-    } else {
-      false // it's a not a temporary table
-    }
+    !name.database.isDefined && tempTables.contains(table)
   }
 
   /**
