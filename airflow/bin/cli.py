@@ -246,7 +246,7 @@ def run(args, dag=None):
                 remote_log_location,
                 append=True)
         # Other
-        elif remote_base:
+        elif remote_base and remote_base != 'None':
             logging.error(
                 'Unsupported remote log location: {}'.format(remote_base))
 

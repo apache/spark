@@ -150,12 +150,12 @@ base_log_folder = {AIRFLOW_HOME}/logs
 # must supply a remote location URL (starting with either 's3://...' or
 # 'gs://...') and an Airflow connection id that provides access to the storage
 # location.
-remote_base_log_folder = None
-remote_log_conn_id = None
+remote_base_log_folder =
+remote_log_conn_id =
 # Use server-side encryption for logs stored in S3
 encrypt_s3_logs = False
 # deprecated option for remote log storage, use remote_base_log_folder instead!
-# s3_log_folder = None
+# s3_log_folder =
 
 # The executor class that airflow should use. Choices include
 # SequentialExecutor, LocalExecutor, CeleryExecutor
