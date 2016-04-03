@@ -1430,8 +1430,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-    * Create a [[StructType]] from a sequence of [[StructField]]s.
-    */
+   * Create a [[StructType]] from a sequence of [[StructField]]s.
+   */
   protected def createStructType(ctx: ColTypeListContext): StructType = {
     StructType(Option(ctx).toSeq.flatMap(visitColTypeList))
   }

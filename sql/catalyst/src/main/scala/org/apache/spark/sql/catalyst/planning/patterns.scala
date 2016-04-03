@@ -140,20 +140,20 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 }
 
 /**
-  * A pattern that collects the filter and inner joins.
-  *
-  *          Filter
-  *            |
-  *        inner Join
-  *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
-  *      Filter   plan2
-  *        |
-  *  inner join
-  *      /    \
-  *   plan0    plan1
-  *
-  * Note: This pattern currently only works for left-deep trees.
-  */
+ * A pattern that collects the filter and inner joins.
+ *
+ *          Filter
+ *            |
+ *        inner Join
+ *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
+ *      Filter   plan2
+ *        |
+ *  inner join
+ *      /    \
+ *   plan0    plan1
+ *
+ * Note: This pattern currently only works for left-deep trees.
+ */
 object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
   // flatten all inner joins, which are next to each other

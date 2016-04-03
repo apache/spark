@@ -444,8 +444,8 @@ private[execution] final case class RangeBoundOrdering(
 }
 
 /**
-  * The interface of row buffer for a partition
-  */
+ * The interface of row buffer for a partition
+ */
 private[execution] abstract class RowBuffer {
 
   /** Number of rows. */
@@ -462,8 +462,8 @@ private[execution] abstract class RowBuffer {
 }
 
 /**
-  * A row buffer based on ArrayBuffer (the number of rows is limited)
-  */
+ * A row buffer based on ArrayBuffer (the number of rows is limited)
+ */
 private[execution] class ArrayRowBuffer(buffer: ArrayBuffer[UnsafeRow]) extends RowBuffer {
 
   private[this] var cursor: Int = -1
@@ -493,8 +493,8 @@ private[execution] class ArrayRowBuffer(buffer: ArrayBuffer[UnsafeRow]) extends 
 }
 
 /**
-  * An external buffer of rows based on UnsafeExternalSorter
-  */
+ * An external buffer of rows based on UnsafeExternalSorter
+ */
 private[execution] class ExternalRowBuffer(sorter: UnsafeExternalSorter, numFields: Int)
   extends RowBuffer {
 
@@ -654,12 +654,16 @@ private[execution] final class SlidingWindowFunctionFrame(
   /** The rows within current sliding window. */
   private[this] val buffer = new util.ArrayDeque[InternalRow]()
 
-  /** Index of the first input row with a value greater than the upper bound of the current
-    * output row. */
+  /**
+   * Index of the first input row with a value greater than the upper bound of the current
+   * output row.
+   */
   private[this] var inputHighIndex = 0
 
-  /** Index of the first input row with a value equal to or greater than the lower bound of the
-    * current output row. */
+  /**
+   * Index of the first input row with a value equal to or greater than the lower bound of the
+   * current output row.
+   */
   private[this] var inputLowIndex = 0
 
   /** Prepare the frame for calculating a new partition. Reset all variables. */
@@ -763,8 +767,10 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
   /** The next row from `input`. */
   private[this] var nextRow: InternalRow = null
 
-  /** Index of the first input row with a value greater than the upper bound of the current
-   * output row. */
+  /**
+   * Index of the first input row with a value greater than the upper bound of the current
+   * output row.
+   */
   private[this] var inputIndex = 0
 
   /** Prepare the frame for calculating a new partition. */
@@ -819,8 +825,10 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
   /** Rows of the partition currently being processed. */
   private[this] var input: RowBuffer = null
 
-  /** Index of the first input row with a value equal to or greater than the lower bound of the
-   * current output row. */
+  /**
+   * Index of the first input row with a value equal to or greater than the lower bound of the
+   * current output row.
+   */
   private[this] var inputIndex = 0
 
   /** Prepare the frame for calculating a new partition. */
