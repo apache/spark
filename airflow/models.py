@@ -376,7 +376,7 @@ class DagBag(LoggingMixin):
 
 
 class User(Base):
-    __tablename__ = "user"
+    __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
     username = Column(String(ID_LEN), unique=True)
@@ -2766,7 +2766,7 @@ class Chart(Base):
     id = Column(Integer, primary_key=True)
     label = Column(String(200))
     conn_id = Column(String(ID_LEN), nullable=False)
-    user_id = Column(Integer(), ForeignKey('user.id'), nullable=True)
+    user_id = Column(Integer(), ForeignKey('users.id'), nullable=True)
     chart_type = Column(String(100), default="line")
     sql_layout = Column(String(50), default="series")
     sql = Column(Text, default="SELECT series, x, y FROM table")
@@ -2802,7 +2802,7 @@ class KnownEvent(Base):
     label = Column(String(200))
     start_date = Column(DateTime)
     end_date = Column(DateTime)
-    user_id = Column(Integer(), ForeignKey('user.id'),)
+    user_id = Column(Integer(), ForeignKey('users.id'),)
     known_event_type_id = Column(Integer(), ForeignKey('known_event_type.id'),)
     reported_by = relationship(
         "User", cascade=False, cascade_backrefs=False, backref='known_events')
