@@ -790,7 +790,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("Infer floating-point values correctly even when it does not fit in decimal") {
     val jsonDF = sqlContext.read
       .option("prefersDecimal", "true")
-      .json(floatingValuesRecords)
+      .json(floatingValueRecords)
 
     // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
     // it will be a decimal as `0.01` by having a precision equal to the scale.
@@ -803,7 +803,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val mergedJsonDF = sqlContext.read
       .option("prefersDecimal", "true")
-      .json(floatingValuesRecords ++ bigIntegerRecords)
+      .json(floatingValueRecords ++ bigIntegerRecords)
 
     val expectedMergedSchema = StructType(
       StructField("a", DoubleType, true) ::

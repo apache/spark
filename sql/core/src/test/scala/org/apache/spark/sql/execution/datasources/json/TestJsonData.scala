@@ -214,7 +214,7 @@ private[json] trait TestJsonData {
       """{"a": {"b": 1}}""" ::
       """{"a": []}""" :: Nil)
 
-  def floatingValuesRecords: RDD[String] =
+  def floatingValueRecords: RDD[String] =
     sqlContext.sparkContext.parallelize(
       s"""{"a": 0.${"0" * 38}1, "b": 0.01}""" :: Nil)
 
