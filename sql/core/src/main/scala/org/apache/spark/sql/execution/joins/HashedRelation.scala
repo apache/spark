@@ -139,7 +139,8 @@ private[joins] class UnsafeHashedRelation(
 
   override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
 
-  override def asReadOnlyCopy(): UnsafeHashedRelation = new UnsafeHashedRelation(numFields, binaryMap)
+  override def asReadOnlyCopy(): UnsafeHashedRelation =
+    new UnsafeHashedRelation(numFields, binaryMap)
 
   override def getMemorySize: Long = {
     binaryMap.getTotalMemoryConsumption
@@ -341,7 +342,8 @@ private[joins] final class GeneralLongHashedRelation(
 
   override def keyIsUnique: Boolean = false
 
-  override def asReadOnlyCopy(): GeneralLongHashedRelation = new GeneralLongHashedRelation(hashTable)
+  override def asReadOnlyCopy(): GeneralLongHashedRelation =
+    new GeneralLongHashedRelation(hashTable)
 
   override def get(key: Long): Iterator[InternalRow] = {
     val rows = hashTable.get(key)
