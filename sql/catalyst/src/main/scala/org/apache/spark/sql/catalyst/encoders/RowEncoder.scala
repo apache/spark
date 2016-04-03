@@ -120,7 +120,7 @@ object RowEncoder {
 
     case StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
-        val x = extractorsFor(
+        val x = serializerFor(
           GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType), f.nullable),
           f.dataType
         )
