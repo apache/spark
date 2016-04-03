@@ -76,8 +76,7 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
     val copied = new GaussianMixtureModel(uid, parentModel)
-    setParent(this.parent)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(this.parent)
   }
 
   @Since("2.0.0")
@@ -170,10 +169,10 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val df = sqlContext.read.parquet(dataPath)
-      val weights = df.select("weights").head().getSeq[Double](0).toArray
-      val mus = df.select("mus").head().getSeq[Vector](0).toArray
-      val sigmas = df.select("sigmas").head().getSeq[Matrix](0).toArray
+      val row = sqlContext.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
+      val weights = row.getSeq[Double](0).toArray
+      val mus = row.getSeq[Vector](1).toArray
+      val sigmas = row.getSeq[Matrix](2).toArray
       require(mus.length == sigmas.length, "Length of Mu and Sigma array must match")
       require(mus.length == weights.length, "Length of weight and Gaussian array must match")
 
@@ -295,9 +294,8 @@ class GaussianMixtureSummary private[clustering] (
    * Size of each cluster.
    */
   @Since("2.0.0")
-  lazy val clusterSizes: Map[Int, Long] = {
+  lazy val clusterSizes: Array[Long] =
     cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().map {
       case Row(cluster: Int, count: Long) => cluster -> count
-    }.toMap
-  }
+    }.toMap.toArray.sortBy(_._1).map(_._2)
 }
