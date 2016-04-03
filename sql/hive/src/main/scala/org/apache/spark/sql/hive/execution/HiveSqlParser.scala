@@ -266,16 +266,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[Generator]]. Override this method in order to support custom Generators.
-   */
-  override protected def withGenerator(
-      name: String,
-      expressions: Seq[Expression],
-      ctx: LateralViewContext): Generator = {
-    UnresolvedGenerator(name, expressions)
-  }
-
-  /**
    * Create a [[HiveScriptIOSchema]].
    */
   override protected def withScriptIOSchema(
