@@ -58,10 +58,10 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
-    * Add an object to `references`, create a class member to access it.
-    *
-    * Returns the name of class member.
-    */
+   * Add an object to `references`, create a class member to access it.
+   *
+   * Returns the name of class member.
+   */
   def addReferenceObj(name: String, obj: Any, className: String = null): String = {
     val term = freshName(name)
     val idx = references.length
@@ -72,9 +72,9 @@ class CodegenContext {
   }
 
   /**
-    * Holding a list of generated columns as input of current operator, will be used by
-    * BoundReference to generate code.
-    */
+   * Holding a list of generated columns as input of current operator, will be used by
+   * BoundReference to generate code.
+   */
   var currentVars: Seq[ExprCode] = null
 
   /**
@@ -169,14 +169,14 @@ class CodegenContext {
   final var INPUT_ROW = "i"
 
   /**
-    * The map from a variable name to it's next ID.
-    */
+   * The map from a variable name to it's next ID.
+   */
   private val freshNameIds = new mutable.HashMap[String, Int]
   freshNameIds += INPUT_ROW -> 1
 
   /**
-    * A prefix used to generate fresh name.
-    */
+   * A prefix used to generate fresh name.
+   */
   var freshNamePrefix = ""
 
   /**
@@ -234,8 +234,8 @@ class CodegenContext {
   }
 
   /**
-    * Update a column in MutableRow from ExprCode.
-    */
+   * Update a column in MutableRow from ExprCode.
+   */
   def updateColumn(
       row: String,
       dataType: DataType,

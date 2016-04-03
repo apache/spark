@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException, IOException}
 import java.net.URI
 import java.util.ConcurrentModificationException
 
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration

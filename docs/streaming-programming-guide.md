@@ -2178,7 +2178,7 @@ overall processing throughput of the system, its use is still recommended to ach
 consistent batch processing times. Make sure you set the CMS GC on both the driver (using `--driver-java-options` in `spark-submit`) and the executors (using [Spark configuration](configuration.html#runtime-environment) `spark.executor.extraJavaOptions`).
 
 * **Other tips**: To further reduce GC overheads, here are some more tips to try.
-    - Use Tachyon for off-heap storage of persisted RDDs. See more detail in the [Spark Programming Guide](programming-guide.html#rdd-persistence).
+    - Persist RDDs using the `OFF_HEAP` storage level. See more detail in the [Spark Programming Guide](programming-guide.html#rdd-persistence).
     - Use more executors with smaller heap sizes. This will reduce the GC pressure within each JVM heap.
 
 

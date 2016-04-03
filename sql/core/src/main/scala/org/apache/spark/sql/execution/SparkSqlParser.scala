@@ -20,8 +20,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.parser.ng.{AbstractSqlParser, AstBuilder, ParseException}
-import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
+import org.apache.spark.sql.catalyst.parser.{AbstractSqlParser, AstBuilder, ParseException}
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.command.{DescribeCommand => _, _}
 import org.apache.spark.sql.execution.datasources._
@@ -37,7 +37,7 @@ object SparkSqlParser extends AbstractSqlParser{
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
 class SparkSqlAstBuilder extends AstBuilder {
-  import org.apache.spark.sql.catalyst.parser.ng.ParserUtils._
+  import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -70,12 +70,26 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   /**
    * Create a [[ShowTablesCommand]] logical plan.
+   * Example SQL :
+   * {{{
+   *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+   * }}}
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.LIKE != null) {
-      logWarning("SHOW TABLES LIKE option is ignored.")
-    }
-    ShowTablesCommand(Option(ctx.db).map(_.getText))
+    ShowTablesCommand(
+      Option(ctx.db).map(_.getText),
+      Option(ctx.pattern).map(string))
+  }
+
+  /**
+   * Create a [[ShowDatabasesCommand]] logical plan.
+   * Example SQL:
+   * {{{
+   *   SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards'];
+   * }}}
+   */
+  override def visitShowDatabases(ctx: ShowDatabasesContext): LogicalPlan = withOrigin(ctx) {
+    ShowDatabasesCommand(Option(ctx.pattern).map(string))
   }
 
   /**
@@ -122,7 +136,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     // Create the explain comment.
     val statement = plan(ctx.statement)
     if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null))
+      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
+        codegen = options.exists(_.CODEGEN != null))
     } else {
       ExplainCommand(OneRowRelation)
     }
@@ -232,8 +247,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx.EXISTS != null,
       Option(ctx.locationSpec).map(visitLocationSpec),
       Option(ctx.comment).map(string),
-      Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))(
-      command(ctx))
+      Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))
   }
 
   /**
@@ -248,8 +262,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterDatabaseProperties(
       ctx.identifier.getText,
-      visitTablePropertyList(ctx.tablePropertyList))(
-      command(ctx))
+      visitTablePropertyList(ctx.tablePropertyList))
   }
 
   /**
@@ -261,7 +274,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDropDatabase(ctx: DropDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DropDatabase(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE == null)(command(ctx))
+    DropDatabase(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE != null)
   }
 
   /**
@@ -273,7 +286,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DescribeDatabase(ctx.identifier.getText, ctx.EXTENDED != null)(command(ctx))
+    DescribeDatabase(ctx.identifier.getText, ctx.EXTENDED != null)
   }
 
   /**
@@ -337,6 +350,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * For example:
    * {{{
    *   ALTER TABLE table1 RENAME TO table2;
+   *   ALTER VIEW view1 RENAME TO view2;
    * }}}
    */
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
@@ -352,6 +366,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * For example:
    * {{{
    *   ALTER TABLE table SET TBLPROPERTIES ('comment' = new_comment);
+   *   ALTER VIEW view SET TBLPROPERTIES ('comment' = new_comment);
    * }}}
    */
   override def visitSetTableProperties(
@@ -368,6 +383,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * For example:
    * {{{
    *   ALTER TABLE table UNSET TBLPROPERTIES IF EXISTS ('comment', 'key');
+   *   ALTER VIEW view UNSET TBLPROPERTIES IF EXISTS ('comment', 'key');
    * }}}
    */
   override def visitUnsetTableProperties(
@@ -512,16 +528,22 @@ class SparkSqlAstBuilder extends AstBuilder {
    * For example:
    * {{{
    *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
+   *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
    * }}}
    */
   override def visitAddTablePartition(
       ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     // Create partition spec to location mapping.
-    val specsAndLocs = ctx.partitionSpecLocation.asScala.map {
-      splCtx =>
-        val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
-        val location = Option(splCtx.locationSpec).map(visitLocationSpec)
-        spec -> location
+    val specsAndLocs = if (ctx.partitionSpec.isEmpty) {
+      ctx.partitionSpecLocation.asScala.map {
+        splCtx =>
+          val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
+          val location = Option(splCtx.locationSpec).map(visitLocationSpec)
+          spec -> location
+      }
+    } else {
+      // Alter View: the location clauses are not allowed.
+      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec(_) -> None)
     }
     AlterTableAddPartition(
       visitTableIdentifier(ctx.tableIdentifier),
@@ -570,6 +592,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * For example:
    * {{{
    *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
+   *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
    * }}}
    */
   override def visitDropTablePartitions(
