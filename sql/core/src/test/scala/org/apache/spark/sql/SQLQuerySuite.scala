@@ -664,11 +664,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         """SELECT TRANSFORM (key, value)
         |USING 'cat' AS (tKey, tValue)
         |FROM testData
-      """.
-          stripMargin).show()
+      """.stripMargin).show()
     }
     assert(e.getMessage contains
-      "Sript Transform is not supported in SQLContext. Use a HiveContext instead.")
+      "Script Transform is not supported in SQLContext. Use a HiveContext instead.")
   }
 
   test("date row") {

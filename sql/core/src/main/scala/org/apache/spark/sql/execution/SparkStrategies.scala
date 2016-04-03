@@ -333,7 +333,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
 
       case _: logical.ScriptTransformation =>
-        sys.error("Sript Transform is not supported in SQLContext. Use a HiveContext instead.")
+        sys.error("Script Transform is not supported in SQLContext. Use a HiveContext instead.")
 
       case logical.Distinct(child) =>
         throw new IllegalStateException(
