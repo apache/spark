@@ -65,8 +65,10 @@ case class WindowSpecDefinition(
         case (RangeFrame, _, vp: ValuePreceding, _) => checkValueBasedBoundaryForRangeFrame()
         case (RangeFrame, _, vf: ValueFollowing, _) => checkValueBasedBoundaryForRangeFrame()
         case (_, _, _, ExcludeGroup) if orderSpec.length == 0 =>
+          // calculating GROUP or TIES needs orderby expression value
           Some("EXCLUDE GROUP clause requires an ordered window frame.")
         case (_, _, _, ExcludeTies) if orderSpec.length == 0 =>
+          // calculating GROUP or TIES needs orderby expression value
           Some("EXCLUDE TIES clause requires an ordered window frame.")
         case (_, _, _, _) => None
       }
