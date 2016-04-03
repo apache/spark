@@ -98,11 +98,11 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }.getMessage
     assert(message1.contains("Table badtable not found in database default"))
 
-    val message2 = intercept[AnalysisException] {
-      sql("SHOW TBLPROPERTIES parquet_tab1('invalid.prop.key')")
-    }.getMessage
-    assert(
-      message2.contains(s"Table default.parquet_tab1 does not have property: invalid.prop.key"))
+    // When key is not found, a row containing the error is returned.
+    checkAnswer(
+      sql("SHOW TBLPROPERTIES parquet_tab1('invalid.prop.key')"),
+      Row("Table default.parquet_tab1 does not have property: invalid.prop.key") :: Nil
+    )
   }
 
   test("show tblproperties for hive table") {
@@ -110,7 +110,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("prop2Val"))
   }
 
-  test("show tblproperties for spark temporary table - error") {
+  test("show tblproperties for spark temporary table - empty row") {
     withTempTable("parquet_temp") {
       sql(
         """
@@ -118,10 +118,8 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
 
-      val message1 = intercept[AnalysisException] {
-        sql("SHOW TBLPROPERTIES parquet_temp")
-      }.getMessage
-      assert(message1.contains("This operation is unsupported for temporary tables"))
+      // An empty sequence of row is returned for session temporary table.
+      checkAnswer(sql("SHOW TBLPROPERTIES parquet_temp"), Nil)
     }
   }
 }

@@ -163,6 +163,7 @@ class SessionCatalog(
   /**
    * Retrieve the metadata of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then an [[AnalysisException]] is thrown.
    */
   def getTable(name: TableIdentifier): CatalogTable = {
     val db = name.database.getOrElse(currentDb)

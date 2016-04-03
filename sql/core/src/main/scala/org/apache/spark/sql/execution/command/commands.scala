@@ -374,10 +374,9 @@ case class ShowDatabasesCommand(databasePattern: Option[String]) extends Runnabl
 }
 
 /**
- * A command for users to list the properties for a table.
- * If propertyKey is specified, the value for the propertyKey
- * is returned. If propertyKey is not specified, all the keys
- * and their corresponding values are returned.
+ * A command for users to list the properties for a table If propertyKey is specified, the value
+ * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
+ * corresponding values are returned.
  * The syntax of using this command in SQL is:
  * {{{
  *   SHOW TBLPROPERTIES table_name[('propertyKey')];
@@ -395,26 +394,29 @@ case class ShowTablePropertiesCommand(
       AttributeReference("key", StringType, nullable = false)() ::
         AttributeReference("value", StringType, nullable = false)() :: Nil
     }
-    propertyKey.map(p => withKeySchema).getOrElse(noKeySchema)
+    propertyKey match {
+      case None => noKeySchema
+      case _ => withKeySchema
+    }
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
 
     if (catalog.isTemporaryTable(table)) {
-      throw new AnalysisException("This operation is unsupported for temporary tables")
-    }
-    val catalogTable = sqlContext.sessionState.catalog.getTable(table)
+      Seq.empty[Row]
+    } else {
+      val catalogTable = sqlContext.sessionState.catalog.getTable(table)
 
-    propertyKey match {
-      case Some(p) =>
-        val errorStr = s"Table ${catalogTable.qualifiedName} does not have property: $p"
-        val propValue = catalogTable
-          .properties
-          .getOrElse(p, throw new AnalysisException(errorStr))
-        Seq(Row(propValue))
-      case None =>
-        catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
+      propertyKey match {
+        case Some(p) =>
+          val propValue = catalogTable
+            .properties
+            .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
+          Seq(Row(propValue))
+        case None =>
+          catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
+      }
     }
   }
 }
