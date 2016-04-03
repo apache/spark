@@ -777,7 +777,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val jsonDF = sqlContext.read
       .json(decimalRecords)
 
-    // The value in `a` field will be a double as they all do not fit in decimal. For `b` field,
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
     // it will be a decimal as `92233720368547758070`.
     val expectedSchema = StructType(
       StructField("a", DoubleType, true) ::
@@ -787,12 +787,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(jsonDF, Row(1.0E38D, BigDecimal("92233720368547758070")))
   }
 
-  test("Infer floating-point values as doubles when it does not fit in decimal") {
+  test("Infer floating-point values correctly even when it does not fit in decimal") {
     val jsonDF = sqlContext.read
       .option("prefersDecimal", "true")
       .json(doubleRecords)
 
-    // The value in `a` field will be a double as they all do not fit in decimal. For `b` field,
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
     // it will be a decimal as `0.01` by having a precision equal to the scale.
     val expectedSchema = StructType(
       StructField("a", DoubleType, true) ::
@@ -800,6 +800,21 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
     checkAnswer(jsonDF, Row(1.0E-39D, BigDecimal(0.01)))
+
+    val mergedJsonDF = sqlContext.read
+      .option("prefersDecimal", "true")
+      .json(doubleRecords ++ decimalRecords)
+
+    val expectedMergedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+      StructField("b", DecimalType(22, 2), true):: Nil)
+
+    assert(expectedMergedSchema === mergedJsonDF.schema)
+    checkAnswer(
+      mergedJsonDF,
+      Row(1.0E-39D, BigDecimal(0.01)) ::
+      Row(1.0E38D, BigDecimal("92233720368547758070")) :: Nil
+    )
   }
 
   test("Loading a JSON dataset from a text file with SQL") {
