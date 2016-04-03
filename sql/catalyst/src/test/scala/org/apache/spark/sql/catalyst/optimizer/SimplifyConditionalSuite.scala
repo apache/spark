@@ -41,7 +41,7 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   private val trueBranch = (TrueLiteral, Literal(5))
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
-  private val nullBranch = (Literal(null, NullType), Literal(30))
+  private val nullBranch = (Literal.create(null, NullType), Literal(30))
 
   test("simplify if") {
     assertEquivalent(
@@ -53,7 +53,7 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
       Literal(20))
 
     assertEquivalent(
-      If(Literal(null, NullType), Literal(10), Literal(20)),
+      If(Literal.create(null, NullType), Literal(10), Literal(20)),
       Literal(20))
   }
 
