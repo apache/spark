@@ -332,7 +332,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
 
-      case s: logical.ScriptTransformation =>
+      case _: logical.ScriptTransformation =>
         sys.error("Sript Transform is not supported in SQLContext. Use a HiveContext instead.")
 
       case logical.Distinct(child) =>

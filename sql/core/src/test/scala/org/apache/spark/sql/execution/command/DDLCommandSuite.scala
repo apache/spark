@@ -778,4 +778,5 @@ class DDLCommandSuite extends PlanTest {
     intercept[ParseException] {
       parser.parsePlan("DROP TABLE D1.T1")
     }
+  }
 }
