@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.json
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
