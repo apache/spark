@@ -107,7 +107,9 @@ private[hive] class HiveFunctionRegistry(
           // If there is any other error, we throw an AnalysisException.
           val errorMessage = s"No handler for Hive udf ${functionInfo.getFunctionClass} " +
             s"because: ${throwable.getMessage}."
-          throw new AnalysisException(errorMessage)
+          val analysisException = new AnalysisException(errorMessage)
+          analysisException.setStackTrace(throwable.getStackTrace)
+          throw analysisException
       }
     }
   }
@@ -141,6 +143,16 @@ private[hive] class HiveFunctionRegistry(
       }
     }.getOrElse(None))
   }
+
+  override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = {
+    underlying.lookupFunctionBuilder(name)
+  }
+
+  // Note: This does not drop functions stored in the metastore
+  override def dropFunction(name: String): Boolean = {
+    underlying.dropFunction(name)
+  }
+
 }
 
 private[hive] case class HiveSimpleUDF(

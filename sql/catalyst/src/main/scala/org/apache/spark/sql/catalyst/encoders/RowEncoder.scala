@@ -36,23 +36,23 @@ object RowEncoder {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     // We use an If expression to wrap extractorsFor result of StructType
-    val extractExpressions = extractorsFor(inputObject, schema).asInstanceOf[If].falseValue
-    val constructExpression = constructorFor(schema)
+    val serializer = serializerFor(inputObject, schema).asInstanceOf[If].falseValue
+    val deserializer = deserializerFor(schema)
     new ExpressionEncoder[Row](
       schema,
       flat = false,
-      extractExpressions.asInstanceOf[CreateStruct].children,
-      constructExpression,
+      serializer.asInstanceOf[CreateStruct].children,
+      deserializer,
       ClassTag(cls))
   }
 
-  private def extractorsFor(
+  private def serializerFor(
       inputObject: Expression,
       inputType: DataType): Expression = inputType match {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType | CalendarIntervalType => inputObject
 
-    case p: PythonUserDefinedType => extractorsFor(inputObject, p.sqlType)
+    case p: PythonUserDefinedType => serializerFor(inputObject, p.sqlType)
 
     case udt: UserDefinedType[_] =>
       val obj = NewInstance(
@@ -95,7 +95,7 @@ object RowEncoder {
           classOf[GenericArrayData],
           inputObject :: Nil,
           dataType = t)
-      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeForInput(et))
+      case _ => MapObjects(serializerFor(_, et), inputObject, externalDataTypeForInput(et))
     }
 
     case t @ MapType(kt, vt, valueNullable) =>
@@ -104,14 +104,14 @@ object RowEncoder {
           Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]])),
           "toSeq",
           ObjectType(classOf[scala.collection.Seq[_]]))
-      val convertedKeys = extractorsFor(keys, ArrayType(kt, false))
+      val convertedKeys = serializerFor(keys, ArrayType(kt, false))
 
       val values =
         Invoke(
           Invoke(inputObject, "valuesIterator", ObjectType(classOf[scala.collection.Iterator[_]])),
           "toSeq",
           ObjectType(classOf[scala.collection.Seq[_]]))
-      val convertedValues = extractorsFor(values, ArrayType(vt, valueNullable))
+      val convertedValues = serializerFor(values, ArrayType(vt, valueNullable))
 
       NewInstance(
         classOf[ArrayBasedMapData],
@@ -128,7 +128,7 @@ object RowEncoder {
         If(
           Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
           Literal.create(null, f.dataType),
-          extractorsFor(
+          serializerFor(
             Invoke(inputObject, method, externalDataTypeForInput(f.dataType), Literal(i) :: Nil),
             f.dataType))
       }
@@ -166,7 +166,7 @@ object RowEncoder {
     case _: NullType => ObjectType(classOf[java.lang.Object])
   }
 
-  private def constructorFor(schema: StructType): Expression = {
+  private def deserializerFor(schema: StructType): Expression = {
     val fields = schema.zipWithIndex.map { case (f, i) =>
       val dt = f.dataType match {
         case p: PythonUserDefinedType => p.sqlType
@@ -176,13 +176,13 @@ object RowEncoder {
       If(
         IsNull(field),
         Literal.create(null, externalDataTypeFor(dt)),
-        constructorFor(field)
+        deserializerFor(field)
       )
     }
     CreateExternalRow(fields, schema)
   }
 
-  private def constructorFor(input: Expression): Expression = input.dataType match {
+  private def deserializerFor(input: Expression): Expression = input.dataType match {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType | CalendarIntervalType => input
 
@@ -216,7 +216,7 @@ object RowEncoder {
     case ArrayType(et, nullable) =>
       val arrayData =
         Invoke(
-          MapObjects(constructorFor(_), input, et),
+          MapObjects(deserializerFor(_), input, et),
           "array",
           ObjectType(classOf[Array[_]]))
       StaticInvoke(
@@ -227,10 +227,10 @@ object RowEncoder {
 
     case MapType(kt, vt, valueNullable) =>
       val keyArrayType = ArrayType(kt, false)
-      val keyData = constructorFor(Invoke(input, "keyArray", keyArrayType))
+      val keyData = deserializerFor(Invoke(input, "keyArray", keyArrayType))
 
       val valueArrayType = ArrayType(vt, valueNullable)
-      val valueData = constructorFor(Invoke(input, "valueArray", valueArrayType))
+      val valueData = deserializerFor(Invoke(input, "valueArray", valueArrayType))
 
       StaticInvoke(
         ArrayBasedMapData.getClass,
@@ -243,7 +243,7 @@ object RowEncoder {
         If(
           Invoke(input, "isNullAt", BooleanType, Literal(i) :: Nil),
           Literal.create(null, externalDataTypeFor(f.dataType)),
-          constructorFor(GetStructField(input, i)))
+          deserializerFor(GetStructField(input, i)))
       }
       If(IsNull(input),
         Literal.create(null, externalDataTypeFor(input.dataType)),

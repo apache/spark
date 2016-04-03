@@ -219,6 +219,14 @@ private[json] trait TestJsonData {
       """{"a": 3, "b": 1.1}""" ::
       """{"a": 3.1, "b": 1}""" :: Nil)
 
+  def floatingValueRecords: RDD[String] =
+    sqlContext.sparkContext.parallelize(
+      s"""{"a": 0.${"0" * 38}1, "b": 0.01}""" :: Nil)
+
+  def bigIntegerRecords: RDD[String] =
+    sqlContext.sparkContext.parallelize(
+      s"""{"a": 1${"0" * 38}, "b": 92233720368547758070}""" :: Nil)
+
   lazy val singleRow: RDD[String] = sqlContext.sparkContext.parallelize("""{"a":123}""" :: Nil)
 
   def empty: RDD[String] = sqlContext.sparkContext.parallelize(Seq[String]())

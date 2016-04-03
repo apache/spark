@@ -64,10 +64,10 @@ trait HashJoin {
   }
 
   /**
-    * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
-    *
-    * If not, returns the original expressions.
-    */
+   * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
+   *
+   * If not, returns the original expressions.
+   */
   def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     var keyExpr: Expression = null
     var width = 0
