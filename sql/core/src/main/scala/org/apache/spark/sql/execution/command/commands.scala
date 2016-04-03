@@ -387,16 +387,10 @@ case class ShowTablePropertiesCommand(
     propertyKey: Option[String]) extends RunnableCommand {
 
   override val output: Seq[Attribute] = {
-    val withKeySchema: Seq[Attribute] = {
-      AttributeReference("value", StringType, nullable = false)() :: Nil
-    }
-    val noKeySchema: Seq[Attribute] = {
-      AttributeReference("key", StringType, nullable = false)() ::
-        AttributeReference("value", StringType, nullable = false)() :: Nil
-    }
+    val schema = AttributeReference("value", StringType, nullable = false)() :: Nil
     propertyKey match {
-      case None => noKeySchema
-      case _ => withKeySchema
+      case None => AttributeReference("key", StringType, nullable = false)() :: schema
+      case _ => schema
     }
   }
 
