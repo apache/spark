@@ -860,4 +860,18 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
     throw new ParseException(s"DROP TABLE is not supported in SQLContext.", ctx)
   }
+
+  /**
+   * CreateView: not supported in SQL Context
+   */
+  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
+    throw new ParseException(s"CREATE VIEW is not supported in SQLContext.", ctx)
+  }
+
+  /**
+   * AlterViewQuery: not supported in SQL Context
+   */
+  override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
+    throw new ParseException(s"ALTER VIEW AS QUERY is not supported in SQLContext.", ctx)
+  }
 }

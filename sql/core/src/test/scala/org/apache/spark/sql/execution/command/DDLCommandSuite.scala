@@ -778,5 +778,11 @@ class DDLCommandSuite extends PlanTest {
     intercept[ParseException] {
       parser.parsePlan("DROP TABLE D1.T1")
     }
+    intercept[ParseException] {
+      parser.parsePlan("CREATE VIEW testView AS SELECT id FROM tab")
+    }
+    intercept[ParseException] {
+      parser.parsePlan("ALTER VIEW testView AS SELECT id FROM tab")
+    }
   }
 }
