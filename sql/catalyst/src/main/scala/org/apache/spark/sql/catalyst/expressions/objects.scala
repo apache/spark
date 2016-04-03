@@ -704,11 +704,11 @@ case class GetExternalRowField(
       case ByteType => s"""${obj.value}.getByte($index)"""
       case DoubleType => s"""${obj.value}.getDouble($index)"""
       case BooleanType => s"""${obj.value}.getBoolean($index)"""
-      case _: StructType => s"""${obj.value}.getStruct($index)"""
+      case ObjectType(x) if x == classOf[Row] => s"""${obj.value}.getStruct($index)"""
       case _ => s"""((${javaType}) ${obj.value}.get($index))"""
     }
 
-    val code = if (nullable) {
+    if (nullable) {
       s"""
         ${obj.code}
         final ${javaType} ${ev.value};
@@ -728,6 +728,5 @@ case class GetExternalRowField(
         final boolean ${ev.isNull} = false;
       """
     }
-    code
   }
 }
