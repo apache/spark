@@ -173,6 +173,8 @@ unsupportedHiveNativeCommands
     | kw1=LOCK kw2=DATABASE
     | kw1=UNLOCK kw2=TABLE
     | kw1=UNLOCK kw2=DATABASE
+    | kw1=CREATE kw2=TEMPORARY kw3=MACRO
+    | kw1=DROP kw2=TEMPORARY kw3=MACRO
     ;
 
 createTableHeader
@@ -759,6 +761,7 @@ SNAPSHOT: 'SNAPSHOT';
 READ: 'READ';
 WRITE: 'WRITE';
 ONLY: 'ONLY';
+MACRO: 'MACRO';
 
 IF: 'IF';
 

@@ -1295,6 +1295,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertUnsupportedFeature {
       sql("ALTER INDEX my_index ON my_table set IDXPROPERTIES (\"prop1\"=\"val1_new\")")}
   }
+
+  test("create/drop macro commands are not supported") {
+    assertUnsupportedFeature {
+      sql("CREATE TEMPORARY MACRO SIGMOID (x DOUBLE) 1.0 / (1.0 + EXP(-x))")
+    }
+    assertUnsupportedFeature { sql("DROP TEMPORARY MACRO SIGMOID") }
+  }
 }
 
 // for SPARK-2180 test
