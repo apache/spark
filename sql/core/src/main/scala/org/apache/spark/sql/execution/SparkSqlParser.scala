@@ -314,7 +314,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     CreateFunction(
       database,
       function,
-      string(ctx.className), // TODO this is not an alias.
+      string(ctx.className),
       resources,
       ctx.TEMPORARY != null)
   }

@@ -198,9 +198,10 @@ case class CreateFunction(
       if (databaseName.isDefined) {
         throw new AnalysisException(
           s"It is not allowed to provide database name when defining a temporary function. " +
-            s"However, database name ${databaseName.get} is provided..")
+            s"However, database name ${databaseName.get} is provided.")
       }
-      // We can overwrite the temp function definition.
+      // We first load resources and then put the builder in the function registry.
+      // Please note that it is allowed to overwrite an existing temp function.
       sqlContext.sessionState.catalog.loadFunctionResources(resources)
       val info = new ExpressionInfo(className, functionName)
       val builder =
@@ -208,6 +209,8 @@ case class CreateFunction(
       sqlContext.sessionState.catalog.createTempFunction(
         functionName, info, builder, ignoreIfExists = false)
     } else {
+      // We are creating a permanent function. First, we want to check if this function
+      // has already been created.
       // Check if the function to create is already existing. If so, throw exception.
       if (sqlContext.sessionState.catalog.functionExists(func)) {
         val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)

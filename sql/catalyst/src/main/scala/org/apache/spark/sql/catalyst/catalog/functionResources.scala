@@ -26,7 +26,7 @@ object JarResource extends FunctionResourceType
 
 object FileResource extends FunctionResourceType
 
-// We do nto allow users to specify a archive because it is YARN specific.
+// We do not allow users to specify a archive because it is YARN specific.
 // When loading resources, we will throw an exception and ask users to
 // use --archive with spark submit.
 object ArchiveResource extends FunctionResourceType
@@ -45,11 +45,16 @@ object FunctionResourceType {
 
 case class FunctionResource(resourceType: FunctionResourceType, uri: String)
 
+/**
+ * A simple trait representing a class that can be used to load resources used by
+ * a function. Because only a SQLContext can load resources, we create this trait
+ * to avoid of explicitly passing SQLContext around.
+ */
 trait FunctionResourceLoader {
   def loadResource(resource: FunctionResource): Unit
 }
 
-class DummyFunctionResourceLoader extends FunctionResourceLoader {
+object DummyFunctionResourceLoader extends FunctionResourceLoader {
   override def loadResource(resource: FunctionResource): Unit = {
     throw new UnsupportedOperationException
   }

@@ -207,12 +207,12 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                throw new AnalysisException(s"Undefined Hive UDF: $name"))
+                failFunctionLookup(name))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => throw new AnalysisException(s"Undefined Hive UDF: $name")
+              case NonFatal(e) => failFunctionLookup(name)
             }
           }
           val className = functionInfo.getFunctionClass.getName

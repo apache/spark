@@ -208,6 +208,7 @@ class SQLContext private[sql](
     sparkContext.addJar(path)
   }
 
+  /** Returns a [[FunctionResourceLoader]] that can be used in SessionCatalog. */
   protected[sql] def functionResourceLoader: FunctionResourceLoader = {
     new FunctionResourceLoader {
       override def loadResource(resource: FunctionResource): Unit = {

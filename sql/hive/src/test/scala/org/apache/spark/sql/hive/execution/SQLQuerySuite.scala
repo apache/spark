@@ -111,7 +111,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val errMsg = intercept[AnalysisException] {
         sql("SELECT key, cc FROM src LATERAL VIEW udtf_count_temp(value) dd AS cc")
       }.getMessage
-      assert(errMsg.contains("Undefined Hive UDF"))
+      assert(errMsg.contains("Undefined function"))
       assert(errMsg.contains("udtf_count_temp"))
     }
   }

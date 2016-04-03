@@ -1230,7 +1230,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val e = intercept[AnalysisException] {
       range(1).selectExpr("not_a_udf()")
     }
-    assert(e.getMessage.contains("Undefined Hive UDF"))
+    assert(e.getMessage.contains("Undefined function"))
     assert(e.getMessage.contains("not_a_udf"))
     var success = false
     val t = new Thread("test") {
@@ -1238,7 +1238,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         val e = intercept[AnalysisException] {
           range(1).selectExpr("not_a_udf()")
         }
-        assert(e.getMessage.contains("Undefined Hive UDF"))
+        assert(e.getMessage.contains("Undefined function"))
         assert(e.getMessage.contains("not_a_udf"))
         success = true
       }

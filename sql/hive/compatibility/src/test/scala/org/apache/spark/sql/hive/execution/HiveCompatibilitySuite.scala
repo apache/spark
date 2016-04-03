@@ -366,7 +366,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_index",
 
     // We do not support macro for now.
-    // TODO: throw an exception if a user is trying to create a macro.
     "macro"
   )
 

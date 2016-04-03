@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, SimpleFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, FunctionRegistry, SimpleFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -48,7 +48,7 @@ class SessionCatalog(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
       conf: CatalystConf) {
-    this(externalCatalog, new DummyFunctionResourceLoader, functionRegistry, conf)
+    this(externalCatalog, DummyFunctionResourceLoader, functionRegistry, conf)
   }
 
   // For testing only.
@@ -480,7 +480,6 @@ class SessionCatalog(
    * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
    *
    * This performs reflection to decide what type of [[Expression]] to return in the builder.
-   * This is useful for creating temporary functions.
    */
   private[sql] def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
     // TODO: at least support UDAFs here
@@ -488,7 +487,7 @@ class SessionCatalog(
   }
 
   /**
-   * Loads resources such as JARs and Files to SQLContext.
+   * Loads resources such as JARs and Files for a function.
    */
   def loadFunctionResources(resources: Seq[(String, String)]): Unit = {
     resources.foreach {
@@ -527,6 +526,12 @@ class SessionCatalog(
     }
   }
 
+  protected def failFunctionLookup(name: String): Nothing = {
+    throw new AnalysisException(s"Undefined function: $name. This function is " +
+      s"neither a registered temporary function nor " +
+      s"a permanent function registered in the database $currentDb.")
+  }
+
   /**
    * Return an [[Expression]] that represents the specified function, assuming it exists.
    * Note: This is currently only used for temporary functions.
@@ -537,14 +542,22 @@ class SessionCatalog(
     // TODO: Right now, we assume that name is not qualified!
     val qualifiedName = FunctionIdentifier(name, Some(currentDb)).unquotedString
     if (functionRegistry.functionExists(name)) {
+      // This function has been already loaded into the function registry.
       functionRegistry.lookupFunction(name, children)
     } else if (functionRegistry.functionExists(qualifiedName)) {
+      // This function has been already loaded into the function registry.
+      // Unlike the above block, we find this function by using the qualified name.
       functionRegistry.lookupFunction(qualifiedName, children)
     } else {
       // The function has not been loaded to the function registry, which means
-      // that the function is a permanent function.
-      // We need to first put the function in FunctionRegistry.
-      val catalogFunction = externalCatalog.getFunction(currentDb, name)
+      // that the function is a permanent function (if it actually has been registered
+      // in the metastore). We need to first put the function in FunctionRegistry.
+      val catalogFunction = try {
+        externalCatalog.getFunction(currentDb, name)
+      } catch {
+        case e: AnalysisException => failFunctionLookup(name)
+        case e: NoSuchFunctionException => failFunctionLookup(name)
+      }
       assert(qualifiedName == catalogFunction.identifier.unquotedString)
       loadFunctionResources(catalogFunction.resources)
       val info = new ExpressionInfo(catalogFunction.className, qualifiedName)

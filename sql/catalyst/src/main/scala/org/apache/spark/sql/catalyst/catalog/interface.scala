@@ -146,7 +146,7 @@ abstract class ExternalCatalog {
 
   def createFunction(db: String, funcDefinition: CatalogFunction): Unit
 
-  // TODO: dropFunction should also take a FunctionIdentifier.
+  // TODO: dropFunction should take a FunctionIdentifier.
   def dropFunction(db: String, funcName: String): Unit
 
   def renameFunction(db: String, oldName: String, newName: String): Unit
@@ -175,6 +175,7 @@ abstract class ExternalCatalog {
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
  * @param resources resource types and Uris used by the function
  */
+// TODO: Use FunctionResource instead of (String, String) as the element type of resources.
 case class CatalogFunction(
     identifier: FunctionIdentifier,
     className: String,
