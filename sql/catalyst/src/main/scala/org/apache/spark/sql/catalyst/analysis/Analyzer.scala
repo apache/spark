@@ -1541,6 +1541,12 @@ object CleanupAliases extends Rule[LogicalPlan] {
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
+    case Expand(projections, child) =>
+      val cleanedProjections = projections.map { projection =>
+        projection.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+      }
+      Expand(cleanedProjections, child)
+
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.
     case o: ObjectOperator => o
@@ -1663,7 +1669,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
             Literal(WINDOW_END) :: windowEnd :: Nil)
         }
 
-        val projections = windows.map(_ +: p.children.head.output)
+        val projections = windows.map(Alias(_, "window")() +: p.children.head.output)
 
         val filterExpr =
           window.timeColumn >= windowAttr.getField(WINDOW_START) &&
@@ -1671,7 +1677,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         val expandedPlan =
           Filter(filterExpr,
-            Expand(projections, windowAttr +: child.output, child))
+            Expand(projections, child))
 
         val substitutedPlan = p transformExpressions {
           case t: TimeWindow => windowAttr

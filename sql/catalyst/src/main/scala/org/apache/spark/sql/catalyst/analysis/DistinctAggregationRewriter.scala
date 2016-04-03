@@ -121,9 +121,18 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
 
     // Aggregation strategy can handle the query with single distinct
     if (distinctAggGroups.size > 1) {
+      val regularAggExprsExists = aggExpressions.exists(!_.isDistinct)
+
       // Create the attributes for the grouping id and the group by clause.
+      // We will take the gid expression in first projection in Expand. So if regularAggExprs
+      // exists, the gid attribute would be Alias(Literal(0), "gid"), otherwise it is
+      // Alias(Literal(1), "gid").
       val gid =
-        new AttributeReference("gid", IntegerType, false)(isGenerated = true)
+        if (regularAggExprsExists) {
+          Alias(Literal(0), "gid")()
+        } else {
+          Alias(Literal(1), "gid")()
+        }
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
         case e => e -> new AttributeReference(e.sql, e.dataType, e.nullable)()
@@ -131,7 +140,8 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
       val groupByAttrs = groupByMap.map(_._2)
 
       // Functions used to modify aggregate functions and their inputs.
-      def evalWithinGroup(id: Literal, e: Expression) = If(EqualTo(gid, id), e, nullify(e))
+      def evalWithinGroup(id: Literal, e: Expression) =
+        If(EqualTo(gid.toAttribute, id), e, nullify(e))
       def patchAggregateFunctionChildren(
           af: AggregateFunction)(
           attrs: Expression => Expression): AggregateFunction = {
@@ -150,12 +160,17 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)
+          val idAlias = if (i == 0) {
+            gid
+          } else {
+            Alias(id, "gid")()
+          }
 
           // Expand projection
           val projection = distinctAggChildren.map {
             case e if group.contains(e) => e
             case e => nullify(e)
-          } :+ id
+          } :+ idAlias
 
           // Final aggregate
           val operators = expressions.map { e =>
@@ -175,7 +190,7 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
 
       // Setup aggregates for 'regular' aggregate expressions.
-      val regularGroupId = Literal(0)
+      val regularGroupId = gid
       val regularAggChildAttrLookup = regularAggChildAttrMap.toMap
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
@@ -184,7 +199,8 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(
-          aggregate.First(evalWithinGroup(regularGroupId, operator.toAttribute), Literal(true)),
+          aggregate.First(evalWithinGroup(regularGroupId.child.asInstanceOf[Literal],
+            operator.toAttribute), Literal(true)),
           mode = Complete,
           isDistinct = false)
 
@@ -202,29 +218,65 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
         (e, operator, resultWithDefault)
       }
 
+      val namedGroupingExpressions: Seq[NamedExpression] = a.groupingExpressions.map { e =>
+        val attrName = groupByMap
+          .find(ge => e.semanticEquals(ge._1))
+          .map(_._2.name).get
+        Alias(e, attrName)()
+      }
+
+      val namedRegularAggChildren: Seq[NamedExpression] = regularAggChildren.map { e =>
+        val attrName = regularAggChildAttrMap
+          .find(ge => e.semanticEquals(ge._1))
+          .map(_._2.name).get
+        Alias(e, attrName)()
+      }
+
+      val nullRegularAggChildren: Seq[NamedExpression] = regularAggChildren.map { e =>
+        val attrName = regularAggChildAttrMap
+          .find(ge => e.semanticEquals(ge._1))
+          .map(_._2.name).get
+        Alias(nullify(e), attrName)()
+      }
+
+      val nullDistinctAggChildren: Seq[NamedExpression] = distinctAggChildren.map { e =>
+        val attrName = distinctAggChildAttrMap
+          .find(ge => e.semanticEquals(ge._1))
+          .map(_._2.name).get
+        Alias(nullify(e), attrName)()
+      }
+
       // Construct the regular aggregate input projection only if we need one.
-      val regularAggProjection = if (regularAggExprs.nonEmpty) {
-        Seq(a.groupingExpressions ++
-          distinctAggChildren.map(nullify) ++
+      val regularAggProjection: Seq[Seq[NamedExpression]] = if (regularAggExprs.nonEmpty) {
+        Seq(namedGroupingExpressions ++
+          nullDistinctAggChildren ++
           Seq(regularGroupId) ++
-          regularAggChildren)
+          namedRegularAggChildren)
       } else {
-        Seq.empty[Seq[Expression]]
+        Seq.empty[Seq[NamedExpression]]
       }
 
       // Construct the distinct aggregate input projections.
-      val regularAggNulls = regularAggChildren.map(nullify)
-      val distinctAggProjections = distinctAggOperatorMap.map {
+      val distinctAggProjections: Seq[Seq[NamedExpression]] = distinctAggOperatorMap.map {
         case (projection, _) =>
-          a.groupingExpressions ++
-            projection ++
-            regularAggNulls
+          val namedProjection: Seq[NamedExpression] = projection.map { e =>
+            e match {
+              case n: NamedExpression => n
+              case _: Expression =>
+                val attrName = distinctAggChildAttrMap
+                  .find(ge => e.semanticEquals(ge._1))
+                  .map(_._2.name).get
+                Alias(e, attrName)()
+            }
+          }
+          namedGroupingExpressions ++
+            namedProjection ++
+            nullRegularAggChildren
       }
 
       // Construct the expand operator.
       val expand = Expand(
         regularAggProjection ++ distinctAggProjections,
-        groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.map(_._2),
         a.child)
 
       // Construct the first aggregate operator. This de-duplicates the all the children of

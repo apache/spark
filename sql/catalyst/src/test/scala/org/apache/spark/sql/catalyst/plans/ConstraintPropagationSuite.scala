@@ -106,13 +106,14 @@ class ConstraintPropagationSuite extends SparkFunSuite {
 
     val expand = Expand(
           Seq(
-            Seq('c, Literal.create(null, StringType), 1),
-            Seq('c, 'a, 2)),
-          Seq('c, 'a, 'gid.int),
-          Project(Seq('a, 'c),
-            notNullRelation))
+            Seq('c, Alias(Literal.create(null, IntegerType), "a")(), Alias(1, "gid")()),
+            Seq('c, 'a, Alias(2, "gid")())),
+            notNullRelation)
     verifyConstraints(expand.analyze.constraints,
-      ExpressionSet(Seq.empty[Expression]))
+      ExpressionSet(Seq(
+        resolveColumn(notNullRelation.analyze, "c") > 10,
+        IsNotNull(resolveColumn(notNullRelation.analyze, "c")),
+        IsNotNull(resolveColumn(expand.analyze, "gid")))))
   }
 
   test("propagating constraints in aliases") {

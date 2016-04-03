@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -495,15 +496,14 @@ private[sql] object Expand {
         if (nonSelectedGroupAttrSet.contains(attr)) {
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
-          Literal.create(null, attr.dataType)
+          Alias(Literal.create(null, attr.dataType), attr.name)()
         } else {
           attr
         }
       // groupingId is the last output, here we use the bit mask as the concrete value for it.
-      } :+ Literal.create(bitmask, IntegerType)
+      } :+ Alias(Literal.create(bitmask, IntegerType), gid.name)()
     }
-    val output = child.output ++ groupByAttrs :+ gid
-    Expand(projections, output, Project(child.output ++ groupByAliases, child))
+    Expand(projections, Project(child.output ++ groupByAliases, child))
   }
 }
 
@@ -512,13 +512,27 @@ private[sql] object Expand {
  * a input row.
  *
  * @param projections to apply
- * @param output of all projections.
  * @param child operator.
  */
 case class Expand(
-    projections: Seq[Seq[Expression]],
-    output: Seq[Attribute],
+    projections: Seq[Seq[NamedExpression]],
     child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = {
+    // Take the first projection as output
+    val preOutput = projections.head.map(_.toAttribute)
+
+    // Check output consistency on remaining projections
+    projections.tail.foreach { p =>
+      p.zipWithIndex.foreach { case (e, index) =>
+        if (e.name != preOutput(index).name || e.dataType != preOutput(index).dataType) {
+          throw new AnalysisException(s"Projection $p is inconsistent with output $preOutput" +
+            "in Expand operator")
+        }
+      }
+    }
+    preOutput
+  }
+
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
@@ -526,10 +540,6 @@ case class Expand(
     val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
-
-  // This operator can reuse attributes (for example making them null when doing a roll up) so
-  // the contraints of the child may no longer be valid.
-  override protected def validConstraints: Set[Expression] = Set.empty[Expression]
 }
 
 /**
