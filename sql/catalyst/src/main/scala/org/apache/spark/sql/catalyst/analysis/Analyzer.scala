@@ -1847,7 +1847,8 @@ class Analyzer(
   }
 
   private def notSupportForExclude(wf: WindowFunction): Boolean =
-    wf.isInstanceOf[RowNumberLike] || wf.isInstanceOf[RankLike] || wf.isInstanceOf[OffsetWindowFunction]
+    wf.isInstanceOf[RowNumberLike] ||
+      wf.isInstanceOf[RankLike] || wf.isInstanceOf[OffsetWindowFunction]
 
   /**
    * Check and add order to [[AggregateWindowFunction]]s.

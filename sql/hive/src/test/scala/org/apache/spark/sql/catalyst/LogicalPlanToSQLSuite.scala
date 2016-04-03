@@ -772,34 +772,19 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "window_with_the_same_window_with_agg_functions")
   }
 
-  test("window with exclude clause - current row") {
-    checkHiveQl(
-      """
-        |SELECT key, value,
-        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key
-        |range between unbounded preceding and current row exclude current row) AS max
-        |FROM parquet_t1 GROUP BY key, value
-      """.stripMargin)
-  }
+  test("window with exclude clause") {
+    val sql_exclude =
+      """SELECT key, value, MAX(value) OVER (PARTITION BY key % 5
+        |ORDER BY key FRAME_TYPE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE EXCLUDE_TYPE
+        |) AS MAX FROM parquet_t1 GROUP BY key, value
+      """.stripMargin
 
-  test("window with exclude clause - group") {
-    checkHiveQl(
-      """
-        |SELECT key, value,
-        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key
-        |range between unbounded preceding and current row exclude group) AS max
-        |FROM parquet_t1 GROUP BY key, value
-      """.stripMargin)
-  }
-
-  test("window with exclude clause - ties") {
-    checkHiveQl(
-      """
-        |SELECT key, value,
-        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key
-        |range between unbounded preceding and current row exclude ties) AS max
-        |FROM parquet_t1 GROUP BY key, value
-      """.stripMargin)
+    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "CURRENT ROW"))
+    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "GROUP"))
+    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "RANGE").replace("EXCLUDE_TYPE", "TIES"))
+    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "CURRENT ROW"))
+    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "GROUP"))
+    checkHiveQl(sql_exclude.replace("FRAME_TYPE", "ROWS").replace("EXCLUDE_TYPE", "TIES"))
   }
 
   test("window with exclude clause - no order by ") {
@@ -808,26 +793,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |SELECT key, value,
         |MAX(value) OVER (PARTITION BY key % 5
         |range between unbounded preceding and current row exclude current row) AS max
-        |FROM parquet_t1 GROUP BY key, value
-      """.stripMargin)
-  }
-
-  test("window with exclude clause - rows framing  ") {
-    checkHiveQl(
-      """
-        |SELECT key, value,
-        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key
-        |ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING exclude current row) AS max
-        |FROM parquet_t1 GROUP BY key, value
-      """.stripMargin)
-  }
-
-  test("window with exclude clause - range framing  ") {
-    checkHiveQl(
-      """
-        |SELECT key, value,
-        |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key
-        |RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING exclude current row) AS max
         |FROM parquet_t1 GROUP BY key, value
       """.stripMargin)
   }

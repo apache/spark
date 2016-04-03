@@ -232,46 +232,46 @@ case class WindowExec(
           // Growing Frame.
           case ("AGGREGATE", frameType, None, Some(high), excludeType) =>
             target: MutableRow => {
-              val toBeCompare = newMutableProjection(orderSpec.map(_.child), child.output)()
+              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)()
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
                 processor,
                 createBoundOrdering(frameType, high),
-                ExcludeClause(excludeType, orderbyColumnValueOrdering(), toBeCompare)
+                ExcludeClause(excludeType, orderbyColumnValueOrdering(), toBeCompared)
               )
             }
 
           // Shrinking Frame.
           case ("AGGREGATE", frameType, Some(low), None, excludeType) =>
             target: MutableRow => {
-              val toBeCompare = newMutableProjection(orderSpec.map(_.child), child.output)()
+              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)()
               new UnboundedFollowingWindowFunctionFrame(
                 target,
                 processor,
                 createBoundOrdering(frameType, low),
-                ExcludeClause(excludeType, orderbyColumnValueOrdering(),toBeCompare ))
+                ExcludeClause(excludeType, orderbyColumnValueOrdering(),toBeCompared ))
             }
 
           // Moving Frame.
           case ("AGGREGATE", frameType, Some(low), Some(high), excludeType) =>
             target: MutableRow => {
-              val toBeCompare = newMutableProjection(orderSpec.map(_.child), child.output)()
+              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)()
               new SlidingWindowFunctionFrame(
                 target,
                 processor,
                 createBoundOrdering(frameType, low),
                 createBoundOrdering(frameType, high),
-                ExcludeClause(excludeType, orderbyColumnValueOrdering(),toBeCompare))
+                ExcludeClause(excludeType, orderbyColumnValueOrdering(),toBeCompared))
             }
 
           // Entire Partition Frame.
           case ("AGGREGATE", frameType, None, None, excludeType) =>
             target: MutableRow => {
-              val toBeCompare = newMutableProjection(orderSpec.map(_.child), child.output)()
+              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)()
               new UnboundedWindowFunctionFrame(
                 target,
                 processor,
-                ExcludeClause(excludeType, orderbyColumnValueOrdering(),toBeCompare))
+                ExcludeClause(excludeType, orderbyColumnValueOrdering(),toBeCompared))
             }
         }
 
@@ -739,14 +739,21 @@ private[execution] final class SlidingWindowFunctionFrame(
 
     processor.initialize(input.size)
     val iter = buffer.iterator()
+
+    // Indicate whether we should update the visited row to the processor. If the row is not
+    // qualified to be included in the calculation, make it false.
     var shouldUpdate = true
+
+    // The offset from the index of the lower bound of the sliding frame.
+    // It is used to keep track of the absolute index of the visited row, in order to
+    // to see if the visited row is the current row.
     var progress = 0
     while (iter.hasNext) {
       val next = iter.next()
       excludeSpec.excludeType match{
         case ExcludeCurrentRow if (inputLowIndex + progress == index) =>
-          // The buffer is the sliding frame now and to exclude current row
-          // out of the calculation, just to make sure the currently traversed
+          // The buffer is the current sliding frame and to exclude current row
+          // out of the calculation, just to make sure the visited
           // row has the same index as the current row of the input
           shouldUpdate = false
         case ExcludeGroup if excludeSpec.valueOrdering.compare(
@@ -793,19 +800,20 @@ private[execution] final class UnboundedWindowFunctionFrame(
     processor: AggregateProcessor,
     excludeSpec: ExcludeClause) extends WindowFunctionFrame {
 
-  /** This buffer is used to hold the  */
+  /** Refer to the comment below in function prepare()*/
   private[this] val buffer = new util.ArrayList[InternalRow]()
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: RowBuffer): Unit = {
     val size = rows.size()
     processor.initialize(size)
-    if (excludeSpec.excludeType != ExcludeNoOthers){
-      // for the exclude cases, the content of the window frame is always changing
-      // along with the current row, such as a row was not included before need to be included
-      // or a row is the included before need to be excluded now, etc.. So intermediate buffer
-      // is used for now.. For potential performance gain, we need to look into the
-      // AggregateProcessor to see if it can support removing a row. TODO
+    if (excludeSpec.excludeType != ExcludeNoOthers) {
+      // For the exclude cases, the content of the window frame is always changing
+      // along with the current row. For example, a row that was not included before
+      // needs to be included now, or a row that was included before needs to be excluded now.
+      // So intermediate buffer is used for now..
+      // TODO: For potential performance gains, we need to look into the AggregateProcessor
+      // to see if it can support removing a row.
       buffer.clear()
       var i = 0
       while (i < size) {
@@ -813,7 +821,7 @@ private[execution] final class UnboundedWindowFunctionFrame(
         i += 1
       }
     } else{
-      // for non-exclude case, the rows in the frame are static. so we can
+      // For non-exclude case, the rows in the frame are static. thus we can
       // initialize the processor upfront.
       var i = 0
       while (i < size) {
@@ -926,7 +934,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
     excludeSpec.excludeType match {
       case ExcludeCurrentRow =>
         ubound match {
-          case b @ RowBoundOrdering(_) =>
+          case b: RowBoundOrdering =>
             // For RowBoundOrdering, the upper bound is just one row before the current row
             // in order to exclude the physical current row
             while (nextRow != null && b.compare(nextRow, inputIndex, current, index) < 0) {
@@ -935,11 +943,11 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
               nextRow = input.next()
               inputIndex += 1
             }
-          case b @ RangeBoundOrdering(_, _, _) =>
+          case b: RangeBoundOrdering =>
             // For RangeBoundOrdering, the upper bound is actually a set of nearby rows that have
             // the same value matching to the current row in terms of orderby spec.. so if we
             // still need to exclude the physical current row, reset the processor and update
-            // the contents of it based on the physical exclusion of current row.
+            // its contents based on the physical exclusion of the current row.
             processor.initialize(input.size())
             input.reset()
             inputIndex = 0
@@ -964,7 +972,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
           if (excludeSpec.valueOrdering.compare(leftRow,rightRow) == 0) {
             buffer.add(nextRow)
           } else {
-            // when we move to the row that no long has the same order by value as
+            // when we move to the row that no longer has the same order by value as
             // the current row, add the previously saved rows to the calculation
             while (buffer.size() > 0) {
               processor.update(buffer.pop())
@@ -976,8 +984,8 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
           inputIndex += 1
         }
       case ExcludeTies =>
-        // For this case, we need to scan and update processor from the beginning of the partition
-        // since the processor can not remove an update
+        // For this case, we need to scan and update the processor from the beginning of
+        // the partition since the processor can not remove an update
         processor.initialize(input.size())
         input.reset()
         inputIndex = 0
@@ -1083,13 +1091,12 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
           excludeSpec.toBeCompared(current).copy()) == 0 =>
           // don't update the processor when the row has the value of the order by spec
           // that is the same as the current row, but include the physical current row
-          if (inputIndex + progress == index)
-            processor.update(nextRow)
+          if (inputIndex + progress == index) processor.update(nextRow)
         case _ =>
           processor.update(nextRow)
       }
       nextRow = tmp.next()
-      progress +=1
+      progress += 1
     }
     processor.evaluate(target)
   }

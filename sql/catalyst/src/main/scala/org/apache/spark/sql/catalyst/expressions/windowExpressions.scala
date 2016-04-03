@@ -284,12 +284,12 @@ object SpecifiedWindowFrame {
  */
 sealed trait ExcludeType
 
-/** Represent the type of Excluding Current Row  */
+/** Represents the type of Excluding Current Row*/
 case object ExcludeCurrentRow extends ExcludeType
 
 /**
  * Specifies excluding the current row and all rows that are tied with it.
- * Ties occur when there is a match on the order column or columns
+ * Ties occur when there is a match on the order-by column or columns
  */
 case object ExcludeGroup extends ExcludeType
 
@@ -299,12 +299,31 @@ case object ExcludeGroup extends ExcludeType
  */
 case object ExcludeTies extends ExcludeType
 
-/** Specifies not excluding any rows. This value is the default if you specify no exclusion. */
+/** Specifies not excluding any rows. This value is the default if you specify no exclusion.*/
 case object ExcludeNoOthers extends ExcludeType
 
+/**
+ * Exclude clause within window framing clause.
+ * e.g.: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW
+ * This clause allow users to exclude certain rows from the window function calculation
+ * on the current row.
+ * 'EXCLUDE CURRENT ROW' means the current row for which the window function is calculated
+ * is excluded from the current fame.
+ * 'EXCLUDE GROUP' means that the nearby rows that match the current row with respect to
+ * the orderby expression together with the current row will be excluded from the calculation
+ * 'EXCLUDE TIES' means that the nearby rows that match the current row with respect to
+ * the orderby expression except the current row will be excluded from the calculation
+ * 'EXCLUDE NO OTHERS' means not excluding any rows from the calculation. This is the
+ * default behavior. Exclude types, GROUP and TIES, requires ORDER BY clause in the window
+ * specification clause.
+ * @param excludeType The type of exclusion as defined above
+ * @param valueOrdering The ordering operator that does the value comparison between 2 rows
+ * @param toBeCompared The projection of the orderby expression from a row
+ *
+ */
 case class ExcludeClause (
     excludeType: ExcludeType,
-    valueOrdering: Ordering[InternalRow] = null, // compare order by column value with current row
+    valueOrdering: Ordering[InternalRow] = null,
     toBeCompared: Projection = null) {
 
   override def toString: String = excludeType match {
