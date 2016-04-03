@@ -911,7 +911,7 @@ class WindowFunctionExcludeSuite extends QueryTest with SQLTestUtils with TestHi
     )
   }
 
-  test("multiple partitions"){
+  test("multiple partitions") {
     checkAnswer(
       sql(
         """
@@ -974,5 +974,27 @@ class WindowFunctionExcludeSuite extends QueryTest with SQLTestUtils with TestHi
           |from table1
         """.stripMargin))
     assert(e3.getMessage.contains("does not support exclude clause"))
+  }
+
+  test("require ORDERBY for EXCLUDE GROUP/TIES") {
+    val e1 = intercept[AnalysisException](
+      sql(
+        """
+          |select col1, col2, col3, sum(col2) over
+          |(partition by col1
+          |rows current row exclude group)
+          |from table1
+        """.stripMargin))
+    assert(e1.getMessage.contains("requires an ordered window frame"))
+
+    val e2 = intercept[AnalysisException](
+      sql(
+        """
+          |select col1, col2, col3, sum(col2) over
+          |(partition by col1
+          |range current row exclude ties)
+          |from table1
+        """.stripMargin))
+    assert(e2.getMessage.contains("requires an ordered window frame"))
   }
 }
