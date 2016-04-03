@@ -148,8 +148,8 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   }
 
   /**
-    * Signal that the scheduler has registered with Mesos.
-    */
+   * Signal that the scheduler has registered with Mesos.
+   */
   protected def markRegistered(): Unit = {
     registerLatch.countDown()
   }

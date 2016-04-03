@@ -38,20 +38,20 @@ import org.apache.spark.util.collection.CompactBuffer
  */
 private[execution] sealed trait HashedRelation {
   /**
-    * Returns matched rows.
-    */
+   * Returns matched rows.
+   */
   def get(key: InternalRow): Seq[InternalRow]
 
   /**
-    * Returns matched rows for a key that has only one column with LongType.
-    */
+   * Returns matched rows for a key that has only one column with LongType.
+   */
   def get(key: Long): Seq[InternalRow] = {
     throw new UnsupportedOperationException
   }
 
   /**
-    * Returns the size of used memory.
-    */
+   * Returns the size of used memory.
+   */
   def getMemorySize: Long = 1L  // to make the test happy
 
   /**
@@ -77,20 +77,20 @@ private[execution] sealed trait HashedRelation {
 }
 
 /**
-  * Interface for a hashed relation that have only one row per key.
-  *
-  * We should call getValue() for better performance.
-  */
+ * Interface for a hashed relation that have only one row per key.
+ *
+ * We should call getValue() for better performance.
+ */
 private[execution] trait UniqueHashedRelation extends HashedRelation {
 
   /**
-    * Returns the matched single row.
-    */
+   * Returns the matched single row.
+   */
   def getValue(key: InternalRow): InternalRow
 
   /**
-    * Returns the matched single row with key that have only one column of LongType.
-    */
+   * Returns the matched single row with key that have only one column of LongType.
+   */
   def getValue(key: Long): InternalRow = {
     throw new UnsupportedOperationException
   }
@@ -345,8 +345,8 @@ private[joins] object UnsafeHashedRelation {
 }
 
 /**
-  * An interface for a hashed relation that the key is a Long.
-  */
+ * An interface for a hashed relation that the key is a Long.
+ */
 private[joins] trait LongHashedRelation extends HashedRelation {
   override def get(key: InternalRow): Seq[InternalRow] = {
     get(key.getLong(0))
@@ -396,26 +396,26 @@ private[joins] final class UniqueLongHashedRelation(
 }
 
 /**
-  * A relation that pack all the rows into a byte array, together with offsets and sizes.
-  *
-  * All the bytes of UnsafeRow are packed together as `bytes`:
-  *
-  *  [  Row0  ][  Row1  ][] ... [  RowN  ]
-  *
-  * With keys:
-  *
-  *   start    start+1   ...       start+N
-  *
-  * `offsets` are offsets of UnsafeRows in the `bytes`
-  * `sizes` are the numbers of bytes of UnsafeRows, 0 means no row for this key.
-  *
-  *  For example, two UnsafeRows (24 bytes and 32 bytes), with keys as 3 and 5 will stored as:
-  *
-  *  start   = 3
-  *  offsets = [0, 0, 24]
-  *  sizes   = [24, 0, 32]
-  *  bytes   = [0 - 24][][24 - 56]
-  */
+ * A relation that pack all the rows into a byte array, together with offsets and sizes.
+ *
+ * All the bytes of UnsafeRow are packed together as `bytes`:
+ *
+ *  [  Row0  ][  Row1  ][] ... [  RowN  ]
+ *
+ * With keys:
+ *
+ *   start    start+1   ...       start+N
+ *
+ * `offsets` are offsets of UnsafeRows in the `bytes`
+ * `sizes` are the numbers of bytes of UnsafeRows, 0 means no row for this key.
+ *
+ *  For example, two UnsafeRows (24 bytes and 32 bytes), with keys as 3 and 5 will stored as:
+ *
+ *  start   = 3
+ *  offsets = [0, 0, 24]
+ *  sizes   = [24, 0, 32]
+ *  bytes   = [0 - 24][][24 - 56]
+ */
 private[joins] final class LongArrayRelation(
     private var numFields: Int,
     private var start: Long,
@@ -483,8 +483,8 @@ private[joins] final class LongArrayRelation(
 }
 
 /**
-  * Create hashed relation with key that is long.
-  */
+ * Create hashed relation with key that is long.
+ */
 private[joins] object LongHashedRelation {
 
   val DENSE_FACTOR = 0.2
