@@ -784,5 +784,12 @@ class DDLCommandSuite extends PlanTest {
     intercept[ParseException] {
       parser.parsePlan("ALTER VIEW testView AS SELECT id FROM tab")
     }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE EXTERNAL TABLE parquet_tab2(c1 INT, c2 STRING)
+          |TBLPROPERTIES('prop1Key '= "prop1Val", ' `prop2Key` '= "prop2Val")
+        """.stripMargin)
+    }
   }
 }

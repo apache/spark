@@ -874,4 +874,11 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
     throw new ParseException(s"ALTER VIEW AS QUERY is not supported in SQLContext.", ctx)
   }
+
+  /**
+   * CreateTable: not supported in SQL Context
+   */
+  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = {
+    throw new ParseException(s"CREATE non-temporary TABLE is not supported in SQLContext.", ctx)
+  }
 }
