@@ -2160,81 +2160,33 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'   # One minute windows every 15 seconds 10 seconds after the minute, e.g. 09:00:10-09:01:10,
 #'   # 09:00:25-09:01:25, 09:00:40-09:01:40, ...
 #'   window(df$time, "1 minute", "15 seconds", "10 seconds")
-#'}
-setMethod("window", signature(x = "Column", windowDuration = "character",
-                              slideDuration = "character", startTime = "character"),
-          function(x, windowDuration, slideDuration, startTime) {
-            jc <- callJStatic("org.apache.spark.sql.functions",
-                              "window",
-                              x@jc, windowDuration, slideDuration, startTime)
-            column(jc)
-          })
-
-#' window
 #'
-#' Bucketize rows into one or more time windows given a timestamp specifying column. Window
-#' starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
-#' [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
-#' the order of months are not supported.
+#'   # One minute tumbling windows 15 seconds after the minute, e.g. 09:00:15-09:01:15,
+#    # 09:01:15-09:02:15...
+#'   window(df$time, "1 minute", startTime = "15 seconds")
 #'
-#' The time column must be of TimestampType.
-#'
-#' Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
-#' interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
-#' If the `slideDuration` is not provided, the windows will be tumbling windows.
-#'
-#' The output column will be a struct called 'window' by default with the nested columns 'start'
-#' and 'end'.
-#'
-#' @family datetime_funcs
-#' @rdname window
-#' @name window
-#' @export
-#' @examples
-#'\dontrun{
 #'   # Thirty second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
 #'   window(df$time, "30 seconds", "10 seconds")
 #'}
-setMethod("window", signature(x = "Column", windowDuration = "character",
-                              slideDuration = "character", startTime = "missing"),
-          function(x, windowDuration, slideDuration, startTime) {
-            jc <- callJStatic("org.apache.spark.sql.functions",
-                              "window",
-                              x@jc, windowDuration, slideDuration)
-            column(jc)
-          })
-
-#' window
-#'
-#' Bucketize rows into one or more time windows given a timestamp specifying column. Window
-#' starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
-#' [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
-#' the order of months are not supported.
-#'
-#' The time column must be of TimestampType.
-#'
-#' Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
-#' interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
-#' If the `slideDuration` is not provided, the windows will be tumbling windows.
-#'
-#' The output column will be a struct called 'window' by default with the nested columns 'start'
-#' and 'end'.
-#'
-#' @family datetime_funcs
-#' @rdname window
-#' @name window
-#' @export
-#' @examples
-#'\dontrun{
-#'   # Thirty second tumbling windows, e.g. 09:00:00-09:00:30, 09:00:30-09:01:00, ...
-#'   window(df$time, "30 seconds")
-#'}
-setMethod("window", signature(x = "Column", windowDuration = "character",
-                              slideDuration = "missing", startTime = "missing"),
-          function(x, windowDuration, slideDuration, startTime) {
-            jc <- callJStatic("org.apache.spark.sql.functions",
-                              "window",
-                              x@jc, windowDuration)
+setMethod("window", signature(x = "Column"),
+          function(x, windowDuration, slideDuration = NULL, startTime = NULL) {
+            if (!is.null(slideDuration) && !is.null(startTime)) {
+              jc <- callJStatic("org.apache.spark.sql.functions",
+                                "window",
+                                x@jc, windowDuration, slideDuration, startTime)
+            } else if (!is.null(slideDuration)) {
+              jc <- callJStatic("org.apache.spark.sql.functions",
+                                "window",
+                                x@jc, windowDuration, slideDuration)
+            } else if (!is.null(startTime)) {
+              jc <- callJStatic("org.apache.spark.sql.functions",
+                                "window",
+                                x@jc, windowDuration, windowDuration, startTime)
+            } else {
+              jc <- callJStatic("org.apache.spark.sql.functions",
+                                "window",
+                                x@jc, windowDuration)
+            }
             column(jc)
           })
 
