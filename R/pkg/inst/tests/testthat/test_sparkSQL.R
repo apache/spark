@@ -1205,7 +1205,7 @@ test_that("greatest() and least() on a DataFrame", {
 })
 
 test_that("time windowing (window()) with all inputs", {
-  df <- createDataFrame(sqlContext, data.frame(t=c("2016-03-11 09:00:07"), v=c(1)))
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
   df$window <- window(df$t, "5 seconds", "5 seconds", "0 seconds")
   local <- collect(df)$v
   # Not checking time windows because of possible time zone issues. Just checking that the function
@@ -1214,7 +1214,7 @@ test_that("time windowing (window()) with all inputs", {
 })
 
 test_that("time windowing (window()) with slide duration", {
-  df <- createDataFrame(sqlContext, data.frame(t=c("2016-03-11 09:00:07"), v=c(1)))
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
   df$window <- window(df$t, "5 seconds", "2 seconds")
   local <- collect(df)$v
   # Not checking time windows because of possible time zone issues. Just checking that the function
@@ -1223,7 +1223,7 @@ test_that("time windowing (window()) with slide duration", {
 })
 
 test_that("time windowing (window()) with start time", {
-  df <- createDataFrame(sqlContext, data.frame(t=c("2016-03-11 09:00:07"), v=c(1)))
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
   df$window <- window(df$t, "5 seconds", startTime = "2 seconds")
   local <- collect(df)$v
   # Not checking time windows because of possible time zone issues. Just checking that the function
@@ -1232,7 +1232,7 @@ test_that("time windowing (window()) with start time", {
 })
 
 test_that("time windowing (window()) with just window duration", {
-  df <- createDataFrame(sqlContext, data.frame(t=c("2016-03-11 09:00:07"), v=c(1)))
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
   df$window <- window(df$t, "5 seconds")
   local <- collect(df)$v
   # Not checking time windows because of possible time zone issues. Just checking that the function
