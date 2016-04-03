@@ -177,10 +177,10 @@ It is also possible to pull XCom directly in a template, here's an example
 of what this may look like:
 
 .. code:: sql
-    
+
     SELECT * FROM {{ task_instance.xcom_pull(task_ids='foo', key='table_name') }}
 
-Note that XComs are similar to `Variables`_, but are specifically designed 
+Note that XComs are similar to `Variables`_, but are specifically designed
 for inter-task communication rather than global settings.
 
 
@@ -441,7 +441,7 @@ configuration files, it allows you to expose the configuration that led
 to the related tasks in Airflow.
 
 .. code:: python
-    
+
     t = BashOperator("foo", dag=dag)
     t.doc_md = """\
     #Title"

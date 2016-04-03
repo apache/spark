@@ -100,7 +100,7 @@ Airflow requirement and should be used where possible).
 
 ### Testing locally
 
-#### TL;DR 
+#### TL;DR
 Tests can then be run with (see also the [Running unit tests](#running-unit-tests) section below):
 
     ./run_unit_tests.sh
