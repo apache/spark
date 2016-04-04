@@ -117,10 +117,10 @@ private[deploy] class DriverRunner(
   /** Kill driver process and wait for it to exit. */
   private def killProcess(): Unit = {
     if (process != null) {
-      logInfo("Killing process!")
+      logInfo("Killing driver process!")
       val exitCode = Utils.terminateProcess(process, DRIVER_TERMINATE_TIMEOUT_MS)
       if (exitCode.isEmpty) {
-        logWarning("Failed to terminate process: " + process +
+        logWarning("Failed to terminate driver process: " + process +
             ". This process will likely be orphaned.")
       }
     }
