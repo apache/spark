@@ -72,6 +72,11 @@ case class MapPartitions(
 
 /**
  * Applies the given function to each input row and encodes the result.
+ *
+ * TODO: Each serializer expression needs the result object which is returned by the given function,
+ * as input. This operator uses some tricks to make sure we only calculate the result object once,
+ * we can use [[Project]] to replace this operator after we make subexpression elimination work in
+ * whole stage codegen.
  */
 case class MapElements(
     func: AnyRef,
