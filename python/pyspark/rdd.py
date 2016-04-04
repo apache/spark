@@ -2306,7 +2306,7 @@ class RDD(object):
         """
         with SCCallSiteSync(self.context) as css:
             port = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
-        return list(_load_from_socket(port, self._jrdd_deserializer))
+        return _load_from_socket(port, self._jrdd_deserializer)
 
 
 def _prepare_for_python_RDD(sc, command):
