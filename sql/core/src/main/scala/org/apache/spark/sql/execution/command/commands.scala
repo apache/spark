@@ -485,9 +485,20 @@ case class DescribeFunction(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
     functionName match {
-      case "<>" | "!=" | "between" | "case" =>
+      case "<>" =>
         Row(s"Function: $functionName") ::
-        Row(s"Usage: To be added.") :: Nil
+        Row(s"Usage: a <> b - Returns TRUE if a is not equal to b") :: Nil
+      case "!=" =>
+        Row(s"Function: $functionName") ::
+        Row(s"Usage: a != b - Returns TRUE if a is not equal to b") :: Nil
+      case "between" =>
+        Row(s"Function: $functionName") ::
+        Row(s"Usage: between a [NOT] BETWEEN b AND c - " +
+          s"evaluate if a is [not] in between b and c") :: Nil
+      case "case" =>
+        Row(s"Function: $functionName") ::
+        Row(s"Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
+          s"When a = b, returns c; when a = d, return e; else return f") :: Nil
       case _ => sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
         case Some(info) =>
           val result =
