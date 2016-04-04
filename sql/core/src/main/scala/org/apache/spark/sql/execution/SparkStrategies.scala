@@ -332,9 +332,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
 
-      case _: logical.ScriptTransformation =>
-        sys.error("Script Transform is not supported in SQLContext. Use a HiveContext instead.")
-
       case logical.Distinct(child) =>
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")

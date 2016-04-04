@@ -294,11 +294,12 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
    * Create a [[HiveScriptIOSchema]].
    */
   override protected def withScriptIOSchema(
+      ctx: QuerySpecificationContext,
       inRowFormat: RowFormatContext,
       recordWriter: Token,
       outRowFormat: RowFormatContext,
       recordReader: Token,
-      schemaLess: Boolean): HiveScriptIOSchema = {
+      schemaLess: Boolean): AnyRef = {
     if (recordWriter != null || recordReader != null) {
       logWarning("Used defined record reader/writer classes are currently ignored.")
     }

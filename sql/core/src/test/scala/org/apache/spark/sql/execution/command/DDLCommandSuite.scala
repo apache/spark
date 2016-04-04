@@ -774,7 +774,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
-  test("commands in HiveSqlParser") {
+  test("commands only available in HiveContext") {
     intercept[ParseException] {
       parser.parsePlan("DROP TABLE D1.T1")
     }
@@ -790,6 +790,9 @@ class DDLCommandSuite extends PlanTest {
           |CREATE EXTERNAL TABLE parquet_tab2(c1 INT, c2 STRING)
           |TBLPROPERTIES('prop1Key '= "prop1Val", ' `prop2Key` '= "prop2Val")
         """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan("SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue) FROM testData")
     }
   }
 }

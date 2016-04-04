@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
 
+import org.antlr.v4.runtime.Token
+
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.{AbstractSqlParser, AstBuilder, ParseException}
@@ -180,6 +182,20 @@ class SparkSqlAstBuilder extends AstBuilder {
       "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.",
       ctx)
     (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists, ctx.EXTERNAL != null)
+  }
+
+  /**
+   * Unsupported operation in SQL Context.
+   */
+  override protected def withScriptIOSchema(
+      ctx: QuerySpecificationContext,
+      inRowFormat: RowFormatContext,
+      recordWriter: Token,
+      outRowFormat: RowFormatContext,
+      recordReader: Token,
+      schemaLess: Boolean): AnyRef = {
+    throw new ParseException(
+      "Script Transform is not supported in SQLContext. Use a HiveContext instead", ctx)
   }
 
   /**
