@@ -82,7 +82,7 @@ class HiveSessionCatalog(
     metastoreCatalog.refreshTable(name)
   }
 
-  def invalidateTable(name: TableIdentifier): Unit = {
+  override def invalidateTable(name: TableIdentifier): Unit = {
     metastoreCatalog.invalidateTable(name)
   }
 

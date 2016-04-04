@@ -414,33 +414,34 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   override def visitBucketTable(ctx: BucketTableContext): LogicalPlan = withOrigin(ctx) {
     throw new AnalysisException(
-      "Unsupported operation: ALTER TABLE ... CLUSTERED BY ... INTO N BUCKETS")
+      "Operation not allowed: ALTER TABLE ... CLUSTERED BY ... INTO N BUCKETS")
   }
 
   override def visitUnclusterTable(ctx: UnclusterTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Unsupported operation: ALTER TABLE ... NOT CLUSTERED")
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... NOT CLUSTERED")
   }
 
   override def visitUnsortTable(ctx: UnsortTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Unsupported operation: ALTER TABLE ... NOT SORTED")
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... NOT SORTED")
   }
 
   override def visitSkewTable(ctx: SkewTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Unsupported operation: ALTER TABLE ... SKEWED BY ...")
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... SKEWED BY ...")
   }
 
   override def visitUnskewTable(ctx: UnskewTableContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Unsupported operation: ALTER TABLE ... NOT SKEWED")
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... NOT SKEWED")
   }
 
   override def visitUnstoreTable(ctx: UnstoreTableContext): LogicalPlan = withOrigin(ctx) {
     throw new AnalysisException(
-      "Unsupported operation: ALTER TABLE ... NOT STORED AS DIRECTORIES")
+      "Operation not allowed: ALTER TABLE ... NOT STORED AS DIRECTORIES")
   }
 
   override def visitSetTableSkewLocations(
       ctx: SetTableSkewLocationsContext): LogicalPlan = withOrigin(ctx) {
-    throw new AnalysisException("Unsupported operation: ALTER TABLE ... SET SKEWED LOCATION ...")
+    throw new AnalysisException(
+      "Operation not allowed: ALTER TABLE ... SET SKEWED LOCATION ...")
   }
 
   /**

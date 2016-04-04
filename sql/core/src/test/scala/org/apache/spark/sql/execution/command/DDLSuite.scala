@@ -34,6 +34,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     try {
+      // drop all databases, tables and functions after each test
       sqlContext.sessionState.catalog.reset()
     } finally {
       super.afterEach()
@@ -54,11 +55,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql(query)
     }
-    assert(e.getMessage.toLowerCase.contains("unsupported"))
+    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
   }
 
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
-    catalog.createDatabase(CatalogDatabase("dbx", "", "", Map()), ignoreIfExists = false)
+    catalog.createDatabase(CatalogDatabase(name, "", "", Map()), ignoreIfExists = false)
   }
 
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
@@ -200,6 +201,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
     val tableIdent2 = TableIdentifier("tab2", Some("dbx"))
     createDatabase(catalog, "dbx")
+    createDatabase(catalog, "dby")
     createTable(catalog, tableIdent1)
     assert(catalog.listTables("dbx") == Seq(tableIdent1))
     sql("ALTER TABLE dbx.tab1 RENAME TO dbx.tab2")
@@ -219,33 +221,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: set location") {
-    val catalog = sqlContext.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    val partSpec = Map("a" -> "1")
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    createTablePartition(catalog, partSpec, tableIdent)
-    assert(catalog.getTable(tableIdent).storage.locationUri.isEmpty)
-    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isEmpty)
-    // set table location
-    sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
-    assert(catalog.getTable(tableIdent).storage.locationUri ===
-      Some("/path/to/your/lovely/heart"))
-    // set table partition location
-    sql("ALTER TABLE dbx.tab1 PARTITION (a='1') SET LOCATION '/path/to/part/ways'")
-    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri ===
-      Some("/path/to/part/ways"))
-    // set table location without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
-    assert(catalog.getTable(tableIdent).storage.locationUri === Some("/swanky/steak/place"))
-    // set table partition location
-    sql("ALTER TABLE tab1 PARTITION (a='1') SET LOCATION 'vienna'")
-    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri === Some("vienna"))
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
-    }
+    testSetLocation(isDatasourceTable = false)
+  }
+
+  test("alter table: set location (datasource table)") {
+    testSetLocation(isDatasourceTable = true)
   }
 
   test("alter table: set properties") {
@@ -267,8 +247,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
     }
     // throw exception for datasource tables
-    catalog.alterTable(catalog.getTable(tableIdent).copy(
-      properties = Map("spark.sql.sources.provider" -> "csv")))
+    convertToDatasourceTable(catalog, tableIdent)
     val e = intercept[AnalysisException] {
       sql("ALTER TABLE tab1 SET TBLPROPERTIES ('sora' = 'bol')")
     }
@@ -301,8 +280,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
     assert(catalog.getTable(tableIdent).properties.isEmpty)
     // throw exception for datasource tables
-    catalog.alterTable(catalog.getTable(tableIdent).copy(
-      properties = Map("spark.sql.sources.provider" -> "csv")))
+    convertToDatasourceTable(catalog, tableIdent)
     val e1 = intercept[AnalysisException] {
       sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('sora')")
     }
@@ -310,44 +288,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: set serde") {
-    val catalog = sqlContext.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    assert(catalog.getTable(tableIdent).storage.serde.isEmpty)
-    assert(catalog.getTable(tableIdent).storage.serdeProperties.isEmpty)
-    // set table serde
-    sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.jadoop'")
-    assert(catalog.getTable(tableIdent).storage.serde == Some("org.apache.jadoop"))
-    assert(catalog.getTable(tableIdent).storage.serdeProperties.isEmpty)
-    // set table serde and properties
-    sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.madoop' " +
-      "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
-    assert(catalog.getTable(tableIdent).storage.serde == Some("org.apache.madoop"))
-    assert(catalog.getTable(tableIdent).storage.serdeProperties ==
-      Map("k" -> "v", "kay" -> "vee"))
-    // set serde properties only
-    sql("ALTER TABLE dbx.tab1 SET SERDEPROPERTIES ('k' = 'vvv')")
-    assert(catalog.getTable(tableIdent).storage.serde == Some("org.apache.madoop"))
-    assert(catalog.getTable(tableIdent).storage.serdeProperties ==
-      Map("k" -> "vvv", "kay" -> "vee"))
-    catalog.setCurrentDatabase("dbx")
-    // set things without explicitly specifying database
-    sql("ALTER TABLE tab1 SET SERDE 'com.yahoot' WITH SERDEPROPERTIES ('kay' = 'veee')")
-    assert(catalog.getTable(tableIdent).storage.serde == Some("com.yahoot"))
-    assert(catalog.getTable(tableIdent).storage.serdeProperties ==
-      Map("k" -> "vvv", "kay" -> "veee"))
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist SET SERDE 'whatever' WITH SERDEPROPERTIES ('x' = 'y')")
-    }
-    // set table serde is not supported for datasource tables
-    catalog.alterTable(catalog.getTable(tableIdent).copy(
-      properties = Map("spark.sql.sources.provider" -> "csv")))
-    val e = intercept[AnalysisException] {
-      sql("ALTER TABLE tab1 SET SERDE 'whatever'")
-    }
-    assert(e.getMessage.contains("datasource"))
+    testSetSerde(isDatasourceTable = false)
+  }
+
+  test("alter table: set serde (datasource table)") {
+    testSetSerde(isDatasourceTable = true)
   }
 
   test("alter table: bucketing is not supported") {
@@ -443,6 +388,107 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     checkAnswer(
       sql("SHOW DATABASES LIKE 'non-existentdb'"),
       Nil)
+  }
+
+  private def convertToDatasourceTable(
+      catalog: SessionCatalog,
+      tableIdent: TableIdentifier): Unit = {
+    catalog.alterTable(catalog.getTable(tableIdent).copy(
+      properties = Map("spark.sql.sources.provider" -> "csv")))
+  }
+
+  private def testSetLocation(isDatasourceTable: Boolean): Unit = {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val partSpec = Map("a" -> "1")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, partSpec, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    assert(catalog.getTable(tableIdent).storage.locationUri.isEmpty)
+    assert(catalog.getTable(tableIdent).storage.serdeProperties.isEmpty)
+    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isEmpty)
+    assert(catalog.getPartition(tableIdent, partSpec).storage.serdeProperties.isEmpty)
+    // Verify that the location is set to the expected string
+    def verifyLocation(expected: String, spec: Option[TablePartitionSpec] = None): Unit = {
+      val storageFormat = spec
+        .map { s => catalog.getPartition(tableIdent, s).storage }
+        .getOrElse { catalog.getTable(tableIdent).storage }
+      if (isDatasourceTable) {
+        assert(storageFormat.serdeProperties.get("path") === Some(expected))
+      } else {
+        assert(storageFormat.locationUri === Some(expected))
+      }
+    }
+    // set table location
+    sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
+    verifyLocation("/path/to/your/lovely/heart")
+    // set table partition location
+    sql("ALTER TABLE dbx.tab1 PARTITION (a='1') SET LOCATION '/path/to/part/ways'")
+    verifyLocation("/path/to/part/ways", Some(partSpec))
+    // set table location without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
+    verifyLocation("/swanky/steak/place")
+    // set table partition location without explicitly specifying database
+    sql("ALTER TABLE tab1 PARTITION (a='1') SET LOCATION 'vienna'")
+    verifyLocation("vienna", Some(partSpec))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
+    }
+    // partition to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.tab1 PARTITION (b='2') SET LOCATION '/mister/spark'")
+    }
+  }
+
+  private def testSetSerde(isDatasourceTable: Boolean): Unit = {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    assert(catalog.getTable(tableIdent).storage.serde.isEmpty)
+    assert(catalog.getTable(tableIdent).storage.serdeProperties.isEmpty)
+    // set table serde and/or properties (should fail on datasource tables)
+    if (isDatasourceTable) {
+      val e1 = intercept[AnalysisException] {
+        sql("ALTER TABLE dbx.tab1 SET SERDE 'whatever'")
+      }
+      val e2 = intercept[AnalysisException] {
+        sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.madoop' " +
+          "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+      }
+      assert(e1.getMessage.contains("datasource"))
+      assert(e2.getMessage.contains("datasource"))
+    } else {
+      sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.jadoop'")
+      assert(catalog.getTable(tableIdent).storage.serde == Some("org.apache.jadoop"))
+      assert(catalog.getTable(tableIdent).storage.serdeProperties.isEmpty)
+      sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.madoop' " +
+        "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+      assert(catalog.getTable(tableIdent).storage.serde == Some("org.apache.madoop"))
+      assert(catalog.getTable(tableIdent).storage.serdeProperties ==
+        Map("k" -> "v", "kay" -> "vee"))
+    }
+    // set serde properties only
+    sql("ALTER TABLE dbx.tab1 SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
+    assert(catalog.getTable(tableIdent).storage.serdeProperties ==
+      Map("k" -> "vvv", "kay" -> "vee"))
+    // set things without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 SET SERDEPROPERTIES ('kay' = 'veee')")
+    assert(catalog.getTable(tableIdent).storage.serdeProperties ==
+      Map("k" -> "vvv", "kay" -> "veee"))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
+    }
   }
 
 }

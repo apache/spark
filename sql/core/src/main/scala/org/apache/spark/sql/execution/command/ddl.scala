@@ -20,10 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
 
@@ -210,7 +209,9 @@ case class AlterTableRename(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.renameTable(oldName, newName)
+    val catalog = sqlContext.sessionState.catalog
+    catalog.invalidateTable(oldName)
+    catalog.renameTable(oldName, newName)
     Seq.empty[Row]
   }
 
@@ -234,10 +235,9 @@ case class AlterTableSetProperties(
     val catalog = sqlContext.sessionState.catalog
     val table = catalog.getTable(tableName)
     val newProperties = table.properties ++ properties
-    // TODO: make this a constant
-    if (newProperties.contains("spark.sql.sources.provider")) {
+    if (DDLUtils.isDatasourceTable(newProperties)) {
       throw new AnalysisException(
-        "alter table properties is not supported for datasource tables")
+        "alter table properties is not supported for tables defined using the datasource API")
     }
     val newTable = table.copy(properties = newProperties)
     catalog.alterTable(newTable)
@@ -264,8 +264,7 @@ case class AlterTableUnsetProperties(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
     val table = catalog.getTable(tableName)
-    // TODO: make this a constant
-    if (table.properties.contains("spark.sql.sources.provider")) {
+    if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "alter table properties is not supported for datasource tables")
     }
@@ -309,7 +308,7 @@ case class AlterTableSerDeProperties(
     val catalog = sqlContext.sessionState.catalog
     val table = catalog.getTable(tableName)
     // Do not support setting serde for datasource tables
-    if (serdeClassName.isDefined && table.properties.contains("spark.sql.sources.provider")) {
+    if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "alter table serde is not supported for datasource tables")
     }
@@ -381,6 +380,9 @@ case class AlterTableSetFileFormat(
 /**
  * A command that sets the location of a table or a partition.
  *
+ * For normal tables, this just sets the location URI in the table/partition's storage format.
+ * For datasource tables, this sets a "path" parameter in the table/partition's serde properties.
+ *
  * The syntax of this command is:
  * {{{
  *    ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION "loc";
@@ -394,17 +396,29 @@ case class AlterTableSetLocation(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    if (partitionSpec.isEmpty) {
-      // No partition spec is specified, so we set the location for the table itself
-      val table = catalog.getTable(tableName)
-      val newTable = table.withNewStorage(locationUri = Some(location))
-      catalog.alterTable(newTable)
-    } else {
-      // Partition spec is specified, so we set the location only for this partition
-      val spec = partitionSpec.get
-      val part = catalog.getPartition(tableName, spec)
-      val newPart = part.copy(storage = part.storage.copy(locationUri = Some(location)))
-      catalog.alterPartitions(tableName, Seq(newPart))
+    val table = catalog.getTable(tableName)
+    partitionSpec match {
+      case Some(spec) =>
+        // Partition spec is specified, so we set the location only for this partition
+        val part = catalog.getPartition(tableName, spec)
+        val newPart =
+          if (DDLUtils.isDatasourceTable(table)) {
+            part.copy(storage = part.storage.copy(
+              serdeProperties = part.storage.serdeProperties ++ Map("path" -> location)))
+          } else {
+            part.copy(storage = part.storage.copy(locationUri = Some(location)))
+          }
+        catalog.alterPartitions(tableName, Seq(newPart))
+      case None =>
+        // No partition spec is specified, so we set the location for the table itself
+        val newTable =
+          if (DDLUtils.isDatasourceTable(table)) {
+            table.withNewStorage(
+              serdeProperties = table.storage.serdeProperties ++ Map("path" -> location))
+          } else {
+            table.withNewStorage(locationUri = Some(location))
+          }
+        catalog.alterTable(newTable)
     }
     Seq.empty[Row]
   }
@@ -454,3 +468,16 @@ case class AlterTableReplaceCol(
     restrict: Boolean,
     cascade: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
+
+
+private object DDLUtils {
+
+  def isDatasourceTable(props: Map[String, String]): Boolean = {
+    props.contains("spark.sql.sources.provider")
+  }
+
+  def isDatasourceTable(table: CatalogTable): Boolean = {
+    isDatasourceTable(table.properties)
+  }
+}
+
