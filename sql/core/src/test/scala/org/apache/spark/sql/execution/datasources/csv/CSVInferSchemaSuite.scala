@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.csv
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
-class InferSchemaSuite extends SparkFunSuite {
+class CSVInferSchemaSuite extends SparkFunSuite {
 
   test("String fields types are inferred correctly from null types") {
     assert(CSVInferSchema.inferField(NullType, "") == NullType)

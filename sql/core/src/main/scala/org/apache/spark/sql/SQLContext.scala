@@ -25,13 +25,14 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, InMemoryCatalog}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
@@ -65,13 +66,14 @@ class SQLContext private[sql](
     @transient val sparkContext: SparkContext,
     @transient protected[sql] val cacheManager: CacheManager,
     @transient private[sql] val listener: SQLListener,
-    val isRootContext: Boolean)
+    val isRootContext: Boolean,
+    @transient private[sql] val externalCatalog: ExternalCatalog)
   extends Logging with Serializable {
 
   self =>
 
-  def this(sparkContext: SparkContext) = {
-    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
+  def this(sc: SparkContext) = {
+    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), true, new InMemoryCatalog)
   }
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
@@ -109,7 +111,8 @@ class SQLContext private[sql](
       sparkContext = sparkContext,
       cacheManager = cacheManager,
       listener = listener,
-      isRootContext = false)
+      isRootContext = false,
+      externalCatalog = externalCatalog)
   }
 
   /**
@@ -186,6 +189,12 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
+  // Extract `spark.sql.*` entries and put it in our SQLConf.
+  // Subclasses may additionally set these entries in other confs.
+  SQLContext.getSQLProperties(sparkContext.getConf).asScala.foreach { case (k, v) =>
+    setConf(k, v)
+  }
+
   protected[sql] def parseSql(sql: String): LogicalPlan = sessionState.sqlParser.parsePlan(sql)
 
   protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
@@ -197,30 +206,6 @@ class SQLContext private[sql](
    */
   protected[sql] def addJar(path: String): Unit = {
     sparkContext.addJar(path)
-  }
-
-  {
-    // We extract spark sql settings from SparkContext's conf and put them to
-    // Spark SQL's conf.
-    // First, we populate the SQLConf (conf). So, we can make sure that other values using
-    // those settings in their construction can get the correct settings.
-    // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
-    // and spark.sql.hive.metastore.jars to get correctly constructed.
-    val properties = new Properties
-    sparkContext.getConf.getAll.foreach {
-      case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
-      case _ =>
-    }
-    // We directly put those settings to conf to avoid of calling setConf, which may have
-    // side-effects. For example, in HiveContext, setConf may cause executionHive and metadataHive
-    // get constructed. If we call setConf directly, the constructed metadataHive may have
-    // wrong settings, or the construction may fail.
-    conf.setConf(properties)
-    // After we have populated SQLConf, we call setConf to populate other confs in the subclass
-    // (e.g. hiveconf in HiveContext).
-    properties.asScala.foreach {
-      case (key, value) => setConf(key, value)
-    }
   }
 
   /**
@@ -287,11 +272,11 @@ class SQLContext private[sql](
   }
 
   /**
-   * Returns true if the [[Queryable]] is currently cached in-memory.
+   * Returns true if the [[Dataset]] is currently cached in-memory.
    * @group cachemgmt
    * @since 1.3.0
    */
-  private[sql] def isCached(qName: Queryable): Boolean = {
+  private[sql] def isCached(qName: Dataset[_]): Boolean = {
     cacheManager.lookupCachedData(qName).nonEmpty
   }
 
@@ -683,8 +668,10 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sessionState.catalog.registerTable(
-      sessionState.sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
+    sessionState.catalog.createTempTable(
+      sessionState.sqlParser.parseTableIdentifier(tableName).table,
+      df.logicalPlan,
+      overrideIfExists = true)
   }
 
   /**
@@ -697,7 +684,7 @@ class SQLContext private[sql](
    */
   def dropTempTable(tableName: String): Unit = {
     cacheManager.tryUncacheQuery(table(tableName))
-    sessionState.catalog.unregisterTable(TableIdentifier(tableName))
+    sessionState.catalog.dropTable(TableIdentifier(tableName), ignoreIfNotExists = true)
   }
 
   /**
@@ -725,13 +712,13 @@ class SQLContext private[sql](
   }
 
   /**
-    * :: Experimental ::
-    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-    * in an range from `start` to `end` (exclusive) with an step value.
-    *
-    * @since 2.0.0
-    * @group dataset
-    */
+   * :: Experimental ::
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with an step value.
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
   @Experimental
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, numPartitions = sparkContext.defaultParallelism)
@@ -794,7 +781,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(this, ShowTablesCommand(None))
+    Dataset.ofRows(this, ShowTablesCommand(None, None))
   }
 
   /**
@@ -806,7 +793,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName)))
+    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName), None))
   }
 
   /**
@@ -824,9 +811,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(): Array[String] = {
-    sessionState.catalog.getTables(None).map {
-      case (tableName, _) => tableName
-    }.toArray
+    tableNames(sessionState.catalog.getCurrentDatabase)
   }
 
   /**
@@ -836,9 +821,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    sessionState.catalog.getTables(Some(databaseName)).map {
-      case (tableName, _) => tableName
-    }.toArray
+    sessionState.catalog.listTables(databaseName).map(_.table).toArray
   }
 
   @transient
@@ -1025,4 +1008,18 @@ object SQLContext {
     }
     sqlListener.get()
   }
+
+  /**
+   * Extract `spark.sql.*` properties from the conf and return them as a [[Properties]].
+   */
+  private[sql] def getSQLProperties(sparkConf: SparkConf): Properties = {
+    val properties = new Properties
+    sparkConf.getAll.foreach { case (key, value) =>
+      if (key.startsWith("spark.sql")) {
+        properties.setProperty(key, value)
+      }
+    }
+    properties
+  }
+
 }

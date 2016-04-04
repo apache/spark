@@ -34,13 +34,13 @@ public class JavaMultiLabelClassificationMetricsExample {
     JavaSparkContext sc = new JavaSparkContext(conf);
     // $example on$
     List<Tuple2<double[], double[]>> data = Arrays.asList(
-      new Tuple2<double[], double[]>(new double[]{0.0, 1.0}, new double[]{0.0, 2.0}),
-      new Tuple2<double[], double[]>(new double[]{0.0, 2.0}, new double[]{0.0, 1.0}),
-      new Tuple2<double[], double[]>(new double[]{}, new double[]{0.0}),
-      new Tuple2<double[], double[]>(new double[]{2.0}, new double[]{2.0}),
-      new Tuple2<double[], double[]>(new double[]{2.0, 0.0}, new double[]{2.0, 0.0}),
-      new Tuple2<double[], double[]>(new double[]{0.0, 1.0, 2.0}, new double[]{0.0, 1.0}),
-      new Tuple2<double[], double[]>(new double[]{1.0}, new double[]{1.0, 2.0})
+      new Tuple2<>(new double[]{0.0, 1.0}, new double[]{0.0, 2.0}),
+      new Tuple2<>(new double[]{0.0, 2.0}, new double[]{0.0, 1.0}),
+      new Tuple2<>(new double[]{}, new double[]{0.0}),
+      new Tuple2<>(new double[]{2.0}, new double[]{2.0}),
+      new Tuple2<>(new double[]{2.0, 0.0}, new double[]{2.0, 0.0}),
+      new Tuple2<>(new double[]{0.0, 1.0, 2.0}, new double[]{0.0, 1.0}),
+      new Tuple2<>(new double[]{1.0}, new double[]{1.0, 2.0})
     );
     JavaRDD<Tuple2<double[], double[]>> scoreAndLabels = sc.parallelize(data);
 

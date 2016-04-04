@@ -25,6 +25,7 @@ import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
+import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 
@@ -39,9 +40,9 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
-    streaming, streamingKafka
+    streaming, streamingFlumeSink, streamingFlume, streamingKafka
   ) = Seq(
-    "streaming", "streaming-kafka"
+    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka"
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
@@ -56,8 +57,8 @@ object BuildCommons {
     Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
-    Seq("assembly", "network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
+  val assemblyProjects@Seq(assembly, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKinesisAslAssembly) =
+    Seq("assembly", "network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
 
   val copyJarsProjects@Seq(examples) = Seq("examples").map(ProjectRef(buildLocation, _))
@@ -283,6 +284,8 @@ object SparkBuild extends PomBuild {
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
+  enable(Flume.settings)(streamingFlumeSink)
+
   enable(Java8TestSettings.settings)(java8Tests)
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
@@ -348,6 +351,10 @@ object Unsafe {
   )
 }
 
+object Flume {
+  lazy val settings = sbtavro.SbtAvro.avroSettings
+}
+
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
@@ -395,57 +402,10 @@ object OldDeps {
 }
 
 object Catalyst {
-  lazy val settings = Seq(
-    // ANTLR code-generation step.
-    //
-    // This has been heavily inspired by com.github.stefri.sbt-antlr (0.5.3). It fixes a number of
-    // build errors in the current plugin.
-    // Create Parser from ANTLR grammar files.
-    sourceGenerators in Compile += Def.task {
-      val log = streams.value.log
-
-      val grammarFileNames = Seq(
-        "SparkSqlLexer.g",
-        "SparkSqlParser.g")
-      val sourceDir = (sourceDirectory in Compile).value / "antlr3"
-      val targetDir = (sourceManaged in Compile).value
-
-      // Create default ANTLR Tool.
-      val antlr = new org.antlr.Tool
-
-      // Setup input and output directories.
-      antlr.setInputDirectory(sourceDir.getPath)
-      antlr.setOutputDirectory(targetDir.getPath)
-      antlr.setForceRelativeOutput(true)
-      antlr.setMake(true)
-
-      // Add grammar files.
-      grammarFileNames.flatMap(gFileName => (sourceDir ** gFileName).get).foreach { gFilePath =>
-        val relGFilePath = (gFilePath relativeTo sourceDir).get.getPath
-        log.info("ANTLR: Grammar file '%s' detected.".format(relGFilePath))
-        antlr.addGrammarFile(relGFilePath)
-        // We will set library directory multiple times here. However, only the
-        // last one has effect. Because the grammar files are located under the same directory,
-        // We assume there is only one library directory.
-        antlr.setLibDirectory(gFilePath.getParent)
-      }
-
-      // Generate the parser.
-      antlr.process()
-      val errorState = org.antlr.tool.ErrorManager.getErrorState
-      if (errorState.errors > 0) {
-        sys.error("ANTLR: Caught %d build errors.".format(errorState.errors))
-      } else if (errorState.warnings > 0) {
-        sys.error("ANTLR: Caught %d build warnings.".format(errorState.warnings))
-      }
-
-      // Return all generated java files.
-      (targetDir ** "*.java").get.toSeq
-    }.taskValue,
-    // Include ANTLR tokens files.
-    resourceGenerators in Compile += Def.task {
-      ((sourceManaged in Compile).value ** "*.tokens").get.toSeq
-    }.taskValue
+  lazy val settings = antlr4Settings ++ Seq(
+    antlr4PackageName in Antlr4 := Some("org.apache.spark.sql.catalyst.parser"),
+    antlr4GenListener in Antlr4 := true,
+    antlr4GenVisitor in Antlr4 := true
   )
 }
 
@@ -526,7 +486,7 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-kafka-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
+      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
         // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
         s"${mName}-${v}.jar"
       } else {
@@ -644,9 +604,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
 
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.
@@ -665,7 +625,7 @@ object Unidoc {
       "-public",
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
-        "streaming.api.java", "streaming.kafka", "streaming.kinesis"
+        "streaming.api.java", "streaming.flume", "streaming.kafka", "streaming.kinesis"
       ),
       "-group", "MLlib", packageList(
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",

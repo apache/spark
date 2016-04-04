@@ -34,7 +34,7 @@ import org.scalatest.concurrent.Timeouts._
 
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.memory.StaticMemoryManager
+import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.NettyBlockTransferService
@@ -74,10 +74,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       name: String = SparkContext.DRIVER_IDENTIFIER,
       master: BlockManagerMaster = this.master,
       transferService: Option[BlockTransferService] = Option.empty): BlockManager = {
+    conf.set("spark.testing.memory", maxMem.toString)
+    conf.set("spark.memory.offHeap.size", maxMem.toString)
     val serializer = new KryoSerializer(conf)
     val transfer = transferService
       .getOrElse(new NettyBlockTransferService(conf, securityMgr, numCores = 1))
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
+    val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
@@ -92,6 +94,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     System.setProperty("os.arch", "amd64")
     conf = new SparkConf(false)
       .set("spark.app.id", "test")
+      .set("spark.testing", "true")
+      .set("spark.memory.fraction", "1")
+      .set("spark.memory.storageFraction", "1")
       .set("spark.kryoserializer.buffer", "1m")
       .set("spark.test.useCompressedOops", "true")
       .set("spark.storage.unrollFraction", "0.4")
@@ -518,6 +523,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     testInMemoryLRUStorage(StorageLevel.MEMORY_ONLY_SER)
   }
 
+  test("in-memory LRU storage with off-heap") {
+    testInMemoryLRUStorage(StorageLevel(
+      useDisk = false,
+      useMemory = true,
+      useOffHeap = true,
+      deserialized = false, replication = 1))
+  }
+
   private def testInMemoryLRUStorage(storageLevel: StorageLevel): Unit = {
     store = makeBlockManager(12000)
     val a1 = new Array[Byte](4000)
@@ -606,6 +619,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("disk and memory storage with serialization and getLocalBytes") {
     testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = true)
+  }
+
+  test("disk and off-heap memory storage") {
+    testDiskAndMemoryStorage(StorageLevel.OFF_HEAP, getAsBytes = false)
+  }
+
+  test("disk and off-heap memory storage with getLocalBytes") {
+    testDiskAndMemoryStorage(StorageLevel.OFF_HEAP, getAsBytes = true)
   }
 
   def testDiskAndMemoryStorage(
@@ -817,12 +838,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
+    conf.set("spark.testing.memory", "1200")
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
-    val memoryManager = new StaticMemoryManager(
-      conf,
-      maxOnHeapExecutionMemory = Long.MaxValue,
-      maxStorageMemory = 1200,
-      numCores = 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
@@ -928,6 +946,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!store.diskStore.contains("list3"), "list3 was in disk store")
     assert(!store.diskStore.contains("list4"), "list4 was in disk store")
     assert(!store.diskStore.contains("list5"), "list5 was in disk store")
+
+    // remove block - list2 should be removed from disk
+    val updatedBlocks6 = getUpdatedBlocks {
+      store.removeBlock(
+        "list2", tellMaster = true)
+    }
+    assert(updatedBlocks6.size === 1)
+    assert(updatedBlocks6.head._1 === TestBlockId("list2"))
+    assert(updatedBlocks6.head._2.storageLevel == StorageLevel.NONE)
+    assert(!store.diskStore.contains("list2"), "list2 was in disk store")
   }
 
   test("query block statuses") {
@@ -1035,7 +1063,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("safely unroll blocks through putIterator (disk)") {
     store = makeBlockManager(12000)
-    val memAndDisk = StorageLevel.MEMORY_AND_DISK
     val memoryStore = store.memoryStore
     val diskStore = store.diskStore
     val smallList = List.fill(40)(new Array[Byte](100))
@@ -1044,12 +1071,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
-    store.putIterator("b1", smallIterator, memAndDisk)
-    store.putIterator("b2", smallIterator, memAndDisk)
+    store.putIterator("b1", smallIterator, StorageLevel.MEMORY_AND_DISK)
+    store.putIterator("b2", smallIterator, StorageLevel.MEMORY_AND_DISK)
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     // Memory store should contain b2 and b3, while disk store should contain only b1
-    val result3 = memoryStore.putIterator("b3", smallIterator, memAndDisk, ClassTag.Any)
+    val result3 = memoryStore.putIteratorAsValues("b3", smallIterator, ClassTag.Any)
     assert(result3.isRight)
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
@@ -1065,7 +1092,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // the block may be stored to disk. During the unrolling process, block "b2" should be kicked
     // out, so the memory store should contain only b3, while the disk store should contain
     // b1, b2 and b4.
-    val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk, ClassTag.Any)
+    val result4 = memoryStore.putIteratorAsValues("b4", bigIterator, ClassTag.Any)
     assert(result4.isLeft)
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))

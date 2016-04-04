@@ -519,7 +519,6 @@ case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
@@ -527,6 +526,10 @@ case class Expand(
     val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
+
+  // This operator can reuse attributes (for example making them null when doing a roll up) so
+  // the contraints of the child may no longer be valid.
+  override protected def validConstraints: Set[Expression] = Set.empty[Expression]
 }
 
 /**

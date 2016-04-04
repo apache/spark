@@ -160,7 +160,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       "SparkPi",
       "42");
 
-    Map<String, String> env = new HashMap<String, String>();
+    Map<String, String> env = new HashMap<>();
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
     assertEquals("foo", findArgValue(cmd, parser.MASTER));
     assertEquals("bar", findArgValue(cmd, parser.DEPLOY_MODE));

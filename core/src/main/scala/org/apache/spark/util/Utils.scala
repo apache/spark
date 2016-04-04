@@ -256,10 +256,11 @@ private[spark] object Utils extends Logging {
     dir
   }
 
-  /** Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
-    * copying is disabled by default unless explicitly set transferToEnabled as true,
-    * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
-    */
+  /**
+   * Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
+   * copying is disabled by default unless explicitly set transferToEnabled as true,
+   * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
+   */
   def copyStream(in: InputStream,
                  out: OutputStream,
                  closeStreams: Boolean = false,
@@ -1194,21 +1195,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a block of code that evaluates to Unit, re-throwing any non-fatal uncaught
-   * exceptions as IOException.  This is used when implementing Externalizable and Serializable's
-   * read and write methods, since Java's serializer will not report non-IOExceptions properly;
-   * see SPARK-4080 for more context.
-   */
-  def tryOrIOException(block: => Unit) {
-    try {
-      block
-    } catch {
-      case e: IOException => throw e
-      case NonFatal(t) => throw new IOException(t)
-    }
-  }
-
-  /**
    * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
    * exceptions as IOException. This is used when implementing Externalizable and Serializable's
    * read and write methods, since Java's serializer will not report non-IOExceptions properly;
@@ -1218,8 +1204,12 @@ private[spark] object Utils extends Logging {
     try {
       block
     } catch {
-      case e: IOException => throw e
-      case NonFatal(t) => throw new IOException(t)
+      case e: IOException =>
+        logError("Exception encountered", e)
+        throw e
+      case NonFatal(e) =>
+        logError("Exception encountered", e)
+        throw new IOException(e)
     }
   }
 
@@ -1575,9 +1565,11 @@ private[spark] object Utils extends Logging {
     else -1
   }
 
-  /** Returns the system properties map that is thread-safe to iterator over. It gets the
-    * properties which have been set explicitly, as well as those for which only a default value
-    * has been defined. */
+  /**
+   * Returns the system properties map that is thread-safe to iterator over. It gets the
+   * properties which have been set explicitly, as well as those for which only a default value
+   * has been defined.
+   */
   def getSystemProperties: Map[String, String] = {
     System.getProperties.stringPropertyNames().asScala
       .map(key => (key, System.getProperty(key))).toMap
