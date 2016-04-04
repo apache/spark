@@ -265,7 +265,6 @@ exportMethods("%in%",
               "var_samp",
               "weekofyear",
               "when",
-              "window",
               "year")
 
 exportClasses("GroupedData")
