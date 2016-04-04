@@ -178,6 +178,9 @@ private[spark] class Executor(
     /** Whether this task has been killed. */
     @volatile private var killed = false
 
+    /** Whether this task has been finished. */
+    @volatile private var finished = false
+
     /** How much the JVM process has spent in GC when the task starts to run. */
     @volatile var startGCTime: Long = _
 
@@ -191,8 +194,16 @@ private[spark] class Executor(
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
       killed = true
       if (task != null) {
-        task.kill(interruptThread)
+        synchronized {
+          if (!finished) {
+            task.kill(interruptThread)
+          }
+        }
       }
+    }
+
+    private def setTaskFinished(finished: Boolean): Unit = synchronized {
+      this.finished = true
     }
 
     override def run(): Unit = {
@@ -315,16 +326,21 @@ private[spark] class Executor(
       } catch {
         case ffe: FetchFailedException =>
           val reason = ffe.toTaskEndReason
+          setTaskFinished(true)
+          // Reset the interrupted status of the thread to update the status
+          Thread.interrupted()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case _: TaskKilledException | _: InterruptedException if task.killed =>
           logInfo(s"Executor killed $taskName (TID $taskId)")
+          setTaskFinished(true)
           // Reset the interrupted status of the thread to update the status
           Thread.interrupted()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
 
         case cDE: CommitDeniedException =>
           val reason = cDE.toTaskEndReason
+          setTaskFinished(true)
           // Reset the interrupted status of the thread to update the status
           Thread.interrupted()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
@@ -356,6 +372,7 @@ private[spark] class Executor(
                 ser.serialize(new ExceptionFailure(t, accumulatorUpdates, preserveCause = false))
             }
           }
+          setTaskFinished(true)
           // Reset the interrupted status of the thread to update the status
           Thread.interrupted()
           execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
