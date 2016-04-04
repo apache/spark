@@ -141,7 +141,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     if (ctx.storageHandler == null) {
       typedVisit[CatalogStorageFormat](ctx.fileFormat)
     } else {
-      typedVisit[CatalogStorageFormat](ctx.storageHandler)
+      visitStorageHandler(ctx.storageHandler)
     }
   }
 
@@ -403,7 +403,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   /**
    * Storage Handlers are currently not supported in the statements we support (CTAS).
    */
-  override def visitStorageHandler(ctx: StorageHandlerContext): AnyRef = withOrigin(ctx) {
+  override def visitStorageHandler(
+      ctx: StorageHandlerContext): CatalogStorageFormat = withOrigin(ctx) {
     throw new ParseException("Storage Handlers are currently unsupported.", ctx)
   }
 
