@@ -483,20 +483,27 @@ case class DescribeFunction(
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
-      case Some(info) =>
-        val result =
-          Row(s"Function: ${info.getName}") ::
-          Row(s"Class: ${info.getClassName}") ::
-          Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
+    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    functionName match {
+      case "<>" | "!=" | "between" | "case" =>
+        Row(s"Function: $functionName") ::
+        Row(s"Usage: To be added.") :: Nil
+      case _ => sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
+        case Some(info) =>
+          val result =
+            Row(s"Function: ${info.getName}") ::
+            Row(s"Class: ${info.getClassName}") ::
+            Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
 
-        if (isExtended) {
-          result :+ Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
-        } else {
-          result
-        }
+          if (isExtended) {
+            result :+
+              Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
+          } else {
+            result
+          }
 
-      case None => Seq(Row(s"Function: $functionName not found."))
+        case None => Seq(Row(s"Function: $functionName not found."))
+      }
     }
   }
 }
