@@ -1898,8 +1898,13 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] =
-    map(t => func.call(t))(encoder)
+  def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    implicit val uEnc = encoder
+    new Dataset[U](
+      sqlContext,
+      MapElements[T, U](func, logicalPlan),
+      uEnc)
+  }
 
   /**
    * :: Experimental ::

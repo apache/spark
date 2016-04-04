@@ -93,10 +93,10 @@ case class MapPartitions(
 
 object MapElements {
   def apply[T : Encoder, U : Encoder](
-      func: T => U,
+      func: AnyRef,
       child: LogicalPlan): MapElements = {
     MapElements(
-      func.asInstanceOf[Any => Any],
+      func,
       encoderFor[T].deserializer,
       encoderFor[U].namedExpressions,
       child)
@@ -110,7 +110,7 @@ object MapElements {
  * @param serializer use to serialize the output of `func`.
  */
 case class MapElements(
-    func: Any => Any,
+    func: AnyRef,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
     child: LogicalPlan) extends UnaryNode with ObjectOperator {

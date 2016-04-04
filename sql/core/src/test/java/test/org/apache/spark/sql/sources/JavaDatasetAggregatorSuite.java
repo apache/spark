@@ -73,7 +73,7 @@ public class JavaDatasetAggregatorSuite implements Serializable {
     return ds.groupByKey(
       new MapFunction<Tuple2<String, Integer>, String>() {
         @Override
-        public String call(Tuple2<String, Integer> value) throws Exception {
+        public String call(Tuple2<String, Integer> value) {
           return value._1();
         }
       },

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import scala.language.existentials
+
+import org.apache.spark.api.java.function.MapFunction
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -71,7 +74,7 @@ case class MapPartitions(
  * Applies the given function to each input row and encodes the result.
  */
 case class MapElements(
-    func: Any => Any,
+    func: AnyRef,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with ObjectOperator with CodegenSupport {
@@ -85,32 +88,40 @@ case class MapElements(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  // Mark this as empty. We'll always deserialize the input row and apply the given function at the
-  // beginning.
-  override def usedInputs: AttributeSet = AttributeSet.empty
-
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val (funcClass, methodName) = func match {
+      case m: MapFunction[_, _] => classOf[MapFunction[_, _]] -> "call"
+      case _ => classOf[Any => Any] -> "apply"
+    }
+    val funcObj = Literal.create(func, ObjectType(funcClass))
+    val resultObjType = serializer.head.collect { case b: BoundReference => b }.head.dataType
+    val callFunc = Invoke(funcObj, methodName, resultObjType, Seq(deserializer))
+
     val bound = ExpressionCanonicalizer.execute(
-      BindReferences.bindReference(deserializer, child.output))
+      BindReferences.bindReference(callFunc, child.output))
     ctx.currentVars = input
     val evaluated = bound.gen(ctx)
 
-    val resultObj = LambdaVariable(evaluated.value, evaluated.isNull, bound.dataType)
+    val resultObj = LambdaVariable(evaluated.value, evaluated.isNull, resultObjType)
     val outputFields = serializer.map(_ transform {
       case _: BoundReference => resultObj
     })
     val resultVars = outputFields.map(_.gen(ctx))
     s"""
-      ${evaluateRequiredVariables(output, Seq(evaluated), bound.references)}
+      ${evaluated.code}
       ${consume(ctx, resultVars)}
     """
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
+    val callFunc: Any => Any = func match {
+      case m: MapFunction[_, _] => i => m.asInstanceOf[MapFunction[Any, Any]].call(i)
+      case _ => func.asInstanceOf[Any => Any]
+    }
     child.execute().mapPartitionsInternal { iter =>
       val getObject = generateToObject(deserializer, child.output)
       val outputObject = generateToRow(serializer)
-      iter.map(getObject).map(func).map(outputObject)
+      iter.map(getObject).map(callFunc).map(outputObject)
     }
   }
 

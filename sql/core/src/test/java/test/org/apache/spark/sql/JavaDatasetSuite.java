@@ -102,7 +102,7 @@ public class JavaDatasetSuite implements Serializable {
 
     Dataset<Integer> mapped = ds.map(new MapFunction<String, Integer>() {
       @Override
-      public Integer call(String v) throws Exception {
+      public Integer call(String v) {
         return v.length();
       }
     }, Encoders.INT());
@@ -171,7 +171,7 @@ public class JavaDatasetSuite implements Serializable {
     KeyValueGroupedDataset<Integer, String> grouped = ds.groupByKey(
       new MapFunction<String, Integer>() {
         @Override
-        public Integer call(String v) throws Exception {
+        public Integer call(String v) {
           return v.length();
         }
       },
@@ -221,7 +221,7 @@ public class JavaDatasetSuite implements Serializable {
     KeyValueGroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(
       new MapFunction<Integer, Integer>() {
         @Override
-        public Integer call(Integer v) throws Exception {
+        public Integer call(Integer v) {
           return v / 2;
         }
       },
