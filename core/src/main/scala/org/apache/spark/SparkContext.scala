@@ -1398,7 +1398,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
   }
 
-
   /**
    * :: DeveloperApi ::
    * Request an additional number of executors from the cluster manager.

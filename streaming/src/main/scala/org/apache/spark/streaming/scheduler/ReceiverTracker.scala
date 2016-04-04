@@ -236,10 +236,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
-  def getAllocatedExecutors: Map[Int, Option[String]] = {
+  def getAllocatedExecutors(): Map[Int, Option[String]] = {
     endpoint.askWithRetry[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
       _.runningExecutor.map { _.executorId }
     }
+  }
+
+  def numReceivers(): Int = {
+    receiverInputStreams.size
   }
 
   /** Register a receiver */

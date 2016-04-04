@@ -1,16 +1,31 @@
-package org.apache.spark.streaming.scheduler
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import scala.collection.mutable.ArrayBuffer
+package org.apache.spark.streaming.scheduler
 
 import org.mockito.Matchers.{eq => meq}
 import org.mockito.Mockito._
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
 
-import org.apache.spark.util.ManualClock
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
+import org.apache.spark.util.ManualClock
 
 
 class ExecutorAllocationManagerSuite extends SparkFunSuite
@@ -18,142 +33,302 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
   import ExecutorAllocationManager._
 
-  private var allocationClient: ExecutorAllocationClient = null
-  private var receiverTracker: ReceiverTracker = null
-  private var allocationManagers = new ArrayBuffer[ExecutorAllocationManager]
-  private var clock: ManualClock = null
   private val batchDurationMillis = 1000L
+  private var allocationClient: ExecutorAllocationClient = null
+  private var clock: ManualClock = null
 
   before {
     allocationClient = mock[ExecutorAllocationClient]
-    receiverTracker = mock[ReceiverTracker]
     clock = new ManualClock()
   }
 
-  after {
-    allocationManagers.foreach { _.stop() }
-  }
-
   test("basic functionality") {
-    val allocationManager = createManager()
+    // Test that adding batch processing time info to allocation manager
+    // causes executors to be requested and killed accordingly
 
-    allocationManager.start()
+    // There is 1 receiver, and exec 1 has been allocated to it
+    withAllocationManager(numReceivers = 1) { case (receiverTracker, allocationManager) =>
+      when(receiverTracker.getAllocatedExecutors).thenReturn(Map(1 -> Some("1")))
 
-    def advanceTimeAndAssert(batchProcTimeMs: Double)(body: => Unit): Unit = {
-      reset(allocationClient)
-      reset(receiverTracker)
-      when(allocationClient.getExecutorIds()).thenReturn(Seq("1"))
-      when(receiverTracker.getAllocatedExecutors).thenReturn(Map.empty[Int, Option[String]])
-      addBatchProcTime(allocationManager, batchProcTimeMs.toLong)
-      clock.advance(DEFAULT_SCALING_INTERVAL_SECS * 1000)
-      eventually(timeout(10 seconds)) {
-        body
+      /** Add data point for batch processing time and verify executor allocation */
+      def addBatchProcTimeAndVerifyAllocation(batchProcTimeMs: Double)(body: => Unit): Unit = {
+        // 2 active executors
+        reset(allocationClient)
+        when(allocationClient.getExecutorIds()).thenReturn(Seq("1", "2"))
+        addBatchProcTime(allocationManager, batchProcTimeMs.toLong)
+        clock.advance(SCALING_INTERVAL_DEFAULT_SECS * 1000 + 1)
+        eventually(timeout(10 seconds)) {
+          body
+        }
       }
-    }
 
-    def verifyRequestExec(expectedRequestedTotalExecs: Int): Unit = {
-      if (expectedRequestedTotalExecs > 0) {
-        verify(allocationClient, times(1)).requestTotalExecutors(
-          meq(expectedRequestedTotalExecs), meq(0), meq(Map.empty))
-      } else {
-        verify(allocationClient, never()).requestTotalExecutors(0, 0, Map.empty)
+      /** Verify that the expected number of total executor were requested */
+      def verifyTotalRequestedExecs(expectedRequestedTotalExecs: Option[Int]): Unit = {
+        if (expectedRequestedTotalExecs.nonEmpty) {
+          require(expectedRequestedTotalExecs.get > 0)
+          verify(allocationClient, times(1)).requestTotalExecutors(
+            meq(expectedRequestedTotalExecs.get), meq(0), meq(Map.empty))
+        } else {
+          verify(allocationClient, never).requestTotalExecutors(0, 0, Map.empty)
+        }
       }
-    }
 
-    def verifyKillExec(expectedKilledExec: Option[String]): Unit = {
-      if (expectedKilledExec.nonEmpty) {
-        verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
-      } else {
-        verify(allocationClient, never()).killExecutor(null)
+      /** Verify that a particular executor was killed */
+      def verifyKilledExec(expectedKilledExec: Option[String]): Unit = {
+        if (expectedKilledExec.nonEmpty) {
+          verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
+        } else {
+          verify(allocationClient, never).killExecutor(null)
+        }
       }
-    }
 
+      // Batch proc time = batch interval, should increase allocation by 1
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis) {
+        verifyTotalRequestedExecs(Some(3)) // one already allocated, increase allocation by 1
+        verifyKilledExec(None)
+      }
 
-    advanceTimeAndAssert(batchDurationMillis) {
-      verifyRequestExec(2)
-      verifyKillExec(None)
-    }
+      // Batch proc time = batch interval * 2, should increase allocation by 2
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * 2) {
+        verifyTotalRequestedExecs(Some(4))
+        verifyKilledExec(None)
+      }
 
-    advanceTimeAndAssert(batchDurationMillis * 2) {
-      verifyRequestExec(3)
-      verifyKillExec(None)
-    }
+      // Batch proc time slightly more than the scale up ratio, should increase allocation by 1
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT + 1) {
+        verifyTotalRequestedExecs(Some(3))
+        verifyKilledExec(None)
+      }
 
-    advanceTimeAndAssert(batchDurationMillis * DEFAULT_SCALE_UP_RATIO + 1) {
-      verifyRequestExec(2)
-      verifyKillExec(None)
-    }
+      // Batch proc time slightly less than the scale up ratio, should not change allocation
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT - 1) {
+        verifyTotalRequestedExecs(None)
+        verifyKilledExec(None)
+      }
 
-    advanceTimeAndAssert(batchDurationMillis * DEFAULT_SCALE_UP_RATIO - 1) {
-      verifyRequestExec(0)
-      verifyKillExec(None)
-    }
+      // Batch proc time slightly more than the scale down ratio, should not change allocation
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT + 1) {
+        verifyTotalRequestedExecs(None)
+        verifyKilledExec(None)
+      }
 
-    advanceTimeAndAssert(batchDurationMillis * DEFAULT_SCALE_DOWN_RATIO + 1) {
-      verifyRequestExec(0)
-      verifyKillExec(None)
-    }
-
-    advanceTimeAndAssert(batchDurationMillis * DEFAULT_SCALE_DOWN_RATIO - 1) {
-      verifyRequestExec(0)
-      verifyKillExec(Some("1"))
+      // Batch proc time slightly more than the scale down ratio, should not change allocation
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT - 1) {
+        verifyTotalRequestedExecs(None)
+        verifyKilledExec(Some("2"))
+      }
     }
   }
 
-  test("requestExecutors") {
-    val allocationManager = createManager()
+  test("requestExecutors policy") {
 
-    def assert(
-        execIds: Seq[String],
-        ratio: Double,
-        expectedRequestedTotalExecs: Int): Unit = {
+    /** Verify that the expected number of total executor were requested */
+    def verifyRequestedExecs(
+        numExecs: Int,
+        numNewExecs: Int,
+        expectedRequestedTotalExecs: Int)(
+      implicit allocationManager: ExecutorAllocationManager): Unit = {
       reset(allocationClient)
-      when(allocationClient.getExecutorIds()).thenReturn(execIds)
-      requestExecutors(allocationManager, ratio)
+      when(allocationClient.getExecutorIds()).thenReturn((1 to numExecs).map(_.toString))
+      requestExecutors(allocationManager, numNewExecs)
       verify(allocationClient, times(1)).requestTotalExecutors(
         meq(expectedRequestedTotalExecs), meq(0), meq(Map.empty))
     }
 
-    assert(Nil, 0, 1)
-    assert(Nil, 1, 1)
-    assert(Nil, 1.1, 1)
-    assert(Nil, 1.6, 2)
+    withAllocationManager(numReceivers = 1) { case (_, allocationManager) =>
+      implicit val am = allocationManager
+      intercept[IllegalArgumentException] {
+        verifyRequestedExecs(numExecs = 0, numNewExecs = 0, 0)
+      }
+      verifyRequestedExecs(numExecs = 0, numNewExecs = 1, expectedRequestedTotalExecs = 1)
+      verifyRequestedExecs(numExecs = 1, numNewExecs = 1, expectedRequestedTotalExecs = 2)
+      verifyRequestedExecs(numExecs = 2, numNewExecs = 2, expectedRequestedTotalExecs = 4)
+    }
 
-    assert(Seq("1"), 1, 2)
-    assert(Seq("1"), 1.1, 2)
-    assert(Seq("1", "2"), 1.6, 4)
+    withAllocationManager(numReceivers = 2) { case(_, allocationManager) =>
+      implicit val am = allocationManager
+
+      verifyRequestedExecs(numExecs = 0, numNewExecs = 1, expectedRequestedTotalExecs = 2)
+      verifyRequestedExecs(numExecs = 1, numNewExecs = 1, expectedRequestedTotalExecs = 2)
+      verifyRequestedExecs(numExecs = 2, numNewExecs = 2, expectedRequestedTotalExecs = 4)
+    }
+
+    withAllocationManager(
+      // Test min 2 executors
+      new SparkConf().set("spark.streaming.dynamicAllocation.minExecutors", "2")) {
+      case (_, allocationManager) =>
+        implicit val am = allocationManager
+
+        verifyRequestedExecs(numExecs = 0, numNewExecs = 1, expectedRequestedTotalExecs = 2)
+        verifyRequestedExecs(numExecs = 0, numNewExecs = 3, expectedRequestedTotalExecs = 3)
+        verifyRequestedExecs(numExecs = 1, numNewExecs = 1, expectedRequestedTotalExecs = 2)
+        verifyRequestedExecs(numExecs = 1, numNewExecs = 2, expectedRequestedTotalExecs = 3)
+        verifyRequestedExecs(numExecs = 2, numNewExecs = 1, expectedRequestedTotalExecs = 3)
+        verifyRequestedExecs(numExecs = 2, numNewExecs = 2, expectedRequestedTotalExecs = 4)
+    }
+
+    withAllocationManager(
+      // Test with max 2 executors
+      new SparkConf().set("spark.streaming.dynamicAllocation.maxExecutors", "2")) {
+      case (_, allocationManager) =>
+        implicit val am = allocationManager
+
+        verifyRequestedExecs(numExecs = 0, numNewExecs = 1, expectedRequestedTotalExecs = 1)
+        verifyRequestedExecs(numExecs = 0, numNewExecs = 3, expectedRequestedTotalExecs = 2)
+        verifyRequestedExecs(numExecs = 1, numNewExecs = 2, expectedRequestedTotalExecs = 2)
+        verifyRequestedExecs(numExecs = 2, numNewExecs = 1, expectedRequestedTotalExecs = 2)
+        verifyRequestedExecs(numExecs = 2, numNewExecs = 2, expectedRequestedTotalExecs = 2)
+    }
   }
 
-  test("killExecutor") {
-    val allocationManager = createManager()
-    def assert(
+  test("killExecutor policy") {
+
+    /**
+     * Verify that a particular executor was killed, given active executors and executors
+     * allocated to receivers.
+     */
+    def verifyKilledExec(
         execIds: Seq[String],
-      receiverExecIds: Map[Int, Option[String]],
-      expectedKilledExec: Option[String]): Unit = {
+        receiverExecIds: Map[Int, Option[String]],
+        expectedKilledExec: Option[String])(
+        implicit x: (ReceiverTracker, ExecutorAllocationManager)): Unit = {
+      val (receiverTracker, allocationManager) = x
+
       reset(allocationClient)
-      reset(receiverTracker)
       when(allocationClient.getExecutorIds()).thenReturn(execIds)
       when(receiverTracker.getAllocatedExecutors).thenReturn(receiverExecIds)
       killExecutor(allocationManager)
       if (expectedKilledExec.nonEmpty) {
         verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
       } else {
-        verify(allocationClient, never()).killExecutor(null)
+        verify(allocationClient, never).killExecutor(null)
       }
     }
 
-    assert(Nil, Map.empty, None)
-    assert(Seq("1"), Map.empty, Some("1"))
-    assert(Seq("1"), Map(1 -> Some("1")), None)
-    assert(Seq("1", "2"), Map(1 -> Some("1")), Some("2"))
+    withAllocationManager() { case (receiverTracker, allocationManager) =>
+      implicit val rcvrTrackerAndExecAllocMgr = (receiverTracker, allocationManager)
+
+      verifyKilledExec(Nil, Map.empty, None)
+      verifyKilledExec(Seq("1", "2"), Map.empty, None)
+      verifyKilledExec(Seq("1"), Map(1 -> Some("1")), None)
+      verifyKilledExec(Seq("1", "2"), Map(1 -> Some("1")), Some("2"))
+      verifyKilledExec(Seq("1", "2"), Map(1 -> Some("1"), 2 -> Some("2")), None)
+    }
+
+    withAllocationManager(
+      new SparkConf().set("spark.streaming.dynamicAllocation.minExecutors", "2")) {
+      case (receiverTracker, allocationManager) =>
+        implicit val rcvrTrackerAndExecAllocMgr = (receiverTracker, allocationManager)
+
+        verifyKilledExec(Seq("1", "2"), Map.empty, None)
+        verifyKilledExec(Seq("1", "2", "3"), Map(1 -> Some("1"), 2 -> Some("2")), Some("3"))
+    }
   }
 
+  test("parameter validation") {
 
-  private def createManager(conf: SparkConf = new SparkConf): ExecutorAllocationManager = {
+    def validateParams(
+        numReceivers: Int = 1,
+        scalingIntervalSecs: Option[Int] = None,
+        scalingUpRatio: Option[Double] = None,
+        scalingDownRatio: Option[Double] = None,
+        minExecs: Option[Int] = None,
+        maxExecs: Option[Int] = None): Unit = {
+      require(numReceivers > 0)
+      val receiverTracker = mock[ReceiverTracker]
+      when(receiverTracker.numReceivers()).thenReturn(numReceivers)
+      val conf = new SparkConf()
+      if (scalingIntervalSecs.nonEmpty) {
+        conf.set(
+          "spark.streaming.dynamicAllocation.scalingInterval",
+          s"${scalingIntervalSecs.get}s")
+      }
+      if (scalingUpRatio.nonEmpty) {
+        conf.set("spark.streaming.dynamicAllocation.scalingUpRatio", scalingUpRatio.get.toString)
+      }
+      if (scalingDownRatio.nonEmpty) {
+        conf.set(
+          "spark.streaming.dynamicAllocation.scalingDownRatio",
+          scalingDownRatio.get.toString)
+      }
+      if (minExecs.nonEmpty) {
+        conf.set("spark.streaming.dynamicAllocation.minExecutors", minExecs.get.toString)
+      }
+      if (maxExecs.nonEmpty) {
+        conf.set("spark.streaming.dynamicAllocation.maxExecutors", maxExecs.get.toString)
+      }
+      new ExecutorAllocationManager(
+        allocationClient, receiverTracker, conf, batchDurationMillis, clock)
+    }
+
+    validateParams(numReceivers = 1)
+    validateParams(numReceivers = 2, minExecs = Some(1))
+    validateParams(numReceivers = 2, minExecs = Some(3))
+    validateParams(numReceivers = 2, maxExecs = Some(3))
+    validateParams(numReceivers = 2, maxExecs = Some(1))
+    validateParams(minExecs = Some(3), maxExecs = Some(3))
+    validateParams(scalingIntervalSecs = Some(1))
+    validateParams(scalingUpRatio = Some(1.1))
+    validateParams(scalingDownRatio = Some(0.1))
+    validateParams(scalingUpRatio = Some(1.1), scalingDownRatio = Some(0.1))
+
+    intercept[IllegalArgumentException] {
+      validateParams(minExecs = Some(0))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(minExecs = Some(-1))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(maxExecs = Some(0))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(maxExecs = Some(-1))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(minExecs = Some(4), maxExecs = Some(3))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(scalingIntervalSecs = Some(-1))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(scalingIntervalSecs = Some(0))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(scalingUpRatio = Some(-0.1))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(scalingUpRatio = Some(0))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(scalingDownRatio = Some(-0.1))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(scalingDownRatio = Some(0))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(scalingUpRatio = Some(0.5), scalingDownRatio = Some(0.5))
+    }
+    intercept[IllegalArgumentException] {
+      validateParams(scalingUpRatio = Some(0.3), scalingDownRatio = Some(0.5))
+    }
+  }
+
+  private def withAllocationManager(
+      conf: SparkConf = new SparkConf,
+      numReceivers: Int = 1
+    )(body: (ReceiverTracker, ExecutorAllocationManager) => Unit): Unit = {
+
+    val receiverTracker = mock[ReceiverTracker]
+    when(receiverTracker.numReceivers()).thenReturn(numReceivers)
+
     val manager = new ExecutorAllocationManager(
       allocationClient, receiverTracker, conf, batchDurationMillis, clock)
-    allocationManagers += manager
-    manager
+    try {
+      manager.start()
+      body(receiverTracker, manager)
+    } finally {
+      manager.stop()
+    }
   }
 
   private val _addBatchProcTime = PrivateMethod[Unit]('addBatchProcTime)
@@ -164,8 +339,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
     manager invokePrivate _addBatchProcTime(timeMs)
   }
 
-  private def requestExecutors(manager: ExecutorAllocationManager, ratio: Double): Unit = {
-    manager invokePrivate _requestExecutors(ratio)
+  private def requestExecutors(manager: ExecutorAllocationManager, newExecs: Int): Unit = {
+    manager invokePrivate _requestExecutors(newExecs)
   }
 
   private def killExecutor(manager: ExecutorAllocationManager): Unit = {
