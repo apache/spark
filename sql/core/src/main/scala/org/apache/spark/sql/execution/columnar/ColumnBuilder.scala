@@ -185,7 +185,7 @@ private[columnar] object ColumnBuilder {
       case udt: UserDefinedType[_] =>
         return apply(udt.sqlType, initialSize, columnName, useCompression)
       case other =>
-        throw new Exception(s"not suppported type: $other")
+        throw new Exception(s"not supported type: $other")
     }
 
     builder.initialize(initialSize, columnName, useCompression)

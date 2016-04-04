@@ -170,11 +170,11 @@ public class UnsafeShuffleWriterSuite {
   private UnsafeShuffleWriter<Object, Object> createWriter(
       boolean transferToEnabled) throws IOException {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
-    return new UnsafeShuffleWriter<Object, Object>(
+    return new UnsafeShuffleWriter<>(
       blockManager,
       shuffleBlockResolver,
       taskMemoryManager,
-      new SerializedShuffleHandle<Object, Object>(0, 1, shuffleDep),
+      new SerializedShuffleHandle<>(0, 1, shuffleDep),
       0, // map id
       taskContext,
       conf

@@ -205,7 +205,7 @@ final class DecisionTreeClassificationModel private[ml] (
   @Since("2.0.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(this, numFeatures)
 
-  /** Convert to spark.mllib DecisionTreeModel (losing some infomation) */
+  /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   override private[spark] def toOld: OldDecisionTreeModel = {
     new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.Classification)
   }

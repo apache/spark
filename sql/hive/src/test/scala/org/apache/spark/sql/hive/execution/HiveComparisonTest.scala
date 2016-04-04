@@ -482,7 +482,7 @@ abstract class HiveComparisonTest
                 val tablesGenerated = queryList.zip(executions).flatMap {
                   // We should take executedPlan instead of sparkPlan, because in following codes we
                   // will run the collected plans. As we will do extra processing for sparkPlan such
-                  // as adding exchage, collapsing codegen stages, etc., collecing sparkPlan here
+                  // as adding exchange, collapsing codegen stages, etc., collecting sparkPlan here
                   // will cause some errors when running these plans later.
                   case (q, e) => e.executedPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>

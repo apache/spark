@@ -759,7 +759,7 @@ class LinearRegressionSuite
             .sliding(2)
             .forall(x => x(0) >= x(1)))
       } else {
-        // To clalify that the normal solver is used here.
+        // To clarify that the normal solver is used here.
         assert(model.summary.objectiveHistory.length == 1)
         assert(model.summary.objectiveHistory(0) == 0.0)
         val devianceResidualsR = Array(-0.47082, 0.34635)

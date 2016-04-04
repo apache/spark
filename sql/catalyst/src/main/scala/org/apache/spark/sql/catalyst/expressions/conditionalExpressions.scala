@@ -222,7 +222,7 @@ object CaseWhen {
   }
 
   /**
-   * A factory method to faciliate the creation of this expression when used in parsers.
+   * A factory method to facilitate the creation of this expression when used in parsers.
    * @param branches Expressions at even position are the branch conditions, and expressions at odd
    *                 position are branch values.
    */

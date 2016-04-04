@@ -71,7 +71,7 @@ private[spark] trait DecisionTreeModel {
    */
   private[ml] def maxSplitFeatureIndex(): Int = rootNode.maxSplitFeatureIndex()
 
-  /** Convert to spark.mllib DecisionTreeModel (losing some infomation) */
+  /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   private[spark] def toOld: OldDecisionTreeModel
 }
 

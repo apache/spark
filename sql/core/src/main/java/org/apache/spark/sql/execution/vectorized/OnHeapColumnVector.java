@@ -212,7 +212,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
     for (int i = 0; i < count; ++i) {
-      intData[i + rowId] = Platform.getInt(src, srcOffset);;
+      intData[i + rowId] = Platform.getInt(src, srcOffset);
       srcIndex += 4;
       srcOffset += 4;
     }

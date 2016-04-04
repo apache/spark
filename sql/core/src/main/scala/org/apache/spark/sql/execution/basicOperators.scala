@@ -146,7 +146,7 @@ case class Filter(condition: Expression, child: SparkPlan)
     // This has the property of not doing redundant IsNotNull checks and taking better advantage of
     // short-circuiting, not loading attributes until they are needed.
     // This is very perf sensitive.
-    // TODO: revisit this. We can consider reodering predicates as well.
+    // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>

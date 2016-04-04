@@ -151,7 +151,7 @@ public final class UnsafeExternalRowSorter {
             Platform.throwException(e);
           }
           throw new RuntimeException("Exception should have been re-thrown in next()");
-        };
+        }
       };
     } catch (IOException e) {
       cleanupResources();

@@ -153,8 +153,8 @@ abstract class Expression extends TreeNode[Expression] {
    * evaluate to the same result.
    */
   lazy val canonicalized: Expression = {
-    val canonicalizedChildred = children.map(_.canonicalized)
-    Canonicalize.execute(withNewChildren(canonicalizedChildred))
+    val canonicalizedChildren = children.map(_.canonicalized)
+    Canonicalize.execute(withNewChildren(canonicalizedChildren))
   }
 
   /**

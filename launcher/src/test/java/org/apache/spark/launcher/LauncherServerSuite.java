@@ -175,7 +175,7 @@ public class LauncherServerSuite extends BaseSuite {
 
     TestClient(Socket s) throws IOException {
       super(s);
-      this.inbound = new LinkedBlockingQueue<Message>();
+      this.inbound = new LinkedBlockingQueue<>();
       this.clientThread = new Thread(this);
       clientThread.setName("TestClient");
       clientThread.setDaemon(true);

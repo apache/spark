@@ -178,7 +178,7 @@ private[state] class HDFSBackedStateStoreProvider(
      * This can be called only after committing all the updates made in the current thread.
      */
     override def iterator(): Iterator[(UnsafeRow, UnsafeRow)] = {
-      verify(state == COMMITTED, "Cannot get iterator of store data before comitting")
+      verify(state == COMMITTED, "Cannot get iterator of store data before committing")
       HDFSBackedStateStoreProvider.this.iterator(newVersion)
     }
 

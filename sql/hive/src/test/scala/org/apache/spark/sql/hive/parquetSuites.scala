@@ -311,7 +311,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
-          s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan. " +
+          s"${classOf[InsertIntoDataSource].getCanonicalName} is expected as the SparkPlan. " +
           s"However, found a ${o.toString} ")
       }
 
@@ -341,7 +341,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
-          s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
+          s"${classOf[InsertIntoDataSource].getCanonicalName} is expected as the SparkPlan." +
           s"However, found a ${o.toString} ")
       }
 

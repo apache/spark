@@ -45,7 +45,7 @@ final class UnsafeSorterSpillMerger {
         }
       }
     };
-    priorityQueue = new PriorityQueue<UnsafeSorterIterator>(numSpills, comparator);
+    priorityQueue = new PriorityQueue<>(numSpills, comparator);
   }
 
   /**

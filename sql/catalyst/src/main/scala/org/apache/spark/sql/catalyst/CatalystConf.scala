@@ -26,7 +26,7 @@ private[spark] trait CatalystConf {
   def groupByOrdinal: Boolean
 
   /**
-   * Returns the [[Resolver]] for the current configuration, which can be used to determin if two
+   * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
    */
   def resolver: Resolver = {

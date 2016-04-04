@@ -509,7 +509,7 @@ class CodegenContext {
 
   /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
-   * common subexpresses, generates the functions that evaluate those expressions and populates
+   * common subexpressions, generates the functions that evaluate those expressions and populates
    * the mapping of common subexpressions to the generated functions.
    */
   private def subexpressionElimination(expressions: Seq[Expression]) = {

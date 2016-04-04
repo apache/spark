@@ -32,7 +32,7 @@ object FileStreamSink {
 
 /**
  * A sink that writes out results to parquet files.  Each batch is written out to a unique
- * directory. After all of the files in a batch have been succesfully written, the list of
+ * directory. After all of the files in a batch have been successfully written, the list of
  * file paths is appended to the log atomically. In the case of partial failures, some duplicate
  * data may be present in the target directory, but only one copy of each file will be present
  * in the log.
