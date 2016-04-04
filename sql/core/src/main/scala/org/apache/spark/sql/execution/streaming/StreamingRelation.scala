@@ -29,13 +29,17 @@ object StreamingRelation {
 }
 
 /**
- * Used to link a streaming [[Source]] of data into a
+ * Used to link a streaming [[DataSource]] into a
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  */
 case class StreamingRelation(dataSource: DataSource, output: Seq[Attribute]) extends LeafNode {
   override def toString: String = dataSource.createSource().toString
 }
 
+/**
+ * Used to link a streaming [[Source]] of data into a
+ * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
+ */
 case class StreamingExecutionRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
   override def toString: String = source.toString
 }
