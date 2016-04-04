@@ -219,21 +219,13 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
   }
 
   private def getBlockIndex(blockLocations: Array[BlockLocation], offset: Long): Int = {
-    val index = blockLocations.indexWhere { b =>
+    blockLocations.indexWhere { b =>
       b.getOffset <= offset && offset < b.getOffset + b.getLength
     }
-
-    if (index < 0) {
-      val last = blockLocations.last
-      val totalLength = last.getOffset + last.getLength
-      throw new IllegalArgumentException(
-        s"Offset $offset is outside of file (0..$totalLength")
-    }
-
-    index
   }
 
   private def getBlockHosts(blockLocations: Array[BlockLocation], offset: Long): Array[String] = {
-    blockLocations(getBlockIndex(blockLocations, offset)).getHosts
+    val index = getBlockIndex(blockLocations, offset)
+    if (index < 0) Array.empty[String] else blockLocations(index).getHosts
   }
 }
