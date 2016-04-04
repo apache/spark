@@ -20,11 +20,20 @@ package org.apache.spark.streaming.scheduler
 
 import scala.util.Random
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkException}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, Utils}
 
+/**
+ * Class that manages executor allocated to a StreamingContext, and dynamically request or kill
+ * executors based on the statistics of the streaming computation. At a high level, the policy is:
+ * - Use StreamingListener interface get batch processing times of completed batches
+ * - Periodically take the average batch completion times and compare with the batch interval
+ * - If (avg. proc. time / batch interval) >= scaling up ratio, then request more executors
+ * - If (avg. proc. time / batch interval) <= scaling down ratio, then try to kill a executor that
+ *   is not running a receiver
+ */
 private[streaming] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
     receiverTracker: ReceiverTracker,
