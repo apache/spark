@@ -32,7 +32,7 @@ rem Find Spark jars.
 if exist "%SPARK_HOME%\RELEASE" (
   set SPARK_JARS_DIR="%SPARK_HOME%\jars"
 ) else (
-  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%"
+  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars"
 )
 
 if not exist "%SPARK_JARS_DIR%"\ (
