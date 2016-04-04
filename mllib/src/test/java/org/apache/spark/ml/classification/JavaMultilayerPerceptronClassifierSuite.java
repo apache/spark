@@ -63,7 +63,7 @@ public class JavaMultilayerPerceptronClassifierSuite implements Serializable {
     MultilayerPerceptronClassifier mlpc = new MultilayerPerceptronClassifier()
       .setLayers(new int[] {2, 5, 2})
       .setBlockSize(1)
-      .setSeed(11L)
+      .setSeed(123L)
       .setMaxIter(100);
     MultilayerPerceptronClassificationModel model = mlpc.fit(dataFrame);
     Dataset<Row> result = model.transform(dataFrame);

@@ -78,7 +78,7 @@ class TestHiveContext private[hive](
     executionHive: HiveClientImpl,
     metadataHive: HiveClient,
     isRootContext: Boolean,
-    hiveCatalog: HiveCatalog,
+    hiveCatalog: HiveExternalCatalog,
     val warehousePath: File,
     val scratchDirPath: File,
     metastoreTemporaryConf: Map[String, String])
@@ -110,7 +110,7 @@ class TestHiveContext private[hive](
       executionHive,
       metadataHive,
       true,
-      new HiveCatalog(metadataHive),
+      new HiveExternalCatalog(metadataHive),
       warehousePath,
       scratchDirPath,
       metastoreTemporaryConf)
@@ -380,8 +380,8 @@ class TestHiveContext private[hive](
        """.stripMargin.cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/episodes.avro")}' INTO TABLE episodes".cmd
     ),
-    // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC PARITIONING
-    // IS NOT YET SUPPORTED
+    // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC
+    // PARTITIONING IS NOT YET SUPPORTED
     TestTable("episodes_part",
       s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
          |PARTITIONED BY (doctor_pt INT)

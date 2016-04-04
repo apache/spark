@@ -27,7 +27,6 @@ import java.util.*;
 import scala.Tuple2;
 
 import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.function.VoidFunction;
 // $example off$
 
 public class JavaStratifiedSamplingExample {
@@ -37,7 +36,7 @@ public class JavaStratifiedSamplingExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
 
     // $example on$
-    List<Tuple2<Integer, Character>> list = new ArrayList<Tuple2<Integer, Character>>(
+    List<Tuple2<Integer, Character>> list = new ArrayList<>(
       Arrays.<Tuple2<Integer, Character>>asList(
         new Tuple2(1, 'a'),
         new Tuple2(1, 'b'),

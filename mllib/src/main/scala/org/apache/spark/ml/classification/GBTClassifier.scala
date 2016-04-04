@@ -192,7 +192,7 @@ final class GBTClassificationModel private[ml](
   extends PredictionModel[Vector, GBTClassificationModel]
   with TreeEnsembleModel with Serializable {
 
-  require(numTrees > 0, "GBTClassificationModel requires at least 1 tree.")
+  require(_trees.nonEmpty, "GBTClassificationModel requires at least 1 tree.")
   require(_trees.length == _treeWeights.length, "GBTClassificationModel given trees, treeWeights" +
     s" of non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
@@ -227,6 +227,9 @@ final class GBTClassificationModel private[ml](
     if (prediction > 0.0) 1.0 else 0.0
   }
 
+  /** Number of trees in ensemble */
+  val numTrees: Int = trees.length
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTClassificationModel = {
     copyValues(new GBTClassificationModel(uid, _trees, _treeWeights, numFeatures),
@@ -237,6 +240,19 @@ final class GBTClassificationModel private[ml](
   override def toString: String = {
     s"GBTClassificationModel (uid=$uid) with $numTrees trees"
   }
+
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * Each feature's importance is the average of its importance across all trees in the ensemble
+   * The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+   * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+   * and follows the implementation from scikit-learn.
+   *
+   * @see [[DecisionTreeClassificationModel.featureImportances]]
+   */
+  @Since("2.0.0")
+  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
@@ -259,6 +275,6 @@ private[ml] object GBTClassificationModel {
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtc")
-    new GBTClassificationModel(parent.uid, newTrees, oldModel.treeWeights, numFeatures)
+    new GBTClassificationModel(uid, newTrees, oldModel.treeWeights, numFeatures)
   }
 }
