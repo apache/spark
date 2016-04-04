@@ -376,7 +376,6 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
   private def getExecutorAllocationManager(
       ssc: StreamingContext): Option[ExecutorAllocationManager] = {
-
     ssc.scheduler invokePrivate _executorAllocationManager()
   }
 

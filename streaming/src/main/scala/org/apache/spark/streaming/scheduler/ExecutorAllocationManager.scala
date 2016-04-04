@@ -52,42 +52,13 @@ private[streaming] class ExecutorAllocationManager(
     MIN_EXECUTORS_KEY,
     math.max(1, receiverTracker.numReceivers))
   private val maxNumExecutors = conf.getInt(MAX_EXECUTORS_KEY, Integer.MAX_VALUE)
-
-  require(
-    scalingIntervalSecs > 0,
-    s"Config $SCALING_INTERVAL_KEY must be more than 0")
-
-  require(
-    scalingUpRatio > 0,
-    s"Config $SCALING_UP_RATIO_KEY must be more than 0")
-
-  require(
-    scalingDownRatio > 0,
-    s"Config $SCALING_DOWN_RATIO_KEY must be more than 0")
-
-  require(
-    minNumExecutors > 0,
-    s"Config $MIN_EXECUTORS_KEY must be more than 0")
-
-  require(
-    maxNumExecutors > 0,
-    s"$MAX_EXECUTORS_KEY must be more than 0")
-
-  require(
-    scalingUpRatio > scalingDownRatio,
-    s"Config $SCALING_UP_RATIO_KEY must be more than config $SCALING_DOWN_RATIO_KEY")
-
-  if (conf.contains(MIN_EXECUTORS_KEY) && conf.contains(MAX_EXECUTORS_KEY)) {
-    require(
-      maxNumExecutors >= minNumExecutors,
-      s"Config $MAX_EXECUTORS_KEY must be more than config $MIN_EXECUTORS_KEY")
-  }
+  private val timer = new RecurringTimer(clock, scalingIntervalSecs * 1000,
+    _ => manageAllocation(), "streaming-executor-allocation-manager")
 
   @volatile private var batchProcTimeSum = 0L
   @volatile private var batchProcTimeCount = 0
 
-  private val timer = new RecurringTimer(clock, scalingIntervalSecs * 1000,
-    _ => manageAllocation(), "streaming-executor-allocation-manager")
+  validateSettings()
 
   def start(): Unit = {
     timer.start()
@@ -156,6 +127,38 @@ private[streaming] class ExecutorAllocationManager(
     batchProcTimeCount += 1
     logDebug(
       s"Added batch processing time $timeMs, sum = $batchProcTimeSum, count = $batchProcTimeCount")
+  }
+
+  private def validateSettings(): Unit = {
+    require(
+      scalingIntervalSecs > 0,
+      s"Config $SCALING_INTERVAL_KEY must be more than 0")
+
+    require(
+      scalingUpRatio > 0,
+      s"Config $SCALING_UP_RATIO_KEY must be more than 0")
+
+    require(
+      scalingDownRatio > 0,
+      s"Config $SCALING_DOWN_RATIO_KEY must be more than 0")
+
+    require(
+      minNumExecutors > 0,
+      s"Config $MIN_EXECUTORS_KEY must be more than 0")
+
+    require(
+      maxNumExecutors > 0,
+      s"$MAX_EXECUTORS_KEY must be more than 0")
+
+    require(
+      scalingUpRatio > scalingDownRatio,
+      s"Config $SCALING_UP_RATIO_KEY must be more than config $SCALING_DOWN_RATIO_KEY")
+
+    if (conf.contains(MIN_EXECUTORS_KEY) && conf.contains(MAX_EXECUTORS_KEY)) {
+      require(
+        maxNumExecutors >= minNumExecutors,
+        s"Config $MAX_EXECUTORS_KEY must be more than config $MIN_EXECUTORS_KEY")
+    }
   }
 
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
