@@ -20,8 +20,6 @@ package org.apache.spark.sql.catalyst.parser
 import java.sql.{Date, Timestamp}
 import javax.xml.bind.DatatypeConverter
 
-import org.apache.spark.sql.catalyst.parser.ParserUtils._
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -1075,9 +1073,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       val excludeSpec = Option(frame.exclude).map { excludeClause =>
         excludeClause.excludeType.getType match {
           case SqlBaseParser.CURRENT => ExcludeClause(ExcludeCurrentRow)
-          case SqlBaseParser.GROUP  => ExcludeClause(ExcludeGroup)
-          case SqlBaseParser.TIES  => ExcludeClause(ExcludeTies)
-          case SqlBaseParser.NO  => ExcludeClause(ExcludeNoOthers)
+          case SqlBaseParser.GROUP => ExcludeClause(ExcludeGroup)
+          case SqlBaseParser.TIES => ExcludeClause(ExcludeTies)
+          case SqlBaseParser.NO => ExcludeClause(ExcludeNoOthers)
         }
       }
 

@@ -289,7 +289,9 @@ object SpecifiedWindowFrame {
  */
 sealed trait ExcludeType
 
-/** Represents the type of Excluding Current Row*/
+/**
+ * Represents the type of Excluding Current Row
+ */
 case object ExcludeCurrentRow extends ExcludeType
 
 /**
@@ -304,7 +306,9 @@ case object ExcludeGroup extends ExcludeType
  */
 case object ExcludeTies extends ExcludeType
 
-/** Specifies not excluding any rows. This value is the default if you specify no exclusion.*/
+/**
+ * Specifies not excluding any rows. This value is the default if you specify no exclusion.
+ */
 case object ExcludeNoOthers extends ExcludeType
 
 /**
