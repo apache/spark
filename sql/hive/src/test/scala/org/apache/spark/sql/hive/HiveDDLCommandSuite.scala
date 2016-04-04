@@ -36,18 +36,6 @@ class HiveDDLCommandSuite extends PlanTest {
     }.head
   }
 
-  private val escapedIdentifier = "`(.+)`".r
-
-  /**
-   * Strip backticks, if any, from the string.
-   */
-  def cleanIdentifier(ident: String): String = {
-    ident match {
-      case escapedIdentifier(i) => i
-      case plainIdent => plainIdent
-    }
-  }
-
   test("Test CTAS #1") {
     val s1 =
       """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
