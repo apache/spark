@@ -67,6 +67,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
       CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
@@ -113,6 +114,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
       CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
@@ -133,6 +135,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
@@ -168,6 +171,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
@@ -202,7 +206,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("use backticks in output of Script Transform") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """SELECT `t`.`thing1`
         |FROM (SELECT TRANSFORM (`parquet_t1`.`key`, `parquet_t1`.`value`)
         |USING 'cat' AS (`thing1` int, `thing2` string) FROM `default`.`parquet_t1`) AS t
@@ -210,7 +214,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("use backticks in output of Generator") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """
         |SELECT `gentab2`.`gencol2`
         |FROM `default`.`src`
@@ -220,7 +224,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("use escaped backticks in output of Generator") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """
         |SELECT `gen``tab2`.`gen``col2`
         |FROM `default`.`src`
