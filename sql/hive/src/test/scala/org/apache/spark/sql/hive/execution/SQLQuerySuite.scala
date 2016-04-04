@@ -68,7 +68,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext.implicits._
 
   test("UDTF") {
-    withTempFunction("udtf_count2" -> true) {
+    withUserDefinedFunction("udtf_count2" -> true) {
       sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
       // The function source code can be found at:
       // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
@@ -89,7 +89,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("permanent UDTF") {
-    withTempFunction("udtf_count_temp" -> false) {
+    withUserDefinedFunction("udtf_count_temp" -> false) {
       sql(
         s"""
           |CREATE FUNCTION udtf_count_temp
@@ -206,9 +206,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     // TODO: Re-enable this test after we fix SPARK-14335.
     // checkAnswer(sql("SHOW functions `~`"), Row("~"))
     checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
-    checkAnswer(sql("SHOW functions `weekofyea.*`"), Row("weekofyear"))
+    checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
     // this probably will failed if we add more function with `sha` prefixing.
-    checkAnswer(sql("SHOW functions `sha.*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+    checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
   }
 
   test("describe functions") {

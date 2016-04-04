@@ -396,18 +396,16 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = pattern match {
-    case Some(p) =>
-      try {
-        val regex = java.util.regex.Pattern.compile(p)
-        sqlContext.sessionState.functionRegistry.listFunction()
-          .filter(regex.matcher(_).matches()).map(Row(_))
-      } catch {
-        // probably will failed in the regex that user provided, then returns empty row.
-        case _: Throwable => Seq.empty[Row]
-      }
-    case None =>
-      sqlContext.sessionState.functionRegistry.listFunction().map(Row(_))
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val dbName = db.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+    val functionNames =
+      sqlContext.sessionState.catalog
+        .listFunctions(dbName, pattern.getOrElse(".*"))
+        .map(_.unquotedString)
+    // We use distinct at here because SessionCatalog's listFunctions will return
+    // duplicated entries for UDFs that have already been loaded into the
+    // FunctionRegistry.
+    functionNames.distinct.sorted.map(Row(_))
   }
 }
 
