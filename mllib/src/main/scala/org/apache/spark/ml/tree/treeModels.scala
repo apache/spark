@@ -452,11 +452,11 @@ private[ml] object EnsembleModelReadWrite {
   }
 
   /**
-    * Info for one [[Node]] in a tree ensemble
-    *
-    * @param treeID  Tree index
-    * @param nodeData  Data for this node
-    */
+   * Info for one [[Node]] in a tree ensemble
+   *
+   * @param treeID  Tree index
+   * @param nodeData  Data for this node
+   */
   case class EnsembleNodeData(
       treeID: Int,
       nodeData: NodeData)

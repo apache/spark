@@ -131,8 +131,8 @@ object RandomForestRegressor extends DefaultParamsReadable[RandomForestRegressor
  * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for regression.
  * It supports both continuous and categorical features.
-  *
-  * @param _trees  Decision trees in the ensemble.
+ *
+ * @param _trees  Decision trees in the ensemble.
  * @param numFeatures  Number of features used by this model
  */
 @Since("1.4.0")
@@ -148,8 +148,8 @@ final class RandomForestRegressionModel private[ml] (
 
   /**
    * Construct a random forest regression model, with all trees weighted equally.
-    *
-    * @param trees  Component trees
+   *
+   * @param trees  Component trees
    */
   private[ml] def this(trees: Array[DecisionTreeRegressionModel], numFeatures: Int) =
     this(Identifiable.randomUID("rfr"), trees, numFeatures)
@@ -251,6 +251,7 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
       val (metadata: Metadata, treesData: Array[(Metadata, Node)]) =
         EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
+      val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
       val trees: Array[DecisionTreeRegressionModel] = treesData.map { case (treeMetadata, root) =>
         val tree =
@@ -258,6 +259,8 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
         DefaultParamsReader.getAndSetParams(tree, treeMetadata)
         tree
       }
+      require(numTrees == trees.length, s"RandomForestRegressionModel.load expected $numTrees" +
+        s" trees based on metadata but found ${trees.length} trees.")
 
       val model = new RandomForestRegressionModel(metadata.uid, trees, numFeatures)
       DefaultParamsReader.getAndSetParams(model, metadata)

@@ -298,6 +298,7 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
         EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
+      val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
       val trees: Array[DecisionTreeClassificationModel] = treesData.map {
         case (treeMetadata, root) =>
@@ -306,6 +307,8 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
           DefaultParamsReader.getAndSetParams(tree, treeMetadata)
           tree
       }
+      require(numTrees == trees.length, s"RandomForestClassificationModel.load expected $numTrees" +
+        s" trees based on metadata but found ${trees.length} trees.")
 
       val model = new RandomForestClassificationModel(metadata.uid, trees, numFeatures, numClasses)
       DefaultParamsReader.getAndSetParams(model, metadata)
