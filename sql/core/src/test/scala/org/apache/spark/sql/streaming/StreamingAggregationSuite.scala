@@ -18,8 +18,9 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Encoder, StreamTest, SumOf, TypedColumn}
+import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.expressions.scala.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -118,11 +119,8 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
   }
 
   test("typed aggregators") {
-    def sum[I, N : Numeric : Encoder](f: I => N): TypedColumn[I, N] =
-      new SumOf(f).toColumn
-
     val inputData = MemoryStream[(String, Int)]
-    val aggregated = inputData.toDS().groupByKey(_._1).agg(sum(_._2))
+    val aggregated = inputData.toDS().groupByKey(_._1).agg(typed.sumLong(_._2))
 
     testStream(aggregated)(
       AddData(inputData, ("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)),

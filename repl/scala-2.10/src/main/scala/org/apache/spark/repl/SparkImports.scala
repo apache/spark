@@ -118,8 +118,9 @@ private[repl] trait SparkImports {
     case class ReqAndHandler(req: Request, handler: MemberHandler) { }
 
     def reqsToUse: List[ReqAndHandler] = {
-      /** Loop through a list of MemberHandlers and select which ones to keep.
-        * 'wanted' is the set of names that need to be imported.
+      /**
+       * Loop through a list of MemberHandlers and select which ones to keep.
+       * 'wanted' is the set of names that need to be imported.
        */
       def select(reqs: List[ReqAndHandler], wanted: Set[Name]): List[ReqAndHandler] = {
         // Single symbol imports might be implicits! See bug #1752.  Rather than
