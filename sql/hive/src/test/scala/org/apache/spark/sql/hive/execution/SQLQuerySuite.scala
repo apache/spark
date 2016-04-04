@@ -209,6 +209,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
     // this probably will failed if we add more function with `sha` prefixing.
     checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+    // Test '|' for alternation.
+    checkAnswer(
+      sql("SHOW functions 'sha*|weekofyea*'"),
+      Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
   }
 
   test("describe functions") {

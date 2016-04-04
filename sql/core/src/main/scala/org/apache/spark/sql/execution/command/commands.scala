@@ -384,8 +384,12 @@ case class ShowDatabasesCommand(databasePattern: Option[String]) extends Runnabl
  * A command for users to list all of the registered functions.
  * The syntax of using this command in SQL is:
  * {{{
- *    SHOW FUNCTIONS
+ *    SHOW FUNCTIONS [LIKE pattern]
  * }}}
+ * For the pattern, '*' matches any sequence of characters (including no characters) and
+ * '|' is for alternation.
+ * For example, "show functions like 'yea*|windo*'" will return "window" and "year".
+ *
  * TODO currently we are simply ignore the db
  */
 case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
