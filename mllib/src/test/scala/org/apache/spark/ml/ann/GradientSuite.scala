@@ -32,7 +32,9 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
     val topology = FeedForwardTopology.multiLayerPerceptron(Array(3, 4, 2), softmaxOnTop = false)
     val layersWithErrors = Seq(
       new SigmoidLayerWithSquaredError(),
-      new SoftmaxLayerWithCrossEntropyLoss()
+      new SoftmaxLayerWithCrossEntropyLoss(),
+      new SigmoidLayerWithCrossEntropyLoss(),
+      new EmptyLayerWithSquaredError()
     )
     // check all layers that provide loss computation
     // 1) compute loss and gradient given the model and initial weights
