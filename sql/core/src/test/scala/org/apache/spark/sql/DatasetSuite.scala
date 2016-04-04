@@ -71,6 +71,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.first() == item)
     assert(ds.take(1).head == item)
     assert(ds.takeAsList(1).get(0) == item)
+    assert(ds.toLocalIterator().next() === item)
   }
 
   test("coalesce, repartition") {

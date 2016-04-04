@@ -2299,14 +2299,14 @@ class RDD(object):
         """
         Return an iterator that contains all of the elements in this RDD.
         The iterator will consume as much memory as the largest partition in this RDD.
+
         >>> rdd = sc.parallelize(range(10))
         >>> [x for x in rdd.toLocalIterator()]
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
-        for partition in range(self.getNumPartitions()):
-            rows = self.context.runJob(self, lambda x: x, [partition])
-            for row in rows:
-                yield row
+        with SCCallSiteSync(self.context) as css:
+            port = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
+        return _load_from_socket(port, self._jrdd_deserializer)
 
 
 def _prepare_for_python_RDD(sc, command):

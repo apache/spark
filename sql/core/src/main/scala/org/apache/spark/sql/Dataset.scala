@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -2057,6 +2058,24 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Return an iterator that contains all of [[Row]]s in this [[Dataset]].
+   *
+   * The iterator will consume as much memory as the largest partition in this [[Dataset]].
+   *
+   * Note: this results in multiple Spark jobs, and if the input Dataset is the result
+   * of a wide transformation (e.g. join with different partitioners), to avoid
+   * recomputing the input Dataset should be cached first.
+   *
+   * @group action
+   * @since 2.0.0
+   */
+  def toLocalIterator(): java.util.Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
+    withNewExecutionId {
+      queryExecution.executedPlan.executeToIterator().map(boundTEncoder.fromRow).asJava
+    }
+  }
+
+  /**
    * Returns the number of rows in the [[Dataset]].
    * @group action
    * @since 1.6.0
@@ -2297,6 +2316,12 @@ class Dataset[T] private[sql](
   protected[sql] def collectToPython(): Int = {
     withNewExecutionId {
       PythonRDD.collectAndServe(javaToPython.rdd)
+    }
+  }
+
+  protected[sql] def toPythonIterator(): Int = {
+    withNewExecutionId {
+      PythonRDD.toLocalIteratorAndServe(javaToPython.rdd)
     }
   }
 
