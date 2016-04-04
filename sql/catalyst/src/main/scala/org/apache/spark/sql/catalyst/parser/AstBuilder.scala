@@ -955,7 +955,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
   /**
    * Create a binary arithmetic expression. The following arithmetic operators are supported:
-   * - Mulitplication: '*'
+   * - Multiplication: '*'
    * - Division: '/'
    * - Hive Long Division: 'DIV'
    * - Modulo: '%'
@@ -1260,7 +1260,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a double literal for a number denoted in scientifc notation.
+   * Create a double literal for a number denoted in scientific notation.
    */
   override def visitScientificDecimalLiteral(
       ctx: ScientificDecimalLiteralContext): Literal = withOrigin(ctx) {
