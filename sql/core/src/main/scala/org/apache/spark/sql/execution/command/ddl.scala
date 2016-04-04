@@ -192,8 +192,6 @@ case class CreateFunction(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val func = FunctionIdentifier(functionName, databaseName)
-    val catalogFunc = CatalogFunction(func, className, resources)
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(
@@ -209,11 +207,13 @@ case class CreateFunction(
       sqlContext.sessionState.catalog.createTempFunction(
         functionName, info, builder, ignoreIfExists = false)
     } else {
+      val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+      val func = FunctionIdentifier(functionName, Some(dbName))
+      val catalogFunc = CatalogFunction(func, className, resources)
       // We are creating a permanent function. First, we want to check if this function
       // has already been created.
       // Check if the function to create is already existing. If so, throw exception.
       if (sqlContext.sessionState.catalog.functionExists(func)) {
-        val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
         throw new AnalysisException(
           s"Function '$functionName' already exists in database '$dbName'.")
       }
@@ -238,14 +238,18 @@ case class DropFunction(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     if (isTemp) {
-      require(databaseName.isEmpty,
-        "attempted to drop a temporary function while specifying a database")
+      if (databaseName.isDefined) {
+        throw new AnalysisException(
+          s"It is not allowed to provide database name when dropping a temporary function. " +
+            s"However, database name ${databaseName.get} is provided.")
+      }
       sqlContext.sessionState.catalog.dropTempFunction(functionName, ifExists)
     } else {
-      val func = FunctionIdentifier(functionName, databaseName)
+      // We are dropping a permanent.
+      val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+      val func = FunctionIdentifier(functionName, Some(dbName))
       if (!ifExists) {
         if (!sqlContext.sessionState.catalog.functionExists(func)) {
-          val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
           throw new AnalysisException(
             s"Function '$functionName' does not exist in database '$dbName'.")
         }

@@ -558,8 +558,12 @@ class SessionCatalog(
         case e: AnalysisException => failFunctionLookup(name)
         case e: NoSuchFunctionException => failFunctionLookup(name)
       }
-      assert(qualifiedName == catalogFunction.identifier.unquotedString)
       loadFunctionResources(catalogFunction.resources)
+      // Please note that qualifiedName is provided by the user. However,
+      // catalogFunction.identifier.unquotedString is returned by the underlying
+      // catalog. So, it is possible that qualifiedName is not exactly the same as
+      // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
+      // At here, we preserve the input from the user.
       val info = new ExpressionInfo(catalogFunction.className, qualifiedName)
       val builder = makeFunctionBuilder(qualifiedName, catalogFunction.className)
       createTempFunction(qualifiedName, info, builder, ignoreIfExists = false)
@@ -575,9 +579,11 @@ class SessionCatalog(
     val dbFunctions =
       externalCatalog.listFunctions(db, pattern).map { f => FunctionIdentifier(f, Some(db)) }
     val regex = pattern.replaceAll("\\*", ".*").r
-    val _tempFunctions = functionRegistry.listFunction()
+    val loadedFunctions = functionRegistry.listFunction()
       .filter { f => regex.pattern.matcher(f).matches() }
       .map { f => FunctionIdentifier(f) }
-    dbFunctions ++ _tempFunctions
+    // TODO: Actually, there will be dbFunctions that have been loaded into FunctionRegistry.
+    // So, the returned list may have two entries for the same function.
+    dbFunctions ++ loadedFunctions
   }
 }

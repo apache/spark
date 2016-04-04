@@ -199,6 +199,7 @@ private[sql] class HiveSessionCatalog(
         } else {
           // This function is not in functionRegistry, let's try to load it as a Hive's
           // built-in function.
+          // Hive is case insensitive.
           val functionName = name.toLowerCase
           // TODO: This may not really work for current_user because current_user is not evaluated
           // with session info.
