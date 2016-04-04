@@ -111,7 +111,7 @@ object Pregel extends Logging {
    */
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
      (graph: Graph[VD, ED],
-      initialMsg: A,
+      initialMsg: Option[A] = None,
       maxIterations: Int = Int.MaxValue,
       activeDirection: EdgeDirection = EdgeDirection.Either)
      (vprog: (VertexId, VD, A) => VD,
@@ -119,7 +119,11 @@ object Pregel extends Logging {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] =
   {
-    var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
+    var g = initialMsg match {
+      case Some(msg) => graph.mapVertices((vid, vdata) => vprog(vid, vdata, msg)).cache()
+      case None => graph
+    }
+
     // compute the messages
     var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
     var activeMessages = messages.count()
