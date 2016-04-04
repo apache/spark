@@ -94,3 +94,24 @@ dag6_task2 = DummyOperator(
     depends_on_past=True,
     dag=dag6,)
 dag6_task2.set_upstream(dag6_task1)
+
+
+# DAG tests that a deadlocked subdag is properly caught
+dag7 = DAG(dag_id='test_subdag_deadlock', default_args=default_args)
+subdag7 = DAG(dag_id='test_subdag_deadlock.subdag', default_args=default_args)
+subdag7_task1 = PythonOperator(
+    task_id='test_subdag_fail',
+    dag=subdag7,
+    python_callable=fail)
+subdag7_task2 = DummyOperator(
+    task_id='test_subdag_dummy_1',
+    dag=subdag7,)
+subdag7_task3 = DummyOperator(
+    task_id='test_subdag_dummy_2',
+    dag=subdag7)
+dag7_subdag1 = SubDagOperator(
+    task_id='subdag',
+    dag=dag7,
+    subdag=subdag7)
+subdag7_task1.set_downstream(subdag7_task2)
+subdag7_task2.set_downstream(subdag7_task3)

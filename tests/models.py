@@ -227,6 +227,7 @@ class TaskInstanceTest(unittest.TestCase):
     def test_depends_on_past(self):
         dagbag = models.DagBag()
         dag = dagbag.get_dag('test_depends_on_past')
+        dag.clear()
         task = dag.tasks[0]
         run_date = task.start_date + datetime.timedelta(days=5)
         ti = TI(task, run_date)

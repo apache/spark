@@ -82,6 +82,16 @@ class SubDagOperatorTests(unittest.TestCase):
         session.delete(pool_10)
         session.commit()
 
+    def test_subdag_deadlock(self):
+        dagbag = DagBag()
+        dag = dagbag.get_dag('test_subdag_deadlock')
+        dag.clear()
+        subdag = dagbag.get_dag('test_subdag_deadlock.subdag')
+        subdag.clear()
 
-if __name__ == "__main__":
-    unittest.main()
+        # first make sure subdag is deadlocked
+        self.assertRaisesRegexp(AirflowException, 'deadlocked', subdag.run, start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+
+        # now make sure dag picks up the subdag error
+        subdag.clear()
+        self.assertRaises(AirflowException, dag.run, start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)

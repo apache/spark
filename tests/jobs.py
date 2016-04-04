@@ -40,6 +40,9 @@ class BackfillJobTest(unittest.TestCase):
         self.dagbag = DagBag()
 
     def test_backfill_examples(self):
+        """
+        Test backfilling example dags
+        """
         dags = [
             dag for dag in self.dagbag.dags.values()
             if dag.dag_id in ('example_bash_operator',)]
@@ -56,12 +59,12 @@ class BackfillJobTest(unittest.TestCase):
 
     def test_trap_executor_error(self):
         """
-        Test for https://github.com/airbnb/airflow/pull/1220
+        Test that errors setting up tasks (before tasks run) are caught
 
-        Test that errors setting up tasks (before tasks run) are properly
-        caught
+        Test for https://github.com/airbnb/airflow/pull/1220
         """
         dag = self.dagbag.get_dag('test_raise_executor_error')
+        dag.clear()
         job = BackfillJob(
             dag=dag,
             start_date=DEFAULT_DATE,
@@ -75,9 +78,9 @@ class BackfillJobTest(unittest.TestCase):
 
     def test_backfill_pooled_task(self):
         """
-        Test for https://github.com/airbnb/airflow/pull/1225
-
         Test that queued tasks are executed by BackfillJob
+
+        Test for https://github.com/airbnb/airflow/pull/1225
         """
         session = settings.Session()
         pool = Pool(pool='test_backfill_pooled_task_pool', slots=1)
@@ -85,6 +88,7 @@ class BackfillJobTest(unittest.TestCase):
         session.commit()
 
         dag = self.dagbag.get_dag('test_backfill_pooled_task_dag')
+        dag.clear()
 
         job = BackfillJob(
             dag=dag,
@@ -103,15 +107,18 @@ class BackfillJobTest(unittest.TestCase):
         self.assertEqual(ti.state, State.SUCCESS)
 
     def test_backfill_depends_on_past(self):
+        """
+        Test that backfill resects ignore_depends_on_past
+        """
         dag = self.dagbag.get_dag('test_depends_on_past')
+        dag.clear()
         run_date = DEFAULT_DATE + datetime.timedelta(days=5)
-        # import ipdb; ipdb.set_trace()
-        BackfillJob(dag=dag, start_date=run_date, end_date=run_date).run()
 
-        # ti should not have run
-        ti = TI(dag.tasks[0], run_date)
-        ti.refresh_from_db()
-        self.assertIs(ti.state, None)
+        # backfill should deadlock
+        self.assertRaisesRegexp(
+            AirflowException,
+            'BackfillJob is deadlocked',
+            BackfillJob(dag=dag, start_date=run_date, end_date=run_date).run)
 
         BackfillJob(
             dag=dag,
@@ -119,12 +126,15 @@ class BackfillJobTest(unittest.TestCase):
             end_date=run_date,
             ignore_first_depends_on_past=True).run()
 
-        # ti should have run
+        # ti should have succeeded
         ti = TI(dag.tasks[0], run_date)
         ti.refresh_from_db()
         self.assertEquals(ti.state, State.SUCCESS)
 
     def test_cli_backfill_depends_on_past(self):
+        """
+        Test that CLI respects -I argument
+        """
         dag_id = 'test_dagrun_states_deadlock'
         run_date = DEFAULT_DATE + datetime.timedelta(days=1)
         args = [
@@ -135,8 +145,9 @@ class BackfillJobTest(unittest.TestCase):
             run_date.isoformat(),
         ]
         dag = self.dagbag.get_dag(dag_id)
+        dag.clear()
 
-        self.assertRaisesRegex(
+        self.assertRaisesRegexp(
             AirflowException,
             'BackfillJob is deadlocked',
             cli.backfill,
@@ -172,6 +183,7 @@ class SchedulerJobTest(unittest.TestCase):
 
         scheduler = SchedulerJob()
         dag = self.dagbag.get_dag(dag_id)
+        dag.clear()
         dr = scheduler.schedule_dag(dag)
         if advance_execution_date:
             # run a second time to schedule a dagrun after the start_date
@@ -208,8 +220,7 @@ class SchedulerJobTest(unittest.TestCase):
 
     def test_dagrun_fail(self):
         """
-        Test that a DagRun with one failed task and one incomplete root task
-        is marked a failure
+        DagRuns with one failed and one incomplete root task -> FAILED
         """
         self.evaluate_dagrun(
             dag_id='test_dagrun_states_fail',
@@ -219,8 +230,7 @@ class SchedulerJobTest(unittest.TestCase):
 
     def test_dagrun_success(self):
         """
-        Test that a DagRun with one failed task and one successful root task
-        is marked a success
+        DagRuns with one failed and one successful root task -> SUCCESS
         """
         self.evaluate_dagrun(
             dag_id='test_dagrun_states_success',
@@ -230,8 +240,7 @@ class SchedulerJobTest(unittest.TestCase):
 
     def test_dagrun_root_fail(self):
         """
-        Test that a DagRun with one successful root task and one failed root
-        task is marked a failure
+        DagRuns with one successful and one failed root task -> FAILED
         """
         self.evaluate_dagrun(
             dag_id='test_dagrun_states_root_fail',
@@ -241,6 +250,8 @@ class SchedulerJobTest(unittest.TestCase):
 
     def test_dagrun_deadlock(self):
         """
+        Deadlocked DagRun is marked a failure
+
         Test that a deadlocked dagrun is marked as a failure by having
         depends_on_past and an execution_date after the start_date
         """
@@ -253,6 +264,8 @@ class SchedulerJobTest(unittest.TestCase):
 
     def test_dagrun_deadlock_ignore_depends_on_past_advance_ex_date(self):
         """
+        DagRun is marked a success if ignore_first_depends_on_past=True
+
         Test that an otherwise-deadlocked dagrun is marked as a success
         if ignore_first_depends_on_past=True and the dagrun execution_date
         is after the start_date.
