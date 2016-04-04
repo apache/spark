@@ -185,20 +185,6 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Unsupported operation in SQL Context.
-   */
-  override protected def withScriptIOSchema(
-      ctx: QuerySpecificationContext,
-      inRowFormat: RowFormatContext,
-      recordWriter: Token,
-      outRowFormat: RowFormatContext,
-      recordReader: Token,
-      schemaLess: Boolean): AnyRef = {
-    throw new ParseException(
-      "Script Transform is not supported in SQLContext. Use a HiveContext instead", ctx)
-  }
-
-  /**
    * Create a [[CreateTableUsing]] or a [[CreateTableUsingAsSelect]] logical plan.
    *
    * TODO add bucketing and partitioning.

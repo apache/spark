@@ -364,8 +364,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           string(script),
           attributes,
           withFilter,
-          withScriptIOSchema(ctx, inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess)
-            .asInstanceOf[ScriptInputOutputSchema])
+          withScriptIOSchema(
+            ctx, inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess))
 
       case SqlBaseParser.SELECT =>
         // Regular select
@@ -417,7 +417,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       recordWriter: Token,
       outRowFormat: RowFormatContext,
       recordReader: Token,
-      schemaLess: Boolean): AnyRef = null
+      schemaLess: Boolean): ScriptInputOutputSchema = {
+    throw new ParseException(
+      "Script Transform is not supported in SQLContext. Use a HiveContext instead", ctx)
+  }
 
   /**
    * Create a logical plan for a given 'FROM' clause. Note that we support multiple (comma

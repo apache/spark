@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageForma
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ScriptInputOutputSchema}
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
 import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView}
 import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveSerDe}
@@ -299,7 +299,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       recordWriter: Token,
       outRowFormat: RowFormatContext,
       recordReader: Token,
-      schemaLess: Boolean): AnyRef = {
+      schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
       logWarning("Used defined record reader/writer classes are currently ignored.")
     }
