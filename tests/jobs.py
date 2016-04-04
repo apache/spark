@@ -320,3 +320,43 @@ class SchedulerJobTest(unittest.TestCase):
             second_task_state=State.SUCCESS,
             dagrun_state=State.SUCCESS,
             run_kwargs=dict(ignore_first_depends_on_past=True))
+
+    def test_scheduler_start_date(self):
+        """
+        Test that the scheduler respects start_dates, even when DAGS have run
+        """
+
+        session = settings.Session()
+
+        dag_id = 'test_start_date_scheduling'
+        dag = self.dagbag.get_dag(dag_id)
+        dag.clear()
+        self.assertTrue(dag.start_date > DEFAULT_DATE)
+
+        scheduler = SchedulerJob(dag_id, num_runs=2)
+        scheduler.run()
+
+        # zero tasks ran
+        self.assertEqual(
+            len(session.query(TI).filter(TI.dag_id == dag_id).all()), 0)
+
+        # previously, running this backfill would kick off the Scheduler
+        # because it would take the most recent run and start from there
+        # That behavior still exists, but now it will only do so if after the
+        # start date
+        backfill = BackfillJob(
+            dag=dag,
+            start_date=DEFAULT_DATE,
+            end_date=DEFAULT_DATE)
+        backfill.run()
+
+        # one task ran
+        self.assertEqual(
+            len(session.query(TI).filter(TI.dag_id == dag_id).all()), 1)
+
+        scheduler = SchedulerJob(dag_id, num_runs=2)
+        scheduler.run()
+
+        # still one task
+        self.assertEqual(
+            len(session.query(TI).filter(TI.dag_id == dag_id).all()), 1)
