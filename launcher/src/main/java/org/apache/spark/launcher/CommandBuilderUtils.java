@@ -34,7 +34,7 @@ class CommandBuilderUtils {
   /** The set of known JVM vendors. */
   enum JavaVendor {
     Oracle, IBM, OpenJDK, Unknown
-  };
+  }
 
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {

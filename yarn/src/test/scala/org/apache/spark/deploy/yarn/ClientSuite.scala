@@ -118,8 +118,9 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val sparkConf = new SparkConf()
       .set(SPARK_JARS, Seq(SPARK))
       .set(USER_CLASS_PATH_FIRST, true)
+      .set("spark.yarn.dist.jars", ADDED)
     val env = new MutableHashMap[String, String]()
-    val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
+    val args = new ClientArguments(Array("--jar", USER))
 
     populateClasspath(args, conf, sparkConf, env)
 
@@ -138,9 +139,11 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("Jar path propagation through SparkConf") {
-    val sparkConf = new SparkConf().set(SPARK_JARS, Seq(SPARK))
-    val client = createClient(sparkConf,
-      args = Array("--jar", USER, "--addJars", ADDED))
+    val conf = new Configuration()
+    val sparkConf = new SparkConf()
+      .set(SPARK_JARS, Seq(SPARK))
+      .set("spark.yarn.dist.jars", ADDED)
+    val client = createClient(sparkConf, args = Array("--jar", USER))
 
     val tempDir = Utils.createTempDir()
     try {
@@ -192,9 +195,9 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val sparkConf = new SparkConf()
       .set(APPLICATION_TAGS.key, ",tag1, dup,tag2 , ,multi word , dup")
       .set(MAX_APP_ATTEMPTS, 42)
-    val args = new ClientArguments(Array(
-      "--name", "foo-test-app",
-      "--queue", "staging-queue"), sparkConf)
+      .set("spark.app.name", "foo-test-app")
+      .set(QUEUE_NAME, "staging-queue")
+    val args = new ClientArguments(Array())
 
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
@@ -346,7 +349,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       sparkConf: SparkConf,
       conf: Configuration = new Configuration(),
       args: Array[String] = Array()): Client = {
-    val clientArgs = new ClientArguments(args, sparkConf)
+    val clientArgs = new ClientArguments(args)
     val client = spy(new Client(clientArgs, conf, sparkConf))
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
       any(classOf[Path]), anyShort())

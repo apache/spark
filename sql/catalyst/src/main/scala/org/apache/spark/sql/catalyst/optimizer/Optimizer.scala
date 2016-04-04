@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
 
 /**
-  * Abstract class all optimizers should inherit of, contains the standard batches (extending
-  * Optimizers can override this.
-  */
+ * Abstract class all optimizers should inherit of, contains the standard batches (extending
+ * Optimizers can override this.
+ */
 abstract class Optimizer extends RuleExecutor[LogicalPlan] {
   def batches: Seq[Batch] = {
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
@@ -111,11 +111,11 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
 }
 
 /**
-  * Non-abstract representation of the standard Spark optimizing strategies
-  *
-  * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
-  * specific rules go to the subclasses
-  */
+ * Non-abstract representation of the standard Spark optimizing strategies
+ *
+ * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
+ * specific rules go to the subclasses
+ */
 object DefaultOptimizer extends Optimizer
 
 /**
@@ -527,14 +527,14 @@ object LikeSimplification extends Rule[LogicalPlan] {
  * Null value propagation from bottom to top of the expression tree.
  */
 object NullPropagation extends Rule[LogicalPlan] {
-  def nonNullLiteral(e: Expression): Boolean = e match {
+  private def nonNullLiteral(e: Expression): Boolean = e match {
     case Literal(null, _) => false
     case _ => true
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case e @ AggregateExpression(Count(exprs), _, _) if !exprs.exists(nonNullLiteral) =>
+      case e @ AggregateExpression(Count(exprs), _, _, _) if !exprs.exists(nonNullLiteral) =>
         Cast(Literal(0L), e.dataType)
       case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
       case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
@@ -547,9 +547,9 @@ object NullPropagation extends Rule[LogicalPlan] {
         Literal.create(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
-      case e @ AggregateExpression(Count(exprs), mode, false) if !exprs.exists(_.nullable) =>
+      case ae @ AggregateExpression(Count(exprs), _, false, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
-        AggregateExpression(Count(Literal(1)), mode, isDistinct = false)
+        ae.copy(aggregateFunction = Count(Literal(1)))
 
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
@@ -773,17 +773,24 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * Simplifies conditional expressions (if / case).
  */
 object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
+  private def falseOrNullLiteral(e: Expression): Boolean = e match {
+    case FalseLiteral => true
+    case Literal(null, _) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
+      case If(Literal(null, _), _, falseValue) => falseValue
 
-      case e @ CaseWhen(branches, elseValue) if branches.exists(_._1 == FalseLiteral) =>
+      case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
         // If there are no more branches left, just use the else value.
         // Note that these two are handled together here in a single case statement because
         // otherwise we cannot determine the data type for the elseValue if it is None (i.e. null).
-        val newBranches = branches.filter(_._1 != FalseLiteral)
+        val newBranches = branches.filter(x => !falseOrNullLiteral(x._1))
         if (newBranches.isEmpty) {
           elseValue.getOrElse(Literal.create(null, e.dataType))
         } else {
@@ -955,21 +962,21 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
 }
 
 /**
-  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
-  * one condition.
-  *
-  * The order of joins will not be changed if all of them already have at least one condition.
-  */
+ * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
+ * one condition.
+ *
+ * The order of joins will not be changed if all of them already have at least one condition.
+ */
 object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
-    * Join a list of plans together and push down the conditions into them.
-    *
-    * The joined plan are picked from left to right, prefer those has at least one join condition.
-    *
-    * @param input a list of LogicalPlans to join.
-    * @param conditions a list of condition for join.
-    */
+   * Join a list of plans together and push down the conditions into them.
+   *
+   * The joined plan are picked from left to right, prefer those has at least one join condition.
+   *
+   * @param input a list of LogicalPlans to join.
+   * @param conditions a list of condition for join.
+   */
   @tailrec
   def createOrderedJoin(input: Seq[LogicalPlan], conditions: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)
@@ -1225,13 +1232,13 @@ object DecimalAggregates extends Rule[LogicalPlan] {
   private val MAX_DOUBLE_DIGITS = 15
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case AggregateExpression(Sum(e @ DecimalType.Expression(prec, scale)), mode, isDistinct)
+    case ae @ AggregateExpression(Sum(e @ DecimalType.Expression(prec, scale)), _, _, _)
       if prec + 10 <= MAX_LONG_DIGITS =>
-      MakeDecimal(AggregateExpression(Sum(UnscaledValue(e)), mode, isDistinct), prec + 10, scale)
+      MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
 
-    case AggregateExpression(Average(e @ DecimalType.Expression(prec, scale)), mode, isDistinct)
+    case ae @ AggregateExpression(Average(e @ DecimalType.Expression(prec, scale)), _, _, _)
       if prec + 4 <= MAX_DOUBLE_DIGITS =>
-      val newAggExpr = AggregateExpression(Average(UnscaledValue(e)), mode, isDistinct)
+      val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
       Cast(
         Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
         DecimalType(prec + 4, scale + 4))

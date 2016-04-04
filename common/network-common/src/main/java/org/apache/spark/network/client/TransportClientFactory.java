@@ -94,7 +94,7 @@ public class TransportClientFactory implements Closeable {
     this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
     this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
-    this.connectionPool = new ConcurrentHashMap<SocketAddress, ClientPool>();
+    this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
 

@@ -533,7 +533,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
           - Normalize importances for tree to sum to 1.
 
         Note: Feature importance for single decision trees can have high variance due to
-              correlated predictor variables. Consider using a :class:`RandomForestRegressor`
+              correlated predictor variables. Consider using a :py:class:`RandomForestRegressor`
               to determine feature importance instead.
         """
         return self._call_java("featureImportances")
@@ -626,16 +626,12 @@ class RandomForestRegressionModel(TreeEnsembleModels):
         """
         Estimate of the importance of each feature.
 
-        This generalizes the idea of "Gini" importance to other losses,
-        following the explanation of Gini importance from "Random Forests" documentation
-        by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+        Each feature's importance is the average of its importance across all trees in the ensemble
+        The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+        (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+        and follows the implementation from scikit-learn.
 
-        This feature importance is calculated as follows:
-         - Average over trees:
-            - importance(feature j) = sum (over nodes which split on feature j) of the gain,
-              where gain is scaled by the number of instances passing through node
-            - Normalize importances for tree to sum to 1.
-         - Normalize feature importance vector to sum to 1.
+        .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
         """
         return self._call_java("featureImportances")
 
@@ -655,6 +651,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42)
     >>> model = gbt.fit(df)
+    >>> model.featureImportances
+    SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
@@ -733,6 +731,21 @@ class GBTRegressionModel(TreeEnsembleModels):
 
     .. versionadded:: 1.4.0
     """
+
+    @property
+    @since("2.0.0")
+    def featureImportances(self):
+        """
+        Estimate of the importance of each feature.
+
+        Each feature's importance is the average of its importance across all trees in the ensemble
+        The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+        (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+        and follows the implementation from scikit-learn.
+
+        .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
+        """
+        return self._call_java("featureImportances")
 
 
 @inherit_doc

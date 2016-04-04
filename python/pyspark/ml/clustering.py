@@ -171,7 +171,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         return self.getOrDefault(self.initSteps)
 
 
-class BisectingKMeansModel(JavaModel):
+class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -195,7 +195,8 @@ class BisectingKMeansModel(JavaModel):
 
 
 @inherit_doc
-class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed):
+class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed,
+                      JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -225,6 +226,18 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     True
     >>> rows[2].prediction == rows[3].prediction
     True
+    >>> bkm_path = temp_path + "/bkm"
+    >>> bkm.save(bkm_path)
+    >>> bkm2 = BisectingKMeans.load(bkm_path)
+    >>> bkm2.getK()
+    2
+    >>> model_path = temp_path + "/bkm_model"
+    >>> model.save(model_path)
+    >>> model2 = BisectingKMeansModel.load(model_path)
+    >>> model.clusterCenters()[0] == model2.clusterCenters()[0]
+    array([ True,  True], dtype=bool)
+    >>> model.clusterCenters()[1] == model2.clusterCenters()[1]
+    array([ True,  True], dtype=bool)
 
     .. versionadded:: 2.0.0
     """

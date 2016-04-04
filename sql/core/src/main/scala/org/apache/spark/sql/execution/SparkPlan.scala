@@ -84,8 +84,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
 
   /**
-    * Reset all the metrics.
-    */
+   * Reset all the metrics.
+   */
   private[sql] def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
   }
@@ -377,6 +377,13 @@ object SparkPlan {
 private[sql] trait LeafNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
+}
+
+object UnaryNode {
+  def unapply(a: Any): Option[(SparkPlan, SparkPlan)] = a match {
+    case s: SparkPlan if s.children.size == 1 => Some((s, s.children.head))
+    case _ => None
+  }
 }
 
 private[sql] trait UnaryNode extends SparkPlan {
