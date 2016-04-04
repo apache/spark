@@ -238,7 +238,7 @@ private[sql] class HiveSessionCatalog(
     val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
 
     if (ct.tableType == CatalogTableType.VIRTUAL_VIEW) {
-      sb.append(" VIEW "+ct.qualifiedName+" AS " + ct.viewOriginalText.getOrElse(""))
+      sb.append(" VIEW " + ct.qualifiedName + " AS " + ct.viewOriginalText.getOrElse(""))
     } else {
       if (ct.tableType == CatalogTableType.EXTERNAL_TABLE) {
         processedProperties += "EXTERNAL"
@@ -254,7 +254,7 @@ private[sql] class HiveSessionCatalog(
         })
         // hive ddl does not honor NOT NULL, it is always default to be nullable
       }
-      sb.append(cols.mkString("(", ", ", ")")+"\n")
+      sb.append(cols.mkString("(", ", ", ")") + "\n")
 
       // table comment
       sb.append(" " +
@@ -274,7 +274,7 @@ private[sql] class HiveSessionCatalog(
       }
       if (partCols != null && partCols.size > 0) {
         sb.append(" PARTITIONED BY ")
-        sb.append(partCols.mkString("( ", ", ", " )")+"\n")
+        sb.append(partCols.mkString("( ", ", ", " )") + "\n")
       }
 
       // sort bucket
@@ -318,31 +318,31 @@ private[sql] class HiveSessionCatalog(
             escapeHiveCommand(ch) +
             "' "
       }
-      if (delimiterStrs.size > 0){
+      if (delimiterStrs.size > 0) {
         sb.append("DELIMITED ")
-        sb.append(delimiterStrs.mkString(" ")+"\n")
-      }else{
+        sb.append(delimiterStrs.mkString(" ") + "\n")
+      } else {
         sb.append("SERDE '")
-        sb.append(escapeHiveCommand(ct.storage.serde.getOrElse(""))+ "' \n")
+        sb.append(escapeHiveCommand(ct.storage.serde.getOrElse("")) + "' \n")
       }
 
       sb.append("STORED AS INPUTFORMAT '" +
         escapeHiveCommand(ct.storage.inputFormat.getOrElse("")) + "' \n")
       sb.append("OUTPUTFORMAT  '" +
-        escapeHiveCommand(ct.storage.outputFormat.getOrElse(""))+"' \n")
+        escapeHiveCommand(ct.storage.outputFormat.getOrElse("")) + "' \n")
 
       // table location
       sb.append("LOCATION '" +
-        escapeHiveCommand(ct.storage.locationUri.getOrElse(""))+"' \n")
+        escapeHiveCommand(ct.storage.locationUri.getOrElse("")) + "' \n")
 
       // table properties
       val propertPairs = ct.properties collect {
         case (k, v) if !processedProperties.contains(k) =>
-          "'" + escapeHiveCommand(k) + "'='"+escapeHiveCommand(v)+"'"
+          "'" + escapeHiveCommand(k) + "'='" + escapeHiveCommand(v) + "'"
       }
-      if(propertPairs.size>0)
-        sb.append("TBLPROPERTIES " + propertPairs.mkString("( ", ", \n", " )")+"\n")
-
+      if (propertPairs.size>0) {
+        sb.append("TBLPROPERTIES " + propertPairs.mkString("( ", ", \n", " )") + "\n")
+      }
     }
     sb.toString()
   }
@@ -360,10 +360,10 @@ private[sql] class HiveSessionCatalog(
    */
   override def generateTableDDL(name: TableIdentifier): String = {
     val ct = this.getTable(name)
-    if(ct.properties.get("spark.sql.sources.provider") == None){
+    if(ct.properties.get("spark.sql.sources.provider") == None) {
       // CREATE [TEMPORARY] TABLE <tablename> ... ROW FORMAT.. TBLPROPERTIES (...)
       generateHiveDDL(ct)
-    }else{
+    } else {
       // CREATE [TEMPORARY] TABLE <tablename> .... USING .... OPTIONS (...)
       generateDataSourceDDL(ct)
     }
@@ -371,7 +371,7 @@ private[sql] class HiveSessionCatalog(
 
   private def escapeHiveCommand(str: String): String = {
     str.map{c =>
-      if (c == '\'' || c == ';'){
+      if (c == '\'' || c == ';') {
         '\\'
       } else {
         c
