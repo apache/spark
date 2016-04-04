@@ -610,6 +610,7 @@ def _test():
     import doctest
     import os
     import tempfile
+    from pyspark.doctesthelper import run_doctests
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext, HiveContext
     import pyspark.sql.readwriter
@@ -626,11 +627,11 @@ def _test():
     globs['hiveContext'] = HiveContext(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
 
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.readwriter, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE |
+                          doctest.REPORT_NDIFF)
     globs['sc'].stop()
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)
 
 

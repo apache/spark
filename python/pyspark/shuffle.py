@@ -807,7 +807,7 @@ class ExternalGroupBy(ExternalMerger):
 
 
 if __name__ == "__main__":
-    import doctest
-    (failure_count, test_count) = doctest.testmod()
-    if failure_count:
+    from pyspark.doctesthelper import run_doctests
+    result = run_doctests(__file__)
+    if not result.wasSuccessful():
         exit(-1)

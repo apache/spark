@@ -1459,6 +1459,7 @@ class DataFrameStatFunctions(object):
 
 def _test():
     import doctest
+    from pyspark.doctesthelper import run_doctests
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.dataframe
@@ -1477,11 +1478,11 @@ def _test():
                                   Row(name='Tom', age=None, height=None),
                                   Row(name=None, age=None, height=None)]).toDF()
 
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.dataframe, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE |
+                          doctest.REPORT_NDIFF)
     globs['sc'].stop()
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)
 
 

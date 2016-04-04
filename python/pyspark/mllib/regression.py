@@ -806,13 +806,15 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
 
 def _test():
     import doctest
+    from pyspark.doctesthelper import run_doctests
     from pyspark import SparkContext
     import pyspark.mllib.regression
     globs = pyspark.mllib.regression.__dict__.copy()
     globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)
 
 if __name__ == "__main__":

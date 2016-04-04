@@ -2602,6 +2602,7 @@ if __name__ == "__main__":
     import tempfile
 
     import pyspark.ml.feature
+    from pyspark.doctesthelper import run_doctests
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
 
@@ -2622,7 +2623,8 @@ if __name__ == "__main__":
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        result = run_doctests(__file__, globs=globs,
+                              optionflags=doctest.ELLIPSIS)
         sc.stop()
     finally:
         from shutil import rmtree
@@ -2630,5 +2632,5 @@ if __name__ == "__main__":
             rmtree(temp_path)
         except OSError:
             pass
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)

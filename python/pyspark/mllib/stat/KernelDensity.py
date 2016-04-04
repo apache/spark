@@ -37,7 +37,7 @@ class KernelDensity(object):
     >>> sample = sc.parallelize([0.0, 1.0])
     >>> kd.setSample(sample)
     >>> kd.estimate([0.0, 1.0])
-    array([ 0.12938758,  0.12938758])
+    array([ 0.3204565,  0.3204565])
     """
     def __init__(self):
         self._bandwidth = 1.0
@@ -59,3 +59,20 @@ class KernelDensity(object):
         densities = callMLlibFunc(
             "estimateKernelDensity", self._sample, self._bandwidth, points)
         return np.asarray(densities)
+
+
+def _test():
+    import doctest
+    from pyspark.doctesthelper import run_doctests
+    from pyspark import SparkContext
+    globs = globals().copy()
+    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS)
+    globs['sc'].stop()
+    if not result.wasSuccessful():
+        exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

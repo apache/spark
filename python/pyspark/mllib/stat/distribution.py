@@ -30,3 +30,20 @@ class MultivariateGaussian(namedtuple('MultivariateGaussian', ['mu', 'sigma'])):
     >>> (m[0], m[1])
     (DenseVector([11.0, 12.0]), array([[ 1., 5.],[ 3., 2.]]))
     """
+
+
+def _test():
+    import doctest
+    from pyspark.doctesthelper import run_doctests
+    from pyspark import SparkContext
+    globs = globals().copy()
+    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS)
+    globs['sc'].stop()
+    if not result.wasSuccessful():
+        exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

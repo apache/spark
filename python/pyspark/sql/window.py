@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import sys
 
 from pyspark import since, SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column
@@ -145,10 +144,11 @@ class WindowSpec(object):
 
 
 def _test():
-    import doctest
-    SparkContext('local[4]', 'PythonTest')
-    (failure_count, test_count) = doctest.testmod()
-    if failure_count:
+    from pyspark.doctesthelper import run_doctests
+    sc = SparkContext('local[4]', 'PythonTest')
+    result = run_doctests(__file__)
+    sc.stop()
+    if not result.wasSuccessful():
         exit(-1)
 
 

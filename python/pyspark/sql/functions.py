@@ -1710,6 +1710,7 @@ __all__.sort()
 
 def _test():
     import doctest
+    from pyspark.doctesthelper import run_doctests
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.functions
@@ -1718,11 +1719,10 @@ def _test():
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([Row(name='Alice', age=2), Row(name='Bob', age=5)]).toDF()
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.functions, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     globs['sc'].stop()
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)
 
 

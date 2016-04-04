@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+
 from pyspark import since
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
@@ -312,8 +313,10 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 if __name__ == "__main__":
     import doctest
     import pyspark.ml.clustering
+    from pyspark.doctesthelper import run_doctests
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
+    import tempfile
     globs = pyspark.ml.clustering.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
@@ -321,11 +324,11 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    import tempfile
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        result = run_doctests(__file__, globs=globs,
+                              optionflags=doctest.ELLIPSIS)
         sc.stop()
     finally:
         from shutil import rmtree
@@ -333,5 +336,5 @@ if __name__ == "__main__":
             rmtree(temp_path)
         except OSError:
             pass
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)

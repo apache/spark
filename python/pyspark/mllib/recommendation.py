@@ -317,15 +317,17 @@ class ALS(object):
 
 def _test():
     import doctest
+    from pyspark.doctesthelper import run_doctests
     import pyspark.mllib.recommendation
     from pyspark.sql import SQLContext
     globs = pyspark.mllib.recommendation.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)
 
 

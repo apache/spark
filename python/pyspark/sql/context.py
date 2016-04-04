@@ -645,6 +645,7 @@ class UDFRegistration(object):
 def _test():
     import os
     import doctest
+    from pyspark.doctesthelper import run_doctests
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.context
@@ -670,11 +671,10 @@ def _test():
     ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.context, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     globs['sc'].stop()
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)
 
 

@@ -1236,9 +1236,9 @@ class Matrices(object):
 
 
 def _test():
-    import doctest
-    (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
-    if failure_count:
+    from pyspark.doctesthelper import run_doctests
+    result = run_doctests(__file__, optionflags=doctest.ELLIPSIS)
+    if not result.wasSuccessful():
         exit(-1)
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
@@ -195,6 +196,7 @@ class GroupedData(object):
 
 def _test():
     import doctest
+    from pyspark.doctesthelper import run_doctests
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.group
@@ -213,11 +215,11 @@ def _test():
                                    Row(course="dotNET", year=2013, earnings=48000),
                                    Row(course="Java",   year=2013, earnings=30000)]).toDF()
 
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.group, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+    result = run_doctests(__file__, globs=globs,
+                          optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE |
+                          doctest.REPORT_NDIFF)
     globs['sc'].stop()
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)
 
 

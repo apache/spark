@@ -156,3 +156,10 @@ class StatCounter(object):
     def __repr__(self):
         return ("(count: %s, mean: %s, stdev: %s, max: %s, min: %s)" %
                 (self.count(), self.mean(), self.stdev(), self.max(), self.min()))
+
+
+if __name__ == "__main__":
+    from pyspark.doctesthelper import run_doctests
+    result = run_doctests(__file__)
+    if not result.wasSuccessful():
+        exit(-1)

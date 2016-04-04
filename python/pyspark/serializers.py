@@ -15,40 +15,6 @@
 # limitations under the License.
 #
 
-"""
-PySpark supports custom serializers for transferring data; this can improve
-performance.
-
-By default, PySpark uses L{PickleSerializer} to serialize objects using Python's
-C{cPickle} serializer, which can serialize nearly any Python object.
-Other serializers, like L{MarshalSerializer}, support fewer datatypes but can be
-faster.
-
-The serializer is chosen when creating L{SparkContext}:
-
->>> from pyspark.context import SparkContext
->>> from pyspark.serializers import MarshalSerializer
->>> sc = SparkContext('local', 'test', serializer=MarshalSerializer())
->>> sc.parallelize(list(range(1000))).map(lambda x: 2 * x).take(10)
-[0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
->>> sc.stop()
-
-PySpark serialize objects in batches; By default, the batch size is chosen based
-on the size of objects, also configurable by SparkContext's C{batchSize} parameter:
-
->>> sc = SparkContext('local', 'test', batchSize=2)
->>> rdd = sc.parallelize(range(16), 4).map(lambda x: x)
-
-Behind the scenes, this creates a JavaRDD with four partitions, each of
-which contains two batches of two objects:
-
->>> rdd.glom().collect()
-[[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
->>> int(rdd._jrdd.count())
-8
->>> sc.stop()
-"""
-
 import sys
 from itertools import chain, product
 import marshal
@@ -438,6 +404,40 @@ class MarshalSerializer(FramedSerializer):
     This serializer is faster than PickleSerializer but supports fewer datatypes.
     """
 
+    """
+    PySpark supports custom serializers for transferring data; this can improve
+    performance.
+
+    By default, PySpark uses L{PickleSerializer} to serialize objects using Python's
+    C{cPickle} serializer, which can serialize nearly any Python object.
+    Other serializers, like L{MarshalSerializer}, support fewer datatypes but can be
+    faster.
+
+    The serializer is chosen when creating L{SparkContext}:
+
+    >>> from pyspark.context import SparkContext
+    >>> from pyspark.serializers import MarshalSerializer
+    >>> sc = SparkContext('local', 'test', serializer=MarshalSerializer())
+    >>> sc.parallelize(list(range(1000))).map(lambda x: 2 * x).take(10)
+    [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
+    >>> sc.stop()
+
+    PySpark serialize objects in batches; By default, the batch size is chosen based
+    on the size of objects, also configurable by SparkContext's C{batchSize} parameter:
+
+    >>> sc = SparkContext('local', 'test', batchSize=2)
+    >>> rdd = sc.parallelize(range(16), 4).map(lambda x: x)
+
+    Behind the scenes, this creates a JavaRDD with four partitions, each of
+    which contains two batches of two objects:
+
+    >>> rdd.glom().collect()
+    [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
+    >>> int(rdd._jrdd.count())
+    8
+    >>> sc.stop()
+    """
+
     def dumps(self, obj):
         return marshal.dumps(obj)
 
@@ -556,7 +556,7 @@ def write_with_length(obj, stream):
 
 
 if __name__ == '__main__':
-    import doctest
-    (failure_count, test_count) = doctest.testmod()
-    if failure_count:
+    from pyspark.doctesthelper import run_doctests
+    result = run_doctests(__file__)
+    if not result.wasSuccessful():
         exit(-1)
