@@ -932,6 +932,9 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().indexed
     0.0
+    >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4))]).toDF()
+    >>> model.transform(test2).head().indexed
+    2.0
 
     .. versionadded:: 2.0.0
     """
@@ -976,11 +979,13 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         return self.getOrDefault(self.classifier)
 
     def _fit(self, dataset):
-
         labelCol = self.getLabelCol()
-        featureCol = self.getFeaturesCol()
-        numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"])
-        multiclassLabeled = dataset.select(labelCol, featureCol)
+        featuresCol = self.getFeaturesCol()
+        predictionCol = self.getPredictionCol()
+
+        numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
+
+        multiclassLabeled = dataset.select(labelCol, featuresCol)
 
         # persist if underlying dataset is not persistent.
         handlePersistence = \
@@ -991,24 +996,23 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         models = []
 
         for index in range(0, numClasses):
-            # newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
-            labelColName = "mc2b$" + str(index)
+            binaryLabelCol = "mc2b$" + str(index)
             trainingDataset = multiclassLabeled.withColumn(
-                labelColName,
-                when(dataset[self.getLabelCol()] == float(index), 1.0).otherwise(0.0))
+                binaryLabelCol,
+                when(dataset[labelCol] == float(index), 1.0).otherwise(0.0))
             classifier = self.getClassifier()
-            paramMap = dict([(classifier.labelCol, labelColName),
-                            (classifier.featuresCol, self.getFeaturesCol()),
-                            (classifier.predictionCol, self.getPredictionCol())])
+            paramMap = dict([(classifier.labelCol, binaryLabelCol),
+                            (classifier.featuresCol, featuresCol),
+                            (classifier.predictionCol, predictionCol)])
             models.append(classifier.fit(trainingDataset, paramMap))
 
         if handlePersistence:
             multiclassLabeled.unpersist()
 
         return OneVsRestModel(models=models)\
-            .setFeaturesCol(self.getFeaturesCol())\
-            .setLabelCol(self.getLabelCol())\
-            .setPredictionCol(self.getPredictionCol())
+            .setFeaturesCol(featuresCol)\
+            .setLabelCol(labelCol)\
+            .setPredictionCol(predictionCol)
 
     @since("2.0.0")
     def copy(self, extra=None):
@@ -1022,10 +1026,10 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         """
         if extra is None:
             extra = dict()
-        newOVR = Params.copy(self, extra)
+        newOvr = Params.copy(self, extra)
         if self.isSet(self.classifier):
-            newOVR.setClassifier(self.getClassifier().copy(extra))
-        return newOVR
+            newOvr.setClassifier(self.getClassifier().copy(extra))
+        return newOvr
 
 
 class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
