@@ -74,13 +74,12 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-  /**
-   * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
-   * subsystems.
-   */
-  def newConfiguration(conf: SparkConf): Configuration = {
-    val hadoopConf = new Configuration()
 
+  /**
+    * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
+    * configuration.
+    */
+  def appendS3AndSparkHadoopConfigurations(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Note: this null check is around more than just access to the "conf" object to maintain
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
@@ -106,7 +105,15 @@ class SparkHadoopUtil extends Logging {
       val bufferSize = conf.get("spark.buffer.size", "65536")
       hadoopConf.set("io.file.buffer.size", bufferSize)
     }
+  }
 
+  /**
+    * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
+    * subsystems.
+    */
+  def newConfiguration(conf: SparkConf): Configuration = {
+    val hadoopConf = new Configuration()
+    appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
     hadoopConf
   }
 

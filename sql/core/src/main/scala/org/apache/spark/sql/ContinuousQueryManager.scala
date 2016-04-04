@@ -171,7 +171,8 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
       name: String,
       checkpointLocation: String,
       df: DataFrame,
-      sink: Sink): ContinuousQuery = {
+      sink: Sink,
+      trigger: Trigger = ProcessingTime(0)): ContinuousQuery = {
     activeQueriesLock.synchronized {
       if (activeQueries.contains(name)) {
         throw new IllegalArgumentException(
@@ -185,7 +186,13 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
           // "_logicalPlan" has already used attributes of the previous `output`.
           StreamingExecutionRelation(source, output)
       }
-      val query = new StreamExecution(sqlContext, name, checkpointLocation, logicalPlan, sink)
+      val query = new StreamExecution(
+        sqlContext,
+        name,
+        checkpointLocation,
+        logicalPlan,
+        sink,
+        trigger)
       query.start()
       activeQueries.put(name, query)
       query
