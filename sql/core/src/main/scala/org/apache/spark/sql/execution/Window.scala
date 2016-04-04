@@ -811,7 +811,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
  *
  * This is a very expensive operator to use, O(n * (n - 1) /2), because we need to maintain a
  * buffer and must do full recalculation after each row. Reverse iteration would be possible, if
- * the communitativity of the used window functions can be guaranteed.
+ * the commutativity of the used window functions can be guaranteed.
  *
  * @param target to write results to.
  * @param processor to calculate the row values with.

@@ -318,14 +318,14 @@ public class JavaDatasetSuite implements Serializable {
     Encoder<Tuple3<Integer, Long, String>> encoder3 =
       Encoders.tuple(Encoders.INT(), Encoders.LONG(), Encoders.STRING());
     List<Tuple3<Integer, Long, String>> data3 =
-      Arrays.asList(new Tuple3<Integer, Long, String>(1, 2L, "a"));
+      Arrays.asList(new Tuple3<>(1, 2L, "a"));
     Dataset<Tuple3<Integer, Long, String>> ds3 = context.createDataset(data3, encoder3);
     Assert.assertEquals(data3, ds3.collectAsList());
 
     Encoder<Tuple4<Integer, String, Long, String>> encoder4 =
       Encoders.tuple(Encoders.INT(), Encoders.STRING(), Encoders.LONG(), Encoders.STRING());
     List<Tuple4<Integer, String, Long, String>> data4 =
-      Arrays.asList(new Tuple4<Integer, String, Long, String>(1, "b", 2L, "a"));
+      Arrays.asList(new Tuple4<>(1, "b", 2L, "a"));
     Dataset<Tuple4<Integer, String, Long, String>> ds4 = context.createDataset(data4, encoder4);
     Assert.assertEquals(data4, ds4.collectAsList());
 
@@ -333,7 +333,7 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.tuple(Encoders.INT(), Encoders.STRING(), Encoders.LONG(), Encoders.STRING(),
         Encoders.BOOLEAN());
     List<Tuple5<Integer, String, Long, String, Boolean>> data5 =
-      Arrays.asList(new Tuple5<Integer, String, Long, String, Boolean>(1, "b", 2L, "a", true));
+      Arrays.asList(new Tuple5<>(1, "b", 2L, "a", true));
     Dataset<Tuple5<Integer, String, Long, String, Boolean>> ds5 =
       context.createDataset(data5, encoder5);
     Assert.assertEquals(data5, ds5.collectAsList());
@@ -354,7 +354,7 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.tuple(Encoders.INT(),
         Encoders.tuple(Encoders.STRING(), Encoders.STRING(), Encoders.LONG()));
     List<Tuple2<Integer, Tuple3<String, String, Long>>> data2 =
-      Arrays.asList(tuple2(1, new Tuple3<String, String, Long>("a", "b", 3L)));
+      Arrays.asList(tuple2(1, new Tuple3<>("a", "b", 3L)));
     Dataset<Tuple2<Integer, Tuple3<String, String, Long>>> ds2 =
       context.createDataset(data2, encoder2);
     Assert.assertEquals(data2, ds2.collectAsList());
@@ -376,7 +376,7 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.tuple(Encoders.DOUBLE(), Encoders.DECIMAL(), Encoders.DATE(), Encoders.TIMESTAMP(),
         Encoders.FLOAT());
     List<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> data =
-      Arrays.asList(new Tuple5<Double, BigDecimal, Date, Timestamp, Float>(
+      Arrays.asList(new Tuple5<>(
         1.7976931348623157E308, new BigDecimal("0.922337203685477589"),
           Date.valueOf("1970-01-01"), new Timestamp(System.currentTimeMillis()), Float.MAX_VALUE));
     Dataset<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> ds =

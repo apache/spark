@@ -220,7 +220,7 @@ private[state] object StateStore extends Logging {
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
       val verified =
         coordinatorRef.map(_.verifyIfInstanceActive(storeId, executorId)).getOrElse(false)
-      logDebug(s"Verifyied whether the loaded instance $storeId is active: $verified" )
+      logDebug(s"Verified whether the loaded instance $storeId is active: $verified" )
       verified
     } catch {
       case NonFatal(e) =>
