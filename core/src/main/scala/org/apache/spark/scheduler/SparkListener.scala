@@ -153,14 +153,12 @@ private[spark] trait SparkHistoryListenerFactory {
 
 
 /**
- * :: DeveloperApi ::
  * Interface for listening to events from the Spark scheduler. Most applications should probably
  * extend SparkListener or SparkFirehoseListener directly, rather than implementing this class.
  *
  * Note that this is an internal interface which might change in different Spark releases.
  */
-@DeveloperApi
-trait SparkListenerInterface {
+private[spark] trait SparkListenerInterface {
 
   /**
    * Called when a stage completes successfully or fails, with information on the completed stage.
