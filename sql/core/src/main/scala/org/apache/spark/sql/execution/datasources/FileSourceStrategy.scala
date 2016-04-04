@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -120,7 +120,10 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           logInfo(s"Planning with ${bucketing.numBuckets} buckets")
           val bucketed =
             selectedPartitions.flatMap { p =>
-              p.files.map(f => PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen))
+              p.files.map { f =>
+                val hosts = getBlockHosts(getBlockLocations(f), 0)
+                PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
+              }
             }.groupBy { f =>
               BucketingUtils
                 .getBucketId(new Path(f.filePath).getName)
@@ -139,10 +142,12 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
+              val blockLocations = getBlockLocations(file)
               (0L to file.getLen by maxSplitBytes).map { offset =>
                 val remaining = file.getLen - offset
                 val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-                PartitionedFile(partition.values, file.getPath.toUri.toString, offset, size)
+                val hosts = getBlockHosts(blockLocations, offset)
+                PartitionedFile(partition.values, file.getPath.toUri.toString, offset, size, hosts)
               }
             }
           }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
@@ -206,5 +211,29 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       withProjections :: Nil
 
     case _ => Nil
+  }
+
+  private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
+    case f: LocatedFileStatus => f.getBlockLocations
+    case f => Array.empty[BlockLocation]
+  }
+
+  private def getBlockIndex(blockLocations: Array[BlockLocation], offset: Long): Int = {
+    val index = blockLocations.indexWhere { b =>
+      b.getOffset <= offset && offset < b.getOffset + b.getLength
+    }
+
+    if (index < 0) {
+      val last = blockLocations.last
+      val totalLength = last.getOffset + last.getLength
+      throw new IllegalArgumentException(
+        s"Offset $offset is outside of file (0..$totalLength")
+    }
+
+    index
+  }
+
+  private def getBlockHosts(blockLocations: Array[BlockLocation], offset: Long): Array[String] = {
+    blockLocations(getBlockIndex(blockLocations, offset)).getHosts
   }
 }

@@ -31,7 +31,8 @@ case class PartitionedFile(
     partitionValues: InternalRow,
     filePath: String,
     start: Long,
-    length: Long) {
+    length: Long,
+    locations: Array[String] = Array.empty) {
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
@@ -85,4 +86,8 @@ class FileScanRDD(
   }
 
   override protected def getPartitions: Array[Partition] = filePartitions.toArray
+
+  override protected def getPreferredLocations(split: Partition): Seq[String] = {
+    split.asInstanceOf[FilePartition].files.flatMap(_.locations).distinct
+  }
 }

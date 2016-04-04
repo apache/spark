@@ -21,7 +21,8 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.s3.S3FileSystem
+import org.apache.hadoop.fs.{FileStatus, FileSystem, LocatedFileStatus, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
@@ -31,7 +32,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.execution.datasources._
@@ -625,16 +626,27 @@ class HDFSFileCatalog(
     if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
     } else {
-      val statuses = paths.flatMap { path =>
+      val statuses: Seq[FileStatus] = paths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
         logInfo(s"Listing $path on driver")
         // Dummy jobconf to get to the pathFilter defined in configuration
-        val jobConf = new JobConf(hadoopConf, this.getClass())
+        val jobConf = new JobConf(hadoopConf, this.getClass)
         val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-        if (pathFilter != null) {
+        val statuses = if (pathFilter != null) {
           Try(fs.listStatus(path, pathFilter)).getOrElse(Array.empty)
         } else {
           Try(fs.listStatus(path)).getOrElse(Array.empty)
+        }
+
+        fs match {
+          case _: S3FileSystem =>
+            // S3 doesn't provide locality information.
+            statuses.toSeq
+
+          case _ =>
+            statuses.map { f =>
+              new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
+            }
         }
       }.filterNot { status =>
         val name = status.getPath.getName
@@ -652,7 +664,7 @@ class HDFSFileCatalog(
     }
   }
 
-   def inferPartitioning(schema: Option[StructType]): PartitionSpec = {
+  def inferPartitioning(schema: Option[StructType]): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = leafDirToChildrenFiles.keys.toSeq
     schema match {
@@ -754,7 +766,7 @@ private[sql] object HadoopFsRelation extends Logging {
       Array.empty
     } else {
       // Dummy jobconf to get to the pathFilter defined in configuration
-      val jobConf = new JobConf(fs.getConf, this.getClass())
+      val jobConf = new JobConf(fs.getConf, this.getClass)
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       val statuses =
         if (pathFilter != null) {
