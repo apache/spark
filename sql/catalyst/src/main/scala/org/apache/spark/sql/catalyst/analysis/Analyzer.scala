@@ -249,7 +249,7 @@ class Analyzer(
           s"${VirtualColumn.groupingIdName} is deprecated; use grouping_id() instead")
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
-        val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+        val gid = VirtualColumn.groupingIdAttribute
 
         // Expand works by setting grouping expressions to null as determined by the bitmasks. To
         // prevent these null values from being used in an aggregate instead of the original value

@@ -496,7 +496,7 @@ private[sql] object Expand {
         if (nonSelectedGroupAttrSet.contains(attr)) {
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
-          Alias(Literal.create(null, attr.dataType), attr.name)()
+          Alias(Literal.create(null, attr.dataType), attr.name)(exprId = attr.exprId)
         } else {
           attr
         }
@@ -524,9 +524,10 @@ case class Expand(
     // Check output consistency on remaining projections
     projections.tail.foreach { p =>
       p.zipWithIndex.foreach { case (e, index) =>
-        if (e.name != preOutput(index).name || e.dataType != preOutput(index).dataType) {
-          throw new AnalysisException(s"Projection $p is inconsistent with output $preOutput" +
-            "in Expand operator")
+        if (e.dataType != preOutput(index).dataType) {
+          throw new AnalysisException(s"Projection $p (column ${e.name}, ${e.dataType}) is " +
+            s"inconsistent with output $preOutput (column ${preOutput(index).name}, " +
+            s"${preOutput(index).dataType}) in Expand operator.")
         }
       }
     }

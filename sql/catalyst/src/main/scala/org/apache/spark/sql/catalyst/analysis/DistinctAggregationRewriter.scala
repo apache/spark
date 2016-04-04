@@ -160,16 +160,21 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)
-          val idAlias = if (i == 0) {
-            gid
-          } else {
-            Alias(id, "gid")()
-          }
+          val idAlias =
+            if (i == 0 && !regularAggExprsExists) {
+              gid
+            } else {
+              Alias(id, "gid")()
+            }
 
           // Expand projection
           val projection = distinctAggChildren.map {
             case e if group.contains(e) => e
-            case e => nullify(e)
+            case e: Expression =>
+              val attr = distinctAggChildAttrMap
+                .find(ge => e.semanticEquals(ge._1))
+                .map(_._2).get
+              Alias(nullify(e), attr.name)(exprId = attr.exprId)
           } :+ idAlias
 
           // Final aggregate
@@ -199,8 +204,7 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(
-          aggregate.First(evalWithinGroup(regularGroupId.child.asInstanceOf[Literal],
-            operator.toAttribute), Literal(true)),
+          aggregate.First(evalWithinGroup(Literal(0), operator.toAttribute), Literal(true)),
           mode = Complete,
           isDistinct = false)
 
@@ -219,31 +223,31 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
       }
 
       val namedGroupingExpressions: Seq[NamedExpression] = a.groupingExpressions.map { e =>
-        val attrName = groupByMap
+        val attr = groupByMap
           .find(ge => e.semanticEquals(ge._1))
-          .map(_._2.name).get
-        Alias(e, attrName)()
+          .map(_._2).get
+        Alias(e, attr.name)(exprId = attr.exprId)
       }
 
       val namedRegularAggChildren: Seq[NamedExpression] = regularAggChildren.map { e =>
-        val attrName = regularAggChildAttrMap
+        val attr = regularAggChildAttrMap
           .find(ge => e.semanticEquals(ge._1))
-          .map(_._2.name).get
-        Alias(e, attrName)()
+          .map(_._2).get
+        Alias(e, attr.name)(exprId = attr.exprId)
       }
 
       val nullRegularAggChildren: Seq[NamedExpression] = regularAggChildren.map { e =>
-        val attrName = regularAggChildAttrMap
+        val attr = regularAggChildAttrMap
           .find(ge => e.semanticEquals(ge._1))
-          .map(_._2.name).get
-        Alias(nullify(e), attrName)()
+          .map(_._2).get
+        Alias(nullify(e), attr.name)(exprId = attr.exprId)
       }
 
       val nullDistinctAggChildren: Seq[NamedExpression] = distinctAggChildren.map { e =>
-        val attrName = distinctAggChildAttrMap
+        val attr = distinctAggChildAttrMap
           .find(ge => e.semanticEquals(ge._1))
-          .map(_._2.name).get
-        Alias(nullify(e), attrName)()
+          .map(_._2).get
+        Alias(nullify(e), attr.name)(exprId = attr.exprId)
       }
 
       // Construct the regular aggregate input projection only if we need one.
@@ -260,13 +264,13 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
       val distinctAggProjections: Seq[Seq[NamedExpression]] = distinctAggOperatorMap.map {
         case (projection, _) =>
           val namedProjection: Seq[NamedExpression] = projection.map { e =>
-            e match {
-              case n: NamedExpression => n
-              case _: Expression =>
-                val attrName = distinctAggChildAttrMap
-                  .find(ge => e.semanticEquals(ge._1))
-                  .map(_._2.name).get
-                Alias(e, attrName)()
+            val attr = distinctAggChildAttrMap
+              .find(ge => e.semanticEquals(ge._1))
+              .map(_._2)
+            if (attr.isDefined) {
+              Alias(e, attr.get.name)(exprId = attr.get.exprId)
+            } else {
+              e.asInstanceOf[NamedExpression]
             }
           }
           namedGroupingExpressions ++
@@ -281,7 +285,9 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
 
       // Construct the first aggregate operator. This de-duplicates the all the children of
       // distinct operators, and applies the regular aggregate operators.
-      val firstAggregateGroupBy = groupByAttrs ++ distinctAggChildAttrs :+ gid
+      val gidReference = new AttributeReference("gid", IntegerType, false)(exprId = gid.exprId,
+        isGenerated = true)
+      val firstAggregateGroupBy = groupByAttrs ++ distinctAggChildAttrs :+ gidReference
       val firstAggregate = Aggregate(
         firstAggregateGroupBy,
         firstAggregateGroupBy ++ regularAggOperatorMap.map(_._2),
