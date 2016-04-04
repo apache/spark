@@ -203,8 +203,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    // TODO: Re-enable this test after we fix SPARK-14335.
-    // checkAnswer(sql("SHOW functions `~`"), Row("~"))
+    checkAnswer(sql("SHOW functions `~`"), Row("~"))
     checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
     checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
     // this probably will failed if we add more function with `sha` prefixing.
@@ -236,11 +235,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkExistence(sql("describe functioN abcadf"), true,
       "Function: abcadf not found.")
 
-    // TODO: Re-enable this test after we fix SPARK-14335.
-    // checkExistence(sql("describe functioN  `~`"), true,
-    //  "Function: ~",
-    //  "Class: org.apache.hadoop.hive.ql.udf.UDFOPBitNot",
-    //  "Usage: ~ n - Bitwise not")
+    checkExistence(sql("describe functioN  `~`"), true,
+      "Function: ~",
+      "Class: org.apache.spark.sql.catalyst.expressions.BitwiseNot",
+      "Usage: To be added.")
   }
 
   test("SPARK-5371: union with null and sum") {
