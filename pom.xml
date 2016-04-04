@@ -185,6 +185,10 @@
     <!-- Modules that copy jars to the build directory should do so under this location. -->
     <jars.target.dir>${project.build.directory}/scala-${scala.binary.version}/jars</jars.target.dir>
 
+    <!-- Allow modules to enable / disable certain build plugins easily. -->
+    <build.testJarPhase>prepare-package</build.testJarPhase>
+    <build.copyDependenciesPhase>none</build.copyDependenciesPhase>
+
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
       declared in the projects that build assemblies.
@@ -237,15 +241,6 @@
     </pluginRepository>
   </pluginRepositories>
   <dependencies>
-    <!--
-      This is a dummy dependency that is used along with the shading plug-in
-      to create effective poms on publishing (see SPARK-3812).
-    -->
-    <dependency>
-      <groupId>org.spark-project.spark</groupId>
-      <artifactId>unused</artifactId>
-      <version>1.0.0</version>
-    </dependency>
     <!--
          This is needed by the scalatest plugin, and so is declared here to be available in
          all child modules, just as scalatest is run in all children
@@ -832,6 +827,14 @@
             <artifactId>velocity</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <!-- avro-mapred for some reason depends on avro-ipc's test jar, so undo that. -->
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-ipc</artifactId>
+        <classifier>tests</classifier>
+        <version>${avro.version}</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
@@ -1521,6 +1524,10 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1916,6 +1923,7 @@
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
               <SPARK_PREPEND_CLASSES>1</SPARK_PREPEND_CLASSES>
+              <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
@@ -1964,6 +1972,7 @@
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
               <SPARK_PREPEND_CLASSES>1</SPARK_PREPEND_CLASSES>
+              <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
@@ -2146,6 +2155,7 @@
         <version>2.10</version>
         <executions>
           <execution>
+            <id>generate-test-classpath</id>
             <phase>test-compile</phase>
             <goals>
               <goal>build-classpath</goal>
@@ -2153,6 +2163,17 @@
             <configuration>
               <includeScope>test</includeScope>
               <outputProperty>test_classpath</outputProperty>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-module-dependencies</id>
+            <phase>${build.copyDependenciesPhase}</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeScope>runtime</includeScope>
+              <outputDirectory>${jars.target.dir}</outputDirectory>
             </configuration>
           </execution>
         </executions>
@@ -2169,9 +2190,6 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
-              <!-- At a minimum we must include this to force effective pom generation -->
-              <include>org.spark-project.spark:unused</include>
-
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
               <include>org.eclipse.jetty:jetty-continuation</include>
@@ -2302,7 +2320,7 @@
         <executions>
           <execution>
             <id>prepare-test-jar</id>
-            <phase>prepare-package</phase>
+            <phase>${build.testJarPhase}</phase>
             <goals>
               <goal>test-jar</goal>
             </goals>

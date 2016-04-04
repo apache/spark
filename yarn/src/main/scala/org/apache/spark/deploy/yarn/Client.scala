@@ -447,9 +447,6 @@ private[spark] class Client(
      *
      * Note that the archive cannot be a "local" URI. If none of the above settings are found,
      * then upload all files found in $SPARK_HOME/jars.
-     *
-     * TODO: currently the code looks in $SPARK_HOME/lib while the work to replace assemblies
-     * with a directory full of jars is ongoing.
      */
     val sparkArchive = sparkConf.get(SPARK_ARCHIVE)
     if (sparkArchive.isDefined) {
