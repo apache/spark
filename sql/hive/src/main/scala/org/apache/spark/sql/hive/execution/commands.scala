@@ -95,6 +95,7 @@ case class DropTable(
     } else {
       hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause${tableName.quotedString}")
     }
+    hiveContext.sessionState.catalog.dropTable(tableName, ignoreIfNotExists = true)
     Seq.empty[Row]
   }
 }
