@@ -70,12 +70,26 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   /**
    * Create a [[ShowTablesCommand]] logical plan.
+   * Example SQL :
+   * {{{
+   *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+   * }}}
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.LIKE != null) {
-      logWarning("SHOW TABLES LIKE option is ignored.")
-    }
-    ShowTablesCommand(Option(ctx.db).map(_.getText))
+    ShowTablesCommand(
+      Option(ctx.db).map(_.getText),
+      Option(ctx.pattern).map(string))
+  }
+
+  /**
+   * Create a [[ShowDatabasesCommand]] logical plan.
+   * Example SQL:
+   * {{{
+   *   SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards'];
+   * }}}
+   */
+  override def visitShowDatabases(ctx: ShowDatabasesContext): LogicalPlan = withOrigin(ctx) {
+    ShowDatabasesCommand(Option(ctx.pattern).map(string))
   }
 
   /**
@@ -122,7 +136,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     // Create the explain comment.
     val statement = plan(ctx.statement)
     if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null))
+      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
+        codegen = options.exists(_.CODEGEN != null))
     } else {
       ExplainCommand(OneRowRelation)
     }

@@ -45,6 +45,7 @@ class DDLSuite extends QueryTest with SharedSQLContext {
       dbNames.foreach { name =>
         sqlContext.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
       }
+      sqlContext.sessionState.catalog.setCurrentDatabase("default")
     }
   }
 
@@ -159,4 +160,75 @@ class DDLSuite extends QueryTest with SharedSQLContext {
   }
 
   // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
+
+  test("show tables") {
+    withTempTable("show1a", "show2b") {
+      sql(
+        """
+          |CREATE TEMPORARY TABLE show1a
+          |USING org.apache.spark.sql.sources.DDLScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10',
+          |  Table 'test1'
+          |
+          |)
+        """.stripMargin)
+      sql(
+        """
+          |CREATE TEMPORARY TABLE show2b
+          |USING org.apache.spark.sql.sources.DDLScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10',
+          |  Table 'test1'
+          |)
+        """.stripMargin)
+      checkAnswer(
+        sql("SHOW TABLES IN default 'show1*'"),
+        Row("show1a", true) :: Nil)
+
+      checkAnswer(
+        sql("SHOW TABLES IN default 'show1*|show2*'"),
+        Row("show1a", true) ::
+          Row("show2b", true) :: Nil)
+
+      checkAnswer(
+        sql("SHOW TABLES 'show1*|show2*'"),
+        Row("show1a", true) ::
+          Row("show2b", true) :: Nil)
+
+      assert(
+        sql("SHOW TABLES").count() >= 2)
+      assert(
+        sql("SHOW TABLES IN default").count() >= 2)
+    }
+  }
+
+  test("show databases") {
+    withDatabase("showdb1A", "showdb2B") {
+      sql("CREATE DATABASE showdb1A")
+      sql("CREATE DATABASE showdb2B")
+
+      assert(
+        sql("SHOW DATABASES").count() >= 2)
+
+      checkAnswer(
+        sql("SHOW DATABASES LIKE '*db1A'"),
+        Row("showdb1A") :: Nil)
+
+      checkAnswer(
+        sql("SHOW DATABASES LIKE 'showdb1A'"),
+        Row("showdb1A") :: Nil)
+
+      checkAnswer(
+        sql("SHOW DATABASES LIKE '*db1A|*db2B'"),
+        Row("showdb1A") ::
+          Row("showdb2B") :: Nil)
+
+      checkAnswer(
+        sql("SHOW DATABASES LIKE 'non-existentdb'"),
+        Nil)
+    }
+  }
 }

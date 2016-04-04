@@ -32,10 +32,10 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.Benchmark
 
 /**
-  * Benchmark to measure whole stage codegen performance.
-  * To run this:
-  *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
-  */
+ * Benchmark to measure whole stage codegen performance.
+ * To run this:
+ *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
+ */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
     .set("spark.sql.shuffle.partitions", "1")
@@ -82,6 +82,31 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     -------------------------------------------------------------------------------------------
     range/limit/sum codegen=false             609 /  672        861.6           1.2       1.0X
     range/limit/sum codegen=true              561 /  621        935.3           1.1       1.1X
+    */
+  }
+
+  ignore("range/sample/sum") {
+    val N = 500 << 20
+    runBenchmark("range/sample/sum", N) {
+      sqlContext.range(N).sample(true, 0.01).groupBy().sum().collect()
+    }
+    /*
+    Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    range/sample/sum codegen=false         53888 / 56592          9.7         102.8       1.0X
+    range/sample/sum codegen=true          41614 / 42607         12.6          79.4       1.3X
+    */
+
+    runBenchmark("range/sample/sum", N) {
+      sqlContext.range(N).sample(false, 0.01).groupBy().sum().collect()
+    }
+    /*
+    Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    range/sample/sum codegen=false         12982 / 13384         40.4          24.8       1.0X
+    range/sample/sum codegen=true            7074 / 7383         74.1          13.5       1.8X
     */
   }
 

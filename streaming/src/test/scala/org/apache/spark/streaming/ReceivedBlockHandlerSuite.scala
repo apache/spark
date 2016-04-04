@@ -157,7 +157,8 @@ class ReceivedBlockHandlerSuite
           val reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
           val bytes = reader.read(fileSegment)
           reader.close()
-          serializerManager.dataDeserialize(generateBlockId(), new ChunkedByteBuffer(bytes)).toList
+          serializerManager.dataDeserializeStream(
+            generateBlockId(), new ChunkedByteBuffer(bytes).toInputStream()).toList
         }
         loggedData shouldEqual data
       }
