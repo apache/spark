@@ -110,7 +110,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     super.initialize(inputSplit, taskAttemptContext);
     initializeInternal();
     Configuration conf = ContextUtil.getConfiguration(taskAttemptContext);
-    returnColumnarBatch = conf.getBoolean("returning.batch", false);
+    returnColumnarBatch = conf.getBoolean(ParquetRelation$.MODULE$.RETURNING_BATCH(), false);
   }
 
   /**
