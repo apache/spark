@@ -18,8 +18,6 @@ package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
 
-import org.antlr.v4.runtime.Token
-
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.{AbstractSqlParser, AstBuilder, ParseException}
