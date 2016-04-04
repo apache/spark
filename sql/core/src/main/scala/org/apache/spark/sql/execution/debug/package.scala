@@ -77,9 +77,9 @@ package object debug {
   }
 
   /**
-   * Augments [[DataFrame]]s with debug methods.
+   * Augments [[Dataset]]s with debug methods.
    */
-  implicit class DebugQuery(query: DataFrame) extends Logging {
+  implicit class DebugQuery(query: Dataset[_]) extends Logging {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[TreeNodeRef]()
