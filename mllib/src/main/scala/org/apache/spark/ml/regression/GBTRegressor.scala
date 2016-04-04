@@ -179,7 +179,7 @@ final class GBTRegressionModel private[ml](
   extends PredictionModel[Vector, GBTRegressionModel]
   with TreeEnsembleModel with Serializable {
 
-  require(numTrees > 0, "GBTRegressionModel requires at least 1 tree.")
+  require(_trees.nonEmpty, "GBTRegressionModel requires at least 1 tree.")
   require(_trees.length == _treeWeights.length, "GBTRegressionModel given trees, treeWeights of" +
     s" non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
@@ -212,6 +212,9 @@ final class GBTRegressionModel private[ml](
     val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
     blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
+
+  /** Number of trees in ensemble */
+  val numTrees: Int = trees.length
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressionModel = {
@@ -258,6 +261,6 @@ private[ml] object GBTRegressionModel {
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtr")
-    new GBTRegressionModel(parent.uid, newTrees, oldModel.treeWeights, numFeatures)
+    new GBTRegressionModel(uid, newTrees, oldModel.treeWeights, numFeatures)
   }
 }
