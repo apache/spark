@@ -288,7 +288,11 @@ trait StreamTest extends QueryTest with Timeouts {
             currentStream =
               sqlContext
                 .streams
-                .startQuery(StreamExecution.nextName, metadataRoot, stream, sink)
+                .startQuery(
+                  StreamExecution.nextName,
+                  metadataRoot,
+                  stream,
+                  sink)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {

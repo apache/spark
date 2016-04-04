@@ -21,8 +21,8 @@ package org.apache.spark.examples
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
-  * Usage: BroadcastTest [slices] [numElem] [blockSize]
-  */
+ * Usage: BroadcastTest [slices] [numElem] [blockSize]
+ */
 object BroadcastTest {
   def main(args: Array[String]) {
 

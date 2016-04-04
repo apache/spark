@@ -108,7 +108,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     /**
      * Matches a plan whose single partition should be small enough to build a hash table.
      *
-     * Note: this assume that the number of partition is fixed, requires addtional work if it's
+     * Note: this assume that the number of partition is fixed, requires additional work if it's
      * dynamic.
      */
     def canBuildHashMap(plan: LogicalPlan): Boolean = {
@@ -392,8 +392,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
         exchange.ShuffleExchange(HashPartitioning(
           expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
-      case e @ python.EvaluatePython(udfs, child, _) =>
-        python.BatchPythonEvaluation(udfs, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
       case _ => Nil

@@ -74,6 +74,7 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
+    python.ExtractPythonUDFs,
     PlanSubqueries(sqlContext),
     EnsureRequirements(sqlContext.conf),
     CollapseCodegenStages(sqlContext.conf),
@@ -102,5 +103,21 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
        |== Physical Plan ==
        |${stringOrError(executedPlan)}
     """.stripMargin.trim
+  }
+
+  /** A special namespace for commands that can be used to debug query execution. */
+  // scalastyle:off
+  object debug {
+  // scalastyle:on
+
+    /**
+     * Prints to stdout all the generated code found in this plan (i.e. the output of each
+     * WholeStageCodegen subtree).
+     */
+    def codegen(): Unit = {
+      // scalastyle:off println
+      println(org.apache.spark.sql.execution.debug.codegenString(executedPlan))
+      // scalastyle:on println
+    }
   }
 }

@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
 
 /**
-  * Abstract class all optimizers should inherit of, contains the standard batches (extending
-  * Optimizers can override this.
-  */
+ * Abstract class all optimizers should inherit of, contains the standard batches (extending
+ * Optimizers can override this.
+ */
 abstract class Optimizer extends RuleExecutor[LogicalPlan] {
   def batches: Seq[Batch] = {
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
@@ -111,11 +111,11 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
 }
 
 /**
-  * Non-abstract representation of the standard Spark optimizing strategies
-  *
-  * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
-  * specific rules go to the subclasses
-  */
+ * Non-abstract representation of the standard Spark optimizing strategies
+ *
+ * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
+ * specific rules go to the subclasses
+ */
 object DefaultOptimizer extends Optimizer
 
 /**
@@ -527,7 +527,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
  * Null value propagation from bottom to top of the expression tree.
  */
 object NullPropagation extends Rule[LogicalPlan] {
-  def nonNullLiteral(e: Expression): Boolean = e match {
+  private def nonNullLiteral(e: Expression): Boolean = e match {
     case Literal(null, _) => false
     case _ => true
   }
@@ -773,17 +773,24 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * Simplifies conditional expressions (if / case).
  */
 object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
+  private def falseOrNullLiteral(e: Expression): Boolean = e match {
+    case FalseLiteral => true
+    case Literal(null, _) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
+      case If(Literal(null, _), _, falseValue) => falseValue
 
-      case e @ CaseWhen(branches, elseValue) if branches.exists(_._1 == FalseLiteral) =>
+      case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
         // If there are no more branches left, just use the else value.
         // Note that these two are handled together here in a single case statement because
         // otherwise we cannot determine the data type for the elseValue if it is None (i.e. null).
-        val newBranches = branches.filter(_._1 != FalseLiteral)
+        val newBranches = branches.filter(x => !falseOrNullLiteral(x._1))
         if (newBranches.isEmpty) {
           elseValue.getOrElse(Literal.create(null, e.dataType))
         } else {
@@ -955,21 +962,21 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
 }
 
 /**
-  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
-  * one condition.
-  *
-  * The order of joins will not be changed if all of them already have at least one condition.
-  */
+ * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
+ * one condition.
+ *
+ * The order of joins will not be changed if all of them already have at least one condition.
+ */
 object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
-    * Join a list of plans together and push down the conditions into them.
-    *
-    * The joined plan are picked from left to right, prefer those has at least one join condition.
-    *
-    * @param input a list of LogicalPlans to join.
-    * @param conditions a list of condition for join.
-    */
+   * Join a list of plans together and push down the conditions into them.
+   *
+   * The joined plan are picked from left to right, prefer those has at least one join condition.
+   *
+   * @param input a list of LogicalPlans to join.
+   * @param conditions a list of condition for join.
+   */
   @tailrec
   def createOrderedJoin(input: Seq[LogicalPlan], conditions: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)
