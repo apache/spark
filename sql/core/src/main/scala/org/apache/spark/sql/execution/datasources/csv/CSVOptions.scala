@@ -86,6 +86,7 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val failFast = ParseModes.isFailFastMode(parseMode)
   val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
+  val countMalformed = ParseModes.isCountMalformedMode(parseMode)
   val permissive = ParseModes.isPermissiveMode(parseMode)
 
   val nullValue = parameters.getOrElse("nullValue", "")
@@ -112,6 +113,9 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
   val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
 
   val escapeQuotes = getBool("escapeQuotes", true)
+
+  // Only used in the `COUNTMALFORMED` mode
+  val maxStoredMalformedPerPartition = getInt("maxStoredMalformedPerPartition", 1)
 
   val inputBufferSize = 128
 
