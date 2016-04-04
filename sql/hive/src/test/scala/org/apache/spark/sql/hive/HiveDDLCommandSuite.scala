@@ -18,22 +18,34 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Generate
-import org.apache.spark.sql.hive.execution.HiveSqlParser
+import org.apache.spark.sql.hive.execution.{DropTable, HiveSqlParser}
 
-class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
+class HiveDDLCommandSuite extends PlanTest {
   val parser = HiveSqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
       case CreateTableAsSelect(desc, child, allowExisting) => (desc, allowExisting)
     }.head
+  }
+
+  private val escapedIdentifier = "`(.+)`".r
+
+  /**
+   * Strip backticks, if any, from the string.
+   */
+  def cleanIdentifier(ident: String): String = {
+    ident match {
+      case escapedIdentifier(i) => i
+      case plainIdent => plainIdent
+    }
   }
 
   test("Test CTAS #1") {
@@ -231,5 +243,53 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
         |LATERAL VIEW explode(array(array(1, 2,  3))) `gen``tab1` AS `gen``col1`
         |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
       """.stripMargin)
+  }
+
+  test("drop table") {
+    val tableName1 = "db.tab"
+    val tableName2 = "tab"
+
+    val parsed1 = parser.parsePlan(s"DROP TABLE $tableName1")
+    val parsed2 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName1")
+    val parsed3 = parser.parsePlan(s"DROP TABLE $tableName2")
+    val parsed4 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName2")
+
+    val expected1 =
+      DropTable(TableIdentifier("tab", Option("db")), ifExists = false, isView = false)
+    val expected2 =
+      DropTable(TableIdentifier("tab", Option("db")), ifExists = true, isView = false)
+    val expected3 =
+      DropTable(TableIdentifier("tab", None), ifExists = false, isView = false)
+    val expected4 =
+      DropTable(TableIdentifier("tab", None), ifExists = true, isView = false)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+  }
+
+  test("drop view") {
+    val viewName1 = "db.view"
+    val viewName2 = "view"
+
+    val parsed1 = parser.parsePlan(s"DROP VIEW $viewName1")
+    val parsed2 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName1")
+    val parsed3 = parser.parsePlan(s"DROP VIEW $viewName2")
+    val parsed4 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName2")
+
+    val expected1 =
+      DropTable(TableIdentifier("view", Option("db")), ifExists = false, isView = true)
+    val expected2 =
+      DropTable(TableIdentifier("view", Option("db")), ifExists = true, isView = true)
+    val expected3 =
+      DropTable(TableIdentifier("view", None), ifExists = false, isView = true)
+    val expected4 =
+      DropTable(TableIdentifier("view", None), ifExists = true, isView = true)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
   }
 }
