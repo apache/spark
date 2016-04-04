@@ -294,8 +294,14 @@ class GaussianMixtureSummary private[clustering] (
    * Size of each cluster.
    */
   @Since("2.0.0")
-  lazy val clusterSizes: Array[Long] =
+  lazy val clusterSizes: Array[Long] = {
+    val k = probability.head().getSeq[Double](0).size
+    val sizes = Array.fill[Long](k)(0)
     cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().map {
       case Row(cluster: Int, count: Long) => cluster -> count
-    }.toMap.toArray.sortBy(_._1).map(_._2)
+    }.foreach {
+      case (i, size) => sizes(i) = size
+    }
+    sizes
+  }
 }
