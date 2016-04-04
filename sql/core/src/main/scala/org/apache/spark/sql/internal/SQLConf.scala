@@ -401,10 +401,14 @@ object SQLConf {
     .longConf
     .createWithDefault(128 * 1024 * 1024) // parquet.block.size
 
-  val FILES_MAX_NUM_IN_PARTITION = SQLConfigBuilder("spark.sql.files.maxNumInPartition")
-    .doc("The maximum number of files to pack into a single partition when reading files.")
+  val FILES_OPEN_COST_IN_BYTES = SQLConfigBuilder("spark.sql.files.openCostInBytes")
+    .internal()
+    .doc("The estimated cost to open a file, measured by the number of bytes could be scanned in" +
+      " the same time. This is used when putting multiple files into a partition. It's better to" +
+      " over estimated, then the partitions with small files will be faster than partitions with" +
+      " bigger files (which is scheduled first).")
     .longConf
-    .createWithDefault(32)
+    .createWithDefault(4 * 1024 * 1024)
 
   val EXCHANGE_REUSE_ENABLED = SQLConfigBuilder("spark.sql.exchange.reuse")
     .internal()
@@ -466,7 +470,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
-  def filesMaxNumInPartition: Long = getConf(FILES_MAX_NUM_IN_PARTITION)
+  def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
