@@ -2065,6 +2065,9 @@ class Dataset[T] private[sql](
    * Note: this results in multiple Spark jobs, and if the input Dataset is the result
    * of a wide transformation (e.g. join with different partitioners), to avoid
    * recomputing the input Dataset should be cached first.
+   *
+   * @group action
+   * @since 2.0.0
    */
   def toLocalIterator(): java.util.Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
     withNewExecutionId {
@@ -2313,6 +2316,12 @@ class Dataset[T] private[sql](
   protected[sql] def collectToPython(): Int = {
     withNewExecutionId {
       PythonRDD.collectAndServe(javaToPython.rdd)
+    }
+  }
+
+  protected[sql] def toPythonIterator(): Int = {
+    withNewExecutionId {
+      PythonRDD.toLocalIteratorAndServe(javaToPython.rdd)
     }
   }
 
