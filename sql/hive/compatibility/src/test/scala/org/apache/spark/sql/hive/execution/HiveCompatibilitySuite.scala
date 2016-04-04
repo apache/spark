@@ -20,9 +20,10 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
 
@@ -38,6 +39,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalLocale = Locale.getDefault
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
+  private val originalConvertMetastoreOrc = TestHive.convertMetastoreOrc
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
@@ -56,6 +58,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Use Hive hash expression instead of the native one
     TestHive.sessionState.functionRegistry.unregisterFunction("hash")
+    // Ensures that the plans generation use metastore relation and not OrcRelation
+    // Was done because SqlBuilder does not work with plans having logical relation
+    TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, false)
     RuleExecutor.resetTime()
   }
 
@@ -66,6 +71,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       Locale.setDefault(originalLocale)
       TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+      TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
       TestHive.sessionState.functionRegistry.restore()
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules.
@@ -357,7 +363,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Index commands are not supported
     "drop_index",
     "drop_index_removes_partition_dirs",
-    "alter_index"
+    "alter_index",
+
+    // Macro commands are not supported
+    "macro"
   )
 
   /**
@@ -727,7 +736,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_file_with_space_in_the_name",
     "loadpart1",
     "louter_join_ppr",
-    "macro",
     "mapjoin_distinct",
     "mapjoin_filter_on_outerjoin",
     "mapjoin_mapjoin",

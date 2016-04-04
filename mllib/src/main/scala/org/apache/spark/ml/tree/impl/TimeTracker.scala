@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.impl
+package org.apache.spark.ml.tree.impl
 
 import scala.collection.mutable.{HashMap => MutableHashMap}
 

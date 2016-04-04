@@ -79,7 +79,7 @@ public final class ColumnarBatch {
 
   /**
    * Called to close all the columns in this batch. It is not valid to access the data after
-   * calling this. This must be called at the end to clean up memory allcoations.
+   * calling this. This must be called at the end to clean up memory allocations.
    */
   public void close() {
     for (ColumnVector c: columns) {
@@ -315,7 +315,7 @@ public final class ColumnarBatch {
   public int numRows() { return numRows; }
 
   /**
-   * Returns the number of valid rowss.
+   * Returns the number of valid rows.
    */
   public int numValidRows() {
     assert(numRowsFiltered <= numRows);
