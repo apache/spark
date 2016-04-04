@@ -447,8 +447,8 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     case plan: CodegenSupport if plan.supportCodegen =>
       val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
       // the generated code will be huge if there are too many columns
-      val haveManyFields = numOfNestedFields(plan.schema) > conf.wholeStageMaxNumFields
-      !willFallback && !haveManyFields
+      val haveTooManyFields = numOfNestedFields(plan.schema) > conf.wholeStageMaxNumFields
+      !willFallback && !haveTooManyFields
     case _ => false
   }
 
