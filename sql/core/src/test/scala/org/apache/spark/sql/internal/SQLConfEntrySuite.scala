@@ -152,4 +152,12 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConfString(key) === "a,b,c,d,e")
     assert(conf.getConf(confEntry, Seq("a", "b", "c")) === Seq("a", "b", "c", "d", "e"))
   }
+
+  test("duplicate entry") {
+    val key = "spark.sql.SQLConfEntrySuite.duplicate"
+    SQLConfigBuilder(key).stringConf.createOptional
+    intercept[IllegalArgumentException] {
+      SQLConfigBuilder(key).stringConf.createOptional
+    }
+  }
 }

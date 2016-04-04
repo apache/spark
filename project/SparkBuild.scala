@@ -746,6 +746,9 @@ object TestSettings {
     resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
       var dir = new File(testTempDir)
       if (!dir.isDirectory()) {
+        // Because File.mkdirs() can fail if multiple callers are trying to create the same
+        // parent directory, this code tries to create parents one at a time, and avoids
+        // failures when the directories have been created by somebody else.
         val stack = new Stack[File]()
         while (!dir.isDirectory()) {
           stack.push(dir)
