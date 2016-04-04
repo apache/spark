@@ -111,7 +111,7 @@ object Pregel extends Logging {
    */
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
      (graph: Graph[VD, ED],
-      initialMsg: A,
+      initialMsg: Option[A] = None,
       maxIterations: Int = Int.MaxValue,
       activeDirection: EdgeDirection = EdgeDirection.Either)
      (vprog: (VertexId, VD, A) => VD,
@@ -122,7 +122,11 @@ object Pregel extends Logging {
     require(maxIterations > 0, s"Maximum of iterations must be greater than 0," +
       s" but got ${maxIterations}")
 
-    var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
+    var g = initialMsg match {
+      case Some(msg) => graph.mapVertices((vid, vdata) => vprog(vid, vdata, msg)).cache()
+      case None => graph
+    }
+
     // compute the messages
     var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
     var activeMessages = messages.count()
