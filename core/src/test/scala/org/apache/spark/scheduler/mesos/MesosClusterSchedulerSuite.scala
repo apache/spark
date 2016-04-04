@@ -72,4 +72,40 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val state = scheduler.getSchedulerState()
     assert(state.queuedDrivers.isEmpty)
   }
+
+  test("escapes commandline args for the shell") {
+    val conf = new SparkConf()
+    conf.setMaster("mesos://localhost:5050")
+    conf.setAppName("spark mesos")
+    val scheduler = new MesosClusterScheduler(
+      new BlackHoleMesosClusterPersistenceEngineFactory, conf) {
+      override def start(): Unit = { ready = true }
+    }
+    val escape = scheduler.shellEscape _
+    def wrapped(str: String): String = "\"" + str + "\""
+
+    // Wrapped in quotes
+    assert(escape("'should be left untouched'") === "'should be left untouched'")
+    assert(escape("\"should be left untouched\"") === "\"should be left untouched\"")
+
+    // Harmless
+    assert(escape("") === "")
+    assert(escape("harmless") === "harmless")
+    assert(escape("har-m.l3ss") === "har-m.l3ss")
+
+    // Special Chars escape
+    assert(escape("should escape this \" quote") === wrapped("should escape this \\\" quote"))
+    assert(escape("shouldescape\"quote") === wrapped("shouldescape\\\"quote"))
+    assert(escape("should escape this $ dollar") === wrapped("should escape this \\$ dollar"))
+    assert(escape("should escape this ` backtick") === wrapped("should escape this \\` backtick"))
+    assert(escape("""should escape this \ backslash""")
+      === wrapped("""should escape this \\ backslash"""))
+    assert(escape("""\"?""") === wrapped("""\\\"?"""))
+
+
+    // Special Chars no escape only wrap
+    List(" ", "'", "<", ">", "&", "|", "?", "*", ";", "!", "#", "(", ")").foreach(char => {
+      assert(escape(s"onlywrap${char}this") === wrapped(s"onlywrap${char}this"))
+    })
+  }
 }
