@@ -154,11 +154,12 @@ private[spark] trait SparkHistoryListenerFactory {
 /**
  * :: DeveloperApi ::
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
- * interface which might change in different Spark releases. Java clients should extend
- * {@link JavaSparkListener}
+ * interface which might change in different Spark releases.
  */
 @DeveloperApi
-trait SparkListener {
+abstract class SparkListener {
+  // WHENEVER WE ADD A METHOD HERE, PLEASE ALSO UPDATE SparkFirehoseListener.
+
   /**
    * Called when a stage completes successfully or fails, with information on the completed stage.
    */
@@ -249,6 +250,8 @@ trait SparkListener {
    * Called when other events like SQL-specific events are posted.
    */
   def onOtherEvent(event: SparkListenerEvent) { }
+
+  // WHENEVER WE ADD A METHOD HERE, PLEASE ALSO UPDATE SparkFirehoseListener.
 }
 
 /**
