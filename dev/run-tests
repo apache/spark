@@ -20,7 +20,7 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-for i in `seq 1 100`; do
+for i in `seq 1 10`; do
   build/sbt -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 "project sql" "test-only *StateStore*"
 done
 

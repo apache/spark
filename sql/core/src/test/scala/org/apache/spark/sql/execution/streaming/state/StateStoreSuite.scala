@@ -366,7 +366,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val provider = new HDFSBackedStateStoreProvider(
       storeId, keySchema, valueSchema, storeConf, hadoopConf)
 
-    quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           for (i <- 1 to 20) {
@@ -419,7 +418,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       eventually(timeout(10 seconds)) {
         assert(!StateStore.isLoaded(storeId))
       }
-    }
+
   }
 
   def getDataFromFiles(
