@@ -116,15 +116,30 @@ trait StreamTest extends QueryTest with Timeouts {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
       val encoder = encoderFor[A]
       val toExternalRow = RowEncoder(encoder.schema)
-      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))))
+      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), false)
     }
 
-    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows)
+    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, false)
   }
 
-  case class CheckAnswerRows(expectedAnswer: Seq[Row])
+  /**
+   * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
+   * This operation automatically blocks until all added data has been processed.
+   */
+  object CheckLastBatch {
+    def apply[A : Encoder](data: A*): CheckAnswerRows = {
+      val encoder = encoderFor[A]
+      val toExternalRow = RowEncoder(encoder.schema)
+      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), true)
+    }
+
+    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, true)
+  }
+
+  case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean)
       extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"CheckAnswer: ${expectedAnswer.mkString(",")}"
+    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
+    private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
 
   /** Stops the stream.  It must currently be running. */
@@ -224,11 +239,8 @@ trait StreamTest extends QueryTest with Timeouts {
          """.stripMargin
 
     def verify(condition: => Boolean, message: String): Unit = {
-      try {
-        Assertions.assert(condition)
-      } catch {
-        case NonFatal(e) =>
-          failTest(message, e)
+      if (!condition) {
+        failTest(message)
       }
     }
 
@@ -351,7 +363,7 @@ trait StreamTest extends QueryTest with Timeouts {
           case a: AddData =>
             awaiting.put(a.source, a.addData())
 
-          case CheckAnswerRows(expectedAnswer) =>
+          case CheckAnswerRows(expectedAnswer, lastOnly) =>
             verify(currentStream != null, "stream not running")
 
             // Block until all data added has been processed
@@ -361,12 +373,12 @@ trait StreamTest extends QueryTest with Timeouts {
               }
             }
 
-            val allData = try sink.allData catch {
+            val sparkAnswer = try if (lastOnly) sink.lastBatch else sink.allData catch {
               case e: Exception =>
                 failTest("Exception while getting data from sink", e)
             }
 
-            QueryTest.sameRows(expectedAnswer, allData).foreach {
+            QueryTest.sameRows(expectedAnswer, sparkAnswer).foreach {
               error => failTest(error)
             }
         }

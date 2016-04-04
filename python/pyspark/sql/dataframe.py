@@ -252,7 +252,7 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             port = self._jdf.toPythonIterator()
-            return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
+        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)

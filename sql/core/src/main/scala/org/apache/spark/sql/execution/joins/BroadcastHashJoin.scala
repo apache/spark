@@ -32,7 +32,7 @@ import org.apache.spark.util.collection.CompactBuffer
 /**
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
  * being constructed, a Spark job is asynchronously started to calculate the values for the
- * broadcasted relation.  This data is then placed in a Spark broadcast variable.  The streamed
+ * broadcast relation.  This data is then placed in a Spark broadcast variable.  The streamed
  * relation is not shuffled.
  */
 case class BroadcastHashJoin(
@@ -68,37 +68,9 @@ case class BroadcastHashJoin(
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     streamedPlan.execute().mapPartitions { streamedIter =>
-      val joinedRow = new JoinedRow()
-      val hashTable = broadcastRelation.value
-      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashTable.getMemorySize)
-      val keyGenerator = streamSideKeyGenerator
-      val resultProj = createResultProjection
-
-      joinType match {
-        case Inner =>
-          hashJoin(streamedIter, hashTable, numOutputRows)
-
-        case LeftOuter =>
-          streamedIter.flatMap { currentRow =>
-            val rowKey = keyGenerator(currentRow)
-            joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey), resultProj, numOutputRows)
-          }
-
-        case RightOuter =>
-          streamedIter.flatMap { currentRow =>
-            val rowKey = keyGenerator(currentRow)
-            joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow, resultProj, numOutputRows)
-          }
-
-        case LeftSemi =>
-          hashSemiJoin(streamedIter, hashTable, numOutputRows)
-
-        case x =>
-          throw new IllegalArgumentException(
-            s"BroadcastHashJoin should not take $x as the JoinType")
-      }
+      val hashed = broadcastRelation.value.asReadOnlyCopy()
+      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.getMemorySize)
+      join(streamedIter, hashed, numOutputRows)
     }
   }
 
@@ -122,8 +94,8 @@ case class BroadcastHashJoin(
   }
 
   /**
-    * Returns a tuple of Broadcast of HashedRelation and the variable name for it.
-    */
+   * Returns a tuple of Broadcast of HashedRelation and the variable name for it.
+   */
   private def prepareBroadcast(ctx: CodegenContext): (Broadcast[HashedRelation], String) = {
     // create a name for HashedRelation
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
@@ -132,16 +104,16 @@ case class BroadcastHashJoin(
     val clsName = broadcastRelation.value.getClass.getName
     ctx.addMutableState(clsName, relationTerm,
       s"""
-         | $relationTerm = ($clsName) $broadcast.value();
+         | $relationTerm = (($clsName) $broadcast.value()).asReadOnlyCopy();
          | incPeakExecutionMemory($relationTerm.getMemorySize());
        """.stripMargin)
     (broadcastRelation, relationTerm)
   }
 
   /**
-    * Returns the code for generating join key for stream side, and expression of whether the key
-    * has any null in it or not.
-    */
+   * Returns the code for generating join key for stream side, and expression of whether the key
+   * has any null in it or not.
+   */
   private def genStreamSideJoinKey(
       ctx: CodegenContext,
       input: Seq[ExprCode]): (ExprCode, String) = {
@@ -160,8 +132,8 @@ case class BroadcastHashJoin(
   }
 
   /**
-    * Generates the code for variable of build side.
-    */
+   * Generates the code for variable of build side.
+   */
   private def genBuildSideVars(ctx: CodegenContext, matched: String): Seq[ExprCode] = {
     ctx.currentVars = null
     ctx.INPUT_ROW = matched
@@ -188,8 +160,8 @@ case class BroadcastHashJoin(
   }
 
   /**
-    * Generates the code for Inner join.
-    */
+   * Generates the code for Inner join.
+   */
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
@@ -217,7 +189,7 @@ case class BroadcastHashJoin(
       case BuildLeft => buildVars ++ input
       case BuildRight => input ++ buildVars
     }
-    if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
+    if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -232,18 +204,15 @@ case class BroadcastHashJoin(
     } else {
       ctx.copyResult = true
       val matches = ctx.freshName("matches")
-      val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
-      val i = ctx.freshName("i")
-      val size = ctx.freshName("size")
+      val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       s"""
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashRelation
-         |$bufferType $matches = $anyNull ? null : ($bufferType)$relationTerm.get(${keyEv.value});
+         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
          |if ($matches == null) continue;
-         |int $size = $matches.size();
-         |for (int $i = 0; $i < $size; $i++) {
-         |  UnsafeRow $matched = (UnsafeRow) $matches.apply($i);
+         |while ($matches.hasNext()) {
+         |  UnsafeRow $matched = (UnsafeRow) $matches.next();
          |  $checkCondition
          |  $numOutput.add(1);
          |  ${consume(ctx, resultVars)}
@@ -254,8 +223,8 @@ case class BroadcastHashJoin(
 
 
   /**
-    * Generates the code for left or right outer join.
-    */
+   * Generates the code for left or right outer join.
+   */
   private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
@@ -287,7 +256,7 @@ case class BroadcastHashJoin(
       case BuildLeft => buildVars ++ input
       case BuildRight => input ++ buildVars
     }
-    if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
+    if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -306,22 +275,21 @@ case class BroadcastHashJoin(
     } else {
       ctx.copyResult = true
       val matches = ctx.freshName("matches")
-      val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
+      val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val i = ctx.freshName("i")
-      val size = ctx.freshName("size")
       val found = ctx.freshName("found")
       s"""
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashRelation
-         |$bufferType $matches = $anyNull ? null : ($bufferType)$relationTerm.get(${keyEv.value});
-         |int $size = $matches != null ? $matches.size() : 0;
+         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
          |boolean $found = false;
          |// the last iteration of this loop is to emit an empty row if there is no matched rows.
-         |for (int $i = 0; $i <= $size; $i++) {
-         |  UnsafeRow $matched = $i < $size ? (UnsafeRow) $matches.apply($i) : null;
+         |while ($matches != null && $matches.hasNext() || !$found) {
+         |  UnsafeRow $matched = $matches != null && $matches.hasNext() ?
+         |    (UnsafeRow) $matches.next() : null;
          |  ${checkCondition.trim}
-         |  if (!$conditionPassed || ($i == $size && $found)) continue;
+         |  if (!$conditionPassed) continue;
          |  $found = true;
          |  $numOutput.add(1);
          |  ${consume(ctx, resultVars)}
@@ -356,7 +324,7 @@ case class BroadcastHashJoin(
       ""
     }
 
-    if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
+    if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -369,23 +337,19 @@ case class BroadcastHashJoin(
        """.stripMargin
     } else {
       val matches = ctx.freshName("matches")
-      val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
-      val i = ctx.freshName("i")
-      val size = ctx.freshName("size")
+      val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
       s"""
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashRelation
-         |$bufferType $matches = $anyNull ? null : ($bufferType)$relationTerm.get(${keyEv.value});
+         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
          |if ($matches == null) continue;
-         |int $size = $matches.size();
          |boolean $found = false;
-         |for (int $i = 0; $i < $size; $i++) {
-         |  UnsafeRow $matched = (UnsafeRow) $matches.apply($i);
+         |while (!$found && $matches.hasNext()) {
+         |  UnsafeRow $matched = (UnsafeRow) $matches.next();
          |  $checkCondition
          |  $found = true;
-         |  break;
          |}
          |if (!$found) continue;
          |$numOutput.add(1);

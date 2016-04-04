@@ -467,8 +467,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
 }
 
 /**
-  * Print the result of an expression to stderr (used for debugging codegen).
-  */
+ * Print the result of an expression to stderr (used for debugging codegen).
+ */
 case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = child.dataType

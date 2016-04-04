@@ -28,9 +28,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -237,16 +237,23 @@ case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
       Seq(AttributeReference("plan", StringType, nullable = true)()),
-    extended: Boolean = false)
+    extended: Boolean = false,
+    codegen: Boolean = false)
   extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
   override def run(sqlContext: SQLContext): Seq[Row] = try {
     // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
     val queryExecution = sqlContext.executePlan(logicalPlan)
-    val outputString = if (extended) queryExecution.toString else queryExecution.simpleString
-
-    outputString.split("\n").map(Row(_))
+    val outputString =
+      if (codegen) {
+        codegenString(queryExecution.executedPlan)
+      } else if (extended) {
+        queryExecution.toString
+      } else {
+        queryExecution.simpleString
+      }
+    Seq(Row(outputString))
   } catch { case cause: TreeNodeException[_] =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
@@ -322,18 +329,17 @@ case class DescribeCommand(
  * If a databaseName is not given, the current database will be used.
  * The syntax of using this command in SQL is:
  * {{{
- *    SHOW TABLES [IN databaseName]
+ *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
  * }}}
  */
-case class ShowTablesCommand(databaseName: Option[String]) extends RunnableCommand {
+case class ShowTablesCommand(
+    databaseName: Option[String],
+    tableIdentifierPattern: Option[String]) extends RunnableCommand {
 
   // The result of SHOW TABLES has two columns, tableName and isTemporary.
   override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("tableName", StringType, false) ::
-      StructField("isTemporary", BooleanType, false) :: Nil)
-
-    schema.toAttributes
+    AttributeReference("tableName", StringType, nullable = false)() ::
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -341,11 +347,36 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
     // instead of calling tables in sqlContext.
     val catalog = sqlContext.sessionState.catalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
-    val rows = catalog.listTables(db).map { t =>
+    val tables =
+      tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
+    tables.map { t =>
       val isTemp = t.database.isEmpty
       Row(t.table, isTemp)
     }
-    rows
+  }
+}
+
+/**
+ * A command for users to list the databases/schemas.
+ * If a databasePattern is supplied then the databases that only matches the
+ * pattern would be listed.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards'];
+ * }}}
+ */
+case class ShowDatabasesCommand(databasePattern: Option[String]) extends RunnableCommand {
+
+  // The result of SHOW DATABASES has one column called 'result'
+  override val output: Seq[Attribute] = {
+    AttributeReference("result", StringType, nullable = false)() :: Nil
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val databases =
+      databasePattern.map(catalog.listDatabases(_)).getOrElse(catalog.listDatabases())
+    databases.map { d => Row(d) }
   }
 }
 

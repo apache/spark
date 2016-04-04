@@ -36,24 +36,28 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Evaluates a [[PythonUDF]], appending the result to the end of the input tuple.
+ * Evaluates a list of [[PythonUDF]], appending the result to the end of the input tuple.
  */
 case class EvaluatePython(
-    udf: PythonUDF,
+    udfs: Seq[PythonUDF],
     child: LogicalPlan,
-    resultAttribute: AttributeReference)
+    resultAttribute: Seq[AttributeReference])
   extends logical.UnaryNode {
 
-  def output: Seq[Attribute] = child.output :+ resultAttribute
+  def output: Seq[Attribute] = child.output ++ resultAttribute
 
   // References should not include the produced attribute.
-  override def references: AttributeSet = udf.references
+  override def references: AttributeSet = AttributeSet(udfs.flatMap(_.references))
 }
 
 
 object EvaluatePython {
-  def apply(udf: PythonUDF, child: LogicalPlan): EvaluatePython =
-    new EvaluatePython(udf, child, AttributeReference("pythonUDF", udf.dataType)())
+  def apply(udfs: Seq[PythonUDF], child: LogicalPlan): EvaluatePython = {
+    val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
+      AttributeReference(s"pythonUDF$i", u.dataType)()
+    }
+    new EvaluatePython(udfs, child, resultAttrs)
+  }
 
   def takeAndServe(df: DataFrame, n: Int): Int = {
     registerPicklers()
@@ -64,6 +68,16 @@ object EvaluatePython {
         })
       PythonRDD.serveIterator(iter, s"serve-DataFrame")
     }
+  }
+
+  def needConversionInPython(dt: DataType): Boolean = dt match {
+    case DateType | TimestampType => true
+    case _: StructType => true
+    case _: UserDefinedType[_] => true
+    case ArrayType(elementType, _) => needConversionInPython(elementType)
+    case MapType(keyType, valueType, _) =>
+      needConversionInPython(keyType) || needConversionInPython(valueType)
+    case _ => false
   }
 
   /**
