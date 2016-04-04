@@ -275,6 +275,16 @@ private[sql] class DefaultSource
         file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
   }
 
+  /**
+   * Returns whether the reader will the rows as batch or not.
+   */
+  override def supportBatch(sqlContext: SQLContext, schema: StructType): Boolean = {
+    val conf = SQLContext.getActive().get.conf
+    conf.parquetVectorizedReaderEnabled &&
+      conf.wholeStageEnabled && schema.length <= conf.wholeStageMaxNumFields &&
+      schema.forall(_.dataType.isInstanceOf[AtomicType])
+  }
+
   override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,
@@ -307,8 +317,7 @@ private[sql] class DefaultSource
 
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     parquetConf.setBoolean(ParquetRelation.RETURNING_BATCH,
-      sqlContext.conf.wholeStageEnabled &&
-        partitionSchema.length + dataSchema.length < sqlContext.conf.wholeStageMaxNumFields)
+      supportBatch(sqlContext, StructType(partitionSchema.fields ++ dataSchema.fields)))
 
     // Try to push down filters when filter push-down is enabled.
     val pushed = if (sqlContext.getConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key).toBoolean) {
@@ -402,9 +411,10 @@ private[sql] class DefaultSource
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
-    // There could some be partition columns
-    val returningBatch = sqlContext.conf.wholeStageEnabled &&
-      dataSchema.length + 10 <= sqlContext.conf.wholeStageMaxNumFields
+    // TODO: this could be wrong iff:
+    // 1) dataSchema.length <= max fields
+    // 2) dataSchema.length + number of partition columns > max fields
+    val returningBatch = supportBatch(sqlContext, dataSchema)
 
     // Parquet row group size. We will use this value as the value for
     // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value

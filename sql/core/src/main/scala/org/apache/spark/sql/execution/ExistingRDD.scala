@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => Parq
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{AtomicType, DataType}
 
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
@@ -284,6 +284,7 @@ private[sql] case class BatchedDataSourceScan(
          |  if ($input.hasNext()) {
          |    $batch = ($columnarBatchClz)$input.next();
          |    $numOutputRows.add($batch.numRows());
+         |    $idx = 0;
          |    ${columnAssigns.mkString("", "\n", "\n")}
          |  }
          |  $scanTimeTotalNs += System.nanoTime() - getBatchStart;
@@ -345,11 +346,8 @@ private[sql] object DataSourceScan {
       }
     }
 
-    lazy val conf = SQLContext.getActive().get.conf
     relation match {
-      case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] &&
-        conf.parquetVectorizedReaderEnabled &&
-        conf.wholeStageEnabled && output.length <= conf.wholeStageMaxNumFields =>
+      case r: HadoopFsRelation if r.fileFormat.supportBatch(r.sqlContext, relation.schema) =>
         BatchedDataSourceScan(output, rdd, relation, outputPartitioning, metadata)
       case _ =>
         RowDataSourceScan(output, rdd, relation, outputPartitioning, metadata)
