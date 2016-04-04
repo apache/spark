@@ -34,6 +34,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.rpc._
 import org.apache.spark.util.Utils
+import org.apache.spark.VersionInfo
 
 /**
  * Tests for the REST application submission protocol used in standalone cluster mode.
@@ -41,6 +42,7 @@ import org.apache.spark.util.Utils
 class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
   private var rpcEnv: Option[RpcEnv] = None
   private var server: Option[RestSubmissionServer] = None
+  private val sparkVersion = VersionInfo.getVersion
 
   override def afterEach() {
     try {
@@ -58,7 +60,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val request = new RestSubmissionClient("spark://host:port").constructSubmitRequest(
       "my-app-resource", "my-main-class", appArgs, sparkProperties, environmentVariables)
     assert(request.action === Utils.getFormattedClassName(request))
-    assert(request.clientSparkVersion === SPARK_VERSION)
+    assert(request.clientSparkVersion === sparkVersion)
     assert(request.appResource === "my-app-resource")
     assert(request.mainClass === "my-main-class")
     assert(request.appArgs === appArgs)
@@ -77,7 +79,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val response = new RestSubmissionClient(masterUrl).createSubmission(request)
     val submitResponse = getSubmitResponse(response)
     assert(submitResponse.action === Utils.getFormattedClassName(submitResponse))
-    assert(submitResponse.serverSparkVersion === SPARK_VERSION)
+    assert(submitResponse.serverSparkVersion === sparkVersion)
     assert(submitResponse.message === submitMessage)
     assert(submitResponse.submissionId === submittedDriverId)
     assert(submitResponse.success)
@@ -95,7 +97,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val response = RestSubmissionClient.run("app-resource", "main-class", appArgs, conf)
     val submitResponse = getSubmitResponse(response)
     assert(submitResponse.action === Utils.getFormattedClassName(submitResponse))
-    assert(submitResponse.serverSparkVersion === SPARK_VERSION)
+    assert(submitResponse.serverSparkVersion === sparkVersion)
     assert(submitResponse.message === submitMessage)
     assert(submitResponse.submissionId === submittedDriverId)
     assert(submitResponse.success)
@@ -108,7 +110,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val response = new RestSubmissionClient(masterUrl).killSubmission(submissionId)
     val killResponse = getKillResponse(response)
     assert(killResponse.action === Utils.getFormattedClassName(killResponse))
-    assert(killResponse.serverSparkVersion === SPARK_VERSION)
+    assert(killResponse.serverSparkVersion === sparkVersion)
     assert(killResponse.message === killMessage)
     assert(killResponse.submissionId === submissionId)
     assert(killResponse.success)
@@ -122,7 +124,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val response = new RestSubmissionClient(masterUrl).requestSubmissionStatus(submissionId)
     val statusResponse = getStatusResponse(response)
     assert(statusResponse.action === Utils.getFormattedClassName(statusResponse))
-    assert(statusResponse.serverSparkVersion === SPARK_VERSION)
+    assert(statusResponse.serverSparkVersion === sparkVersion)
     assert(statusResponse.message.contains(submissionException.getMessage))
     assert(statusResponse.submissionId === submissionId)
     assert(statusResponse.driverState === submissionState.toString)

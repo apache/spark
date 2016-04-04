@@ -222,7 +222,7 @@ private[spark] object UIUtils extends Logging {
             <div class="brand">
               <a href={prependBaseUri("/")} class="brand">
                 <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
-                <span class="version">{org.apache.spark.SPARK_VERSION}</span>
+                <span class="version">{org.apache.spark.VersionInfo.getVersion}</span>
               </a>
             </div>
             <p class="navbar-text pull-right">
@@ -265,7 +265,7 @@ private[spark] object UIUtils extends Logging {
                 <a style="text-decoration: none" href={prependBaseUri("/")}>
                   <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
                   <span class="version"
-                        style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
+                        style="margin-right: 15px;">{org.apache.spark.VersionInfo.getVersion}</span>
                 </a>
                 {title}
               </h3>

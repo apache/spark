@@ -40,7 +40,7 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
-import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
+import org.apache.spark.{VersionInfo, SparkException, SparkUserAppException}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
@@ -105,7 +105,11 @@ object SparkSubmit {
     _\ \/ _ \/ _ `/ __/  '_/
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
-                        """.format(SPARK_VERSION))
+                        """.format(VersionInfo.getVersion))
+    printStream.println("Branch %s".format(VersionInfo.getBranch))
+    printStream.println("Compiled by user %s on %s".format(VersionInfo.getUser, VersionInfo.getDate))
+    printStream.println("Url %s".format(VersionInfo.getUrl))
+    printStream.println("From source with checksum %s".format(VersionInfo.getSrcChecksum))
     printStream.println("Type --help for more information.")
     exitFn(0)
   }

@@ -32,6 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
 import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.VersionInfo
 
 /**
  * Test whether EventLoggingListener logs events properly.
@@ -159,7 +160,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
     try {
       val lines = readLines(logData)
-      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      val logStart = SparkListenerLogStart(VersionInfo.getVersion)
       assert(lines.size === 3)
       assert(lines(0).contains("SparkListenerLogStart"))
       assert(lines(1).contains("SparkListenerApplicationStart"))
@@ -202,7 +203,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
     // Make sure expected events exist in the log file.
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
-    val logStart = SparkListenerLogStart(SPARK_VERSION)
+    val logStart = SparkListenerLogStart(VersionInfo.getVersion)
     val lines = readLines(logData)
     val eventSet = mutable.Set(
       SparkListenerApplicationStart,

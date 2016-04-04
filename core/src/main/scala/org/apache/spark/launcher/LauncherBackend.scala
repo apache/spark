@@ -19,7 +19,7 @@ package org.apache.spark.launcher
 
 import java.net.{InetAddress, Socket}
 
-import org.apache.spark.SPARK_VERSION
+import org.apache.spark.VersionInfo
 import org.apache.spark.launcher.LauncherProtocol._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -42,7 +42,7 @@ private[spark] abstract class LauncherBackend {
     if (port != None && secret != None) {
       val s = new Socket(InetAddress.getLoopbackAddress(), port.get)
       connection = new BackendConnection(s)
-      connection.send(new Hello(secret.get, SPARK_VERSION))
+      connection.send(new Hello(secret.get, VersionInfo.getVersion))
       clientThread = LauncherBackend.threadFactory.newThread(connection)
       clientThread.start()
       _isConnected = true

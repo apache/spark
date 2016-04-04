@@ -14,7 +14,7 @@ import scala.reflect.internal.util.Position
 import scala.util.control.Exception.ignoring
 import scala.tools.nsc.util.stackTraceString
 
-import org.apache.spark.SPARK_VERSION
+import org.apache.spark.VersionInfo
 
 /**
  *  Machinery for the asynchronous initialization of the repl.
@@ -30,7 +30,7 @@ private[repl] trait SparkILoopInit {
     _\ \/ _ \/ _ `/ __/  '_/
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
-""".format(SPARK_VERSION))
+""".format(VersionInfo.getVersion))
     import Properties._
     val welcomeMsg = "Using Scala %s (%s, Java %s)".format(
       versionString, javaVmName, javaVersion)
