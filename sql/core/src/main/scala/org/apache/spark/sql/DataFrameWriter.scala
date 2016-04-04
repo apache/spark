@@ -78,6 +78,35 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * :: Experimental ::
+   * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will run
+   * the query as fast as possible.
+   *
+   * Scala Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime("10 seconds"))
+   *
+   *   import scala.concurrent.duration._
+   *   def.writer.trigger(ProcessingTime(10.seconds))
+   * }}}
+   *
+   * Java Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime.create("10 seconds"))
+   *
+   *   import java.util.concurrent.TimeUnit
+   *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def trigger(trigger: Trigger): DataFrameWriter = {
+    this.trigger = trigger
+    this
+  }
+
+  /**
    * Specifies the underlying output data source. Built-in options include "parquet", "json", etc.
    *
    * @since 1.4.0
@@ -261,7 +290,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       queryName,
       checkpointLocation,
       df,
-      dataSource.createSink())
+      dataSource.createSink(),
+      trigger)
   }
 
   /**
@@ -551,6 +581,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private var source: String = df.sqlContext.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
+
+  private var trigger: Trigger = ProcessingTime(0L)
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
