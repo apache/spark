@@ -113,7 +113,10 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     if (ctx.REPLICATION != null) {
       logWarning("REPLICATION clause is ignored.")
     }
-    DropTable(visitTableIdentifier(ctx.tableIdentifier).toString, ctx.EXISTS != null)
+    DropTable(
+      visitTableIdentifier(ctx.tableIdentifier),
+      ctx.EXISTS != null,
+      ctx.kind.getType == SqlBaseParser.VIEW)
   }
 
   /**
