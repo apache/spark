@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.Objects
 
 import org.json4s.JsonAST._
 
@@ -169,6 +170,8 @@ case class Literal protected (value: Any, dataType: DataType)
   override def nullable: Boolean = value == null
 
   override def toString: String = if (value != null) value.toString else "null"
+
+  override def hashCode(): Int = 31 * (31 * Objects.hashCode(dataType)) + Objects.hashCode(value)
 
   override def equals(other: Any): Boolean = other match {
     case o: Literal =>

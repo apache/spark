@@ -45,7 +45,10 @@ private[spark] class NewHadoopPartition(
   extends Partition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
-  override def hashCode(): Int = 41 * (41 + rddId) + index
+
+  override def hashCode(): Int = 31 * (31 + rddId) + index
+
+  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**

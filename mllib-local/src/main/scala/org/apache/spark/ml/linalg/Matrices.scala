@@ -458,6 +458,8 @@ class SparseMatrix (
       rowIndices: Array[Int],
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
+  override def hashCode(): Int = toBreeze.hashCode()
+
   override def equals(o: Any): Boolean = o match {
     case m: Matrix => toBreeze == m.toBreeze
     case _ => false

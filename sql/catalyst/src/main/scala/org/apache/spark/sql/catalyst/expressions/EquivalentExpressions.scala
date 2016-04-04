@@ -35,7 +35,8 @@ class EquivalentExpressions {
       case other: Expr => e.semanticEquals(other.e)
       case _ => false
     }
-    override val hashCode: Int = e.semanticHash()
+
+    override def hashCode: Int = e.semanticHash()
   }
 
   // For each expression, the set of equivalent expressions.

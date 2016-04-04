@@ -19,6 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import java.util.{Arrays, List => JList}
 
+import scala.util.Random
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net.DNSToSwitchMapping
@@ -85,6 +87,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   class MockSplitInfo(host: String) extends SplitInfo(null, host, null, 1, null) {
+    override def hashCode(): Int = Random.nextInt()
     override def equals(other: Any): Boolean = false
   }
 

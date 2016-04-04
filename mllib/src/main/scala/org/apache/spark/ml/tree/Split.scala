@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tree
 
+import java.util.Objects
+
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{FeatureType => OldFeatureType}
@@ -112,12 +114,15 @@ final class CategoricalSplit private[ml] (
     }
   }
 
-  override def equals(o: Any): Boolean = {
-    o match {
-      case other: CategoricalSplit => featureIndex == other.featureIndex &&
-        isLeft == other.isLeft && categories == other.categories
-      case _ => false
-    }
+  override def hashCode(): Int = {
+    val state = Seq(featureIndex, isLeft, categories)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
+  }
+
+  override def equals(o: Any): Boolean = o match {
+    case other: CategoricalSplit => featureIndex == other.featureIndex &&
+      isLeft == other.isLeft && categories == other.categories
+    case _ => false
   }
 
   override private[tree] def toOld: OldSplit = {
@@ -179,6 +184,11 @@ final class ContinuousSplit private[ml] (override val featureIndex: Int, val thr
       case _ =>
         false
     }
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(featureIndex, threshold)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
   override private[tree] def toOld: OldSplit = {

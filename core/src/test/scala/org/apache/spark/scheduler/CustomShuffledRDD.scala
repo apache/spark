@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Arrays
+import java.util.Objects
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -53,6 +54,9 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
     parentPartitionMapping(parent.getPartition(key))
   }
 
+  override def hashCode(): Int =
+    31 * Objects.hashCode(parent) + Arrays.hashCode(partitionStartIndices)
+
   override def equals(other: Any): Boolean = other match {
     case c: CoalescedPartitioner =>
       c.parent == parent && Arrays.equals(c.partitionStartIndices, partitionStartIndices)
@@ -66,6 +70,8 @@ private[spark] class CustomShuffledRDDPartition(
   extends Partition {
 
   override def hashCode(): Int = index
+
+  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**

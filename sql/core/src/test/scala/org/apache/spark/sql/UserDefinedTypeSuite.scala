@@ -37,9 +37,10 @@ object UDT {
 
   @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
   private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
+    override def hashCode(): Int = java.util.Arrays.hashCode(data)
+
     override def equals(other: Any): Boolean = other match {
-      case v: MyDenseVector =>
-        java.util.Arrays.equals(this.data, v.data)
+      case v: MyDenseVector => java.util.Arrays.equals(this.data, v.data)
       case _ => false
     }
   }
@@ -63,10 +64,9 @@ object UDT {
 
     private[spark] override def asNullable: MyDenseVectorUDT = this
 
-    override def equals(other: Any): Boolean = other match {
-      case _: MyDenseVectorUDT => true
-      case _ => false
-    }
+    override def hashCode(): Int = getClass.hashCode()
+
+    override def equals(other: Any): Boolean = other.isInstanceOf[MyDenseVectorUDT]
   }
 
 }
