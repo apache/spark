@@ -112,23 +112,27 @@ case class Invoke(
     arguments: Seq[Expression] = Nil) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = true
-  override def children: Seq[Expression] = arguments.+:(targetObject)
+  override def children: Seq[Expression] = targetObject +: arguments
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  lazy val method = targetObject.dataType match {
+  @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
       cls
         .getMethods
         .find(_.getName == functionName)
         .getOrElse(sys.error(s"Couldn't find $functionName on $cls"))
-        .getReturnType
-        .getName
-    case _ => ""
+    case _ => null
   }
 
-  lazy val unboxer = (dataType, method) match {
+  private def returnType = if (method == null) {
+    ""
+  } else {
+    method.getReturnType.getName
+  }
+
+  lazy val unboxer = (dataType, returnType) match {
     case (IntegerType, "java.lang.Object") => (s: String) =>
       s"((java.lang.Integer)$s).intValue()"
     case (LongType, "java.lang.Object") => (s: String) =>
@@ -155,21 +159,31 @@ case class Invoke(
     // If the function can return null, we do an extra check to make sure our null bit is still set
     // correctly.
     val objNullCheck = if (ctx.defaultValue(dataType) == "null") {
-      s"${ev.isNull} = ${ev.value} == null;"
+      s"boolean ${ev.isNull} = ${ev.value} == null;"
     } else {
+      ev.isNull = obj.isNull
       ""
     }
 
     val value = unboxer(s"${obj.value}.$functionName($argString)")
 
+    val evaluate = if (method == null || method.getExceptionTypes.isEmpty) {
+      s"$javaType ${ev.value} = ${obj.isNull} ? ${ctx.defaultValue(dataType)} : ($javaType) $value;"
+    } else {
+      s"""
+        $javaType ${ev.value} = null;
+        try {
+          ${ev.value} = ${obj.isNull} ? ${ctx.defaultValue(dataType)} : ($javaType) $value;
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """
+    }
+
     s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
-
-      boolean ${ev.isNull} = ${obj.isNull};
-      $javaType ${ev.value} =
-        ${ev.isNull} ?
-        ${ctx.defaultValue(dataType)} : ($javaType) $value;
+      $evaluate
       $objNullCheck
     """
   }
