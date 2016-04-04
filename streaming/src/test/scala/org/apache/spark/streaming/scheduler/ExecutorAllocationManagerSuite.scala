@@ -25,7 +25,8 @@ import org.scalatest.mock.MockitoSugar
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
-import org.apache.spark.util.ManualClock
+import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
+import org.apache.spark.util.{ManualClock, Utils}
 
 
 class ExecutorAllocationManagerSuite extends SparkFunSuite
@@ -313,6 +314,30 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
     }
   }
 
+  test("enabling and disabling") {
+    withStreamingContext(new SparkConf()) { ssc =>
+      ssc.start()
+      assert(getExecutorAllocationManager(ssc).isEmpty)
+    }
+
+    withStreamingContext(
+      new SparkConf().set("spark.streaming.dynamicAllocation.enabled", "true")) { ssc =>
+      ssc.start()
+      assert(getExecutorAllocationManager(ssc).nonEmpty)
+    }
+
+    val confWithBothDynamicAllocationEnabled = new SparkConf()
+      .set("spark.streaming.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+    require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled) === true)
+    withStreamingContext(confWithBothDynamicAllocationEnabled) { ssc =>
+      intercept[IllegalArgumentException] {
+        ssc.start()
+      }
+    }
+  }
+
   private def withAllocationManager(
       conf: SparkConf = new SparkConf,
       numReceivers: Int = 1
@@ -334,6 +359,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
   private val _addBatchProcTime = PrivateMethod[Unit]('addBatchProcTime)
   private val _requestExecutors = PrivateMethod[Unit]('requestExecutors)
   private val _killExecutor = PrivateMethod[Unit]('killExecutor)
+  private val _executorAllocationManager =
+    PrivateMethod[Option[ExecutorAllocationManager]]('executorAllocationManager)
 
   private def addBatchProcTime(manager: ExecutorAllocationManager, timeMs: Long): Unit = {
     manager invokePrivate _addBatchProcTime(timeMs)
@@ -345,5 +372,25 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
   private def killExecutor(manager: ExecutorAllocationManager): Unit = {
     manager invokePrivate _killExecutor()
+  }
+
+  private def getExecutorAllocationManager(
+      ssc: StreamingContext): Option[ExecutorAllocationManager] = {
+
+    ssc.scheduler invokePrivate _executorAllocationManager()
+  }
+
+  private def withStreamingContext(conf: SparkConf)(body: StreamingContext => Unit): Unit = {
+    conf.setMaster("local").setAppName(this.getClass.getSimpleName).set(
+      "spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
+
+    var ssc: StreamingContext = null
+    try {
+      ssc = new  StreamingContext(conf, Seconds(1))
+      new DummyInputDStream(ssc).foreachRDD(_ => { })
+      body(ssc)
+    } finally {
+      if (ssc != null) ssc.stop()
+    }
   }
 }

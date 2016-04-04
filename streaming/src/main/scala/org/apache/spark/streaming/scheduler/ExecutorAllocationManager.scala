@@ -20,10 +20,10 @@ package org.apache.spark.streaming.scheduler
 
 import scala.util.Random
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.Clock
+import org.apache.spark.util.{Clock, Utils}
 
 private[streaming] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
@@ -157,7 +157,9 @@ private[streaming] class ExecutorAllocationManager(
   }
 }
 
-private[streaming] object ExecutorAllocationManager {
+private[streaming] object ExecutorAllocationManager extends Logging {
+  val ENABLED_KEY = "spark.streaming.dynamicAllocation.enabled"
+
   val SCALING_INTERVAL_KEY = "spark.streaming.dynamicAllocation.scalingInterval"
   val SCALING_INTERVAL_DEFAULT_SECS = 60
 
@@ -170,4 +172,34 @@ private[streaming] object ExecutorAllocationManager {
   val MIN_EXECUTORS_KEY = "spark.streaming.dynamicAllocation.minExecutors"
 
   val MAX_EXECUTORS_KEY = "spark.streaming.dynamicAllocation.maxExecutors"
+
+  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+    val numExecutor = conf.getInt("spark.executor.instances", 0)
+    val streamingDynamicAllocationEnabled = conf.getBoolean(ENABLED_KEY, false)
+    if (numExecutor != 0 && streamingDynamicAllocationEnabled) {
+      throw new IllegalArgumentException(
+        "Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+    }
+    if (Utils.isDynamicAllocationEnabled(conf) && streamingDynamicAllocationEnabled) {
+      throw new IllegalArgumentException(
+        """
+          |Dynamic Allocation cannot be enabled for both streaming and core at the same time.
+          |Please disable core Dynamic Allocation by setting spark.dynamicAllocation.enabled to
+          |false to use Dynamic Allocation in streaming.
+        """.stripMargin)
+    }
+    val testing = conf.getBoolean("spark.streaming.dynamicAllocation.testing", false)
+    numExecutor == 0 && streamingDynamicAllocationEnabled && (!Utils.isLocalMaster(conf) || testing)
+  }
+
+  def createIfEnabled(
+      client: ExecutorAllocationClient,
+      receiverTracker: ReceiverTracker,
+      conf: SparkConf,
+      batchDurationMs: Long,
+      clock: Clock): Option[ExecutorAllocationManager] = {
+    if (isDynamicAllocationEnabled(conf)) {
+      Some(new ExecutorAllocationManager(client, receiverTracker, conf, batchDurationMs, clock))
+    } else None
+  }
 }
