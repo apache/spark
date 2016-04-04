@@ -450,9 +450,12 @@ class Dataset[T] private[sql](
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
 
   /**
-   * Returns true if the underlying query will be executed continuously as new data comes in.
-   * Methods that return bounded values, e.g. [[count()]], [[collect()]] will throw
-   * an exception if a Dataset is streaming.
+   * Returns true if this [[Dataset]] contains one or more sources that continuously
+   * return data as it arrives. A [[Dataset]] that reads data from a streaming source
+   * must be executed as a [[ContinuousQuery]] using the `startStream()` method in
+   * [[DataFrameWriter]].  Methods that return a single answer, (e.g., `count()` or 
+   * `collect()`) will throw an [[AnalysisException]] when there is a streaming
+   * source present.
    *
    * @group basic
    * @since 2.0.0
