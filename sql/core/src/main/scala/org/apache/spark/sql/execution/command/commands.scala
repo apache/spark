@@ -441,7 +441,7 @@ case class ShowCreateTableCommand(
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] ={
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
     Seq(Row(catalog.generateTableDDL(TableIdentifier(tableName, databaseName))))
