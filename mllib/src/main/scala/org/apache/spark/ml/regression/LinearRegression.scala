@@ -511,7 +511,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 /**
  * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
- * training coefficients except for the objective trace.
+ * training weights except for the objective trace.
  *
  * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
@@ -539,6 +539,10 @@ class LinearRegressionTrainingSummary private[regression] (
  * Linear regression results evaluated on a dataset.
  *
  * @param predictions predictions outputted by the model's `transform` method.
+ * @param predictionCol Field in "predictions" which gives the predicted value of the label at
+ *                      each instance.
+ * @param labelCol Field in "predictions" which gives the true label of each instance
+ *                 (if available).
  */
 @Since("1.5.0")
 @Experimental

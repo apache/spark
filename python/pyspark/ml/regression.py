@@ -157,7 +157,7 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Gets summary (e.g. residuals, mse, r-squared ) of model on
         training set. An exception is thrown if
-        `trainingSummary == None`.
+        `trainingSummary is None`.
         """
         java_lrt_summary = self._call_java("summary")
         return LinearRegressionTrainingSummary(java_lrt_summary)
@@ -214,7 +214,7 @@ class LinearRegressionSummary(JavaCallable):
     def labelCol(self):
         """
         Field in "predictions" which gives the true label of each
-        instance.
+        instance (if available).
         """
         return self._call_java("labelCol")
 
@@ -336,15 +336,34 @@ class LinearRegressionSummary(JavaCallable):
         return self._call_java("pValues")
 
 
+@inherit_doc
 class LinearRegressionTrainingSummary(LinearRegressionSummary):
     """
     .. note:: Experimental
 
     Linear regression training results. Currently, the training summary ignores the
-    training coefficients except for the objective trace.
+    training weights except for the objective trace.
 
     .. versionadded:: 2.0.0
     """
+
+    @property
+    @since("2.0.0")
+    def featuresCol(self):
+        """
+        Field in "predictions" which gives the features of each instance
+        as a vector.
+        """
+        return self._call_java("featuresCol")
+
+    @property
+    @since("2.0.0")
+    def objectiveHistory(self):
+        """
+        Objective function (scaled loss + regularization) at each
+        iteration.
+        """
+        return self._call_java("objectiveHistory")
 
     @property
     @since("2.0.0")

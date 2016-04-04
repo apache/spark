@@ -726,6 +726,9 @@ class TrainingSummaryTest(PySparkTestCase):
         self.assertTrue(isinstance(s.predictions, DataFrame))
         self.assertEqual(s.predictionCol, "prediction")
         self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.featuresCol, "features")
+        objHist = s.objectiveHistory
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
         self.assertAlmostEqual(s.explainedVariance, 0.25, 2)
         self.assertAlmostEqual(s.meanAbsoluteError, 0.0)
         self.assertAlmostEqual(s.meanSquaredError, 0.0)

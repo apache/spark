@@ -25,9 +25,11 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.regression import (
     RandomForestParams, TreeEnsembleParams, DecisionTreeModel, TreeEnsembleModels)
 from pyspark.mllib.common import inherit_doc
+from pyspark.sql import DataFrame
 
 
 __all__ = ['LogisticRegression', 'LogisticRegressionModel',
+           'LogisticRegressionSummary', 'LogisticRegressionTrainingSummary'
            'BinaryLogisticRegressionSummary', 'BinaryLogisticRegressionTrainingSummary',
            'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
            'GBTClassifier', 'GBTClassificationModel',
@@ -240,9 +242,10 @@ class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Gets summary (e.g. residuals, mse, r-squared ) of model on
         training set. An exception is thrown if
-        `trainingSummary == None`.
+        `trainingSummary is None`.
         """
         java_blrt_summary = self._call_java("summary")
+        # Note: Once multiclass is added, update this to return correct summary
         return BinaryLogisticRegressionTrainingSummary(java_blrt_summary)
 
     @property
@@ -260,8 +263,11 @@ class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Evaluates the model on a test dataset.
 
         :param dataset:
-          Test dataset to evaluate model on.
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
         """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
         return BinaryLogisticRegressionSummary(java_blr_summary)
 
@@ -286,7 +292,7 @@ class LogisticRegressionSummary(JavaCallable):
     def probabilityCol(self):
         """
         Field in "predictions" which gives the calibrated probability
-        of each instance as a vector.
+        of each class as a vector.
         """
         return self._call_java("probabilityCol")
 
@@ -295,7 +301,7 @@ class LogisticRegressionSummary(JavaCallable):
     def labelCol(self):
         """
         Field in "predictions" which gives the true label of each
-        instance.
+        instance (if available).
         """
         return self._call_java("labelCol")
 
@@ -309,6 +315,7 @@ class LogisticRegressionSummary(JavaCallable):
         return self._call_java("featuresCol")
 
 
+@inherit_doc
 class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
     """
     Abstraction for multinomial Logistic Regression Training results.
@@ -322,7 +329,8 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
     @since("2.0.0")
     def objectiveHistory(self):
         """
-        Objective function (scaled loss + regularization) at each iteration.
+        Objective function (scaled loss + regularization) at each
+        iteration.
         """
         return self._call_java("objectiveHistory")
 
@@ -335,6 +343,7 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
         return self._call_java("totalIterations")
 
 
+@inherit_doc
 class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
     """
     .. note:: Experimental
@@ -377,7 +386,8 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
     def pr(self):
         """
         Returns the precision-recall curve, which is an Dataframe
-        containing two fields recall, precision with (0.0, 1.0) prepended to it.
+        containing two fields recall, precision with (0.0, 1.0) prepended
+        to it.
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LogisticRegression.weightCol`. This will change in later Spark
@@ -427,6 +437,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         return self._call_java("recallByThreshold")
 
 
+@inherit_doc
 class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,
                                               LogisticRegressionTrainingSummary):
     """
