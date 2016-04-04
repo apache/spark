@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{AnalysisException, Row, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
 class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton  {
-  test("show create table - hive table - no row format"){
-    withTable("t1"){
+  test("show create table - hive table - no row format") {
+    withTable("t1") {
       sql(
         """
           |create table t1(c1 int, c2 string)
@@ -35,8 +35,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show create table - hive non-external table"){
-    withTable("t1"){
+  test("show create table - hive non-external table") {
+    withTable("t1") {
       sql(
         """
           |create table t1(c1 int COMMENT 'abc', c2 string) COMMENT 'my table'
@@ -48,8 +48,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show create table - hive external table"){
-    withTable("t1"){
+  test("show create table - hive external table") {
+    withTable("t1") {
       sql(
         """
           |create external table t1(c1 int, c2 string)
@@ -64,8 +64,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show create table - hive table - cluster bucket and skew"){
-    withTable("t1"){
+  test("show create table - hive table - cluster bucket and skew") {
+    withTable("t1") {
       sql(
         """
           |create external table t1(c1 int COMMENT 'first column', c2 string)
@@ -85,8 +85,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show create table - hive temp table"){
-    withTable("t1"){
+  test("show create table - hive temp table") {
+    withTable("t1") {
       sql(
         """
           |create TEMPORARY table t1(c1 int, c2 string)
@@ -98,8 +98,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show create table - hive TEMPORARY external table"){
-    withTable("t1"){
+  test("show create table - hive TEMPORARY external table") {
+    withTable("t1") {
       sql(
         """
           |create TEMPORARY external table t1(c1 int, c2 string)
@@ -111,8 +111,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show create table - hive view"){
-    withTable("t1"){
+  test("show create table - hive view") {
+    withTable("t1") {
       withView("v1") {
         sql(
           """
@@ -130,8 +130,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show create temp table"){
-    withTable("t1"){
+  test("show create temp table") {
+    withTable("t1") {
       sql(
         """
           |create temporary table t1(c1 int, c2 string)
@@ -140,16 +140,16 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show create table -- datasource table"){
-    withTable("t_datasource"){
+  test("show create table -- datasource table") {
+    withTable("t_datasource") {
       sql("select 1, 'abc'").write.saveAsTable("t_datasource")
       sql("show create table t_datasource").show(false)
     }
   }
 
-  test("show create table -- partitioned"){
+  test("show create table -- partitioned") {
     val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
-    withTable("t_datasource"){
+    withTable("t_datasource") {
       val df = sqlContext.read.json(jsonFilePath)
       df.write.format("json").saveAsTable("t_datasource")
       sql("show create table t_datasource").show(false)
