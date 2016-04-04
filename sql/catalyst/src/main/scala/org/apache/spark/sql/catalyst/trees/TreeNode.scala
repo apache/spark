@@ -365,20 +365,29 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param newArgs the new product arguments.
    */
   def makeCopy(newArgs: Array[AnyRef]): BaseType = attachTree(this, "makeCopy") {
+    // Skip no-arg constructors that are just there for kryo.
     val ctors = getClass.getConstructors.filter(_.getParameterTypes.size != 0)
     if (ctors.isEmpty) {
       sys.error(s"No valid constructor for $nodeName")
     }
-    val defaultCtor = ctors.maxBy(_.getParameterTypes.size)
+    val allArgs: Array[AnyRef] = if (otherCopyArgs.isEmpty) {
+      newArgs
+    } else {
+      newArgs ++ otherCopyArgs
+    }
+    val defaultCtor = ctors.find { ctor =>
+      if (ctor.getParameterTypes.length != allArgs.length) {
+        false
+      } else {
+        ctor.getParameterTypes.zip(allArgs.map(_.getClass)).forall { case (ctorParam, arg) =>
+          ctorParam.isAssignableFrom(arg)
+        }
+      }
+    }.getOrElse(ctors.maxBy(_.getParameterTypes.length)) // fall back to older heuristic
 
     try {
       CurrentOrigin.withOrigin(origin) {
-        // Skip no-arg constructors that are just there for kryo.
-        if (otherCopyArgs.isEmpty) {
-          defaultCtor.newInstance(newArgs: _*).asInstanceOf[BaseType]
-        } else {
-          defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[BaseType]
-        }
+        defaultCtor.newInstance(allArgs.toArray: _*).asInstanceOf[BaseType]
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
