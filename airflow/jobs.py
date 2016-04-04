@@ -571,8 +571,6 @@ class SchedulerJob(BaseJob):
                 # collect queued tasks for prioritiztion
                 if ti.state == State.QUEUED:
                     self.queued_tis.add(ti)
-                elif ti in self.queued_tis:
-                    self.queued_tis.remove(ti)
             else:
                 # special instructions for failed executions could go here
                 pass
@@ -600,6 +598,8 @@ class SchedulerJob(BaseJob):
                 session.commit()
             else:
                 d[ti.pool].append(ti)
+
+        self.queued_tis.clear()
 
         dag_blacklist = set(dagbag.paused_dags())
         for pool, tis in list(d.items()):

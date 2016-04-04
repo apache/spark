@@ -115,3 +115,15 @@ dag7_subdag1 = SubDagOperator(
     subdag=subdag7)
 subdag7_task1.set_downstream(subdag7_task2)
 subdag7_task2.set_downstream(subdag7_task3)
+
+# DAG tests that queued tasks are run
+dag8 = DAG(
+    dag_id='test_scheduled_queued_tasks',
+    start_date=DEFAULT_DATE,
+    end_date=DEFAULT_DATE,
+    default_args=default_args)
+dag8_task1 = PythonOperator(
+    python_callable=fail,
+    task_id='test_queued_task',
+    dag=dag8,
+    pool='test_queued_pool')

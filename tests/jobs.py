@@ -76,7 +76,7 @@ class BackfillJobTest(unittest.TestCase):
                 job.run()
         self.assertRaises(AirflowException, run_with_timeout)
 
-    def test_backfill_pooled_task(self):
+    def test_backfill_pooled_tasks(self):
         """
         Test that queued tasks are executed by BackfillJob
 
@@ -261,6 +261,35 @@ class SchedulerJobTest(unittest.TestCase):
             second_task_state=None,
             dagrun_state=State.FAILED,
             advance_execution_date=True)
+
+    def test_scheduler_pooled_tasks(self):
+        """
+        Test that the scheduler handles queued tasks correctly
+        See issue #1299
+        """
+        session = settings.Session()
+        if not (
+                session.query(Pool)
+                .filter(Pool.pool == 'test_queued_pool')
+                .first()):
+            pool = Pool(pool='test_queued_pool', slots=5)
+            session.merge(pool)
+            session.commit()
+        session.close()
+
+        dag_id = 'test_scheduled_queued_tasks'
+        dag = self.dagbag.get_dag(dag_id)
+        dag.clear()
+
+        scheduler = SchedulerJob(dag_id, num_runs=10)
+        scheduler.run()
+
+        task_1 = dag.tasks[0]
+        ti = TI(task_1, dag.start_date)
+        ti.refresh_from_db()
+        self.assertEqual(ti.state, State.FAILED)
+
+        dag.clear()
 
     def test_dagrun_deadlock_ignore_depends_on_past_advance_ex_date(self):
         """
