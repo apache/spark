@@ -74,6 +74,7 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
+    python.ExtractPythonUDFs,
     PlanSubqueries(sqlContext),
     EnsureRequirements(sqlContext.conf),
     CollapseCodegenStages(sqlContext.conf),
