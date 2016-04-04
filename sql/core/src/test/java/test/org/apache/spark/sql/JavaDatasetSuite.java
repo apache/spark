@@ -86,6 +86,16 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testToLocalIterator() {
+    List<String> data = Arrays.asList("hello", "world");
+    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Iterator<String> iter = ds.toLocalIterator();
+    Assert.assertEquals("hello", iter.next());
+    Assert.assertEquals("world", iter.next());
+    Assert.assertFalse(iter.hasNext());
+  }
+
+  @Test
   public void testCommonOperation() {
     List<String> data = Arrays.asList("hello", "world");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
