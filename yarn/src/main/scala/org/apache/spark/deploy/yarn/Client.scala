@@ -823,8 +823,8 @@ private[spark] class Client(
     // Validate the driver specific options and add only if running in cluster mode
     driverOpts.foreach { opts =>
       if (opts.contains("-Xmx")) {
-        val msg = s"${DRIVER_JAVA_OPTIONS.key} is not allowed to specify max heap memory settings "+
-          s"(was '$opts'). Use spark.driver.memory instead."
+        val msg = s"${DRIVER_JAVA_OPTIONS.key} is not allowed to specify max heap memory " +
+        s"settings (was '$opts'). Use spark.driver.memory instead."
         throw new SparkException(msg)
       }
       if (isClusterMode) {
