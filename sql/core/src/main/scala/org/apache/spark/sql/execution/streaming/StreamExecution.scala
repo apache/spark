@@ -27,12 +27,14 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.ContinuousQueryListener
 import org.apache.spark.sql.util.ContinuousQueryListener._
+import org.apache.spark.util.UninterruptibleThread
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
@@ -45,15 +47,13 @@ class StreamExecution(
     override val name: String,
     val checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
-    val sink: Sink) extends ContinuousQuery with Logging {
+    val sink: Sink,
+    val trigger: Trigger) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
   private val awaitBatchLock = new Object
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
-
-  /** Minimum amount of time in between the start of each batch. */
-  private val minBatchTime = 10
 
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
@@ -77,6 +77,10 @@ class StreamExecution(
   /** A list of unique sources in the query plan. */
   private val uniqueSources = sources.distinct
 
+  private val triggerExecutor = trigger match {
+    case t: ProcessingTime => ProcessingTimeExecutor(t)
+  }
+
   /** Defines the internal state of execution */
   @volatile
   private var state: State = INITIALIZED
@@ -88,9 +92,10 @@ class StreamExecution(
   private[sql] var streamDeathCause: ContinuousQueryException = null
 
   /** The thread that runs the micro-batches of this stream. */
-  private[sql] val microBatchThread = new Thread(s"stream execution thread for $name") {
-    override def run(): Unit = { runBatches() }
-  }
+  private[sql] val microBatchThread =
+    new UninterruptibleThread(s"stream execution thread for $name") {
+      override def run(): Unit = { runBatches() }
+    }
 
   /**
    * A write-ahead-log that records the offsets that are present in each batch. In order to ensure
@@ -151,11 +156,15 @@ class StreamExecution(
       SQLContext.setActive(sqlContext)
       populateStartOffsets()
       logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-      while (isActive) {
-        if (dataAvailable) runBatch()
-        commitAndConstructNextBatch()
-        Thread.sleep(minBatchTime) // TODO: Could be tighter
-      }
+      triggerExecutor.execute(() => {
+        if (isActive) {
+          if (dataAvailable) runBatch()
+          commitAndConstructNextBatch()
+          true
+        } else {
+          false
+        }
+      })
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
       case NonFatal(e) =>
@@ -227,18 +236,39 @@ class StreamExecution(
     // Update committed offsets.
     committedOffsets ++= availableOffsets
 
+    // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
+    // If we interrupt some thread running Shell.runCommand, we may hit this issue.
+    // As "FileStreamSource.getOffset" will create a file using HDFS API and call "Shell.runCommand"
+    // to set the file permission, we should not interrupt "microBatchThread" when running this
+    // method. See SPARK-14131.
+    //
     // Check to see what new data is available.
-    val newData = uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+    val newData = microBatchThread.runUninterruptibly {
+      uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+    }
     availableOffsets ++= newData
 
     if (dataAvailable) {
-      assert(
-        offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
-        s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
+      // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
+      // If we interrupt some thread running Shell.runCommand, we may hit this issue.
+      // As "offsetLog.add" will create a file using HDFS API and call "Shell.runCommand" to set
+      // the file permission, we should not interrupt "microBatchThread" when running this method.
+      // See SPARK-14131.
+      microBatchThread.runUninterruptibly {
+        assert(
+          offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
+          s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
+      }
       currentBatchId += 1
       logInfo(s"Committed offsets for batch $currentBatchId.")
       true
     } else {
+      noNewData = true
+      awaitBatchLock.synchronized {
+        // Wake up any threads that are waiting for the stream to progress.
+        awaitBatchLock.notifyAll()
+      }
+
       false
     }
   }
@@ -248,6 +278,8 @@ class StreamExecution(
    */
   private def runBatch(): Unit = {
     val startTime = System.nanoTime()
+
+    // TODO: Move this to IncrementalExecution.
 
     // Request unprocessed data from all sources.
     val newData = availableOffsets.flatMap {
@@ -282,13 +314,14 @@ class StreamExecution(
     }
 
     val optimizerStart = System.nanoTime()
-
-    lastExecution = new QueryExecution(sqlContext, newPlan)
-    val executedPlan = lastExecution.executedPlan
+    lastExecution =
+        new IncrementalExecution(sqlContext, newPlan, checkpointFile("state"), currentBatchId)
+    lastExecution.executedPlan
     val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
     logDebug(s"Optimized batch in ${optimizerTime}ms")
 
-    val nextBatch = Dataset.newDataFrame(sqlContext, newPlan)
+    val nextBatch =
+      new Dataset(sqlContext, lastExecution, RowEncoder(lastExecution.analyzed.schema))
     sink.addBatch(currentBatchId - 1, nextBatch)
 
     awaitBatchLock.synchronized {
@@ -332,6 +365,18 @@ class StreamExecution(
       awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
     logDebug(s"Unblocked at $newOffset for $source")
+  }
+
+  /** A flag to indicate that a batch has completed with no new data available. */
+  @volatile private var noNewData = false
+
+  override def processAllAvailable(): Unit = {
+    noNewData = false
+    while (!noNewData) {
+      awaitBatchLock.synchronized { awaitBatchLock.wait(10000) }
+      if (streamDeathCause != null) { throw streamDeathCause }
+    }
+    if (streamDeathCause != null) { throw streamDeathCause }
   }
 
   override def awaitTermination(): Unit = {

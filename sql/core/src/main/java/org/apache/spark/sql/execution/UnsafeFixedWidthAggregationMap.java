@@ -134,7 +134,7 @@ public final class UnsafeFixedWidthAggregationMap {
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
-      boolean putSucceeded = loc.putNewKey(
+      boolean putSucceeded = loc.append(
         key.getBaseObject(),
         key.getBaseOffset(),
         key.getSizeInBytes(),
@@ -241,7 +241,11 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
     return new UnsafeKVExternalSorter(
-      groupingKeySchema, aggregationBufferSchema,
-      SparkEnv.get().blockManager(), map.getPageSizeBytes(), map);
+      groupingKeySchema,
+      aggregationBufferSchema,
+      SparkEnv.get().blockManager(),
+      SparkEnv.get().serializerManager(),
+      map.getPageSizeBytes(),
+      map);
   }
 }

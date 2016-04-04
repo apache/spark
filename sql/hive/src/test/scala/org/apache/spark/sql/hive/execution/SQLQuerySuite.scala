@@ -1325,6 +1325,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         .format("parquet")
         .save(path)
 
+      // We don't support creating a temporary table while specifying a database
       val message = intercept[AnalysisException] {
         sqlContext.sql(
           s"""
@@ -1335,9 +1336,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |)
         """.stripMargin)
       }.getMessage
-      assert(message.contains("Specifying database name or other qualifiers are not allowed"))
 
-      // If you use backticks to quote the name of a temporary table having dot in it.
+      // If you use backticks to quote the name then it's OK.
       sqlContext.sql(
         s"""
           |CREATE TEMPORARY TABLE `db.t`
@@ -1809,6 +1809,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           sqlContext.table("dest2"),
           sql("SELECT col FROM source LATERAL VIEW EXPLODE(arr) exp AS col WHERE col > 3"))
       }
+    }
+  }
+
+  test("show tables") {
+    withTable("show1a", "show2b") {
+      sql("CREATE TABLE show1a(c1 int)")
+      sql("CREATE TABLE show2b(c2 int)")
+      checkAnswer(
+        sql("SHOW TABLES IN default 'show1*'"),
+        Row("show1a", false) :: Nil)
+      checkAnswer(
+        sql("SHOW TABLES IN default 'show1*|show2*'"),
+        Row("show1a", false) ::
+          Row("show2b", false) :: Nil)
+      checkAnswer(
+        sql("SHOW TABLES 'show1*|show2*'"),
+        Row("show1a", false) ::
+          Row("show2b", false) :: Nil)
+      assert(
+        sql("SHOW TABLES").count() >= 2)
+      assert(
+        sql("SHOW TABLES IN default").count() >= 2)
     }
   }
 }

@@ -64,6 +64,9 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
     assert(sources.size == offsets.size)
     new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
   }
+
+  override def toString: String =
+    offsets.map(_.map(_.toString).getOrElse("-")).mkString("[", ", ", "]")
 }
 
 object CompositeOffset {

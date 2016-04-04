@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.DataSourceScan
 import org.apache.spark.sql.execution.command.ExecutedCommand
 import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
@@ -310,7 +311,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
-          s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan. " +
+          s"${classOf[InsertIntoDataSource].getCanonicalName} is expected as the SparkPlan. " +
           s"However, found a ${o.toString} ")
       }
 
@@ -340,7 +341,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
-          s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
+          s"${classOf[InsertIntoDataSource].getCanonicalName} is expected as the SparkPlan." +
           s"However, found a ${o.toString} ")
       }
 
@@ -425,10 +426,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   test("Caching converted data source Parquet Relations") {
-    val _catalog = sessionState.catalog
-    def checkCached(tableIdentifier: _catalog.QualifiedTableName): Unit = {
+    def checkCached(tableIdentifier: TableIdentifier): Unit = {
       // Converted test_parquet should be cached.
-      sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
+      sessionState.catalog.getCachedDataSourceTable(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
         case logical @ LogicalRelation(parquetRelation: HadoopFsRelation, _, _) => // OK
         case other =>
@@ -453,17 +453,17 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    var tableIdentifier = _catalog.QualifiedTableName("default", "test_insert_parquet")
+    var tableIdentifier = TableIdentifier("test_insert_parquet", Some("default"))
 
     // First, make sure the converted test_parquet is not cached.
-    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
     // Table lookup will make the table cached.
     table("test_insert_parquet")
     checkCached(tableIdentifier)
     // For insert into non-partitioned table, we will do the conversion,
     // so the converted test_insert_parquet should be cached.
     invalidateTable("test_insert_parquet")
-    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_insert_parquet
@@ -476,7 +476,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       sql("select a, b from jt").collect())
     // Invalidate the cache.
     invalidateTable("test_insert_parquet")
-    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
 
     // Create a partitioned table.
     sql(
@@ -493,8 +493,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    tableIdentifier = _catalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
-    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    tableIdentifier = TableIdentifier("test_parquet_partitioned_cache_test", Some("default"))
+    assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
@@ -503,14 +503,14 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       """.stripMargin)
     // Right now, insert into a partitioned Parquet is not supported in data source Parquet.
     // So, we expect it is not cached.
-    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
         |PARTITION (`date`='2015-04-02')
         |select a, b from jt
       """.stripMargin)
-    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
 
     // Make sure we can cache the partitioned table.
     table("test_parquet_partitioned_cache_test")
@@ -526,7 +526,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         """.stripMargin).collect())
 
     invalidateTable("test_parquet_partitioned_cache_test")
-    assert(sessionState.catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
+    assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
 
     dropTables("test_insert_parquet", "test_parquet_partitioned_cache_test")
   }
@@ -700,6 +700,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
   var partitionedTableDirWithKeyAndComplexTypes: File = null
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     partitionedTableDir = Utils.createTempDir()
     normalTableDir = Utils.createTempDir()
 

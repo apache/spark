@@ -176,7 +176,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @group param
    */
   @Since("1.6.0")
-  final val topicDistributionCol = new Param[String](this, "topicDistribution", "Output column" +
+  final val topicDistributionCol = new Param[String](this, "topicDistributionCol", "Output column" +
     " with estimates of the topic mixture distribution for each document (often called \"theta\"" +
     " in the literature).  Returns a vector of zeros for an empty document.")
 
