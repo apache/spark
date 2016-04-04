@@ -60,18 +60,21 @@ case class DropTable(
 
     // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
     // issue an exception.
-    try {
+    val (dropTableUsingDropView, dropViewUsingDropTable) = try {
       // If the table/view does not exist, it will throw an exception:
       // - AnalysisException, if it is from InMemoryCatalog.
       // - NoSuchTableException, if it is from HiveExternalCatalog
       val catalogTable = sqlContext.sessionState.catalog.getTable(tableName)
-      if (catalogTable.viewOriginalText.isEmpty && isView) {
-        throw new AnalysisException(s"Cannot drop a table with DROP VIEW")
-      } else if (catalogTable.viewOriginalText.nonEmpty && !isView) {
-        throw new AnalysisException(s"Cannot drop a view with DROP TABLE")
-      }
+      (catalogTable.viewOriginalText.isEmpty && isView,
+        catalogTable.viewOriginalText.nonEmpty && !isView)
     } catch {
       case e: Throwable => log.warn(s"${e.getMessage}", e)
+        (false, false)
+    }
+    if (dropTableUsingDropView) {
+      throw new AnalysisException(s"Cannot drop a table with DROP VIEW")
+    } else if (dropViewUsingDropTable) {
+      throw new AnalysisException(s"Cannot drop a view with DROP TABLE")
     }
 
     try {
