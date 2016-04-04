@@ -34,20 +34,20 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
     val toUnsafe = UnsafeProjection.create(schema)
-    val unsafeData = data.map(toUnsafe(_).copy()).toArray
+    val unsafeData = data.map(toUnsafe(_).copy())
 
     val buildKey = Seq(BoundReference(0, IntegerType, false))
     val keyGenerator = UnsafeProjection.create(buildKey)
     val hashed = UnsafeHashedRelation(unsafeData.iterator, keyGenerator, 1)
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
 
-    assert(hashed.get(unsafeData(0)) === CompactBuffer[InternalRow](unsafeData(0)))
-    assert(hashed.get(unsafeData(1)) === CompactBuffer[InternalRow](unsafeData(1)))
+    assert(hashed.get(unsafeData(0)).toArray === Array(unsafeData(0)))
+    assert(hashed.get(unsafeData(1)).toArray === Array(unsafeData(1)))
     assert(hashed.get(toUnsafe(InternalRow(10))) === null)
 
     val data2 = CompactBuffer[InternalRow](unsafeData(2).copy())
     data2 += unsafeData(2).copy()
-    assert(hashed.get(unsafeData(2)) === data2)
+    assert(hashed.get(unsafeData(2)).toArray === data2.toArray)
 
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
@@ -56,10 +56,10 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
     val hashed2 = new UnsafeHashedRelation()
     hashed2.readExternal(in)
-    assert(hashed2.get(unsafeData(0)) === CompactBuffer[InternalRow](unsafeData(0)))
-    assert(hashed2.get(unsafeData(1)) === CompactBuffer[InternalRow](unsafeData(1)))
+    assert(hashed2.get(unsafeData(0)).toArray === Array(unsafeData(0)))
+    assert(hashed2.get(unsafeData(1)).toArray === Array(unsafeData(1)))
     assert(hashed2.get(toUnsafe(InternalRow(10))) === null)
-    assert(hashed2.get(unsafeData(2)) === data2)
+    assert(hashed2.get(unsafeData(2)).toArray === data2)
 
     val os2 = new ByteArrayOutputStream()
     val out2 = new ObjectOutputStream(os2)
