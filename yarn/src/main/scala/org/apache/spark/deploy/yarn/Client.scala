@@ -1452,12 +1452,8 @@ object Client extends Logging {
       conf: SparkConf,
       fs: FileSystem,
       appStagingDir: String): Path = {
-    val stagingRootDir = conf.get(STAGING_DIR).orNull
-    if (stagingRootDir != null) {
-      new Path(stagingRootDir, appStagingDir)
-    } else {
-      new Path(fs.getHomeDirectory, appStagingDir)
-    }
+    val baseDir = conf.get(STAGING_DIR).map { new Path(_) }.getOrElse(fs.getHomeDirectory())
+    new Path(baseDir, appStagingDir)
   }
 
 }
