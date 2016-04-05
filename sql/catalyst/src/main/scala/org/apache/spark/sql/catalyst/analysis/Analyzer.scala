@@ -1440,7 +1440,7 @@ class Analyzer(
 
   /**
    * Replaces [[UnresolvedDeserializer]] with the deserialization expression that has been resolved
-   * by the given input attributes.
+   * to the given input attributes.
    */
   object ResolveDeserializer extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {

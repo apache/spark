@@ -311,7 +311,8 @@ case class UnresolvedAlias(child: Expression, aliasName: Option[String] = None)
 /**
  * Holds the deserializer expression and the attributes that are available during the resolution
  * for it.  Deserializer expression is a special kind of expression that is not always resolved by
- * children output, but by given attributes.
+ * children output, but by given attributes, e.g. the `keyDeserializer` in `MapGroups` should be
+ * resolved by `groupingAttributes` instead of children output.
  *
  * @param deserializer The unresolved deserializer expression
  * @param inputAttributes The input attributes used to resolve deserializer expression, can be empty
