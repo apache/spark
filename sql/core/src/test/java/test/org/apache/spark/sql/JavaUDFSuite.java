@@ -56,16 +56,8 @@ public class JavaUDFSuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void udf1Test() {
-    // With Java 8 lambdas:
-    // sqlContext.registerFunction(
-    //   "stringLengthTest", (String str) -> str.length(), DataType.IntegerType);
-
-    sqlContext.udf().register("stringLengthTest", new UDF1<String, Integer>() {
-      @Override
-      public Integer call(String str) {
-        return str.length();
-      }
-    }, DataTypes.IntegerType);
+   sqlContext.udf().register(
+     "stringLengthTest", (String str) -> str.length(), DataTypes.IntegerType);
 
     Row result = sqlContext.sql("SELECT stringLengthTest('test')").head();
     Assert.assertEquals(4, result.getInt(0));

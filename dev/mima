@@ -31,7 +31,6 @@ OLD_DEPS_CLASSPATH="$(build/sbt -DcopyDependencies=false $SPARK_PROFILES "export
 rm -f .generated-mima*
 
 java \
-  -XX:MaxPermSize=1g \
   -Xmx2g \
   -cp "$TOOLS_CLASSPATH:$OLD_DEPS_CLASSPATH" \
   org.apache.spark.tools.GenerateMIMAIgnore
