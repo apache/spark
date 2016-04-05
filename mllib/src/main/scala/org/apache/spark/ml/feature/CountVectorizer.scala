@@ -42,7 +42,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
    * vocabSize terms ordered by term frequency across the corpus.
    *
    * Default: 2^18^
-   * @group param
+    *
+    * @group param
    */
   val vocabSize: IntParam =
     new IntParam(this, "vocabSize", "max size of the vocabulary", ParamValidators.gt(0))
@@ -57,7 +58,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
    * if this is a double in [0,1), then this specifies the fraction of documents.
    *
    * Default: 1
-   * @group param
+    *
+    * @group param
    */
   val minDF: DoubleParam = new DoubleParam(this, "minDF", "Specifies the minimum number of" +
     " different documents a term must appear in to be included in the vocabulary." +
@@ -87,7 +89,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
    * affect fitting.
    *
    * Default: 1
-   * @group param
+    *
+    * @group param
    */
   val minTF: DoubleParam = new DoubleParam(this, "minTF", "Filter to ignore rare words in" +
     " a document. For each document, terms with frequency/count less than the given threshold are" +
@@ -100,6 +103,24 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 
   /** @group getParam */
   def getMinTF: Double = $(minTF)
+
+  /**
+    * Binary toggle to control the output vector values.
+    * If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful for
+    * discrete probabilistic models that model binary events rather than integer counts.
+    * Default: false
+    *
+    * @group param
+    */
+  val binary: BooleanParam =
+    new BooleanParam(this, "binary", "If True, all non zero counts are set to 1. " +
+      "This is useful for discrete probabilistic models that model binary events rather " +
+      "than integer counts")
+
+  /** @group getParam */
+  def getBinary: Boolean = $(binary)
+
+  setDefault(binary -> false)
 }
 
 /**
@@ -127,6 +148,9 @@ class CountVectorizer(override val uid: String)
   /** @group setParam */
   def setMinTF(value: Double): this.type = set(minTF, value)
 
+  /** @group setParam */
+  def setBinary(value: Boolean): this.type = set(binary, value)
+
   setDefault(vocabSize -> (1 << 18), minDF -> 1)
 
   override def fit(dataset: DataFrame): CountVectorizerModel = {
@@ -149,7 +173,11 @@ class CountVectorizer(override val uid: String)
     }.filter { case (word, (wc, df)) =>
       df >= minDf
     }.map { case (word, (count, dfCount)) =>
-      (word, count)
+      if ($(binary)) {
+        (word, 1L)
+      } else {
+        (word, count)
+      }
     }.cache()
     val fullVocabSize = wordCounts.count()
     val vocab: Array[String] = {
@@ -184,7 +212,8 @@ object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
 /**
  * :: Experimental ::
  * Converts a text document to a sparse vector of token counts.
- * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
+  *
+  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
  */
 @Experimental
 class CountVectorizerModel(override val uid: String, val vocabulary: Array[String])
@@ -206,25 +235,8 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   /** @group setParam */
   def setMinTF(value: Double): this.type = set(minTF, value)
 
-  /**
-   * Binary toggle to control the output vector values.
-   * If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful for
-   * discrete probabilistic models that model binary events rather than integer counts.
-   * Default: false
-   * @group param
-   */
-  val binary: BooleanParam =
-    new BooleanParam(this, "binary", "If True, all non zero counts are set to 1. " +
-      "This is useful for discrete probabilistic models that model binary events rather " +
-      "than integer counts")
-
-  /** @group getParam */
-  def getBinary: Boolean = $(binary)
-
   /** @group setParam */
   def setBinary(value: Boolean): this.type = set(binary, value)
-
-  setDefault(binary -> false)
 
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
