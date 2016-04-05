@@ -1412,10 +1412,6 @@
             <artifactId>commons-codec</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.google.code.findbugs</groupId>
-            <artifactId>jsr305</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro</artifactId>
           </exclusion>
@@ -1625,10 +1621,6 @@
           <exclusion>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.code.findbugs</groupId>
-            <artifactId>jsr305</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.codehaus.janino</groupId>
