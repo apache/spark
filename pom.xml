@@ -170,7 +170,6 @@
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.3.2</commons-lang3.version>
-    <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <janino.version>2.7.8</janino.version>
     <jersey.version>1.9</jersey.version>
     <joda.version>2.9</joda.version>
@@ -1715,11 +1714,6 @@
         <groupId>joda-time</groupId>
         <artifactId>joda-time</artifactId>
         <version>${joda.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.datanucleus</groupId>
-        <artifactId>datanucleus-core</artifactId>
-        <version>${datanucleus-core.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>
