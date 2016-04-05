@@ -64,40 +64,37 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       assert(metadataLog.getLatest() === Some(0 -> "batch0"))
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.getLatest() === Some(0 -> "batch0"))
-      assert(metadataLog.get(None, 0) === Array(0 -> "batch0"))
+      assert(metadataLog.get(None, 0L) === Array(0 -> "batch0"))
 
       assert(metadataLog.add(1, "batch1"))
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.get(1) === Some("batch1"))
       assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+      assert(metadataLog.get(None, 1L) === Array(0 -> "batch0", 1 -> "batch1"))
 
       // Adding the same batch does nothing
       metadataLog.add(1, "batch1-duplicated")
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.get(1) === Some("batch1"))
       assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+      assert(metadataLog.get(None, 1L) === Array(0 -> "batch0", 1 -> "batch1"))
     }
   }
 
   testQuietly("HDFSMetadataLog: fallback from FileContext to FileSystem") {
-    sqlContext.sparkContext.hadoopConfiguration.set(
-      s"fs.$scheme.impl",
-      classOf[FakeFileSystem].getName)
-    withTempDir { temp =>
-      val metadataLog = new HDFSMetadataLog[String](sqlContext, s"$scheme://$temp")
-      assert(metadataLog.add(0, "batch0"))
-      assert(metadataLog.getLatest() === Some(0 -> "batch0"))
-      assert(metadataLog.get(0) === Some("batch0"))
-      assert(metadataLog.get(None, 0) === Array(0 -> "batch0"))
+    withHadoopConf(s"fs.$scheme.impl" -> classOf[FakeFileSystem].getName) {
+      withTempDir { temp =>
+        val metadataLog = new HDFSMetadataLog[String](sqlContext, s"$scheme://$temp")
+        assert(metadataLog.add(0, "batch0"))
+        assert(metadataLog.getLatest() === Some(0 -> "batch0"))
+        assert(metadataLog.get(0) === Some("batch0"))
+        assert(metadataLog.get(None, 0L) === Array(0 -> "batch0"))
 
-
-      val metadataLog2 = new HDFSMetadataLog[String](sqlContext, s"$scheme://$temp")
-      assert(metadataLog2.get(0) === Some("batch0"))
-      assert(metadataLog2.getLatest() === Some(0 -> "batch0"))
-      assert(metadataLog2.get(None, 0) === Array(0 -> "batch0"))
-
+        val metadataLog2 = new HDFSMetadataLog[String](sqlContext, s"$scheme://$temp")
+        assert(metadataLog2.get(0) === Some("batch0"))
+        assert(metadataLog2.getLatest() === Some(0 -> "batch0"))
+        assert(metadataLog2.get(None, 0L) === Array(0 -> "batch0"))
+      }
     }
   }
 
@@ -109,20 +106,20 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.get(1) === Some("batch1"))
       assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+      assert(metadataLog.get(None, 1L) === Array(0 -> "batch0", 1 -> "batch1"))
 
       val metadataLog2 = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
       assert(metadataLog2.get(0) === Some("batch0"))
       assert(metadataLog2.get(1) === Some("batch1"))
       assert(metadataLog2.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog2.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+      assert(metadataLog2.get(None, 1L) === Array(0 -> "batch0", 1 -> "batch1"))
     }
   }
 
   test("HDFSMetadataLog: metadata directory collision") {
     withTempDir { temp =>
       val waiter = new Waiter
-      val maxBatchId = 100
+      val maxBatchId: Long = 100L
       for (id <- 0 until 10) {
         new Thread() {
           override def run(): Unit = waiter {
@@ -147,7 +144,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       waiter.await(timeout(10.seconds), dismissals(10))
       val metadataLog = new HDFSMetadataLog[String](sqlContext, temp.getAbsolutePath)
       assert(metadataLog.getLatest() === Some(maxBatchId -> maxBatchId.toString))
-      assert(metadataLog.get(None, maxBatchId) === (0 to maxBatchId).map(i => (i, i.toString)))
+      assert(metadataLog.get(None, maxBatchId) === (0L to maxBatchId).map(i => (i, i.toString)))
     }
   }
 
