@@ -43,11 +43,11 @@ private[hive] trait HiveStrategies {
   object DataSinks extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(
-          table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
+          table: MetastoreRelation, partition, child, overwrite, ifNotExists, _) =>
         execution.InsertIntoHiveTable(
           table, partition, planLater(child), overwrite, ifNotExists) :: Nil
       case hive.InsertIntoHiveTable(
-          table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
+          table: MetastoreRelation, partition, child, overwrite, ifNotExists, _) =>
         execution.InsertIntoHiveTable(
           table, partition, planLater(child), overwrite, ifNotExists) :: Nil
       case _ => Nil

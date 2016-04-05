@@ -313,7 +313,7 @@ trait CheckAnalysis extends PredicateHelper {
                  |${s.catalogTable.identifier}
                """.stripMargin)
 
-          case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
+          case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _, _) =>
             failAnalysis(
               s"""
                  |Hive support is required to insert into the following tables:

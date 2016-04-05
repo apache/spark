@@ -512,7 +512,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         partitions.getOrElse(Map.empty[String, Option[String]]),
         df.logicalPlan,
         overwrite,
-        ifNotExists = false)).toRdd
+        ifNotExists = false,
+        isMatchByName = matchOutputColumnsByName)).toRdd
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
@@ -571,6 +572,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     if (partitioningColumns.isDefined) {
       throw new AnalysisException( s"'$operation' does not support partitioning")
     }
+  }
+
+  def byName: DataFrameWriter = {
+    extraOptions.put("matchByName", "true")
+    this
+  }
+
+  private def matchOutputColumnsByName: Boolean = {
+    extraOptions.getOrElse("matchByName", "false").toBoolean
   }
 
   /**
