@@ -23,6 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.language.postfixOps
 
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -601,6 +602,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(TupleClass((1, "a"))).toDS(),
       TupleClass(1, "a")
     )
+  }
+
+  test("isStreaming returns false for static Dataset") {
+    val data = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    assert(!data.isStreaming, "static Dataset returned true for 'isStreaming'.")
+  }
+
+  test("isStreaming returns true for streaming Dataset") {
+    val data = MemoryStream[Int].toDS()
+    assert(data.isStreaming, "streaming Dataset returned false for 'isStreaming'.")
+  }
+
+  test("isStreaming returns true after static and streaming Dataset join") {
+    val static = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("a", "b")
+    val streaming = MemoryStream[Int].toDS().toDF("b")
+    val df = streaming.join(static, Seq("b"))
+    assert(df.isStreaming, "streaming Dataset returned false for 'isStreaming'.")
   }
 }
 

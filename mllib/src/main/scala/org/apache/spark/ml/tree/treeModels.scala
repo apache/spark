@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tree
 
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -82,14 +84,16 @@ private[spark] trait DecisionTreeModel {
  * Abstraction for models which are ensembles of decision trees
  *
  * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
+ *
+ * @tparam M  Type of tree model in this ensemble
  */
-private[ml] trait TreeEnsembleModel {
+private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   // Note: We use getTrees since subclasses of TreeEnsembleModel will store subclasses of
   //       DecisionTreeModel.
 
   /** Trees in this ensemble. Warning: These have null parent Estimators. */
-  def trees: Array[DecisionTreeModel]
+  def trees: Array[M]
 
   /**
    * Number of trees in ensemble
@@ -148,7 +152,7 @@ private[ml] object TreeEnsembleModel {
    *                     If -1, then numFeatures is set based on the max feature index in all trees.
    * @return  Feature importance values, of length numFeatures.
    */
-  def featureImportances(trees: Array[DecisionTreeModel], numFeatures: Int): Vector = {
+  def featureImportances[M <: DecisionTreeModel](trees: Array[M], numFeatures: Int): Vector = {
     val totalImportances = new OpenHashMap[Int, Double]()
     trees.foreach { tree =>
       // Aggregate feature importance vector for this tree
@@ -199,7 +203,7 @@ private[ml] object TreeEnsembleModel {
    *                     If -1, then numFeatures is set based on the max feature index in all trees.
    * @return  Feature importance values, of length numFeatures.
    */
-  def featureImportances(tree: DecisionTreeModel, numFeatures: Int): Vector = {
+  def featureImportances[M <: DecisionTreeModel : ClassTag](tree: M, numFeatures: Int): Vector = {
     featureImportances(Array(tree), numFeatures)
   }
 
@@ -386,7 +390,7 @@ private[ml] object EnsembleModelReadWrite {
    * @param path  Path to which to save the ensemble model.
    * @param extraMetadata  Metadata such as numFeatures, numClasses, numTrees.
    */
-  def saveImpl[M <: Params with TreeEnsembleModel](
+  def saveImpl[M <: Params with TreeEnsembleModel[_ <: DecisionTreeModel]](
       instance: M,
       path: String,
       sql: SQLContext,

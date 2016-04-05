@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.BucketSpec
@@ -773,4 +774,34 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
+  test("show tblproperties") {
+    val parsed1 = parser.parsePlan("SHOW TBLPROPERTIES tab1")
+    val expected1 = ShowTablePropertiesCommand(TableIdentifier("tab1", None), None)
+    val parsed2 = parser.parsePlan("SHOW TBLPROPERTIES tab1('propKey1')")
+    val expected2 = ShowTablePropertiesCommand(TableIdentifier("tab1", None), Some("propKey1"))
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("commands only available in HiveContext") {
+    intercept[ParseException] {
+      parser.parsePlan("DROP TABLE D1.T1")
+    }
+    intercept[ParseException] {
+      parser.parsePlan("CREATE VIEW testView AS SELECT id FROM tab")
+    }
+    intercept[ParseException] {
+      parser.parsePlan("ALTER VIEW testView AS SELECT id FROM tab")
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE EXTERNAL TABLE parquet_tab2(c1 INT, c2 STRING)
+          |TBLPROPERTIES('prop1Key '= "prop1Val", ' `prop2Key` '= "prop2Val")
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan("SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue) FROM testData")
+    }
+  }
 }

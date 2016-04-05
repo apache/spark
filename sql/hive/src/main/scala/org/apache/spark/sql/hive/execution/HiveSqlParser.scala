@@ -134,6 +134,18 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
+   * Create a [[CatalogStorageFormat]]. This is part of the [[CreateTableAsSelect]] command.
+   */
+  override def visitCreateFileFormat(
+      ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    if (ctx.storageHandler == null) {
+      typedVisit[CatalogStorageFormat](ctx.fileFormat)
+    } else {
+      visitStorageHandler(ctx.storageHandler)
+    }
+  }
+
+  /**
    * Create a [[CreateTableAsSelect]] command.
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = {
@@ -269,6 +281,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
    * Create a [[HiveScriptIOSchema]].
    */
   override protected def withScriptIOSchema(
+      ctx: QuerySpecificationContext,
       inRowFormat: RowFormatContext,
       recordWriter: Token,
       outRowFormat: RowFormatContext,
@@ -378,7 +391,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   /**
    * Storage Handlers are currently not supported in the statements we support (CTAS).
    */
-  override def visitStorageHandler(ctx: StorageHandlerContext): AnyRef = withOrigin(ctx) {
+  override def visitStorageHandler(
+      ctx: StorageHandlerContext): CatalogStorageFormat = withOrigin(ctx) {
     throw new ParseException("Storage Handlers are currently unsupported.", ctx)
   }
 
