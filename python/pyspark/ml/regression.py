@@ -938,7 +938,7 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
 @inherit_doc
 class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, HasPredictionCol,
                                   HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
-                                  HasSolver):
+                                  HasSolver, JavaMLWritable, JavaMLReadable):
     """
     Generalized Linear Regression.
 
@@ -955,26 +955,26 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
-    ...     (17.05224, Vectors.dense(3.55954, 11.19528)),
-    ...     (13.46161, Vectors.dense(2.34561, 9.65407)),
-    ...     (17.13384, Vectors.dense(3.37980, 12.03069)),
-    ...     (13.84938, Vectors.dense(2.51969, 9.64902)),], ["label", "features"])
-    >>> glr = GeneralizedLinearRegression()
-    >>> model = glr.setFamily("gaussian").setLink("identity").fit(df)
-    >>> model.transform(df).show()
-    +--------+------------------+------------------+
-    |   label|          features|        prediction|
-    +--------+------------------+------------------+
-    |17.05224|[3.55954,11.19528]|17.052776698886376|
-    |13.46161| [2.34561,9.65407]|13.463078911930246|
-    |17.13384| [3.3798,12.03069]| 17.13348844246882|
-    |13.84938| [2.51969,9.64902]|13.847725946714558|
-    +--------+------------------+------------------+
-    ...
+    ...     (1.0, Vectors.dense(1.0, 0.0)),
+    ...     (1.0, Vectors.dense(1.0, 2.0)),], ["label", "features"])
+    >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity")
+    >>> model = glr.fit(df)
+    >>> abs(model.transform(df).head().prediction - 1.0) < 0.001
+    True
     >>> model.coefficients
-    DenseVector([2.2263, 0.5756])
-    >>> model.intercept
-    2.6841196897757795
+    DenseVector([0.0, 0.0])
+    >>> abs(model.intercept - 1.0) < 0.001
+    True
+    >>> glr_path = temp_path + "/glr"
+    >>> glr.save(glr_path)
+    >>> glr2 = GeneralizedLinearRegression.load(glr_path)
+    >>> glr.getFamily() == glr2.getFamily()
+    True
+    >>> model_path = temp_path + "/glr_model"
+    >>> model.save(model_path)
+    >>> model2 = GeneralizedLinearRegressionModel.load(model_path)
+    >>> abs(model.intercept - model2.intercept) < 0.001
+    True
 
     .. versionadded:: 2.0.0
     """
@@ -989,29 +989,29 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
-                 fitIntercept=True, maxIter=25, tol=1e-6, regParam=0.0, weightCol=None,
-                 solver="irls"):
+                 family="gaussian", link="identity", fitIntercept=True, maxIter=25, tol=1e-6,
+                 regParam=0.0, weightCol=None, solver="irls"):
         """
         __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
-                 fitIntercept=True, maxIter=25, tol=1e-6, regParam=0.0, weightCol=None, \
-                 solver="irls")
+                 family="gaussian", link="identity", fitIntercept=True, maxIter=25, tol=1e-6, \
+                 regParam=0.0, weightCol=None, solver="irls")
         """
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid)
-        self._setDefault(family="gaussian", link="identity")
+        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
-                  fitIntercept=True, maxIter=25, tol=1e-6, regParam=0.0, weightCol=None,
-                  solver="irls"):
+                  family="gaussian", link="identity", fitIntercept=True, maxIter=25, tol=1e-6,
+                  regParam=0.0, weightCol=None, solver="irls"):
         """
         setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
-                 fitIntercept=True, maxIter=25, tol=1e-6, regParam=0.0, weightCol=None, \
-                 solver="irls")
+                  family="gaussian", link="identity", fitIntercept=True, maxIter=25, tol=1e-6, \
+                  regParam=0.0, weightCol=None, solver="irls")
         Sets params for generalized linear regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -1051,7 +1051,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self.getOrDefault(self.link)
 
 
-class GeneralizedLinearRegressionModel(JavaModel):
+class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GeneralizedLinearRegression.
 
