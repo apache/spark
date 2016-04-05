@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class CSVTypeCastSuite extends SparkFunSuite {
 
-  private def isNull(v: Any) = assert(v == null)
+  private def assertNull(v: Any) = assert(v == null)
 
   test("Can parse decimal type values") {
     val stringValues = Seq("10.05", "1,000.01", "158,058,049.001")

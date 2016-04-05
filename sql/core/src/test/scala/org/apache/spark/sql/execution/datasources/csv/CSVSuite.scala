@@ -506,7 +506,5 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(numbersFile))
 
     assert(numbers.count() == 8)
-    
-
   }
 }

@@ -128,10 +128,8 @@ private[sql] class CSVOptions(
 
 object CSVOptions {
 
-  /** Used for convenient construction in unit tests */
   def apply(): CSVOptions = new CSVOptions(Map.empty)
 
-  /** Used for conveneint construction with single option in uni tests */
   def apply(paramName: String, paramValue: String): CSVOptions = {
     new CSVOptions(Map(paramName -> paramValue))
   }
