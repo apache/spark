@@ -70,40 +70,4 @@ object Main extends Logging {
       Option(sparkContext).map(_.stop)
     }
   }
-
-  def createSparkContext(): SparkContext = {
-    val execUri = System.getenv("SPARK_EXECUTOR_URI")
-    conf.setIfMissing("spark.app.name", "Spark shell")
-      // SparkContext will detect this configuration and register it with the RpcEnv's
-      // file server, setting spark.repl.class.uri to the actual URI for executors to
-      // use. This is sort of ugly but since executors are started as part of SparkContext
-      // initialization in certain cases, there's an initialization order issue that prevents
-      // this from being set after SparkContext is instantiated.
-      .set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
-    if (execUri != null) {
-      conf.set("spark.executor.uri", execUri)
-    }
-    if (System.getenv("SPARK_HOME") != null) {
-      conf.setSparkHome(System.getenv("SPARK_HOME"))
-    }
-    sparkContext = new SparkContext(conf)
-    logInfo("Created spark context..")
-    sparkContext
-  }
-
-  def createSQLContext(): SQLContext = {
-    val name = "org.apache.spark.sql.hive.HiveContext"
-    val loader = Utils.getContextOrSparkClassLoader
-    try {
-      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext]
-      logInfo("Created sql context (with Hive support)..")
-    } catch {
-      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
-        sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context..")
-    }
-    sqlContext
-  }
-
 }
