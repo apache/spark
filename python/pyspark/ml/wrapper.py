@@ -64,7 +64,7 @@ class JavaWrapper(Params):
         param = self._resolveParam(param)
         java_param = self._java_obj.getParam(param.name)
         java_value = _py2java(sc, value)
-        return java_param, java_value
+        return java_param.w(java_value)
 
     def _transfer_params_to_java(self):
         """
@@ -73,18 +73,18 @@ class JavaWrapper(Params):
         paramMap = self.extractParamMap()
         for param in self.params:
             if param in paramMap:
-                p, v = self._make_java_param_pair(param, paramMap[param])
-                self._java_obj.set(p.w(v))
+                pair = self._make_java_param_pair(param, paramMap[param])
+                self._java_obj.set(pair)
 
-    def _transfer_extra_params_to_java(self, extra):
+    def _transfer_param_map_to_java(self, pyParamMap):
         """
-        Transforms extra params of the instance into a Java ParamMap.
+        Transforms a Python ParamMap into a Java ParamMap.
         """
         paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
         for param in self.params:
-            if param in extra:
-                p, v = self._make_java_param_pair(param, extra[param])
-                paramMap.put(p, v)
+            if param in pyParamMap:
+                pair = self._make_java_param_pair(param, pyParamMap[param])
+                paramMap.put([pair])
         return paramMap
 
     def _transfer_params_from_java(self):
@@ -99,13 +99,13 @@ class JavaWrapper(Params):
                     value = _java2py(sc, self._java_obj.getOrDefault(java_param))
                     self._paramMap[param] = value
 
-    def _transfer_extra_params_from_java(self, extra):
+    def _transfer_param_map_from_java(self, javaParamMap):
         """
-        Transforms extra params of the instance into a Java ParamMap.
+        Transforms a Java ParamMap into a Python ParamMap.
         """
         sc = SparkContext._active_spark_context
         paramMap = dict()
-        for pair in extra.toList():
+        for pair in javaParamMap.toList():
             param = pair.param()
             if self.hasParam(str(param.name())):
                 paramMap[self.getParam(param.name())] = _java2py(sc, pair.value())

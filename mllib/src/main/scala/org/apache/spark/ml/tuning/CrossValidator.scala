@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import java.{util => ju}
+import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 
@@ -204,8 +204,8 @@ class CrossValidatorModel private[ml] (
     @Since("1.5.0") val avgMetrics: Array[Double])
   extends Model[CrossValidatorModel] with CrossValidatorParams with MLWritable {
 
-  /** A Java/Python-friendly auxiliary constructor. */
-  private[ml] def this(uid: String, bestModel: Model[_], avgMetrics: ju.List[Double]) = {
+  /** A Python-friendly auxiliary constructor. */
+  private[ml] def this(uid: String, bestModel: Model[_], avgMetrics: JList[Double]) = {
     this(uid, bestModel, avgMetrics.asScala.toArray)
   }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import java.{util => ju}
+import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 
@@ -202,8 +202,8 @@ class TrainValidationSplitModel private[ml] (
     @Since("1.5.0") val validationMetrics: Array[Double])
   extends Model[TrainValidationSplitModel] with TrainValidationSplitParams with MLWritable {
 
-  /** A Java/Python-friendly auxiliary constructor. */
-  private[ml] def this(uid: String, bestModel: Model[_], validationMetrics: ju.List[Double]) = {
+  /** A Python-friendly auxiliary constructor. */
+  private[ml] def this(uid: String, bestModel: Model[_], validationMetrics: JList[Double]) = {
     this(uid, bestModel, validationMetrics.asScala.toArray)
   }
 

@@ -94,7 +94,7 @@ class ParamGridBuilder(object):
         return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
-class ValidatorParams(Params):
+class ValidatorParams(HasSeed):
     """
     Common params for TrainValidationSplit and CrossValidator.
     """
@@ -105,15 +105,11 @@ class ValidatorParams(Params):
         Params._dummy(), "evaluator",
         "evaluator used to select hyper-parameters that maximize the validator metric")
 
-    def __init__(self):
-        super(ValidatorParams, self).__init__()
-
     def setEstimator(self, value):
         """
         Sets the value of :py:attr:`estimator`.
         """
-        self._paramMap[self.estimator] = value
-        return self
+        return self._set(estimator=value)
 
     def getEstimator(self):
         """
@@ -125,8 +121,7 @@ class ValidatorParams(Params):
         """
         Sets the value of :py:attr:`estimatorParamMaps`.
         """
-        self._paramMap[self.estimatorParamMaps] = value
-        return self
+        return self._set(estimatorParamMaps=value)
 
     def getEstimatorParamMaps(self):
         """
@@ -138,8 +133,7 @@ class ValidatorParams(Params):
         """
         Sets the value of :py:attr:`evaluator`.
         """
-        self._paramMap[self.evaluator] = value
-        return self
+        return self._set(evaluator=value)
 
     def getEvaluator(self):
         """
@@ -156,7 +150,7 @@ class ValidatorParams(Params):
         # Load information from java_stage to the instance.
         estimator = JavaWrapper._from_java(java_stage.getEstimator())
         evaluator = JavaWrapper._from_java(java_stage.getEvaluator())
-        epms = [estimator._transfer_extra_params_from_java(epm)
+        epms = [estimator._transfer_param_map_from_java(epm)
                 for epm in java_stage.getEstimatorParamMaps()]
         return estimator, epms, evaluator
 
@@ -170,14 +164,14 @@ class ValidatorParams(Params):
 
         java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
         for idx, epm in enumerate(self.getEstimatorParamMaps()):
-            java_epms[idx] = self.getEstimator()._transfer_extra_params_to_java(epm)
+            java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
 
         java_estimator = self.getEstimator()._to_java()
         java_evaluator = self.getEvaluator()._to_java()
         return java_estimator, java_epms, java_evaluator
 
 
-class CrossValidator(Estimator, ValidatorParams, HasSeed, MLReadable, MLWritable):
+class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
     """
     K-fold cross validation.
 
@@ -286,10 +280,7 @@ class CrossValidator(Estimator, ValidatorParams, HasSeed, MLReadable, MLWritable
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return CrossValidatorModel(bestModel)\
-            .setEstimator(self.getEstimator())\
-            .setEstimatorParamMaps(self.getEstimatorParamMaps())\
-            .setEvaluator(self.getEvaluator())
+        return self._copyValues(CrossValidatorModel(bestModel))
 
     @since("1.4.0")
     def copy(self, extra=None):
@@ -445,7 +436,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         return _java_obj
 
 
-class TrainValidationSplit(Estimator, ValidatorParams, HasSeed, MLReadable, MLWritable):
+class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
     """
     Train-Validation-Split.
 
@@ -548,10 +539,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasSeed, MLReadable, MLWr
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return TrainValidationSplitModel(bestModel)\
-            .setEstimator(self.getEstimator())\
-            .setEstimatorParamMaps(self.getEstimatorParamMaps())\
-            .setEvaluator(self.getEvaluator())
+        return self._copyValues(TrainValidationSplitModel(bestModel))
 
     @since("2.0.0")
     def copy(self, extra=None):
