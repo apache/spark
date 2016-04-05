@@ -18,15 +18,17 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 import com.google.common.io.Files
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs._
 
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
@@ -226,6 +228,49 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
           .parquet(path)
         checkAnswer(df, copyDf)
       }
+    }
+  }
+
+  test("Locality support for FileScanRDD") {
+    withHadoopConf(
+      "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true"
+    ) {
+      withTempPath { dir =>
+        val path = "file://" + dir.getCanonicalPath
+        sqlContext.range(4).repartition(2).write.parquet(path)
+        val df = sqlContext.read.parquet(path)
+
+        val Some(fileScanRDD) = {
+          def allRDDsInDAG(rdd: RDD[_]): Seq[RDD[_]] = {
+            rdd +: rdd.dependencies.map(_.rdd).flatMap(allRDDsInDAG)
+          }
+
+          // We have to search for the `FileScanRDD` along the the RDD DAG since
+          // RDD.preferredLocations doesn't propagate along the DAG to the root RDD.
+          allRDDsInDAG(df.rdd).collectFirst {
+            case f: FileScanRDD => f
+          }
+        }
+
+        val partitions = fileScanRDD.partitions
+        val preferredLocations = partitions.flatMap(fileScanRDD.preferredLocations)
+
+        assert(preferredLocations.distinct.length == 2)
+      }
+    }
+  }
+}
+
+class LocalityTestFileSystem extends RawLocalFileSystem {
+  private val invocations = new AtomicInteger(0)
+
+  override def getFileBlockLocations(
+      file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
+    if (invocations.getAndAdd(1) % 2 == 0) {
+      Array(new BlockLocation(Array("host1:50010"), Array("host1"), 0, len))
+    } else {
+      Array(new BlockLocation(Array("host2:50010"), Array("host2"), 0, len))
     }
   }
 }

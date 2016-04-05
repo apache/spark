@@ -91,6 +91,10 @@ private[sql] trait SQLTestUtils
     sparkContext.hadoopConfiguration
   }
 
+  /**
+   * Sets all Hadoop configurations specified in `pairs`, calls `f`, and then restore all Hadoop
+   * configurations.
+   */
   protected def withHadoopConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, _) = pairs.unzip
     val originalValues = keys.map(key => Option(hadoopConfiguration.get(key)))
