@@ -29,7 +29,7 @@ from pyspark.sql import DataFrame
 
 
 __all__ = ['LogisticRegression', 'LogisticRegressionModel',
-           'LogisticRegressionSummary', 'LogisticRegressionTrainingSummary'
+           'LogisticRegressionSummary', 'LogisticRegressionTrainingSummary',
            'BinaryLogisticRegressionSummary', 'BinaryLogisticRegressionTrainingSummary',
            'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
            'GBTClassifier', 'GBTClassificationModel',
