@@ -415,29 +415,29 @@ class DAGScheduler(
     // caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
     def visit(r: RDD[_]) {
-      if (!visited(r)) {
-        val deps = r.dependencies.filter {
-          case shufDep: ShuffleDependency[_, _, _] =>
-            !shuffleToMapStage.contains(shufDep.shuffleId)
-          case _ => true
+      if (visited(r)) {
+        waitingForVisit.pop()
+      } else {
+        val visitedShuffleDeps = new ArrayBuffer[ShuffleDependency[_, _, _]]
+        val unvisitedDeps = new ArrayBuffer[Dependency[_]]
+
+        r.dependencies.foreach {
+          case dep: ShuffleDependency[_, _, _] if !shuffleToMapStage.contains(dep.shuffleId) =>
+            if (visited(dep.rdd)) visitedShuffleDeps += dep
+            else unvisitedDeps += dep
+          case dep if !visited(dep.rdd) => unvisitedDeps += dep
+          case _ =>
         }
-        if (deps.forall(dep => visited(dep.rdd))) {
+
+        if (unvisitedDeps.isEmpty) {
           waitingForVisit.pop()
           visited += r
-          for (dep <- deps) {
-            dep match {
-              case shufDep: ShuffleDependency[_, _, _] =>
-                parents += shufDep
-              case _ =>
-            }
-          }
+          for (shufDep <- visitedShuffleDeps) { parents += shufDep }
         } else {
-          for (dep <- deps if !visited(dep.rdd)) {
+          for (dep <- unvisitedDeps) {
             waitingForVisit.push(dep.rdd)
           }
         }
-      } else {
-        waitingForVisit.pop()
       }
     }
 
