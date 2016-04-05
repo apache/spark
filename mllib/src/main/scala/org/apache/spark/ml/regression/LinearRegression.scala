@@ -534,7 +534,12 @@ class LinearRegressionTrainingSummary private[regression] (
     model,
     diagInvAtWA) {
 
-  /** Number of training iterations until termination */
+  /**
+   * Number of training iterations until termination
+   *
+   * This value is only available when using the "l-bfgs" solver.
+   * @see [[LinearRegression.solver]]
+   */
   @Since("1.5.0")
   val totalIterations = objectiveHistory.length
 
@@ -547,8 +552,8 @@ class LinearRegressionTrainingSummary private[regression] (
  * @param predictions predictions outputted by the model's `transform` method.
  * @param predictionCol Field in "predictions" which gives the predicted value of the label at
  *                      each instance.
- * @param labelCol Field in "predictions" which gives the true label of each instance
- *                 (if available).
+ * @param labelCol Field in "predictions" which gives the true label of each instance.
+ * @param featuresCol Field in "predictions" which gives the features of each instance as a vector.
  */
 @Since("1.5.0")
 @Experimental
@@ -650,6 +655,9 @@ class LinearRegressionSummary private[regression] (
 
   /**
    * Standard error of estimated coefficients and intercept.
+   *
+   * This value is only available when using the "normal" solver.
+   * @see [[LinearRegression.solver]]
    */
   lazy val coefficientStandardErrors: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
@@ -671,6 +679,9 @@ class LinearRegressionSummary private[regression] (
 
   /**
    * T-statistic of estimated coefficients and intercept.
+   *
+   * This value is only available when using the "normal" solver.
+   * @see [[LinearRegression.solver]]
    */
   lazy val tValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
@@ -688,6 +699,9 @@ class LinearRegressionSummary private[regression] (
 
   /**
    * Two-sided p-value of estimated coefficients and intercept.
+   *
+   * This value is only available when using the "normal" solver.
+   * @see [[LinearRegression.solver]]
    */
   lazy val pValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {

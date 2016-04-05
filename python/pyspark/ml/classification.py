@@ -301,7 +301,7 @@ class LogisticRegressionSummary(JavaCallable):
     def labelCol(self):
         """
         Field in "predictions" which gives the true label of each
-        instance (if available).
+        instance.
         """
         return self._call_java("labelCol")
 
