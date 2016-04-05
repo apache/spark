@@ -203,10 +203,10 @@ final class DecisionTreeRegressionModel private[ml] (
    *       to determine feature importance instead.
    */
   @Since("2.0.0")
-  lazy val featureImportances: Vector = RandomForest.featureImportances(this, numFeatures)
+  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(this, numFeatures)
 
-  /** Convert to a model in the old API */
-  private[ml] def toOld: OldDecisionTreeModel = {
+  /** Convert to spark.mllib DecisionTreeModel (losing some information) */
+  override private[spark] def toOld: OldDecisionTreeModel = {
     new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.Regression)
   }
 

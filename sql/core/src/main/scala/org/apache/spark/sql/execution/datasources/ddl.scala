@@ -51,11 +51,11 @@ case class DescribeCommand(
 }
 
 /**
-  * Used to represent the operation of create table using a data source.
+ * Used to represent the operation of create table using a data source.
  *
-  * @param allowExisting If it is true, we will do nothing when the table already exists.
-  *                      If it is false, an exception will be thrown
-  */
+ * @param allowExisting If it is true, we will do nothing when the table already exists.
+ *                      If it is false, an exception will be thrown
+ */
 case class CreateTableUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
@@ -107,7 +107,7 @@ case class CreateTempTableUsing(
     sqlContext.sessionState.catalog.createTempTable(
       tableIdent.table,
       Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
-      ignoreIfExists = true)
+      overrideIfExists = true)
 
     Seq.empty[Row]
   }
@@ -138,7 +138,7 @@ case class CreateTempTableUsingAsSelect(
     sqlContext.sessionState.catalog.createTempTable(
       tableIdent.table,
       Dataset.ofRows(sqlContext, LogicalRelation(result)).logicalPlan,
-      ignoreIfExists = true)
+      overrideIfExists = true)
 
     Seq.empty[Row]
   }

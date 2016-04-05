@@ -272,11 +272,11 @@ class SQLContext private[sql](
   }
 
   /**
-   * Returns true if the [[Queryable]] is currently cached in-memory.
+   * Returns true if the [[Dataset]] is currently cached in-memory.
    * @group cachemgmt
    * @since 1.3.0
    */
-  private[sql] def isCached(qName: Queryable): Boolean = {
+  private[sql] def isCached(qName: Dataset[_]): Boolean = {
     cacheManager.lookupCachedData(qName).nonEmpty
   }
 
@@ -671,7 +671,7 @@ class SQLContext private[sql](
     sessionState.catalog.createTempTable(
       sessionState.sqlParser.parseTableIdentifier(tableName).table,
       df.logicalPlan,
-      ignoreIfExists = true)
+      overrideIfExists = true)
   }
 
   /**
@@ -712,13 +712,13 @@ class SQLContext private[sql](
   }
 
   /**
-    * :: Experimental ::
-    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-    * in an range from `start` to `end` (exclusive) with an step value.
-    *
-    * @since 2.0.0
-    * @group dataset
-    */
+   * :: Experimental ::
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with an step value.
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
   @Experimental
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, numPartitions = sparkContext.defaultParallelism)
@@ -781,7 +781,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(this, ShowTablesCommand(None))
+    Dataset.ofRows(this, ShowTablesCommand(None, None))
   }
 
   /**
@@ -793,7 +793,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName)))
+    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName), None))
   }
 
   /**

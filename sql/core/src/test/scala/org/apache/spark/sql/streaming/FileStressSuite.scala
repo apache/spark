@@ -29,7 +29,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 /**
- * A stress test for streamign queries that read and write files.  This test constists of
+ * A stress test for streaming queries that read and write files.  This test consists of
  * two threads:
  *  - one that writes out `numRecords` distinct integers to files of random sizes (the total
  *    number of records is fixed but each files size / creation time is random).
@@ -43,10 +43,10 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
 
   test("fault tolerance stress test") {
     val numRecords = 10000
-    val inputDir = Utils.createTempDir("stream.input").getCanonicalPath
-    val stagingDir = Utils.createTempDir("stream.staging").getCanonicalPath
-    val outputDir = Utils.createTempDir("stream.output").getCanonicalPath
-    val checkpoint = Utils.createTempDir("stream.checkpoint").getCanonicalPath
+    val inputDir = Utils.createTempDir(namePrefix = "stream.input").getCanonicalPath
+    val stagingDir = Utils.createTempDir(namePrefix = "stream.staging").getCanonicalPath
+    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val checkpoint = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
     @volatile
     var continue = true

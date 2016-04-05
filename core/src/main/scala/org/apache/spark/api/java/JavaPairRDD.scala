@@ -461,10 +461,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     fromRDD(rdd.partitionBy(partitioner))
 
   /**
-    * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
-    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
-    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
-    */
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
+   */
   def join[W](other: JavaPairRDD[K, W], partitioner: Partitioner): JavaPairRDD[K, (V, W)] =
     fromRDD(rdd.join(other, partitioner))
 

@@ -24,7 +24,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveMetastoreTypes
 import org.apache.spark.sql.types.StructType
 
@@ -92,7 +91,6 @@ private[orc] object OrcFileOperator extends Logging {
     // TODO: Check if the paths coming in are already qualified and simplify.
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
-    val path = origPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     val paths = SparkHadoopUtil.get.listLeafStatuses(fs, origPath)
       .filterNot(_.isDirectory)
       .map(_.getPath)

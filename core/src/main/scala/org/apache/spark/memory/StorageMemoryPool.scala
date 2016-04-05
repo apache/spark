@@ -28,8 +28,17 @@ import org.apache.spark.storage.memory.MemoryStore
  * (caching).
  *
  * @param lock a [[MemoryManager]] instance to synchronize on
+ * @param memoryMode the type of memory tracked by this pool (on- or off-heap)
  */
-private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) with Logging {
+private[memory] class StorageMemoryPool(
+    lock: Object,
+    memoryMode: MemoryMode
+  ) extends MemoryPool(lock) with Logging {
+
+  private[this] val poolName: String = memoryMode match {
+    case MemoryMode.ON_HEAP => "on-heap storage"
+    case MemoryMode.OFF_HEAP => "off-heap storage"
+  }
 
   @GuardedBy("lock")
   private[this] var _memoryUsed: Long = 0L
@@ -56,7 +65,7 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
 
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
- *
+   *
    * @return whether all N bytes were successfully granted.
    */
   def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = lock.synchronized {
@@ -80,7 +89,7 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
     if (numBytesToFree > 0) {
-      memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree)
+      memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree, memoryMode)
     }
     // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
     // back into this StorageMemoryPool in order to free memory. Therefore, these variables
@@ -117,7 +126,8 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
     val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
     if (remainingSpaceToFree > 0) {
       // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
-      val spaceFreedByEviction = memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree)
+      val spaceFreedByEviction =
+        memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree, memoryMode)
       // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
       // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.
       decrementPoolSize(spaceFreedByEviction)

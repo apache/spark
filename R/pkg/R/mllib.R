@@ -27,6 +27,16 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' @export
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
+#' @title S4 class that represents a AFTSurvivalRegressionModel
+#' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
+#' @export
+setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
+
+#' @title S4 class that represents a KMeansModel
+#' @param jobj a Java object reference to the backing Scala KMeansModel
+#' @export
+setClass("KMeansModel", representation(jobj = "jobj"))
+
 #' Fits a generalized linear model
 #'
 #' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
@@ -149,17 +159,6 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
               return(list(coefficients = coefficients))
-            } else if (modelName == "KMeansModel") {
-              modelSize <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                       "getKMeansModelSize", object@model)
-              cluster <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                     "getKMeansCluster", object@model, "classes")
-              k <- unlist(modelSize)[1]
-              size <- unlist(modelSize)[-1]
-              coefficients <- t(matrix(coefficients, ncol = k))
-              colnames(coefficients) <- unlist(features)
-              rownames(coefficients) <- 1:k
-              return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
             } else {
               stop(paste("Unsupported model", modelName, sep = " "))
             }
@@ -208,21 +207,21 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @examples
 #' \dontrun{
 #' model <- kmeans(x, centers = 2, algorithm="random")
-#'}
+#' }
 setMethod("kmeans", signature(x = "DataFrame"),
           function(x, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
             columnNames <- as.array(colnames(x))
             algorithm <- match.arg(algorithm)
-            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers", "fitKMeans", x@sdf,
-                                 algorithm, iter.max, centers, columnNames)
-            return(new("PipelineModel", model = model))
+            jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", x@sdf,
+                                centers, iter.max, algorithm, columnNames)
+            return(new("KMeansModel", jobj = jobj))
          })
 
-#' Get fitted result from a model
+#' Get fitted result from a k-means model
 #'
-#' Get fitted result from a model, similarly to R's fitted().
+#' Get fitted result from a k-means model, similarly to R's fitted().
 #'
-#' @param object A fitted MLlib model
+#' @param object A fitted k-means model
 #' @return DataFrame containing fitted values
 #' @rdname fitted
 #' @export
@@ -232,19 +231,58 @@ setMethod("kmeans", signature(x = "DataFrame"),
 #' fitted.model <- fitted(model)
 #' showDF(fitted.model)
 #'}
-setMethod("fitted", signature(object = "PipelineModel"),
+setMethod("fitted", signature(object = "KMeansModel"),
           function(object, method = c("centers", "classes"), ...) {
-            modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                     "getModelName", object@model)
+            method <- match.arg(method)
+            return(dataFrame(callJMethod(object@jobj, "fitted", method)))
+          })
 
-            if (modelName == "KMeansModel") {
-              method <- match.arg(method)
-              fittedResult <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                          "getKMeansCluster", object@model, method)
-              return(dataFrame(fittedResult))
-            } else {
-              stop(paste("Unsupported model", modelName, sep = " "))
-            }
+#' Get the summary of a k-means model
+#'
+#' Returns the summary of a k-means model produced by kmeans(),
+#' similarly to R's summary().
+#'
+#' @param object a fitted k-means model
+#' @return the model's coefficients, size and cluster
+#' @rdname summary
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- kmeans(trainingData, 2)
+#' summary(model)
+#' }
+setMethod("summary", signature(object = "KMeansModel"),
+          function(object, ...) {
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "features")
+            coefficients <- callJMethod(jobj, "coefficients")
+            cluster <- callJMethod(jobj, "cluster")
+            k <- callJMethod(jobj, "k")
+            size <- callJMethod(jobj, "size")
+            coefficients <- t(matrix(coefficients, ncol = k))
+            colnames(coefficients) <- unlist(features)
+            rownames(coefficients) <- 1:k
+            return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
+          })
+
+#' Make predictions from a k-means model
+#'
+#' Make predictions from a model produced by kmeans().
+#'
+#' @param object A fitted k-means model
+#' @param newData DataFrame for testing
+#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @rdname predict
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- kmeans(trainingData, 2)
+#' predicted <- predict(model, testData)
+#' showDF(predicted)
+#' }
+setMethod("predict", signature(object = "KMeansModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
 #' Fit a Bernoulli naive Bayes model
@@ -272,4 +310,74 @@ setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
                                  formula, data@sdf, laplace)
             return(new("NaiveBayesModel", jobj = jobj))
+          })
+
+#' Fit an accelerated failure time (AFT) survival regression model.
+#'
+#' Fit an accelerated failure time (AFT) survival regression model, similarly to R's survreg().
+#'
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', ':', '+', and '-'.
+#'                Note that operator '.' is not supported currently.
+#' @param data DataFrame for training.
+#' @return a fitted AFT survival regression model
+#' @rdname survreg
+#' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(sqlContext, ovarian)
+#' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
+#' }
+setMethod("survreg", signature(formula = "formula", data = "DataFrame"),
+          function(formula, data, ...) {
+            formula <- paste(deparse(formula), collapse = "")
+            jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
+                                "fit", formula, data@sdf)
+            return(new("AFTSurvivalRegressionModel", jobj = jobj))
+          })
+
+#' Get the summary of an AFT survival regression model
+#'
+#' Returns the summary of an AFT survival regression model produced by survreg(),
+#' similarly to R's summary().
+#'
+#' @param object a fitted AFT survival regression model
+#' @return coefficients the model's coefficients, intercept and log(scale).
+#' @rdname summary
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, trainingData)
+#' summary(model)
+#' }
+setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
+          function(object, ...) {
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "rFeatures")
+            coefficients <- callJMethod(jobj, "rCoefficients")
+            coefficients <- as.matrix(unlist(coefficients))
+            colnames(coefficients) <- c("Value")
+            rownames(coefficients) <- unlist(features)
+            return(list(coefficients = coefficients))
+          })
+
+#' Make predictions from an AFT survival regression model
+#'
+#' Make predictions from a model produced by survreg(), similarly to R package survival's predict.
+#'
+#' @param object A fitted AFT survival regression model
+#' @param newData DataFrame for testing
+#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @rdname predict
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, trainingData)
+#' predicted <- predict(model, testData)
+#' showDF(predicted)
+#' }
+setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
