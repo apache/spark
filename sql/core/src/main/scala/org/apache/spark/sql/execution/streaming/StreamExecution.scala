@@ -158,10 +158,7 @@ class StreamExecution(
       logDebug(s"Stream running from $committedOffsets to $availableOffsets")
       triggerExecutor.execute(() => {
         if (isActive) {
-          if (dataAvailable) {
-            runBatch()
-            commitBatch()
-          }
+          if (dataAvailable) runBatch()
           constructNextBatch()
           true
         } else {
@@ -225,17 +222,6 @@ class StreamExecution(
             .map(committed => committed < available)
             .getOrElse(true)
     }
-  }
-
-  /**
-   * Commit the batch. Note that committing the offsets for a new batch implicitly marks the
-   * previous batch as finished and thus this method should only be called when all currently
-   * available data has been written to the sink.
-   */
-  private def commitBatch(): Unit = {
-    // Update committed offsets.
-    committedOffsets ++= availableOffsets
-    postEvent(new QueryProgress(this))
   }
 
   /**
@@ -338,6 +324,9 @@ class StreamExecution(
 
     val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
+    // Update committed offsets.
+    committedOffsets ++= availableOffsets
+    postEvent(new QueryProgress(this))
   }
 
   private def postEvent(event: ContinuousQueryListener.Event) {
