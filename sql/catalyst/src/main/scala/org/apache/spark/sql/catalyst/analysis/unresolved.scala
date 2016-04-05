@@ -307,3 +307,25 @@ case class UnresolvedAlias(child: Expression, aliasName: Option[String] = None)
 
   override lazy val resolved = false
 }
+
+/**
+ * Holds the deserializer expression and the attributes that are available during the resolution
+ * for it.  Deserializer expression is a special kind of expression that is not always resolved by
+ * children output, but by given attributes, e.g. the `keyDeserializer` in `MapGroups` should be
+ * resolved by `groupingAttributes` instead of children output.
+ *
+ * @param deserializer The unresolved deserializer expression
+ * @param inputAttributes The input attributes used to resolve deserializer expression, can be empty
+ *                        if we want to resolve deserializer by children output.
+ */
+case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq[Attribute])
+  extends UnaryExpression with Unevaluable with NonSQLExpression {
+  // The input attributes used to resolve deserializer expression must be all resolved.
+  require(inputAttributes.forall(_.resolved), "Input attributes must all be resolved.")
+
+  override def child: Expression = deserializer
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override lazy val resolved = false
+}

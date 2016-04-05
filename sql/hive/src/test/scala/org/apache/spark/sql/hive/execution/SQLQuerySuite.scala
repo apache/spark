@@ -1811,26 +1811,4 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
-
-  test("show tables") {
-    withTable("show1a", "show2b") {
-      sql("CREATE TABLE show1a(c1 int)")
-      sql("CREATE TABLE show2b(c2 int)")
-      checkAnswer(
-        sql("SHOW TABLES IN default 'show1*'"),
-        Row("show1a", false) :: Nil)
-      checkAnswer(
-        sql("SHOW TABLES IN default 'show1*|show2*'"),
-        Row("show1a", false) ::
-          Row("show2b", false) :: Nil)
-      checkAnswer(
-        sql("SHOW TABLES 'show1*|show2*'"),
-        Row("show1a", false) ::
-          Row("show2b", false) :: Nil)
-      assert(
-        sql("SHOW TABLES").count() >= 2)
-      assert(
-        sql("SHOW TABLES IN default").count() >= 2)
-    }
-  }
 }
