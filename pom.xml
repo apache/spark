@@ -832,6 +832,9 @@
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-mapred</artifactId>
         <version>${avro.version}</version>
+        <!-- use the build matching the hadoop api of avro-mapred (i.e. no classifier for hadoop 1
+             API, adoop2 classifier for hadoop 2 API. avro-mapred is a dependency of
+             org.spark-project.hive:hive-serde -->
         <classifier>${avro.mapred.classifier}</classifier>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
