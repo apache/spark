@@ -409,10 +409,6 @@
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
         </exclusions>
       </dependency>
       <!-- Added for selenium only, and should match its dependent version: -->
@@ -517,11 +513,13 @@
         <artifactId>netty-all</artifactId>
         <version>4.0.29.Final</version>
       </dependency>
+      <!-- Spark 2.x doesn't have a direct dependency on io.netty:netty, but we leave this
+           entry in order to prevent a downgrade of our transitive io.netty:netty dependency -->
       <dependency>
-        <groupId>io.netty</groupId>
-        <artifactId>netty</artifactId>
-        <version>3.8.0.Final</version>
-      </dependency>
+         <groupId>io.netty</groupId>
+         <artifactId>netty</artifactId>
+         <version>3.8.0.Final</version>
+       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
@@ -799,10 +797,6 @@
         <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.mortbay.jetty</groupId>
             <artifactId>jetty</artifactId>
           </exclusion>
@@ -838,10 +832,6 @@
         <classifier>${avro.mapred.classifier}</classifier>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.mortbay.jetty</groupId>
             <artifactId>jetty</artifactId>
@@ -1464,10 +1454,6 @@
         <scope>${flume.deps.scope}</scope>
         <exclusions>
           <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.flume</groupId>
             <artifactId>flume-ng-auth</artifactId>
           </exclusion>
@@ -1487,10 +1473,6 @@
         <version>${flume.version}</version>
         <scope>${flume.deps.scope}</scope>
         <exclusions>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
