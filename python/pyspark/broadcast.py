@@ -104,6 +104,17 @@ class Broadcast(object):
         if self._jbroadcast is None:
             raise Exception("Broadcast can only be unpersisted in driver")
         self._jbroadcast.unpersist(blocking)
+
+    def destroy(self):
+        """
+        Destroy all data and metadata related to this broadcast variable.
+        Use this with caution; once a broadcast variable has been destroyed,
+        it cannot be used again. This method blocks until destroy has
+        completed.
+        """
+        if self._jbroadcast is None:
+            raise Exception("Broadcast can only be destroyed in driver")
+        self._jbroadcast.destroy()
         os.unlink(self._path)
 
     def __reduce__(self):
