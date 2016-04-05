@@ -1665,8 +1665,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
           val windowEnd = windowStart + window.windowDuration
 
           CreateNamedStruct(
-            Literal(WINDOW_START) :: windowStart ::
-            Literal(WINDOW_END) :: windowEnd :: Nil)
+            Literal(WINDOW_START) :: TimestampFromLong(windowStart) ::
+            Literal(WINDOW_END) :: TimestampFromLong(windowEnd) :: Nil)
         }
 
         val projections =
