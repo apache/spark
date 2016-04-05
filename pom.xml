@@ -1186,9 +1186,6 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-exec</artifactId>
-<!--
-        <classifier>core</classifier>
--->
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
