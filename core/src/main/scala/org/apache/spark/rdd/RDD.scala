@@ -568,11 +568,7 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: RDD[T]): RDD[T] = withScope {
-    if (partitioner.isDefined && other.partitioner == partitioner) {
-      new PartitionerAwareUnionRDD(sc, Array(this, other))
-    } else {
-      new UnionRDD(sc, Array(this, other))
-    }
+    sc.union(this, other)
   }
 
   /**
