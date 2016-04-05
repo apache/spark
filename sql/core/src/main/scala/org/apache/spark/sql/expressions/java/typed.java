@@ -18,7 +18,14 @@
 package org.apache.spark.sql.expressions.java;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoder;
+import org.apache.spark.sql.TypedColumn;
+import org.apache.spark.sql.execution.aggregate.TypedAverage;
+import org.apache.spark.sql.execution.aggregate.TypedCount;
+import org.apache.spark.sql.execution.aggregate.TypedSumDouble;
+import org.apache.spark.sql.execution.aggregate.TypedSumLong;
 
 /**
  * :: Experimental ::
@@ -30,5 +37,19 @@ import org.apache.spark.sql.Dataset;
  */
 @Experimental
 public class typed {
+  public static<T> TypedColumn<T, Double> avg(MapFunction<T, Double> f) {
+    return new TypedAverage<T>(f).toColumnJava();
+  }
 
+  public static<T> TypedColumn<T, Long> count(MapFunction<T, Object> f) {
+    return new TypedCount<T>(f).toColumnJava();
+  }
+
+  public static<T> TypedColumn<T, Double> sum(MapFunction<T, Double> f) {
+    return new TypedSumDouble<T>(f).toColumnJava();
+  }
+
+  public static<T> TypedColumn<T, Long> sumLong(MapFunction<T, Long> f) {
+    return new TypedSumLong<T>(f).toColumnJava();
+  }
 }
