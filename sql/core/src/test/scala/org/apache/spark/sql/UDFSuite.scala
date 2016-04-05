@@ -83,7 +83,8 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       df.selectExpr("a_function_that_does_not_exist()")
     }
-    assert(e.getMessage.contains("undefined function"))
+    assert(e.getMessage.contains("Undefined function"))
+    assert(e.getMessage.contains("a_function_that_does_not_exist"))
   }
 
   test("Simple UDF") {

@@ -147,13 +147,13 @@ class DDLCommandSuite extends PlanTest {
       "helloworld",
       "com.matthewrathbone.example.SimpleUDFExample",
       Seq(("jar", "/path/to/jar1"), ("jar", "/path/to/jar2")),
-      isTemp = true)(sql1)
+      isTemp = true)
     val expected2 = CreateFunction(
       Some("hello"),
       "world",
       "com.matthewrathbone.example.SimpleUDFExample",
       Seq(("archive", "/path/to/archive"), ("file", "/path/to/file")),
-      isTemp = false)(sql2)
+      isTemp = false)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
   }
@@ -173,22 +173,22 @@ class DDLCommandSuite extends PlanTest {
       None,
       "helloworld",
       ifExists = false,
-      isTemp = true)(sql1)
+      isTemp = true)
     val expected2 = DropFunction(
       None,
       "helloworld",
       ifExists = true,
-      isTemp = true)(sql2)
+      isTemp = true)
     val expected3 = DropFunction(
       Some("hello"),
       "world",
       ifExists = false,
-      isTemp = false)(sql3)
+      isTemp = false)
     val expected4 = DropFunction(
       Some("hello"),
       "world",
       ifExists = true,
-      isTemp = false)(sql4)
+      isTemp = false)
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)

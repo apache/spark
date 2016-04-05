@@ -52,6 +52,8 @@ trait FunctionRegistry {
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
 
+  /** Checks if a function with a given name exists. */
+  def functionExists(name: String): Boolean = lookupFunction(name).isDefined
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -362,7 +364,10 @@ object FunctionRegistry {
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
-          case Failure(e) => throw new AnalysisException(e.getMessage)
+          case Failure(e) =>
+            // the exception is an invocation exception. To get a meaningful message, we need the
+            // cause.
+            throw new AnalysisException(e.getCause.getMessage)
         }
       }
     }

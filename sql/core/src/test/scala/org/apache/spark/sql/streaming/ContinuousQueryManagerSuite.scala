@@ -29,7 +29,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
-import org.apache.spark.sql.execution.streaming.{MemorySink, MemoryStream, StreamExecution, StreamingRelation}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -294,8 +294,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       if (withError) {
         logDebug(s"Terminating query ${queryToStop.name} with error")
         queryToStop.asInstanceOf[StreamExecution].logicalPlan.collect {
-          case StreamingRelation(memoryStream, _) =>
-            memoryStream.asInstanceOf[MemoryStream[Int]].addData(0)
+          case StreamingExecutionRelation(source, _) =>
+            source.asInstanceOf[MemoryStream[Int]].addData(0)
         }
       } else {
         logDebug(s"Stopping query ${queryToStop.name}")
