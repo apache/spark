@@ -380,8 +380,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       if (ctor.getParameterTypes.length != allArgs.length) {
         false
       } else {
-        val givenParams: Array[Class[_]] = allArgs.map(_.getClass)
-        ClassUtils.isAssignable(ctor.getParameterTypes, givenParams, true /* autoboxing */)
+        val argsArray: Array[Class[_]] = allArgs.map(_.getClass)
+        ClassUtils.isAssignable(argsArray, ctor.getParameterTypes, true /* autoboxing */)
       }
     }.getOrElse(ctors.maxBy(_.getParameterTypes.length)) // fall back to older heuristic
 
