@@ -23,6 +23,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.types._
 
+/*
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with PredicateHelper {
   override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
 
@@ -66,3 +67,4 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     }
   }
 }
+*/
