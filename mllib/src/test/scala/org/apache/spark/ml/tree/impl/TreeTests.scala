@@ -131,7 +131,7 @@ private[ml] object TreeTests extends SparkFunSuite {
    * Check if the two models are exactly the same.
    * If the models are not equal, this throws an exception.
    */
-  def checkEqual(a: TreeEnsembleModel, b: TreeEnsembleModel): Unit = {
+  def checkEqual[M <: DecisionTreeModel](a: TreeEnsembleModel[M], b: TreeEnsembleModel[M]): Unit = {
     try {
       a.trees.zip(b.trees).foreach { case (treeA, treeB) =>
         TreeTests.checkEqual(treeA, treeB)
