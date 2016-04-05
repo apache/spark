@@ -22,6 +22,7 @@ import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
@@ -47,18 +48,40 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
 }
 
 /**
- * Drops a table from the metastore and removes it if it is cached.
+ * Drops a table/view from the metastore and removes it if it is cached.
  */
 private[hive]
 case class DropTable(
-    tableName: String,
-    ifExists: Boolean) extends RunnableCommand {
+    tableName: TableIdentifier,
+    ifExists: Boolean,
+    isView: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+
+    // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
+    // issue an exception.
+    val catalogTable: Option[CatalogTable] = try {
+      // If the table/view does not exist, it will throw an exception:
+      // - AnalysisException, if it is from InMemoryCatalog.
+      // - NoSuchTableException, if it is from HiveExternalCatalog
+      Option(sqlContext.sessionState.catalog.getTable(tableName))
+    } catch {
+      case _: org.apache.spark.sql.AnalysisException => None
+      case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException => None
+      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException => None
+    }
+
+    catalogTable.map(_.tableType match {
+      case CatalogTableType.VIRTUAL_VIEW if !isView =>
+        throw new AnalysisException(s"Cannot drop a view with DROP TABLE")
+      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+        throw new AnalysisException(s"Cannot drop a table with DROP VIEW")
+      case _ =>
+    })
+
     try {
-      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
+      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName.quotedString))
     } catch {
       // This table's metadata is not in Hive metastore (e.g. the table does not exist).
       case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
@@ -68,10 +91,14 @@ case class DropTable(
       // Users should be able to drop such kinds of tables regardless if there is an error.
       case e: Throwable => log.warn(s"${e.getMessage}", e)
     }
-    hiveContext.invalidateTable(tableName)
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.sessionState.catalog.dropTable(
-      TableIdentifier(tableName), ignoreIfNotExists = true)
+    hiveContext.invalidateTable(tableName.quotedString)
+    val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+    if (isView) {
+      hiveContext.runSqlHive(s"DROP VIEW $ifExistsClause${tableName.quotedString}")
+    } else {
+      hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause${tableName.quotedString}")
+    }
+    hiveContext.sessionState.catalog.dropTable(tableName, ignoreIfNotExists = true)
     Seq.empty[Row]
   }
 }
