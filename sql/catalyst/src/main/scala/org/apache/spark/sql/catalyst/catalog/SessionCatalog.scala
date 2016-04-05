@@ -102,7 +102,7 @@ class SessionCatalog(
   }
 
   def getDatabase(db: String): CatalogDatabase = {
-      externalCatalog.getDatabase(db)
+    externalCatalog.getDatabase(db)
   }
 
   def databaseExists(db: String): Boolean = {
