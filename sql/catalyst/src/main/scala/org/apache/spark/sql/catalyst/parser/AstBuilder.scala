@@ -869,10 +869,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a filtering correlated sub-query. This is not supported yet.
+   * Create a filtering correlated sub-query (EXISTS).
    */
   override def visitExists(ctx: ExistsContext): Expression = {
-    throw new ParseException("EXISTS clauses are not supported.", ctx)
+    Exists(plan(ctx.query))
   }
 
   /**
@@ -930,10 +930,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create an IN expression, where the the right hand side is a query. This is unsupported.
+   * Create an IN expression, where the the right hand side is a query.
    */
   override def visitInSubquery(ctx: InSubqueryContext): Expression = {
-    throw new ParseException("IN with a Sub-query is currently not supported.", ctx)
+    val in = In(expression(ctx.value), InSubQuery(plan(ctx.query)) :: Nil)
+    invertIfNotDefined(in, ctx.NOT)
   }
 
   /**

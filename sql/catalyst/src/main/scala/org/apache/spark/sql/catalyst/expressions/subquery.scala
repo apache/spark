@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, NullType}
 
 /**
  * An interface for subquery that is used in expressions.
@@ -76,4 +76,22 @@ case class ScalarSubquery(
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = ScalarSubquery(plan, exprId)
 
   override def toString: String = s"subquery#${exprId.id}"
+}
+
+
+case class InSubQuery(query: LogicalPlan)
+  extends SubqueryExpression with Unevaluable  {
+  override lazy val resolved: Boolean = false  // can't be resolved
+  override def dataType: DataType = ArrayType(NullType)
+  override def nullable: Boolean = true
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(plan)
+}
+
+case class Exists(query: LogicalPlan) extends SubqueryExpression with Unevaluable {
+  override lazy val resolved: Boolean = false  // can't be resolved
+  override def dataType: DataType = BooleanType
+  override def nullable: Boolean = false
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan)
 }
