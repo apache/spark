@@ -76,7 +76,7 @@ trait CheckAnalysis {
           case g: GroupingID =>
             failAnalysis(s"grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
-          case w @ WindowExpression(AggregateExpression(_, _, true), _) =>
+          case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
           case w @ WindowExpression(_: OffsetWindowFunction, WindowSpecDefinition(_, order,

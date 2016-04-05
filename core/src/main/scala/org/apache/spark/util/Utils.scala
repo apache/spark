@@ -256,10 +256,11 @@ private[spark] object Utils extends Logging {
     dir
   }
 
-  /** Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
-    * copying is disabled by default unless explicitly set transferToEnabled as true,
-    * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
-    */
+  /**
+   * Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
+   * copying is disabled by default unless explicitly set transferToEnabled as true,
+   * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
+   */
   def copyStream(in: InputStream,
                  out: OutputStream,
                  closeStreams: Boolean = false,
@@ -1120,9 +1121,9 @@ private[spark] object Utils extends Logging {
       extraEnvironment: Map[String, String] = Map.empty,
       redirectStderr: Boolean = true): String = {
     val process = executeCommand(command, workingDir, extraEnvironment, redirectStderr)
-    val output = new StringBuffer
+    val output = new StringBuilder
     val threadName = "read stdout for " + command(0)
-    def appendToOutput(s: String): Unit = output.append(s)
+    def appendToOutput(s: String): Unit = output.append(s).append("\n")
     val stdoutThread = processStreamByLine(threadName, process.getInputStream, appendToOutput)
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
@@ -1564,9 +1565,11 @@ private[spark] object Utils extends Logging {
     else -1
   }
 
-  /** Returns the system properties map that is thread-safe to iterator over. It gets the
-    * properties which have been set explicitly, as well as those for which only a default value
-    * has been defined. */
+  /**
+   * Returns the system properties map that is thread-safe to iterator over. It gets the
+   * properties which have been set explicitly, as well as those for which only a default value
+   * has been defined.
+   */
   def getSystemProperties: Map[String, String] = {
     System.getProperties.stringPropertyNames().asScala
       .map(key => (key, System.getProperty(key))).toMap

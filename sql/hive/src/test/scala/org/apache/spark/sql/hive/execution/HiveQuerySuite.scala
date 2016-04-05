@@ -707,7 +707,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   def isExplanation(result: DataFrame): Boolean = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.contains("== Physical Plan ==")
+    explanation.head.startsWith("== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a DataFrame") {
@@ -1294,6 +1294,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertUnsupportedFeature { sql("ALTER INDEX my_index ON my_table REBUILD")}
     assertUnsupportedFeature {
       sql("ALTER INDEX my_index ON my_table set IDXPROPERTIES (\"prop1\"=\"val1_new\")")}
+  }
+
+  test("create/drop macro commands are not supported") {
+    assertUnsupportedFeature {
+      sql("CREATE TEMPORARY MACRO SIGMOID (x DOUBLE) 1.0 / (1.0 + EXP(-x))")
+    }
+    assertUnsupportedFeature { sql("DROP TEMPORARY MACRO SIGMOID") }
   }
 }
 

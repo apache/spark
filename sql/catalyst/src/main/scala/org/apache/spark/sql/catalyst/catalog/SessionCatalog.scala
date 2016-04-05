@@ -163,6 +163,7 @@ class SessionCatalog(
   /**
    * Retrieve the metadata of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then an [[AnalysisException]] is thrown.
    */
   def getTable(name: TableIdentifier): CatalogTable = {
     val db = name.database.getOrElse(currentDb)
@@ -269,6 +270,16 @@ class SessionCatalog(
     } else {
       true // it's a temporary table
     }
+  }
+
+  /**
+   * Return whether a table with the specified name is a temporary table.
+   *
+   * Note: The temporary table cache is checked only when database is not
+   * explicitly specified.
+   */
+  def isTemporaryTable(name: TableIdentifier): Boolean = {
+    !name.database.isDefined && tempTables.contains(formatTableName(name.table))
   }
 
   /**

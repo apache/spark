@@ -116,6 +116,8 @@ statement
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
+    | SHOW TBLPROPERTIES table=tableIdentifier
+        ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
@@ -173,6 +175,8 @@ unsupportedHiveNativeCommands
     | kw1=LOCK kw2=DATABASE
     | kw1=UNLOCK kw2=TABLE
     | kw1=UNLOCK kw2=DATABASE
+    | kw1=CREATE kw2=TEMPORARY kw3=MACRO
+    | kw1=DROP kw2=TEMPORARY kw3=MACRO
     ;
 
 createTableHeader
@@ -584,7 +588,7 @@ frameBound
 
 
 explainOption
-    : LOGICAL | FORMATTED | EXTENDED
+    : LOGICAL | FORMATTED | EXTENDED | CODEGEN
     ;
 
 transactionMode
@@ -633,7 +637,7 @@ nonReserved
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
     | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | TEMPORARY | OPTIONS
     | GROUPING | CUBE | ROLLUP
-    | EXPLAIN | FORMAT | LOGICAL | FORMATTED
+    | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
     | SET
     | VIEW | REPLACE
@@ -724,6 +728,7 @@ DESCRIBE: 'DESCRIBE';
 EXPLAIN: 'EXPLAIN';
 FORMAT: 'FORMAT';
 LOGICAL: 'LOGICAL';
+CODEGEN: 'CODEGEN';
 CAST: 'CAST';
 SHOW: 'SHOW';
 TABLES: 'TABLES';
@@ -758,6 +763,7 @@ SNAPSHOT: 'SNAPSHOT';
 READ: 'READ';
 WRITE: 'WRITE';
 ONLY: 'ONLY';
+MACRO: 'MACRO';
 
 IF: 'IF';
 

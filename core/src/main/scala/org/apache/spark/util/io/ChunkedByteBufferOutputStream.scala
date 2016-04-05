@@ -18,19 +18,25 @@
 package org.apache.spark.util.io
 
 import java.io.OutputStream
+import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.storage.StorageUtils
 
 /**
  * An OutputStream that writes to fixed-size chunks of byte arrays.
  *
  * @param chunkSize size of each chunk, in bytes.
  */
-private[spark]
-class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
+private[spark] class ChunkedByteBufferOutputStream(
+    chunkSize: Int,
+    allocator: Int => ByteBuffer)
+  extends OutputStream {
 
-  private[this] val chunks = new ArrayBuffer[Array[Byte]]
+  private[this] var toChunkedByteBufferWasCalled = false
+
+  private val chunks = new ArrayBuffer[ByteBuffer]
 
   /** Index of the last chunk. Starting with -1 when the chunks array is empty. */
   private[this] var lastChunkIndex = -1
@@ -48,7 +54,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
 
   override def write(b: Int): Unit = {
     allocateNewChunkIfNeeded()
-    chunks(lastChunkIndex)(position) = b.toByte
+    chunks(lastChunkIndex).put(b.toByte)
     position += 1
     _size += 1
   }
@@ -58,7 +64,7 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
     while (written < len) {
       allocateNewChunkIfNeeded()
       val thisBatch = math.min(chunkSize - position, len - written)
-      System.arraycopy(bytes, written + off, chunks(lastChunkIndex), position, thisBatch)
+      chunks(lastChunkIndex).put(bytes, written + off, thisBatch)
       written += thisBatch
       position += thisBatch
     }
@@ -67,33 +73,41 @@ class ByteArrayChunkOutputStream(chunkSize: Int) extends OutputStream {
 
   @inline
   private def allocateNewChunkIfNeeded(): Unit = {
+    require(!toChunkedByteBufferWasCalled, "cannot write after toChunkedByteBuffer() is called")
     if (position == chunkSize) {
-      chunks += new Array[Byte](chunkSize)
+      chunks += allocator(chunkSize)
       lastChunkIndex += 1
       position = 0
     }
   }
 
-  def toArrays: Array[Array[Byte]] = {
+  def toChunkedByteBuffer: ChunkedByteBuffer = {
+    require(!toChunkedByteBufferWasCalled, "toChunkedByteBuffer() can only be called once")
+    toChunkedByteBufferWasCalled = true
     if (lastChunkIndex == -1) {
-      new Array[Array[Byte]](0)
+      new ChunkedByteBuffer(Array.empty[ByteBuffer])
     } else {
       // Copy the first n-1 chunks to the output, and then create an array that fits the last chunk.
       // An alternative would have been returning an array of ByteBuffers, with the last buffer
       // bounded to only the last chunk's position. However, given our use case in Spark (to put
       // the chunks in block manager), only limiting the view bound of the buffer would still
       // require the block manager to store the whole chunk.
-      val ret = new Array[Array[Byte]](chunks.size)
+      val ret = new Array[ByteBuffer](chunks.size)
       for (i <- 0 until chunks.size - 1) {
         ret(i) = chunks(i)
+        ret(i).flip()
       }
       if (position == chunkSize) {
         ret(lastChunkIndex) = chunks(lastChunkIndex)
+        ret(lastChunkIndex).flip()
       } else {
-        ret(lastChunkIndex) = new Array[Byte](position)
-        System.arraycopy(chunks(lastChunkIndex), 0, ret(lastChunkIndex), 0, position)
+        ret(lastChunkIndex) = allocator(position)
+        chunks(lastChunkIndex).flip()
+        ret(lastChunkIndex).put(chunks(lastChunkIndex))
+        ret(lastChunkIndex).flip()
+        StorageUtils.dispose(chunks(lastChunkIndex))
       }
-      ret
+      new ChunkedByteBuffer(ret)
     }
   }
 }

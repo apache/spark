@@ -44,7 +44,7 @@ class StorageLevel(object):
         result = ""
         result += "Disk " if self.useDisk else ""
         result += "Memory " if self.useMemory else ""
-        result += "Tachyon " if self.useOffHeap else ""
+        result += "OffHeap " if self.useOffHeap else ""
         result += "Deserialized " if self.deserialized else "Serialized "
         result += "%sx Replicated" % self.replication
         return result

@@ -296,7 +296,7 @@ private[sql] object StatFunctions extends Logging {
     val defaultRelativeError: Double = 0.01
 
     /**
-     * Statisttics from the Greenwald-Khanna paper.
+     * Statistics from the Greenwald-Khanna paper.
      * @param value the sampled value
      * @param g the minimum rank jump from the previous value's minimum rank
      * @param delta the maximum span of the rank.
