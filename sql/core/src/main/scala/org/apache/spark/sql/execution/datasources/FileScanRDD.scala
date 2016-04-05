@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.{RDD, SqlNewHadoopRDDState}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A single file that should be read, along with partition column values that
@@ -46,36 +50,86 @@ case class PartitionedFile(
  */
 case class FilePartition(index: Int, files: Seq[PartitionedFile]) extends Partition
 
+object FileScanRDD {
+  private val ioExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("FileScanRDD", 16))
+}
+
 class FileScanRDD(
     @transient val sqlContext: SQLContext,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition])
     extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
 
+  /**
+   * To get better interleaving of CPU and IO, this RDD will create a future to prepare the next
+   * file while the current one is being processed. `currentIterator` is the current file and
+   * `nextFile` is the future that will initialize the next file to be read. This includes things
+   * such as starting up connections to open the file and any initial buffering. The expectation
+   * is that `currentIterator` is CPU intensive and `nextFile` is IO intensive.
+   */
+  val asyncIO = sqlContext.conf.filesAsyncIO
+
+  case class NextFile(file: PartitionedFile, iter: Iterator[Object])
+
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
       private[this] val files = split.asInstanceOf[FilePartition].files.toIterator
+      // TODO: do we need to close this?
       private[this] var currentIterator: Iterator[Object] = null
+
+      private[this] var nextFile: Future[NextFile] = if (asyncIO) prepareNextFile() else null
 
       def hasNext = (currentIterator != null && currentIterator.hasNext) || nextIterator()
       def next() = currentIterator.next()
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
-        if (files.hasNext) {
-          val nextFile = files.next()
-          logInfo(s"Reading File $nextFile")
-          SqlNewHadoopRDDState.setInputFileName(nextFile.filePath)
-          currentIterator = readFunction(nextFile)
-          hasNext
+        if (asyncIO) {
+          if (nextFile == null) return false
         } else {
-          SqlNewHadoopRDDState.unsetInputFileName()
-          false
+          if (!files.hasNext) return false
         }
+
+        // Wait for the async task to complete
+        val file = if (asyncIO) {
+          Await.result(nextFile, Duration.Inf)
+        } else {
+          val f = files.next()
+          val it = readFunction(f)
+          NextFile(f, it)
+        }
+
+        // This is only used to evaluate the rest of the execution so we can safely set it here.
+        SqlNewHadoopRDDState.setInputFileName(file.file.filePath)
+        currentIterator = file.iter
+
+        if (asyncIO && files.hasNext) {
+          // Asynchronously start the next file.
+          nextFile = prepareNextFile()
+        } else {
+          nextFile = null
+        }
+
+        hasNext
       }
 
       override def close() = {
         SqlNewHadoopRDDState.unsetInputFileName()
+      }
+
+      def prepareNextFile() = {
+        Future {
+          if (files.hasNext) {
+            val file = files.next()
+            val it = readFunction(file)
+            // Read something from the file to trigger some initial IO.
+            it.hasNext
+            NextFile(file, it)
+          } else {
+            null
+          }
+        }(FileScanRDD.ioExecutionContext)
       }
     }
 
