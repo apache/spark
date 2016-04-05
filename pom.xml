@@ -683,7 +683,7 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
-          <!-- ASM is actually relocated inside of the docker-client JAR but is not relocated.
+          <!-- ASM is actually packaged inside of the docker-client JAR but is not relocated.
                Ordinarily, this would be a problem but in our case it's fine because this package
                is only used in a handful of unit tests which are isolated to their own Maven
                project. For more details, see https://github.com/spotify/docker-client/pull/272.
