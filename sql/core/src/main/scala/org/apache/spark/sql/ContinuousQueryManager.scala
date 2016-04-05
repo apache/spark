@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.{ContinuousQueryListenerBus, Sink, StreamExecution}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.util.ContinuousQueryListener
 
@@ -178,11 +178,19 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
+      val logicalPlan = df.logicalPlan.transform {
+        case StreamingRelation(dataSource, _, output) =>
+          // Materialize source to avoid creating it in every batch
+          val source = dataSource.createSource()
+          // We still need to use the previous `output` instead of `source.schema` as attributes in
+          // "df.logicalPlan" has already used attributes of the previous `output`.
+          StreamingExecutionRelation(source, output)
+      }
       val query = new StreamExecution(
         sqlContext,
         name,
         checkpointLocation,
-        df.logicalPlan,
+        logicalPlan,
         sink,
         trigger)
       query.start()
