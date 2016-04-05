@@ -23,7 +23,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr1,expr2,expr3) - If expr1 is TRUE (expr1 <> 0 and expr1 <> NULL) then IF() returns expr2; otherwise it returns expr3.")
+// scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends Expression {
 
@@ -256,6 +259,8 @@ object CaseKeyWhen {
  * A function that returns the least value of all parameters, skipping null values.
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(n1, ...) - Returns the least value of all parameters, skipping null values.")
 case class Least(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -315,6 +320,8 @@ case class Least(children: Seq[Expression]) extends Expression {
  * A function that returns the greatest value of all parameters, skipping null values.
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(n1, ...) - Returns the greatest value of all parameters, skipping null values.")
 case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = children.forall(_.nullable)

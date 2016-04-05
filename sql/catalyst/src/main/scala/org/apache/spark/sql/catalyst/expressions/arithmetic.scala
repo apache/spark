@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Returns -a.")
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
 
@@ -59,6 +60,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
   override def sql: String = s"(-${child.sql})"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Returns a.")
 case class UnaryPositive(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
   override def prettyName: String = "positive"
@@ -80,7 +83,7 @@ case class UnaryPositive(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric value",
-  extended = "> SELECT _FUNC_('-1');\n1")
+  extended = "> SELECT _FUNC_('-1');\n 1")
 case class Abs(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -464,6 +467,9 @@ case class MinOf(left: Expression, right: Expression)
   override def symbol: String = "min"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(a, b) - Returns the positive modulo",
+  extended = "> SELECT _FUNC_(10,3);\n 1")
 case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def toString: String = s"pmod($left, $right)"

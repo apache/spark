@@ -39,8 +39,7 @@ import org.apache.spark.sql.types._
  *
  * @see [[https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
  *     Algorithms for calculating variance (Wikipedia)]]
- *
- * @param child to compute central moments of.
+  * @param child to compute central moments of.
  */
 abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate {
 
@@ -130,6 +129,8 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
 }
 
 // Compute the population standard deviation of a column
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the standard deviation of a set of numbers.")
 case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
@@ -143,6 +144,8 @@ case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 }
 
 // Compute the sample standard deviation of a column
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the sample standard deviation of a set of numbers.")
 case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
@@ -157,6 +160,8 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 }
 
 // Compute the population variance of a column
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the variance of a set of numbers.")
 case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
@@ -170,6 +175,8 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 }
 
 // Compute the sample variance of a column
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the sample variance of a set of numbers.")
 case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
@@ -183,6 +190,8 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
   override def prettyName: String = "var_samp"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the Skewness value of a set of numbers.")
 case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 
   override def prettyName: String = "skewness"
@@ -196,6 +205,8 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the Kurtosis value of a set of numbers.")
 case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 4
