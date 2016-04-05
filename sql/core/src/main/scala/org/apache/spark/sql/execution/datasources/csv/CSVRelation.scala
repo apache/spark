@@ -83,8 +83,8 @@ object CSVRelation extends Logging {
       malformedLinesInfo: MalformedLinesInfo): Array[String] => Option[InternalRow] = {
     val schemaFields = schema.fields
     val requiredFields = StructType(requiredColumns.map(schema(_))).fields
-    val safeRequiredFields = if (params.countMalformed || params.dropMalformed) {
-      // If `countMalformed` or `dropMalformed` is enabled, then it needs to parse all the values
+    val safeRequiredFields = if (params.dropMalformed) {
+      // If `dropMalformed` is enabled, then it needs to parse all the values
       // so that we can decide which row is malformed.
       requiredFields ++ schemaFields.filterNot(requiredFields.contains(_))
     } else {
@@ -100,16 +100,18 @@ object CSVRelation extends Logging {
     val row = new GenericMutableRow(requiredSize)
 
     (tokens: Array[String]) => {
-      if (params.countMalformed && schemaFields.length != tokens.length) {
-        malformedLinesInfo.add(tokens.mkString(params.delimiter.toString))
-        None
-      } else if (params.dropMalformed && schemaFields.length != tokens.length) {
-        logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+      if (params.dropMalformed && schemaFields.length != tokens.length) {
+        val line = tokens.mkString(params.delimiter.toString)
+        logWarning(s"Dropping malformed line: $line")
+        malformedLinesInfo.add(line)
         None
       } else if (params.failFast && schemaFields.length != tokens.length) {
         throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
           s"${tokens.mkString(params.delimiter.toString)}")
       } else {
+        if (schemaFields.length != tokens.length) {
+          malformedLinesInfo.add(tokens.mkString(params.delimiter.toString))
+        }
         val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.length) {
           tokens ++ new Array[String](schemaFields.length - tokens.length)
         } else if (params.permissive && schemaFields.length < tokens.length) {
@@ -124,8 +126,8 @@ object CSVRelation extends Logging {
             index = safeRequiredIndices(subIndex)
             val field = schemaFields(index)
             // It anyway needs to try to parse since it decides if this row is malformed
-            // or not after trying to cast in `COUNTMALFORMED` or `DROPMALFORMED` mode even if the
-            // casted value is not stored in the row.
+            // or not after trying to cast in `DROPMALFORMED` mode even if the casted
+            // value is not stored in the row.
             val value = CSVTypeCast.castTo(
               indexSafeTokens(index),
               field.dataType,
@@ -138,12 +140,10 @@ object CSVRelation extends Logging {
           }
           Some(row)
         } catch {
-          case NonFatal(e) if params.countMalformed =>
-            malformedLinesInfo.add(tokens.mkString(params.delimiter.toString))
-            None
           case NonFatal(e) if params.dropMalformed =>
-            logWarning("Parse exception. " +
-              s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+            val line = tokens.mkString(params.delimiter.toString)
+            logWarning("Parse exception. " + s"Dropping malformed line: ${line}")
+            malformedLinesInfo.add(line)
             None
         }
       }

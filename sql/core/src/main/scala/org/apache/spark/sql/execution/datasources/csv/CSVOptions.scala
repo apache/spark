@@ -86,7 +86,6 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val failFast = ParseModes.isFailFastMode(parseMode)
   val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
-  val countMalformed = ParseModes.isCountMalformedMode(parseMode)
   val permissive = ParseModes.isPermissiveMode(parseMode)
 
   val nullValue = parameters.getOrElse("nullValue", "")
