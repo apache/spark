@@ -1154,7 +1154,7 @@ setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 
 #' @rdname window
 #' @export
-setGeneric("window", function(x, windowDuration, ...) { standardGeneric("window") })
+setGeneric("window", function(x, ...) { standardGeneric("window") })
 
 #' @rdname year
 #' @export
