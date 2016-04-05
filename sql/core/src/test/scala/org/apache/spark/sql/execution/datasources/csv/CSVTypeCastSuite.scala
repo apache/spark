@@ -155,19 +155,19 @@ class CSVTypeCastSuite extends SparkFunSuite {
   }
 
   test("Type-specific null values are used for casting") {
-    isNull(
+    assertNull(
       CSVTypeCast.castTo("-", ByteType, nullable = true, CSVOptions("byteNullValue", "-")))
-    isNull(
+    assertNull(
       CSVTypeCast.castTo("-", ShortType, nullable = true, CSVOptions("shortNullValue", "-")))
-    isNull(
+    assertNull(
       CSVTypeCast.castTo("-", IntegerType, nullable = true, CSVOptions("integerNullValue", "-")))
-    isNull(
+    assertNull(
       CSVTypeCast.castTo("-", LongType, nullable = true, CSVOptions("longNullValue", "-")))
-    isNull(
+    assertNull(
       CSVTypeCast.castTo("-", FloatType, nullable = true, CSVOptions("floatNullValue", "-")))
-    isNull(
+    assertNull(
       CSVTypeCast.castTo("-", DoubleType, nullable = true, CSVOptions("doubleNullValue", "-")))
-    isNull(
+    assertNull(
       CSVTypeCast.castTo("-", DecimalType.DoubleDecimal, true, CSVOptions("decimalNullValue", "-")))
   }
 }
