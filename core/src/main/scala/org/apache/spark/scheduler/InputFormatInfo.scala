@@ -26,9 +26,9 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.util.ReflectionUtils
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 
 /**
  * :: DeveloperApi ::
@@ -103,7 +103,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     val instance: org.apache.hadoop.mapreduce.InputFormat[_, _] =
       ReflectionUtils.newInstance(inputFormatClazz.asInstanceOf[Class[_]], conf).asInstanceOf[
         org.apache.hadoop.mapreduce.InputFormat[_, _]]
-    val job = new Job(conf)
+    val job = Job.getInstance(conf)
 
     val retval = new ArrayBuffer[SplitInfo]()
     val list = instance.getSplits(job)
@@ -157,7 +157,7 @@ object InputFormatInfo {
     b) Decrement the currently allocated containers on that host.
     c) Compute rack info for each host and update rack -> count map based on (b).
     d) Allocate nodes based on (c)
-    e) On the allocation result, ensure that we dont allocate "too many" jobs on a single node
+    e) On the allocation result, ensure that we don't allocate "too many" jobs on a single node
        (even if data locality on that is very high) : this is to prevent fragility of job if a
        single (or small set of) hosts go down.
 
@@ -173,7 +173,7 @@ object InputFormatInfo {
     for (inputSplit <- formats) {
       val splits = inputSplit.findPreferredLocations()
 
-      for (split <- splits){
+      for (split <- splits) {
         val location = split.hostLocation
         val set = nodeToSplit.getOrElseUpdate(location, new HashSet[SplitInfo])
         set += split

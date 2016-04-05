@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashSet
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
@@ -71,13 +72,13 @@ private[scheduler] abstract class Stage(
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
 
-  val name = callSite.shortForm
-  val details = callSite.longForm
+  val name: String = callSite.shortForm
+  val details: String = callSite.longForm
 
-  private var _internalAccumulators: Seq[Accumulator[Long]] = Seq.empty
+  private var _internalAccumulators: Seq[Accumulator[_]] = Seq.empty
 
   /** Internal accumulators shared across all tasks in this stage. */
-  def internalAccumulators: Seq[Accumulator[Long]] = _internalAccumulators
+  def internalAccumulators: Seq[Accumulator[_]] = _internalAccumulators
 
   /**
    * Re-initialize the internal accumulators associated with this stage.
@@ -134,6 +135,7 @@ private[scheduler] abstract class Stage(
   def latestInfo: StageInfo = _latestInfo
 
   override final def hashCode(): Int = id
+
   override final def equals(other: Any): Boolean = other match {
     case stage: Stage => stage != null && stage.id == id
     case _ => false

@@ -18,8 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * A set of tests that validates support for Hive Explain command.
@@ -37,8 +37,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
                    "== Optimized Logical Plan ==",
-                   "== Physical Plan ==",
-                   "Code Generation")
+                   "== Physical Plan ==")
   }
 
   test("explain create table command") {
@@ -101,5 +100,34 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       assert(!outputs.substring(physicalIndex).contains("Subquery"),
         "Physical Plan should not contain Subquery since it's eliminated by optimizer")
     }
+  }
+
+  test("EXPLAIN CODEGEN command") {
+    checkExistence(sql("EXPLAIN CODEGEN SELECT 1"), true,
+      "WholeStageCodegen",
+      "Generated code:",
+      "/* 001 */ public Object generate(Object[] references) {",
+      "/* 002 */   return new GeneratedIterator(references);",
+      "/* 003 */ }"
+    )
+
+    checkExistence(sql("EXPLAIN CODEGEN SELECT 1"), false,
+      "== Physical Plan =="
+    )
+
+    checkExistence(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"), true,
+      "WholeStageCodegen",
+      "Generated code:",
+      "/* 001 */ public Object generate(Object[] references) {",
+      "/* 002 */   return new GeneratedIterator(references);",
+      "/* 003 */ }"
+    )
+
+    checkExistence(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"), false,
+      "== Parsed Logical Plan ==",
+      "== Analyzed Logical Plan ==",
+      "== Optimized Logical Plan ==",
+      "== Physical Plan =="
+    )
   }
 }

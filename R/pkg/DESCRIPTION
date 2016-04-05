@@ -1,7 +1,7 @@
 Package: SparkR
 Type: Package
 Title: R frontend for Spark
-Version: 1.6.0
+Version: 2.0.0
 Date: 2013-09-09
 Author: The Apache Software Foundation
 Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
@@ -11,17 +11,19 @@ Depends:
     R (>= 3.0),
     methods,
 Suggests:
-    testthat
+    testthat,
+    e1071,
+    survival
 Description: R frontend for Spark
 License: Apache License (== 2.0)
 Collate:
     'schema.R'
     'generics.R'
     'jobj.R'
-    'RDD.R'
-    'pairRDD.R'
     'column.R'
     'group.R'
+    'RDD.R'
+    'pairRDD.R'
     'DataFrame.R'
     'SQLContext.R'
     'backend.R'
@@ -34,4 +36,6 @@ Collate:
     'serialize.R'
     'sparkR.R'
     'stats.R'
+    'types.R'
     'utils.R'
+RoxygenNote: 5.0.1

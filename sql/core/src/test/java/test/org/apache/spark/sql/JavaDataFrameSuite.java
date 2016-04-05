@@ -18,10 +18,14 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import scala.collection.JavaConverters;
 import scala.collection.Seq;
@@ -34,10 +38,12 @@ import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
-import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.util.sketch.CountMinSketch;
+import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
+import org.apache.spark.util.sketch.BloomFilter;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
@@ -61,8 +67,15 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testExecution() {
-    DataFrame df = context.table("testData").filter("key = 1");
-    Assert.assertEquals(1, df.select("key").collect()[0].get(0));
+    Dataset<Row> df = context.table("testData").filter("key = 1");
+    Assert.assertEquals(1, df.select("key").collectAsList().get(0).get(0));
+  }
+
+  @Test
+  public void testCollectAndTake() {
+    Dataset<Row> df = context.table("testData").filter("key = 1 or key = 2 or key = 3");
+    Assert.assertEquals(3, df.select("key").collectAsList().size());
+    Assert.assertEquals(2, df.select("key").takeAsList(2).size());
   }
 
   /**
@@ -70,7 +83,7 @@ public class JavaDataFrameSuite {
    */
   @Test
   public void testVarargMethods() {
-    DataFrame df = context.table("testData");
+    Dataset<Row> df = context.table("testData");
 
     df.toDF("key1", "value1");
 
@@ -91,7 +104,6 @@ public class JavaDataFrameSuite {
     df.groupBy().mean("key");
     df.groupBy().max("key");
     df.groupBy().min("key");
-    df.groupBy().stddev("key");
     df.groupBy().sum("key");
 
     // Varargs in column expressions
@@ -100,7 +112,7 @@ public class JavaDataFrameSuite {
     df.select(coalesce(col("key")));
 
     // Varargs with mathfunctions
-    DataFrame df2 = context.table("testData2");
+    Dataset<Row> df2 = context.table("testData2");
     df2.select(exp("a"), exp("b"));
     df2.select(exp(log("a")));
     df2.select(pow("a", "a"), pow("b", 2.0));
@@ -114,7 +126,7 @@ public class JavaDataFrameSuite {
   @Ignore
   public void testShow() {
     // This test case is intended ignored, but to make sure it compiles correctly
-    DataFrame df = context.table("testData");
+    Dataset<Row> df = context.table("testData");
     df.show();
     df.show(1000);
   }
@@ -142,7 +154,7 @@ public class JavaDataFrameSuite {
     }
   }
 
-  void validateDataFrameWithBeans(Bean bean, DataFrame df) {
+  void validateDataFrameWithBeans(Bean bean, Dataset<Row> df) {
     StructType schema = df.schema();
     Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
       schema.apply("a"));
@@ -182,7 +194,7 @@ public class JavaDataFrameSuite {
   public void testCreateDataFrameFromLocalJavaBeans() {
     Bean bean = new Bean();
     List<Bean> data = Arrays.asList(bean);
-    DataFrame df = context.createDataFrame(data, Bean.class);
+    Dataset<Row> df = context.createDataFrame(data, Bean.class);
     validateDataFrameWithBeans(bean, df);
   }
 
@@ -190,7 +202,7 @@ public class JavaDataFrameSuite {
   public void testCreateDataFrameFromJavaBeans() {
     Bean bean = new Bean();
     JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
-    DataFrame df = context.createDataFrame(rdd, Bean.class);
+    Dataset<Row> df = context.createDataFrame(rdd, Bean.class);
     validateDataFrameWithBeans(bean, df);
   }
 
@@ -198,9 +210,22 @@ public class JavaDataFrameSuite {
   public void testCreateDataFromFromList() {
     StructType schema = createStructType(Arrays.asList(createStructField("i", IntegerType, true)));
     List<Row> rows = Arrays.asList(RowFactory.create(0));
-    DataFrame df = context.createDataFrame(rows, schema);
-    Row[] result = df.collect();
-    Assert.assertEquals(1, result.length);
+    Dataset<Row> df = context.createDataFrame(rows, schema);
+    List<Row> result = df.collectAsList();
+    Assert.assertEquals(1, result.size());
+  }
+
+  @Test
+  public void testCreateStructTypeFromList(){
+    List<StructField> fields1 = new ArrayList<>();
+    fields1.add(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema1 = StructType$.MODULE$.apply(fields1);
+    Assert.assertEquals(0, schema1.fieldIndex("id"));
+
+    List<StructField> fields2 =
+        Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema2 = StructType$.MODULE$.apply(fields2);
+    Assert.assertEquals(0, schema2.fieldIndex("id"));
   }
 
   private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
@@ -214,14 +239,14 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testCrosstab() {
-    DataFrame df = context.table("testData2");
-    DataFrame crosstab = df.stat().crosstab("a", "b");
+    Dataset<Row> df = context.table("testData2");
+    Dataset<Row> crosstab = df.stat().crosstab("a", "b");
     String[] columnNames = crosstab.schema().fieldNames();
     Assert.assertEquals("a_b", columnNames[0]);
-    Assert.assertEquals("1", columnNames[1]);
-    Assert.assertEquals("2", columnNames[2]);
-    Row[] rows = crosstab.collect();
-    Arrays.sort(rows, crosstabRowComparator);
+    Assert.assertEquals("2", columnNames[1]);
+    Assert.assertEquals("1", columnNames[2]);
+    List<Row> rows = crosstab.collectAsList();
+    Collections.sort(rows, crosstabRowComparator);
     Integer count = 1;
     for (Row row : rows) {
       Assert.assertEquals(row.get(0).toString(), count.toString());
@@ -233,32 +258,143 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testFrequentItems() {
-    DataFrame df = context.table("testData2");
+    Dataset<Row> df = context.table("testData2");
     String[] cols = {"a"};
-    DataFrame results = df.stat().freqItems(cols, 0.2);
-    Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
+    Dataset<Row> results = df.stat().freqItems(cols, 0.2);
+    Assert.assertTrue(results.collectAsList().get(0).getSeq(0).contains(1));
   }
 
   @Test
   public void testCorrelation() {
-    DataFrame df = context.table("testData2");
+    Dataset<Row> df = context.table("testData2");
     Double pearsonCorr = df.stat().corr("a", "b", "pearson");
     Assert.assertTrue(Math.abs(pearsonCorr) < 1.0e-6);
   }
 
   @Test
   public void testCovariance() {
-    DataFrame df = context.table("testData2");
+    Dataset<Row> df = context.table("testData2");
     Double result = df.stat().cov("a", "b");
     Assert.assertTrue(Math.abs(result) < 1.0e-6);
   }
 
   @Test
   public void testSampleBy() {
-    DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
-    DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
-    Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
-    Row[] expected = {RowFactory.create(0, 5), RowFactory.create(1, 8)};
-    Assert.assertArrayEquals(expected, actual);
+    Dataset<Row> df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
+    Dataset<Row> sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    List<Row> actual = sampled.groupBy("key").count().orderBy("key").collectAsList();
+    Assert.assertEquals(0, actual.get(0).getLong(0));
+    Assert.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);
+    Assert.assertEquals(1, actual.get(1).getLong(0));
+    Assert.assertTrue(2 <= actual.get(1).getLong(1) && actual.get(1).getLong(1) <= 13);
+  }
+
+  @Test
+  public void pivot() {
+    Dataset<Row> df = context.table("courseSales");
+    List<Row> actual = df.groupBy("year")
+      .pivot("course", Arrays.<Object>asList("dotNET", "Java"))
+      .agg(sum("earnings")).orderBy("year").collectAsList();
+
+    Assert.assertEquals(2012, actual.get(0).getInt(0));
+    Assert.assertEquals(15000.0, actual.get(0).getDouble(1), 0.01);
+    Assert.assertEquals(20000.0, actual.get(0).getDouble(2), 0.01);
+
+    Assert.assertEquals(2013, actual.get(1).getInt(0));
+    Assert.assertEquals(48000.0, actual.get(1).getDouble(1), 0.01);
+    Assert.assertEquals(30000.0, actual.get(1).getDouble(2), 0.01);
+  }
+
+  private String getResource(String resource) {
+    try {
+      // The following "getResource" has different behaviors in SBT and Maven.
+      // When running in Jenkins, the file path may contain "@" when there are multiple
+      // SparkPullRequestBuilders running in the same worker
+      // (e.g., /home/jenkins/workspace/SparkPullRequestBuilder@2)
+      // When running in SBT, "@" in the file path will be returned as "@", however,
+      // when running in Maven, "@" will be encoded as "%40".
+      // Therefore, we convert it to URI then call "getPath" to decode it back so that it can both
+      // work both in SBT and Maven.
+      URL url = Thread.currentThread().getContextClassLoader().getResource(resource);
+      return url.toURI().getPath();
+    } catch (URISyntaxException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Test
+  public void testGenericLoad() {
+    Dataset<Row> df1 = context.read().format("text").load(getResource("text-suite.txt"));
+    Assert.assertEquals(4L, df1.count());
+
+    Dataset<Row> df2 = context.read().format("text").load(
+      getResource("text-suite.txt"),
+      getResource("text-suite2.txt"));
+    Assert.assertEquals(5L, df2.count());
+  }
+
+  @Test
+  public void testTextLoad() {
+    Dataset<String> ds1 = context.read().text(getResource("text-suite.txt"));
+    Assert.assertEquals(4L, ds1.count());
+
+    Dataset<String> ds2 = context.read().text(
+      getResource("text-suite.txt"),
+      getResource("text-suite2.txt"));
+    Assert.assertEquals(5L, ds2.count());
+  }
+
+  @Test
+  public void testCountMinSketch() {
+    Dataset<Long> df = context.range(1000);
+
+    CountMinSketch sketch1 = df.stat().countMinSketch("id", 10, 20, 42);
+    Assert.assertEquals(sketch1.totalCount(), 1000);
+    Assert.assertEquals(sketch1.depth(), 10);
+    Assert.assertEquals(sketch1.width(), 20);
+
+    CountMinSketch sketch2 = df.stat().countMinSketch(col("id"), 10, 20, 42);
+    Assert.assertEquals(sketch2.totalCount(), 1000);
+    Assert.assertEquals(sketch2.depth(), 10);
+    Assert.assertEquals(sketch2.width(), 20);
+
+    CountMinSketch sketch3 = df.stat().countMinSketch("id", 0.001, 0.99, 42);
+    Assert.assertEquals(sketch3.totalCount(), 1000);
+    Assert.assertEquals(sketch3.relativeError(), 0.001, 1e-4);
+    Assert.assertEquals(sketch3.confidence(), 0.99, 5e-3);
+
+    CountMinSketch sketch4 = df.stat().countMinSketch(col("id"), 0.001, 0.99, 42);
+    Assert.assertEquals(sketch4.totalCount(), 1000);
+    Assert.assertEquals(sketch4.relativeError(), 0.001, 1e-4);
+    Assert.assertEquals(sketch4.confidence(), 0.99, 5e-3);
+  }
+
+  @Test
+  public void testBloomFilter() {
+    Dataset<Long> df = context.range(1000);
+
+    BloomFilter filter1 = df.stat().bloomFilter("id", 1000, 0.03);
+    Assert.assertTrue(filter1.expectedFpp() - 0.03 < 1e-3);
+    for (int i = 0; i < 1000; i++) {
+      Assert.assertTrue(filter1.mightContain(i));
+    }
+
+    BloomFilter filter2 = df.stat().bloomFilter(col("id").multiply(3), 1000, 0.03);
+    Assert.assertTrue(filter2.expectedFpp() - 0.03 < 1e-3);
+    for (int i = 0; i < 1000; i++) {
+      Assert.assertTrue(filter2.mightContain(i * 3));
+    }
+
+    BloomFilter filter3 = df.stat().bloomFilter("id", 1000, 64 * 5);
+    Assert.assertTrue(filter3.bitSize() == 64 * 5);
+    for (int i = 0; i < 1000; i++) {
+      Assert.assertTrue(filter3.mightContain(i));
+    }
+
+    BloomFilter filter4 = df.stat().bloomFilter(col("id").multiply(3), 1000, 64 * 5);
+    Assert.assertTrue(filter4.bitSize() == 64 * 5);
+    for (int i = 0; i < 1000; i++) {
+      Assert.assertTrue(filter4.mightContain(i * 3));
+    }
   }
 }

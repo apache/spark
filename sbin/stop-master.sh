@@ -19,13 +19,10 @@
 
 # Stops the master on the machine this script is executed on.
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
-
-. "$sbin/spark-config.sh"
-
-"$sbin"/spark-daemon.sh stop org.apache.spark.deploy.master.Master 1
-
-if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
-  "$sbin"/../tachyon/bin/tachyon killAll tachyon.master.Master
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
+
+. "${SPARK_HOME}/sbin/spark-config.sh"
+
+"${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.master.Master 1

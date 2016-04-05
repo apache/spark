@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+
+import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -26,6 +29,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
 object Literal {
+  val TrueLiteral: Literal = Literal(true, BooleanType)
+
+  val FalseLiteral: Literal = Literal(false, BooleanType)
+
   def apply(v: Any): Literal = v match {
     case i: Int => Literal(i, IntegerType)
     case l: Long => Literal(l, LongType)
@@ -44,8 +51,43 @@ object Literal {
     case a: Array[Byte] => Literal(a, BinaryType)
     case i: CalendarInterval => Literal(i, CalendarIntervalType)
     case null => Literal(null, NullType)
+    case v: Literal => v
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
+  }
+
+  /**
+   * Constructs a [[Literal]] of [[ObjectType]], for example when you need to pass an object
+   * into code generation.
+   */
+  def fromObject(obj: AnyRef): Literal = new Literal(obj, ObjectType(obj.getClass))
+
+  def fromJSON(json: JValue): Literal = {
+    val dataType = DataType.parseDataType(json \ "dataType")
+    json \ "value" match {
+      case JNull => Literal.create(null, dataType)
+      case JString(str) =>
+        val value = dataType match {
+          case BooleanType => str.toBoolean
+          case ByteType => str.toByte
+          case ShortType => str.toShort
+          case IntegerType => str.toInt
+          case LongType => str.toLong
+          case FloatType => str.toFloat
+          case DoubleType => str.toDouble
+          case StringType => UTF8String.fromString(str)
+          case DateType => java.sql.Date.valueOf(str)
+          case TimestampType => java.sql.Timestamp.valueOf(str)
+          case CalendarIntervalType => CalendarInterval.fromString(str)
+          case t: DecimalType =>
+            val d = Decimal(str)
+            assert(d.changePrecision(t.precision, t.scale))
+            d
+          case _ => null
+        }
+        Literal.create(value, dataType)
+      case other => sys.error(s"$other is not a valid Literal json value")
+    }
   }
 
   def create(v: Any, dataType: DataType): Literal = {
@@ -68,7 +110,7 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case StringType => Literal("")
-    case BinaryType => Literal("".getBytes)
+    case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
@@ -99,6 +141,24 @@ object IntegerLiteral {
 }
 
 /**
+ * Extractor for and other utility methods for decimal literals.
+ */
+object DecimalLiteral {
+  def apply(v: Long): Literal = Literal(Decimal(v))
+
+  def apply(v: Double): Literal = Literal(Decimal(v))
+
+  def unapply(e: Expression): Option[Decimal] = e match {
+    case Literal(v, _: DecimalType) => Some(v.asInstanceOf[Decimal])
+    case _ => None
+  }
+
+  def largerThanLargestLong(v: Decimal): Boolean = v > Decimal(Long.MaxValue)
+
+  def smallerThanSmallestLong(v: Decimal): Boolean = v < Decimal(Long.MinValue)
+}
+
+/**
  * In order to do type checking, use Literal.create() instead of constructor
  */
 case class Literal protected (value: Any, dataType: DataType)
@@ -116,9 +176,21 @@ case class Literal protected (value: Any, dataType: DataType)
     case _ => false
   }
 
+  override protected def jsonFields: List[JField] = {
+    // Turns all kinds of literal values to string in json field, as the type info is hard to
+    // retain in json format, e.g. {"a": 123} can be a int, or double, or decimal, etc.
+    val jsonValue = (value, dataType) match {
+      case (null, _) => JNull
+      case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
+      case (l: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(l).toString)
+      case (other, _) => JString(other.toString)
+    }
+    ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
+  }
+
   override def eval(input: InternalRow): Any = value
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
@@ -132,7 +204,7 @@ case class Literal protected (value: Any, dataType: DataType)
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].genCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}f"
@@ -141,7 +213,7 @@ case class Literal protected (value: Any, dataType: DataType)
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].genCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}D"
@@ -161,19 +233,26 @@ case class Literal protected (value: Any, dataType: DataType)
           ""
         // eval() version may be faster for non-primitive types
         case other =>
-          super.genCode(ctx, ev)
+          super[CodegenFallback].genCode(ctx, ev)
       }
     }
   }
-}
 
-// TODO: Specialize
-case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
-  extends LeafExpression with CodegenFallback {
-
-  def update(expression: Expression, input: InternalRow): Unit = {
-    value = expression.eval(input)
+  override def sql: String = (value, dataType) match {
+    case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
+    case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
+    case (v: UTF8String, StringType) =>
+      // Escapes all backslashes and double quotes.
+      "\"" + v.toString.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    case (v: Byte, ByteType) => v + "Y"
+    case (v: Short, ShortType) => v + "S"
+    case (v: Long, LongType) => v + "L"
+    // Float type doesn't have a suffix
+    case (v: Float, FloatType) => s"CAST($v AS ${FloatType.sql})"
+    case (v: Double, DoubleType) => v + "D"
+    case (v: Decimal, t: DecimalType) => s"CAST($v AS ${t.sql})"
+    case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
+    case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
+    case _ => value.toString
   }
-
-  override def eval(input: InternalRow): Any = value
 }

@@ -66,8 +66,9 @@ setMethod("crosstab",
 #' cov <- cov(df, "title", "gender")
 #' }
 setMethod("cov",
-          signature(x = "DataFrame", col1 = "character", col2 = "character"),
+          signature(x = "DataFrame"),
           function(x, col1, col2) {
+            stopifnot(class(col1) == "character" && class(col2) == "character")
             statFunctions <- callJMethod(x@sdf, "stat")
             callJMethod(statFunctions, "cov", col1, col2)
           })
@@ -77,7 +78,7 @@ setMethod("cov",
 #' Calculates the correlation of two columns of a DataFrame.
 #' Currently only supports the Pearson Correlation Coefficient.
 #' For Spearman Correlation, consider using RDD methods found in MLlib's Statistics.
-#' 
+#'
 #' @param x A SparkSQL DataFrame
 #' @param col1 the name of the first column
 #' @param col2 the name of the second column
@@ -95,8 +96,9 @@ setMethod("cov",
 #' corr <- corr(df, "title", "gender", method = "pearson")
 #' }
 setMethod("corr",
-          signature(x = "DataFrame", col1 = "character", col2 = "character"),
+          signature(x = "DataFrame"),
           function(x, col1, col2, method = "pearson") {
+            stopifnot(class(col1) == "character" && class(col2) == "character")
             statFunctions <- callJMethod(x@sdf, "stat")
             callJMethod(statFunctions, "corr", col1, col2, method)
           })
@@ -109,7 +111,7 @@ setMethod("corr",
 #'
 #' @param x A SparkSQL DataFrame.
 #' @param cols A vector column names to search frequent items in.
-#' @param support (Optional) The minimum frequency for an item to be considered `frequent`. 
+#' @param support (Optional) The minimum frequency for an item to be considered `frequent`.
 #'                Should be greater than 1e-4. Default support = 0.01.
 #' @return a local R data.frame with the frequent items in each column
 #'
@@ -128,10 +130,49 @@ setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
             collect(dataFrame(sct))
           })
 
+#' approxQuantile
+#'
+#' Calculates the approximate quantiles of a numerical column of a DataFrame.
+#'
+#' The result of this algorithm has the following deterministic bound:
+#' If the DataFrame has N elements and if we request the quantile at probability `p` up to error
+#' `err`, then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
+#' of `x` is close to (p * N). More precisely,
+#'   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+#' This method implements a variation of the Greenwald-Khanna algorithm (with some speed
+#' optimizations). The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670
+#' Space-efficient Online Computation of Quantile Summaries]] by Greenwald and Khanna.
+#'
+#' @param x A SparkSQL DataFrame.
+#' @param col The name of the numerical column.
+#' @param probabilities A list of quantile probabilities. Each number must belong to [0, 1].
+#'                      For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+#' @param relativeError The relative target precision to achieve (>= 0). If set to zero,
+#'                      the exact quantiles are computed, which could be very expensive.
+#'                      Note that values greater than 1 are accepted but give the same result as 1.
+#' @return The approximate quantiles at the given probabilities.
+#'
+#' @rdname statfunctions
+#' @name approxQuantile
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
+#' }
+setMethod("approxQuantile",
+          signature(x = "DataFrame", col = "character",
+                    probabilities = "numeric", relativeError = "numeric"),
+          function(x, col, probabilities, relativeError) {
+            statFunctions <- callJMethod(x@sdf, "stat")
+            callJMethod(statFunctions, "approxQuantile", col,
+                        as.list(probabilities), relativeError)
+          })
+
 #' sampleBy
 #'
 #' Returns a stratified sample without replacement based on the fraction given on each stratum.
-#' 
+#'
 #' @param x A SparkSQL DataFrame
 #' @param col column that defines strata
 #' @param fractions A named list giving sampling fraction for each stratum. If a stratum is

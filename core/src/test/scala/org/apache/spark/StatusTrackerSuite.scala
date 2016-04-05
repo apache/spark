@@ -86,4 +86,30 @@ class StatusTrackerSuite extends SparkFunSuite with Matchers with LocalSparkCont
         Set(firstJobId, secondJobId))
     }
   }
+
+  test("getJobIdsForGroup() with takeAsync()") {
+    sc = new SparkContext("local", "test", new SparkConf(false))
+    sc.setJobGroup("my-job-group2", "description")
+    sc.statusTracker.getJobIdsForGroup("my-job-group2") shouldBe empty
+    val firstJobFuture = sc.parallelize(1 to 1000, 1).takeAsync(1)
+    val firstJobId = eventually(timeout(10 seconds)) {
+      firstJobFuture.jobIds.head
+    }
+    eventually(timeout(10 seconds)) {
+      sc.statusTracker.getJobIdsForGroup("my-job-group2") should be (Seq(firstJobId))
+    }
+  }
+
+  test("getJobIdsForGroup() with takeAsync() across multiple partitions") {
+    sc = new SparkContext("local", "test", new SparkConf(false))
+    sc.setJobGroup("my-job-group2", "description")
+    sc.statusTracker.getJobIdsForGroup("my-job-group2") shouldBe empty
+    val firstJobFuture = sc.parallelize(1 to 1000, 2).takeAsync(999)
+    val firstJobId = eventually(timeout(10 seconds)) {
+      firstJobFuture.jobIds.head
+    }
+    eventually(timeout(10 seconds)) {
+      sc.statusTracker.getJobIdsForGroup("my-job-group2") should have size 2
+    }
+  }
 }

@@ -18,11 +18,10 @@
 package org.apache.spark.ui.jobs
 
 import java.util.Date
+import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{Buffer, HashMap, ListBuffer}
-import scala.xml.{NodeSeq, Node, Unparsed, Utility}
-
-import javax.servlet.http.HttpServletRequest
+import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler.StageInfo
@@ -123,7 +122,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
                |    'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
                |    '${
                         if (event.finishReason.isDefined) {
-                          s"""<br>Reason: ${event.finishReason.get}"""
+                          s"""<br>Reason: ${event.finishReason.get.replace("\n", " ")}"""
                         } else {
                           ""
                         }

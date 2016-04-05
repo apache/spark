@@ -21,15 +21,30 @@ import breeze.linalg.{Vector => BV}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.mllib.classification.NaiveBayes.{Multinomial, Bernoulli}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.mllib.classification.NaiveBayes.{Bernoulli, Multinomial}
+import org.apache.spark.mllib.classification.NaiveBayesSuite._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.mllib.classification.NaiveBayesSuite._
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 
-class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
+class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  @transient var dataset: DataFrame = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    val pi = Array(0.5, 0.1, 0.4).map(math.log)
+    val theta = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
+
+    dataset = sqlContext.createDataFrame(generateNaiveBayesInput(pi, theta, 100, 42))
+  }
 
   def validatePrediction(predictionAndLabels: DataFrame): Unit = {
     val numOfErrorPredictions = predictionAndLabels.collect().count {
@@ -71,7 +86,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       model: NaiveBayesModel,
       modelType: String): Unit = {
     featureAndProbabilities.collect().foreach {
-      case Row(features: Vector, probability: Vector) => {
+      case Row(features: Vector, probability: Vector) =>
         assert(probability.toArray.sum ~== 1.0 relTol 1.0e-10)
         val expected = modelType match {
           case Multinomial =>
@@ -82,7 +97,6 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
             throw new UnknownError(s"Invalid modelType: $modelType.")
         }
         assert(probability ~== expected relTol 1.0e-10)
-      }
     }
   }
 
@@ -161,4 +175,35 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       .select("features", "probability")
     validateProbabilities(featureAndProbabilities, model, "bernoulli")
   }
+
+  test("read/write") {
+    def checkModelData(model: NaiveBayesModel, model2: NaiveBayesModel): Unit = {
+      assert(model.pi === model2.pi)
+      assert(model.theta === model2.theta)
+    }
+    val nb = new NaiveBayes()
+    testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings, checkModelData)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val nb = new NaiveBayes()
+    MLTestingUtils.checkNumericTypes[NaiveBayesModel, NaiveBayes](
+      nb, isClassification = true, sqlContext) { (expected, actual) =>
+        assert(expected.pi === actual.pi)
+        assert(expected.theta === actual.theta)
+      }
+  }
+}
+
+object NaiveBayesSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "smoothing" -> 0.1
+  )
 }

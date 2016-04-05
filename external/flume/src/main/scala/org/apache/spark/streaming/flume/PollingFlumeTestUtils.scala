@@ -17,18 +17,18 @@
 
 package org.apache.spark.streaming.flume
 
+import java.nio.charset.StandardCharsets
+import java.util.{Collections, List => JList, Map => JMap}
 import java.util.concurrent._
-import java.util.{Map => JMap, Collections}
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.base.Charsets.UTF_8
 import org.apache.flume.event.EventBuilder
 import org.apache.flume.Context
 import org.apache.flume.channel.MemoryChannel
 import org.apache.flume.conf.Configurables
 
-import org.apache.spark.streaming.flume.sink.{SparkSinkConfig, SparkSink}
+import org.apache.spark.streaming.flume.sink.{SparkSink, SparkSinkConfig}
 
 /**
  * Share codes for Scala and Python unit tests
@@ -137,7 +137,8 @@ private[flume] class PollingFlumeTestUtils {
   /**
    * A Python-friendly method to assert the output
    */
-  def assertOutput(outputHeaders: Seq[JMap[String, String]], outputBodies: Seq[String]): Unit = {
+  def assertOutput(
+      outputHeaders: JList[JMap[String, String]], outputBodies: JList[String]): Unit = {
     require(outputHeaders.size == outputBodies.size)
     val eventSize = outputHeaders.size
     if (eventSize != totalEventsPerChannel * channels.size) {
@@ -151,8 +152,8 @@ private[flume] class PollingFlumeTestUtils {
       var found = false
       var j = 0
       while (j < eventSize && !found) {
-        if (eventBodyToVerify == outputBodies(j) &&
-          eventHeaderToVerify == outputHeaders(j)) {
+        if (eventBodyToVerify == outputBodies.get(j) &&
+          eventHeaderToVerify == outputHeaders.get(j)) {
           found = true
           counter += 1
         }
@@ -192,7 +193,8 @@ private[flume] class PollingFlumeTestUtils {
         val tx = channel.getTransaction
         tx.begin()
         for (j <- 0 until eventsPerBatch) {
-          channel.put(EventBuilder.withBody(s"${channel.getName}-$t".getBytes(UTF_8),
+          channel.put(EventBuilder.withBody(
+            s"${channel.getName}-$t".getBytes(StandardCharsets.UTF_8),
             Collections.singletonMap(s"test-$t", "header")))
           t += 1
         }

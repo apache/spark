@@ -241,6 +241,7 @@ class CloudPickler(Pickler):
         save(f_globals)
         save(defaults)
         save(dct)
+        save(func.__module__)
         write(pickle.TUPLE)
         write(pickle.REDUCE)  # applies _fill_function on the tuple
 
@@ -698,13 +699,14 @@ def _genpartial(func, args, kwds):
     return partial(func, *args, **kwds)
 
 
-def _fill_function(func, globals, defaults, dict):
+def _fill_function(func, globals, defaults, dict, module):
     """ Fills in the rest of function data into the skeleton function object
         that were created via _make_skel_func().
          """
     func.__globals__.update(globals)
     func.__defaults__ = defaults
     func.__dict__ = dict
+    func.__module__ = module
 
     return func
 

@@ -228,6 +228,12 @@ class SerializationTestCase(unittest.TestCase):
         getter2 = ser.loads(ser.dumps(getter))
         self.assertEqual(getter(d), getter2(d))
 
+    def test_function_module_name(self):
+        ser = CloudPickleSerializer()
+        func = lambda x: x
+        func2 = ser.loads(ser.dumps(func))
+        self.assertEqual(func.__module__, func2.__module__)
+
     def test_attrgetter(self):
         from operator import attrgetter
         ser = CloudPickleSerializer()
@@ -1960,6 +1966,18 @@ class ContextTests(unittest.TestCase):
             self.assertGreater(sc.startTime, 0)
 
 
+class ConfTests(unittest.TestCase):
+    def test_memory_conf(self):
+        memoryList = ["1T", "1G", "1M", "1024K"]
+        for memory in memoryList:
+            sc = SparkContext(conf=SparkConf().set("spark.python.worker.memory", memory))
+            l = list(range(1024))
+            random.shuffle(l)
+            rdd = sc.parallelize(l, 4)
+            self.assertEqual(sorted(l), rdd.sortBy(lambda x: x).collect())
+            sc.stop()
+
+
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
 
@@ -2008,6 +2026,7 @@ class NumPyTests(PySparkTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if not _have_numpy:
