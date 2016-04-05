@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Arrays
 
-import org.apache.spark._
+import org.apache.spark.{Partition => RDDPartition, _}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 
@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 private final class ShuffledRowRDDPartition(
     val postShufflePartitionIndex: Int,
     val startPreShufflePartitionIndex: Int,
-    val endPreShufflePartitionIndex: Int) extends Partition {
+    val endPreShufflePartitionIndex: Int) extends RDDPartition {
   override val index: Int = postShufflePartitionIndex
   override def hashCode(): Int = postShufflePartitionIndex
 }
@@ -133,9 +133,9 @@ class ShuffledRowRDD(
 
   override val partitioner: Option[Partitioner] = Some(part)
 
-  override def getPartitions: Array[Partition] = {
+  override def getPartitions: Array[RDDPartition] = {
     assert(partitionStartIndices.length == part.numPartitions)
-    Array.tabulate[Partition](partitionStartIndices.length) { i =>
+    Array.tabulate[RDDPartition](partitionStartIndices.length) { i =>
       val startIndex = partitionStartIndices(i)
       val endIndex =
         if (i < partitionStartIndices.length - 1) {
@@ -147,13 +147,13 @@ class ShuffledRowRDD(
     }
   }
 
-  override def getPreferredLocations(partition: Partition): Seq[String] = {
+  override def getPreferredLocations(partition: RDDPartition): Seq[String] = {
     val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
     tracker.getPreferredLocationsForShuffle(dep, partition.index)
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+  override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val shuffledRowPartition = split.asInstanceOf[ShuffledRowRDDPartition]
     // The range of pre-shuffle partitions that we are fetching at here is
     // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].

@@ -50,9 +50,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
+import org.apache.spark.sql.execution.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.{DataSourceRegister, Filter => SourcesFilter}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
@@ -281,7 +282,7 @@ private[sql] class DefaultSource
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
-      filters: Seq[Filter],
+      filters: Seq[SourcesFilter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
     val parquetConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
     parquetConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
@@ -399,7 +400,7 @@ private[sql] class DefaultSource
       sqlContext: SQLContext,
       dataSchema: StructType,
       requiredColumns: Array[String],
-      filters: Array[Filter],
+      filters: Array[SourcesFilter],
       bucketSet: Option[BitSet],
       allFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
@@ -562,7 +563,7 @@ private[sql] object ParquetRelation extends Logging {
   /** This closure sets various Parquet configurations at both driver side and executor side. */
   private[parquet] def initializeLocalJobFunc(
       requiredColumns: Array[String],
-      filters: Array[Filter],
+      filters: Array[SourcesFilter],
       dataSchema: StructType,
       parquetBlockSize: Long,
       useMetadataCache: Boolean,

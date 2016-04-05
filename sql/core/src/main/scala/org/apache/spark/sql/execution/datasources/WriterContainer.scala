@@ -31,9 +31,9 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.{HadoopFsRelation, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
 

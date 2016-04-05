@@ -36,13 +36,14 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{HadoopRDD, RDD}
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{sources, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveMetastoreTypes, HiveShim}
-import org.apache.spark.sql.sources.{Filter, _}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 import org.apache.spark.util.collection.BitSet
@@ -115,7 +116,7 @@ private[sql] class DefaultSource
       sqlContext: SQLContext,
       dataSchema: StructType,
       requiredColumns: Array[String],
-      filters: Array[Filter],
+      filters: Array[sources.Filter],
       bucketSet: Option[BitSet],
       inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
@@ -129,7 +130,7 @@ private[sql] class DefaultSource
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
-      filters: Seq[Filter],
+      filters: Seq[sources.Filter],
       options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
     val orcConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
@@ -289,7 +290,7 @@ private[orc] class OrcOutputWriter(
 private[orc] case class OrcTableScan(
     @transient sqlContext: SQLContext,
     attributes: Seq[Attribute],
-    filters: Array[Filter],
+    filters: Array[sources.Filter],
     @transient inputPaths: Seq[FileStatus])
   extends Logging
   with HiveInspectors {

@@ -31,10 +31,11 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{sources, AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{JoinedRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -97,7 +98,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sqlContext: SQLContext,
       dataSchema: StructType,
       requiredColumns: Array[String],
-      filters: Array[Filter],
+      filters: Array[sources.Filter],
       bucketSet: Option[BitSet],
       inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
@@ -127,7 +128,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
-      filters: Seq[Filter],
+      filters: Seq[sources.Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
     val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
     val broadcastedConf =
