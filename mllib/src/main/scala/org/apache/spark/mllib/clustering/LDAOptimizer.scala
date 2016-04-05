@@ -81,23 +81,23 @@ final class EMLDAOptimizer extends LDAOptimizer {
   import LDA._
 
   // Adjustable parameters
-  private var deleteLastCheckpoint: Boolean = false
+  private var keepLastCheckpoint: Boolean = true
 
   /**
-   * If using checkpointing, this indicates whether to delete the last checkpoint to clean up.
+   * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
    */
   @Since("2.0.0")
-  def getDeleteLastCheckpoint: Boolean = this.deleteLastCheckpoint
+  def getKeepLastCheckpoint: Boolean = this.keepLastCheckpoint
 
   /**
-   * If using checkpointing, this indicates whether to delete the last
-   * checkpoint to clean up. Deleting the checkpoint can cause failures if a data partition
-   * is lost, so set this bit with care.
-   * Default: false
+   * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
+   * Deleting the checkpoint can cause failures if a data partition is lost, so set this bit with
+   * care.
+   * Default: true
    */
   @Since("2.0.0")
-  def setDeleteLastCheckpoint(deleteLastCheckpoint: Boolean): this.type = {
-    this.deleteLastCheckpoint = deleteLastCheckpoint
+  def setKeepLastCheckpoint(keepLastCheckpoint: Boolean): this.type = {
+    this.keepLastCheckpoint = keepLastCheckpoint
     this
   }
 
@@ -229,12 +229,12 @@ final class EMLDAOptimizer extends LDAOptimizer {
 
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
-    val checkpointFiles: Array[String] = if (deleteLastCheckpoint) {
-      this.graphCheckpointer.deleteAllCheckpoints()
-      Array.empty[String]
-    } else {
+    val checkpointFiles: Array[String] = if (keepLastCheckpoint) {
       this.graphCheckpointer.deleteAllCheckpointsButLast()
       this.graphCheckpointer.getAllCheckpointFiles
+    } else {
+      this.graphCheckpointer.deleteAllCheckpoints()
+      Array.empty[String]
     }
     // The constructor's default arguments assume gammaShape = 100 to ensure equivalence in
     // LDAModel.toLocal conversion.

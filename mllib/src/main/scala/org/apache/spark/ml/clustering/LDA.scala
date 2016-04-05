@@ -42,6 +42,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
 
   /**
    * Param for the number of topics (clusters) to infer. Must be > 1. Default: 10.
+   *
    * @group param
    */
   @Since("1.6.0")
@@ -174,6 +175,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * This uses a variational approximation following Hoffman et al. (2010), where the approximate
    * distribution is called "gamma."  Technically, this method returns this approximation "gamma"
    * for each document.
+   *
    * @group param
    */
   @Since("1.6.0")
@@ -192,6 +194,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * iterations count less.
    * This is called "tau0" in the Online LDA paper (Hoffman et al., 2010)
    * Default: 1024, following Hoffman et al.
+   *
    * @group expertParam
    */
   @Since("1.6.0")
@@ -208,6 +211,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * This should be between (0.5, 1.0] to guarantee asymptotic convergence.
    * This is called "kappa" in the Online LDA paper (Hoffman et al., 2010).
    * Default: 0.51, based on Hoffman et al.
+   *
    * @group expertParam
    */
   @Since("1.6.0")
@@ -231,6 +235,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *       [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].
    *
    * Default: 0.05, i.e., 5% of total documents.
+   *
    * @group param
    */
   @Since("1.6.0")
@@ -247,6 +252,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * document-topic distribution) will be optimized during training.
    * Setting this to true will make the model more expressive and fit the training data better.
    * Default: false
+   *
    * @group expertParam
    */
   @Since("1.6.0")
@@ -259,24 +265,30 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getOptimizeDocConcentration: Boolean = $(optimizeDocConcentration)
 
   /**
-   * For EM optimizer, if using checkpointing, this indicates whether to delete the last
-   * checkpoint to clean up. Deleting the checkpoint can cause failures if a data partition
-   * is lost, so set this bit with care.
-   * Default: false
+   * For EM optimizer, if using checkpointing, this indicates whether to keep the last
+   * checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can
+   * cause failures if a data partition is lost, so set this bit with care.
+   *
+   * See [[DistributedLDAModel.getCheckpointFiles]] for getting remaining checkpoints and
+   * [[DistributedLDAModel.deleteCheckpointFiles]] for removing remaining checkpoints.
+   *
+   * Default: true
+   *
    * @group expertParam
    */
   @Since("2.0.0")
-  final val deleteLastCheckpoint = new BooleanParam(this, "deleteLastCheckpoint",
-    "For EM optimizer, if using checkpointing, this indicates whether to delete the last" +
-      " checkpoint to clean up. Deleting the checkpoint can cause failures if a data partition" +
-      " is lost, so set this bit with care.")
+  final val keepLastCheckpoint = new BooleanParam(this, "keepLastCheckpoint",
+    "For EM optimizer, if using checkpointing, this indicates whether to keep the last" +
+      " checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can" +
+      " cause failures if a data partition is lost, so set this bit with care.")
 
   /** @group expertGetParam */
   @Since("2.0.0")
-  def getDeleteLastCheckpoint: Boolean = $(deleteLastCheckpoint)
+  def getKeepLastCheckpoint: Boolean = $(keepLastCheckpoint)
 
   /**
    * Validates and transforms the input schema.
+   *
    * @param schema input schema
    * @return output schema
    */
@@ -321,7 +333,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
         .setOptimizeDocConcentration($(optimizeDocConcentration))
     case "em" =>
       new OldEMLDAOptimizer()
-        .setDeleteLastCheckpoint($(deleteLastCheckpoint))
+        .setKeepLastCheckpoint($(keepLastCheckpoint))
   }
 }
 
@@ -360,6 +372,7 @@ sealed abstract class LDAModel private[ml] (
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).
+   *
    * @group setParam
    */
   @Since("1.6.0")
@@ -641,10 +654,11 @@ class DistributedLDAModel private[ml] (
   private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
 
   /**
-   * If using checkpointing and [[LDA.deleteLastCheckpoint]] is set to false, then there may be
+   * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    * Note that removing the checkpoints can cause failures if a partition is lost and is needed
    * by certain [[DistributedLDAModel]] methods.
+   *
    * @return  Checkpoint files from training
    */
   @Since("2.0.0")
@@ -652,6 +666,7 @@ class DistributedLDAModel private[ml] (
 
   /**
    * Remove any remaining checkpoint files from training.
+   *
    * @see [[getCheckpointFiles]]
    */
   @Since("2.0.0")
@@ -738,11 +753,12 @@ class LDA @Since("1.6.0") (
 
   setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
     learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
-    optimizeDocConcentration -> true, deleteLastCheckpoint -> false)
+    optimizeDocConcentration -> true, keepLastCheckpoint -> true)
 
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).
+   *
    * @group setParam
    */
   @Since("1.6.0")
@@ -802,7 +818,7 @@ class LDA @Since("1.6.0") (
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setDeleteLastCheckpoint(value: Boolean): this.type = set(deleteLastCheckpoint, value)
+  def setKeepLastCheckpoint(value: Boolean): this.type = set(keepLastCheckpoint, value)
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): LDA = defaultCopy(extra)

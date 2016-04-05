@@ -271,6 +271,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     assert(model_.isInstanceOf[DistributedLDAModel])
     val model = model_.asInstanceOf[DistributedLDAModel]
 
+    // There should be 1 checkpoint remaining.
     assert(model.getCheckpointFiles.length === 1)
     val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
     assert(fs.exists(new Path(model.getCheckpointFiles.head)))
@@ -281,7 +282,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   test("EM LDA checkpointing: remove last checkpoint") {
     // Checkpoint dir is set by MLlibTestSparkContext
     val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3).setCheckpointInterval(1)
-      .setDeleteLastCheckpoint(true)
+      .setKeepLastCheckpoint(false)
     val model_ = lda.fit(dataset)
     assert(model_.isInstanceOf[DistributedLDAModel])
     val model = model_.asInstanceOf[DistributedLDAModel]
