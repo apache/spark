@@ -298,7 +298,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           <ul class="unstyled">
             <li>
               <strong>User:</strong>
-              {parent.userName}
+              {parent.sc.map(_.sparkUser).getOrElse("<unknown>")}
             </li>
             <li>
               <strong>Total Uptime:</strong>
