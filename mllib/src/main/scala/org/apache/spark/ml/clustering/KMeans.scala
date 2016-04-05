@@ -299,7 +299,8 @@ class KMeansSummary private[clustering] (
    * Size of each cluster.
    */
   @Since("2.0.0")
-  lazy val size: Array[Int] = cluster.rdd.map {
+  lazy val clusterSizes: Array[Int] = cluster.rdd.map {
     case Row(clusterIdx: Int) => (clusterIdx, 1)
   }.reduceByKey(_ + _).collect().sortBy(_._1).map(_._2)
+
 }
