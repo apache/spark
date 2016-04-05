@@ -1227,10 +1227,6 @@
             <artifactId>kryo</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-httpclient</groupId>
             <artifactId>commons-httpclient</artifactId>
           </exclusion>
@@ -1408,10 +1404,6 @@
             <artifactId>hive-shims</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro</artifactId>
           </exclusion>
@@ -1467,10 +1459,6 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.curator</groupId>
