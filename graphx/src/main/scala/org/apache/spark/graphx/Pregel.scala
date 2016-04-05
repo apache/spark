@@ -120,7 +120,9 @@ object Pregel extends Logging {
     : Graph[VD, ED] =
   {
     var g = initialMsg match {
-      case Some(msg) => graph.mapVertices((vid, vdata) => vprog(vid, vdata, msg)).cache()
+      case Some(msg) =>
+        graph.mapVertices((vid, vdata) => vprog(vid, vdata, msg)).cache()
+
       case None => graph
     }
 
