@@ -1054,7 +1054,8 @@ def to_utc_timestamp(timestamp, tz):
 
 
 @since(2.0)
-def window(col, windowDuration, slideDuration=None, startTime=None):
+@ignore_unicode_prefix
+def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
     """Bucketize rows into one or more time windows given a timestamp specifying column. Window
     starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
     [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
@@ -1071,20 +1072,29 @@ def window(col, windowDuration, slideDuration=None, startTime=None):
     past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
 
     The output column will be a struct called 'window' by default with the nested columns 'start'
-    and 'end'.
+    and 'end', where 'start' and 'end' will be of `TimestampType`.
 
     >>> df = sqlContext.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
     >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
     >>> w.select(w.window.start.cast("string"), w.window.end.cast("string"), "sum").collect()
-    [Row(start="2016-03-11 09:00:05, end=2016-03-11 09:00:10, sum=1)]
+    [Row(start=u"2016-03-11 09:00:05", end=u"2016-03-11 09:00:10", sum=1)]
     """
+    def check_string_field(field, fieldName):
+        if not field or type(field) is not str:
+            raise TypeError("%s should be provided as a string" % fieldName)
+
     sc = SparkContext._active_spark_context
-    time_col = _to_java_column(col)
+    time_col = _to_java_column(timeColumn)
+    check_string_field(windowDuration, "windowDuration")
     if slideDuration and startTime:
+        check_string_field(slideDuration, "slideDuration")
+        check_string_field(startTime, "startTime")
         res = sc._jvm.functions.window(time_col, windowDuration, slideDuration, startTime)
     elif slideDuration:
+        check_string_field(slideDuration, "slideDuration")
         res = sc._jvm.functions.window(time_col, windowDuration, slideDuration)
     elif startTime:
+        check_string_field(startTime, "startTime")
         res = sc._jvm.functions.window(time_col, windowDuration, windowDuration, startTime)
     else:
         res = sc._jvm.functions.window(time_col, windowDuration)
