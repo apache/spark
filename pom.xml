@@ -164,7 +164,6 @@
     <fasterxml.jackson.version>2.5.3</fasterxml.jackson.version>
     <snappy.version>1.1.2.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
@@ -1642,7 +1641,6 @@
       <dependency>
         <groupId>org.apache.calcite</groupId>
         <artifactId>calcite-core</artifactId>
-        <version>${calcite.version}</version>
         <exclusions>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -1681,7 +1679,6 @@
       <dependency>
         <groupId>org.apache.calcite</groupId>
         <artifactId>calcite-avatica</artifactId>
-        <version>${calcite.version}</version>
         <exclusions>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
