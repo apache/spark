@@ -239,6 +239,24 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       "Function: ~",
       "Class: org.apache.spark.sql.catalyst.expressions.BitwiseNot",
       "Usage: To be added.")
+
+    // Hard coded describe functions
+    checkExistence(sql("describe function  `<>`"), true,
+      "Function: <>",
+      "Usage: a <> b - Returns TRUE if a is not equal to b")
+
+    checkExistence(sql("describe function  `!=`"), true,
+      "Function: !=",
+      "Usage: a != b - Returns TRUE if a is not equal to b")
+
+    checkExistence(sql("describe function  `between`"), true,
+      "Function: between",
+      "Usage: a [NOT] BETWEEN b AND c - evaluate if a is [not] in between b and c")
+
+    checkExistence(sql("describe function  `case`"), true,
+      "Function: case",
+      "Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
+        "When a = b, returns c; when a = d, return e; else return f")
   }
 
   test("SPARK-5371: union with null and sum") {
