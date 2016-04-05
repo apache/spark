@@ -66,7 +66,16 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.HadoopFsRelation$FileStatusCache")
       ) ++ Seq(
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory"),
+        // SPARK-14358 SparkListener from trait to abstract class
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.JavaSparkListener"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.SparkFirehoseListener"),
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.scheduler.SparkListener"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ui.jobs.JobProgressListener"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ui.exec.ExecutorsListener"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ui.env.EnvironmentListener"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ui.storage.StorageListener"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.StorageStatusListener")
       ) ++
       Seq(
         // SPARK-3369 Fix Iterable/Iterator in Java API

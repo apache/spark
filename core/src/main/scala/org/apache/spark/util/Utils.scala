@@ -1121,9 +1121,9 @@ private[spark] object Utils extends Logging {
       extraEnvironment: Map[String, String] = Map.empty,
       redirectStderr: Boolean = true): String = {
     val process = executeCommand(command, workingDir, extraEnvironment, redirectStderr)
-    val output = new StringBuffer
+    val output = new StringBuilder
     val threadName = "read stdout for " + command(0)
-    def appendToOutput(s: String): Unit = output.append(s)
+    def appendToOutput(s: String): Unit = output.append(s).append("\n")
     val stdoutThread = processStreamByLine(threadName, process.getInputStream, appendToOutput)
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
