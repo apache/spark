@@ -52,6 +52,9 @@ trait FunctionRegistry {
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
 
+  /** Checks if a function with a given name exists. */
+  def functionExists(name: String): Boolean = lookupFunction(name).isDefined
+
   /** Clear all registered functions. */
   def clear(): Unit
 

@@ -21,7 +21,7 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -381,11 +381,57 @@ case class ShowDatabasesCommand(databasePattern: Option[String]) extends Runnabl
 }
 
 /**
+ * A command for users to list the properties for a table If propertyKey is specified, the value
+ * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
+ * corresponding values are returned.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW TBLPROPERTIES table_name[('propertyKey')];
+ * }}}
+ */
+case class ShowTablePropertiesCommand(
+    table: TableIdentifier,
+    propertyKey: Option[String]) extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    val schema = AttributeReference("value", StringType, nullable = false)() :: Nil
+    propertyKey match {
+      case None => AttributeReference("key", StringType, nullable = false)() :: schema
+      case _ => schema
+    }
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+
+    if (catalog.isTemporaryTable(table)) {
+      Seq.empty[Row]
+    } else {
+      val catalogTable = sqlContext.sessionState.catalog.getTable(table)
+
+      propertyKey match {
+        case Some(p) =>
+          val propValue = catalogTable
+            .properties
+            .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
+          Seq(Row(propValue))
+        case None =>
+          catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
+      }
+    }
+  }
+}
+
+/**
  * A command for users to list all of the registered functions.
  * The syntax of using this command in SQL is:
  * {{{
- *    SHOW FUNCTIONS
+ *    SHOW FUNCTIONS [LIKE pattern]
  * }}}
+ * For the pattern, '*' matches any sequence of characters (including no characters) and
+ * '|' is for alternation.
+ * For example, "show functions like 'yea*|windo*'" will return "window" and "year".
+ *
  * TODO currently we are simply ignore the db
  */
 case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
@@ -396,18 +442,17 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = pattern match {
-    case Some(p) =>
-      try {
-        val regex = java.util.regex.Pattern.compile(p)
-        sqlContext.sessionState.functionRegistry.listFunction()
-          .filter(regex.matcher(_).matches()).map(Row(_))
-      } catch {
-        // probably will failed in the regex that user provided, then returns empty row.
-        case _: Throwable => Seq.empty[Row]
-      }
-    case None =>
-      sqlContext.sessionState.functionRegistry.listFunction().map(Row(_))
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val dbName = db.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+    // If pattern is not specified, we use '*', which is used to
+    // match any sequence of characters (including no characters).
+    val functionNames =
+      sqlContext.sessionState.catalog
+        .listFunctions(dbName, pattern.getOrElse("*"))
+        .map(_.unquotedString)
+    // The session catalog caches some persistent functions in the FunctionRegistry
+    // so there can be duplicates.
+    functionNames.distinct.sorted.map(Row(_))
   }
 }
 

@@ -155,8 +155,8 @@ final class RandomForestClassificationModel private[ml] (
     @Since("1.6.0") override val numFeatures: Int,
     @Since("1.5.0") override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
-  with RandomForestClassificationModelParams with TreeEnsembleModel with MLWritable
-  with Serializable {
+  with RandomForestClassificationModelParams with TreeEnsembleModel[DecisionTreeClassificationModel]
+  with MLWritable with Serializable {
 
   require(_trees.nonEmpty, "RandomForestClassificationModel requires at least 1 tree.")
 
@@ -172,7 +172,7 @@ final class RandomForestClassificationModel private[ml] (
     this(Identifiable.randomUID("rfc"), trees, numFeatures, numClasses)
 
   @Since("1.4.0")
-  override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
+  override def trees: Array[DecisionTreeClassificationModel] = _trees
 
   // Note: We may add support for weights (based on tree performance) later on.
   private lazy val _treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)

@@ -21,13 +21,13 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.parse.EximUtil
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -130,6 +130,18 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       AnalyzeTable(visitTableIdentifier(ctx.tableIdentifier).toString)
     } else {
       HiveNativeCommand(command(ctx))
+    }
+  }
+
+  /**
+   * Create a [[CatalogStorageFormat]]. This is part of the [[CreateTableAsSelect]] command.
+   */
+  override def visitCreateFileFormat(
+      ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    if (ctx.storageHandler == null) {
+      typedVisit[CatalogStorageFormat](ctx.fileFormat)
+    } else {
+      visitStorageHandler(ctx.storageHandler)
     }
   }
 
@@ -266,22 +278,10 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[Generator]]. Override this method in order to support custom Generators.
-   */
-  override protected def withGenerator(
-      name: String,
-      expressions: Seq[Expression],
-      ctx: LateralViewContext): Generator = {
-    val info = Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse {
-      throw new ParseException(s"Couldn't find Generator function '$name'", ctx)
-    }
-    HiveGenericUDTF(name, new HiveFunctionWrapper(info.getFunctionClass.getName), expressions)
-  }
-
-  /**
    * Create a [[HiveScriptIOSchema]].
    */
   override protected def withScriptIOSchema(
+      ctx: QuerySpecificationContext,
       inRowFormat: RowFormatContext,
       recordWriter: Token,
       outRowFormat: RowFormatContext,
@@ -391,7 +391,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   /**
    * Storage Handlers are currently not supported in the statements we support (CTAS).
    */
-  override def visitStorageHandler(ctx: StorageHandlerContext): AnyRef = withOrigin(ctx) {
+  override def visitStorageHandler(
+      ctx: StorageHandlerContext): CatalogStorageFormat = withOrigin(ctx) {
     throw new ParseException("Storage Handlers are currently unsupported.", ctx)
   }
 

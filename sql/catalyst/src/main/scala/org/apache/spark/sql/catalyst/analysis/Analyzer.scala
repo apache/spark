@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.lang.reflect.Modifier
-
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
@@ -47,10 +45,7 @@ object SimpleAnalyzer
     new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 class SimpleAnalyzer(functionRegistry: FunctionRegistry, conf: CatalystConf)
-  extends Analyzer(
-    new SessionCatalog(new InMemoryCatalog, functionRegistry, conf),
-    functionRegistry,
-    conf)
+  extends Analyzer(new SessionCatalog(new InMemoryCatalog, functionRegistry, conf), conf)
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
@@ -59,7 +54,6 @@ class SimpleAnalyzer(functionRegistry: FunctionRegistry, conf: CatalystConf)
  */
 class Analyzer(
     catalog: SessionCatalog,
-    registry: FunctionRegistry,
     conf: CatalystConf,
     maxIterations: Int = 100)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis {
@@ -87,9 +81,11 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
+      ResolveDeserializer ::
+      ResolveNewInstance ::
+      ResolveUpCast ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
-      ResolveUpCast ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveSortReferences ::
       ResolveGenerate ::
@@ -499,18 +495,9 @@ class Analyzer(
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
-      // A special case for ObjectOperator, because the deserializer expressions in ObjectOperator
-      // should be resolved by their corresponding attributes instead of children's output.
-      case o: ObjectOperator if containsUnresolvedDeserializer(o.deserializers.map(_._1)) =>
-        val deserializerToAttributes = o.deserializers.map {
-          case (deserializer, attributes) => new TreeNodeRef(deserializer) -> attributes
-        }.toMap
-
-        o.transformExpressions {
-          case expr => deserializerToAttributes.get(new TreeNodeRef(expr)).map { attributes =>
-            resolveDeserializer(expr, attributes)
-          }.getOrElse(expr)
-        }
+      // Skips plan which contains deserializer expressions, as they should be resolved by another
+      // rule: ResolveDeserializer.
+      case plan if containsDeserializer(plan.expressions) => plan
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
@@ -524,38 +511,6 @@ class Analyzer(
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
         }
-    }
-
-    private def containsUnresolvedDeserializer(exprs: Seq[Expression]): Boolean = {
-      exprs.exists { expr =>
-        !expr.resolved || expr.find(_.isInstanceOf[BoundReference]).isDefined
-      }
-    }
-
-    def resolveDeserializer(
-        deserializer: Expression,
-        attributes: Seq[Attribute]): Expression = {
-      val unbound = deserializer transform {
-        case b: BoundReference => attributes(b.ordinal)
-      }
-
-      resolveExpression(unbound, LocalRelation(attributes), throws = true) transform {
-        case n: NewInstance
-          // If this is an inner class of another class, register the outer object in `OuterScopes`.
-          // Note that static inner classes (e.g., inner classes within Scala objects) don't need
-          // outer pointer registration.
-          if n.outerPointer.isEmpty &&
-             n.cls.isMemberClass &&
-             !Modifier.isStatic(n.cls.getModifiers) =>
-          val outer = OuterScopes.getOuterScope(n.cls)
-          if (outer == null) {
-            throw new AnalysisException(
-              s"Unable to generate an encoder for inner class `${n.cls.getName}` without " +
-                "access to the scope that this class was defined in.\n" +
-                "Try moving this class out of its parent class.")
-          }
-          n.copy(outerPointer = Some(outer))
-      }
     }
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
@@ -621,6 +576,10 @@ class Analyzer(
           failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
       }
     }
+  }
+
+  private def containsDeserializer(exprs: Seq[Expression]): Boolean = {
+    exprs.exists(_.find(_.isInstanceOf[UnresolvedDeserializer]).isDefined)
   }
 
   protected[sql] def resolveExpression(
@@ -793,9 +752,18 @@ class Analyzer(
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
+          case u @ UnresolvedGenerator(name, children) =>
+            withPosition(u) {
+              catalog.lookupFunction(name, children) match {
+                case generator: Generator => generator
+                case other =>
+                  failAnalysis(s"$name is expected to be a generator. However, " +
+                    s"its class is ${other.getClass.getCanonicalName}, which is not a generator.")
+              }
+            }
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
-              registry.lookupFunction(name, children) match {
+              catalog.lookupFunction(name, children) match {
                 // DISTINCT is not meaningful for a Max or a Min.
                 case max: Max if isDistinct =>
                   AggregateExpression(max, Complete, isDistinct = false)
@@ -1475,7 +1443,94 @@ class Analyzer(
     Project(projectList, Join(left, right, joinType, newCondition))
   }
 
+  /**
+   * Replaces [[UnresolvedDeserializer]] with the deserialization expression that has been resolved
+   * to the given input attributes.
+   */
+  object ResolveDeserializer extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.childrenResolved => p
+      case p if p.resolved => p
 
+      case p => p transformExpressions {
+        case UnresolvedDeserializer(deserializer, inputAttributes) =>
+          val inputs = if (inputAttributes.isEmpty) {
+            p.children.flatMap(_.output)
+          } else {
+            inputAttributes
+          }
+          val unbound = deserializer transform {
+            case b: BoundReference => inputs(b.ordinal)
+          }
+          resolveExpression(unbound, LocalRelation(inputs), throws = true)
+      }
+    }
+  }
+
+  /**
+   * Resolves [[NewInstance]] by finding and adding the outer scope to it if the object being
+   * constructed is an inner class.
+   */
+  object ResolveNewInstance extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.childrenResolved => p
+      case p if p.resolved => p
+
+      case p => p transformExpressions {
+        case n: NewInstance if n.childrenResolved && !n.resolved =>
+          val outer = OuterScopes.getOuterScope(n.cls)
+          if (outer == null) {
+            throw new AnalysisException(
+              s"Unable to generate an encoder for inner class `${n.cls.getName}` without " +
+                "access to the scope that this class was defined in.\n" +
+                "Try moving this class out of its parent class.")
+          }
+          n.copy(outerPointer = Some(outer))
+      }
+    }
+  }
+
+  /**
+   * Replace the [[UpCast]] expression by [[Cast]], and throw exceptions if the cast may truncate.
+   */
+  object ResolveUpCast extends Rule[LogicalPlan] {
+    private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
+      throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
+        s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
+        "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
+        "You can either add an explicit cast to the input data or choose a higher precision " +
+        "type of the field in the target object")
+    }
+
+    private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
+      val fromPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(from)
+      val toPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(to)
+      toPrecedence > 0 && fromPrecedence > toPrecedence
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.childrenResolved => p
+      case p if p.resolved => p
+
+      case p => p transformExpressions {
+        case u @ UpCast(child, _, _) if !child.resolved => u
+
+        case UpCast(child, dataType, walkedTypePath) => (child.dataType, dataType) match {
+          case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) =>
+            fail(child, to, walkedTypePath)
+          case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) =>
+            fail(child, to, walkedTypePath)
+          case (from, to) if illegalNumericPrecedence(from, to) =>
+            fail(child, to, walkedTypePath)
+          case (TimestampType, DateType) =>
+            fail(child, DateType, walkedTypePath)
+          case (StringType, to: NumericType) =>
+            fail(child, to, walkedTypePath)
+          case _ => Cast(child, dataType.asNullable)
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -1556,45 +1611,6 @@ object CleanupAliases extends Rule[LogicalPlan] {
           c.copy(children = c.children.map(trimNonTopLevelAliases))
         case Alias(child, _) if !stop => child
       }
-  }
-}
-
-/**
- * Replace the `UpCast` expression by `Cast`, and throw exceptions if the cast may truncate.
- */
-object ResolveUpCast extends Rule[LogicalPlan] {
-  private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
-    throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
-      s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
-      "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
-      "You can either add an explicit cast to the input data or choose a higher precision " +
-      "type of the field in the target object")
-  }
-
-  private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
-    val fromPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(from)
-    val toPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(to)
-    toPrecedence > 0 && fromPrecedence > toPrecedence
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    plan transformAllExpressions {
-      case u @ UpCast(child, _, _) if !child.resolved => u
-
-      case UpCast(child, dataType, walkedTypePath) => (child.dataType, dataType) match {
-        case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) =>
-          fail(child, to, walkedTypePath)
-        case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) =>
-          fail(child, to, walkedTypePath)
-        case (from, to) if illegalNumericPrecedence(from, to) =>
-          fail(child, to, walkedTypePath)
-        case (TimestampType, DateType) =>
-          fail(child, DateType, walkedTypePath)
-        case (StringType, to: NumericType) =>
-          fail(child, to, walkedTypePath)
-        case _ => Cast(child, dataType.asNullable)
-      }
-    }
   }
 }
 

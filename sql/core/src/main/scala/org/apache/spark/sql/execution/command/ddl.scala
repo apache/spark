@@ -174,26 +174,6 @@ case class DescribeDatabase(
   }
 }
 
-case class CreateFunction(
-    databaseName: Option[String],
-    functionName: String,
-    alias: String,
-    resources: Seq[(String, String)],
-    isTemp: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-/**
- * The DDL command that drops a function.
- * ifExists: returns an error if the function doesn't exist, unless this is true.
- * isTemp: indicates if it is a temporary function.
- */
-case class DropFunction(
-    databaseName: Option[String],
-    functionName: String,
-    ifExists: Boolean,
-    isTemp: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
 /**
  * A command that renames a table/view.
  *

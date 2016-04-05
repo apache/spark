@@ -93,6 +93,22 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * A command for users to list the properties for a table. If propertyKey is specified, the value
+   * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
+   * corresponding values are returned.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW TBLPROPERTIES table_name[('propertyKey')];
+   * }}}
+   */
+  override def visitShowTblProperties(
+      ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
+    ShowTablePropertiesCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.key).map(visitTablePropertyKey))
+  }
+
+  /**
    * Create a [[RefreshTable]] logical plan.
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
@@ -220,16 +236,23 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitTablePropertyList(
       ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
     ctx.tableProperty.asScala.map { property =>
-      // A key can either be a String or a collection of dot separated elements. We need to treat
-      // these differently.
-      val key = if (property.key.STRING != null) {
-        string(property.key.STRING)
-      } else {
-        property.key.getText
-      }
+      val key = visitTablePropertyKey(property.key)
       val value = Option(property.value).map(string).orNull
       key -> value
     }.toMap
+  }
+
+  /**
+   * A table property key can either be String or a collection of dot separated elements. This
+   * function extracts the property key based on whether its a string literal or a table property
+   * identifier.
+   */
+  override def visitTablePropertyKey(key: TablePropertyKeyContext): String = {
+    if (key.STRING != null) {
+      string(key.STRING)
+    } else {
+      key.getText
+    }
   }
 
   /**
@@ -314,10 +337,9 @@ class SparkSqlAstBuilder extends AstBuilder {
     CreateFunction(
       database,
       function,
-      string(ctx.className), // TODO this is not an alias.
+      string(ctx.className),
       resources,
-      ctx.TEMPORARY != null)(
-      command(ctx))
+      ctx.TEMPORARY != null)
   }
 
   /**
@@ -330,7 +352,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
     val (database, function) = visitFunctionName(ctx.qualifiedName)
-    DropFunction(database, function, ctx.EXISTS != null, ctx.TEMPORARY != null)(command(ctx))
+    DropFunction(database, function, ctx.EXISTS != null, ctx.TEMPORARY != null)
   }
 
   /**
