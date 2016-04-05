@@ -75,17 +75,17 @@ statement
     | ALTER TABLE tableIdentifier NOT STORED AS DIRECTORIES            #unstoreTable
     | ALTER TABLE tableIdentifier
         SET SKEWED LOCATION skewedLocationList                         #setTableSkewLocations
-    | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
+    | ALTER kind=TABLE tableIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
-    | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
+    | ALTER kind=VIEW tableIdentifier ADD (IF NOT EXISTS)?
         partitionSpec+                                                 #addTablePartition
     | ALTER TABLE tableIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER TABLE from=tableIdentifier
         EXCHANGE partitionSpec WITH TABLE to=tableIdentifier           #exchangeTablePartition
-    | ALTER TABLE tableIdentifier
+    | ALTER kind=TABLE tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
-    | ALTER VIEW tableIdentifier
+    | ALTER kind=VIEW tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE tableIdentifier ARCHIVE partitionSpec                #archiveTablePartition
     | ALTER TABLE tableIdentifier UNARCHIVE partitionSpec              #unarchiveTablePartition
