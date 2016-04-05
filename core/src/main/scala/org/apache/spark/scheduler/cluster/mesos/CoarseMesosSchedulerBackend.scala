@@ -295,12 +295,12 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   /**
-    * Launches executors on accepted offers, and declines unused offers. Executors are launched
-    * round-robin on offers.
-    *
-    * @param d SchedulerDriver
-    * @param offers Mesos offers that match attribute constraints
-    */
+   * Launches executors on accepted offers, and declines unused offers. Executors are launched
+   * round-robin on offers.
+   *
+   * @param d SchedulerDriver
+   * @param offers Mesos offers that match attribute constraints
+   */
   private def handleMatchedOffers(d: SchedulerDriver, offers: Buffer[Offer]): Unit = {
     val tasks = buildMesosTasks(offers)
     for (offer <- offers) {
@@ -336,12 +336,12 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   /**
-    * Returns a map from OfferIDs to the tasks to launch on those offers.  In order to maximize
-    * per-task memory and IO, tasks are round-robin assigned to offers.
-    *
-    * @param offers Mesos offers that match attribute constraints
-    * @return A map from OfferID to a list of Mesos tasks to launch on that offer
-    */
+   * Returns a map from OfferIDs to the tasks to launch on those offers.  In order to maximize
+   * per-task memory and IO, tasks are round-robin assigned to offers.
+   *
+   * @param offers Mesos offers that match attribute constraints
+   * @return A map from OfferID to a list of Mesos tasks to launch on that offer
+   */
   private def buildMesosTasks(offers: Buffer[Offer]): Map[OfferID, List[MesosTaskInfo]] = {
     // offerID -> tasks
     val tasks = new HashMap[OfferID, List[MesosTaskInfo]].withDefaultValue(Nil)

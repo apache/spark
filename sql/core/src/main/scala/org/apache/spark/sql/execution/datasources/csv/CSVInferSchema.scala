@@ -33,11 +33,11 @@ import org.apache.spark.unsafe.types.UTF8String
 private[csv] object CSVInferSchema {
 
   /**
-    * Similar to the JSON schema inference
-    *     1. Infer type of each row
-    *     2. Merge row types to find common type
-    *     3. Replace any null types with string type
-    */
+   * Similar to the JSON schema inference
+   *     1. Infer type of each row
+   *     2. Merge row types to find common type
+   *     3. Replace any null types with string type
+   */
   def infer(
       tokenRdd: RDD[Array[String]],
       header: Array[String],
@@ -75,9 +75,9 @@ private[csv] object CSVInferSchema {
   }
 
   /**
-    * Infer type of string field. Given known type Double, and a string "1", there is no
-    * point checking if it is an Int, as the final type must be Double or higher.
-    */
+   * Infer type of string field. Given known type Double, and a string "1", there is no
+   * point checking if it is an Int, as the final type must be Double or higher.
+   */
   def inferField(typeSoFar: DataType, field: String, nullValue: String = ""): DataType = {
     if (field == null || field.isEmpty || field == nullValue) {
       typeSoFar
@@ -142,9 +142,9 @@ private[csv] object CSVInferSchema {
   private val numericPrecedence: IndexedSeq[DataType] = HiveTypeCoercion.numericPrecedence
 
   /**
-    * Copied from internal Spark api
-    * [[org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion]]
-    */
+   * Copied from internal Spark api
+   * [[org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion]]
+   */
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
     case (NullType, t1) => Some(t1)

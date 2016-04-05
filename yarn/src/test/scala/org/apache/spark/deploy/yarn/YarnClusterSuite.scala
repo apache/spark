@@ -85,6 +85,35 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testBasicYarnApp(false)
   }
 
+  test("run Spark in yarn-client mode with different configurations") {
+    testBasicYarnApp(true,
+      Map(
+        "spark.driver.memory" -> "512m",
+        "spark.executor.cores" -> "1",
+        "spark.executor.memory" -> "512m",
+        "spark.executor.instances" -> "2"
+      ))
+  }
+
+  test("run Spark in yarn-cluster mode with different configurations") {
+    testBasicYarnApp(true,
+      Map(
+        "spark.driver.memory" -> "512m",
+        "spark.driver.cores" -> "1",
+        "spark.executor.cores" -> "1",
+        "spark.executor.memory" -> "512m",
+        "spark.executor.instances" -> "2"
+      ))
+  }
+
+  test("run Spark in yarn-client mode with additional jar") {
+    testWithAddJar(true)
+  }
+
+  test("run Spark in yarn-cluster mode with additional jar") {
+    testWithAddJar(false)
+  }
+
   test("run Spark in yarn-cluster mode unsuccessfully") {
     // Don't provide arguments so the driver will fail.
     val finalState = runSpark(false, mainClassName(YarnClusterDriver.getClass))
@@ -139,11 +168,24 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }
   }
 
-  private def testBasicYarnApp(clientMode: Boolean): Unit = {
+  private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
-      appArgs = Seq(result.getAbsolutePath()))
+      appArgs = Seq(result.getAbsolutePath()),
+      extraConf = conf)
     checkResult(finalState, result)
+  }
+
+  private def testWithAddJar(clientMode: Boolean): Unit = {
+    val originalJar = TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
+    val driverResult = File.createTempFile("driver", null, tempDir)
+    val executorResult = File.createTempFile("executor", null, tempDir)
+    val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
+      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
+      extraClassPath = Seq(originalJar.getPath()),
+      extraJars = Seq("local:" + originalJar.getPath()))
+    checkResult(finalState, driverResult, "ORIGINAL")
+    checkResult(finalState, executorResult, "ORIGINAL")
   }
 
   private def testPySpark(clientMode: Boolean): Unit = {
