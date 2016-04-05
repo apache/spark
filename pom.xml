@@ -1251,11 +1251,6 @@
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
           </exclusion>
-          <!--  this is needed and must be explicitly included later-->
-          <exclusion>
-            <groupId>org.apache.calcite</groupId>
-            <artifactId>calcite-core</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.apache.curator</groupId>
             <artifactId>apache-curator</artifactId>
