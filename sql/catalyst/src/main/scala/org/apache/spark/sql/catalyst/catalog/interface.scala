@@ -146,21 +146,10 @@ abstract class ExternalCatalog {
 
   def createFunction(db: String, funcDefinition: CatalogFunction): Unit
 
-  // TODO: dropFunction should take a FunctionIdentifier.
   def dropFunction(db: String, funcName: String): Unit
 
   def renameFunction(db: String, oldName: String, newName: String): Unit
 
-  /**
-   * Alter a function whose name that matches the one specified in `funcDefinition`,
-   * assuming the function exists.
-   *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
-   */
-  def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
-
-  // TODO: getFunction should take a FunctionIdentifier.
   def getFunction(db: String, funcName: String): CatalogFunction
 
   def listFunctions(db: String, pattern: String): Seq[String]

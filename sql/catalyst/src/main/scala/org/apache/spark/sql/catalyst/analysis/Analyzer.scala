@@ -47,9 +47,7 @@ object SimpleAnalyzer
     new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 class SimpleAnalyzer(functionRegistry: FunctionRegistry, conf: CatalystConf)
-  extends Analyzer(
-    new SessionCatalog(new InMemoryCatalog, functionRegistry, conf),
-    conf)
+  extends Analyzer(new SessionCatalog(new InMemoryCatalog, functionRegistry, conf), conf)
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and

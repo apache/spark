@@ -25,10 +25,17 @@ import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 
 /**
  * The DDL command that creates a function.
- * alias: the class name that implements the created function.
- * resources: Jars, files, or archives which need to be added to the environment when the function
- *            is referenced for the first time by a session.
- * isTemp: indicates if it is a temporary function.
+ * To create a temporary function, the syntax of using this command in SQL is:
+ * {{{
+ *    CREATE TEMPORARY FUNCTION functionName
+ *    AS className [USING JAR\FILE 'uri' [, JAR|FILE 'uri']]
+ * }}}
+ *
+ * To create a permanent function, the syntax in SQL is:
+ * {{{
+ *    CREATE FUNCTION [databaseName.]functionName
+ *    AS className [USING JAR\FILE 'uri' [, JAR|FILE 'uri']]
+ * }}}
  */
 // TODO: Use Seq[FunctionResource] instead of Seq[(String, String)] for resources.
 case class CreateFunction(
@@ -55,17 +62,16 @@ case class CreateFunction(
       sqlContext.sessionState.catalog.createTempFunction(
         functionName, info, builder, ignoreIfExists = false)
     } else {
+      // For a permanent, we will store the metadata into underlying external catalog.
+      // This function will be loaded into the FunctionRegistry when a query uses it.
+      // We do not load it into FunctionRegistry right now.
       val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
       val func = FunctionIdentifier(functionName, Some(dbName))
       val catalogFunc = CatalogFunction(func, className, resources)
-      // We are creating a permanent function. First, we want to check if this function
-      // has already been created.
-      // Check if the function to create is already existing. If so, throw exception.
       if (sqlContext.sessionState.catalog.functionExists(func)) {
         throw new AnalysisException(
           s"Function '$functionName' already exists in database '$dbName'.")
       }
-      // This function will be loaded into the FunctionRegistry when a query uses it.
       sqlContext.sessionState.catalog.createFunction(catalogFunc)
     }
     Seq.empty[Row]
@@ -85,24 +91,23 @@ case class DropFunction(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(
           s"It is not allowed to provide database name when dropping a temporary function. " +
             s"However, database name ${databaseName.get} is provided.")
       }
-      sqlContext.sessionState.catalog.dropTempFunction(functionName, ifExists)
+      catalog.dropTempFunction(functionName, ifExists)
     } else {
-      // We are dropping a permanent.
-      val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+      // We are dropping a permanent function.
+      val dbName = databaseName.getOrElse(catalog.getCurrentDatabase)
       val func = FunctionIdentifier(functionName, Some(dbName))
-      if (!ifExists) {
-        if (!sqlContext.sessionState.catalog.functionExists(func)) {
-          throw new AnalysisException(
-            s"Function '$functionName' does not exist in database '$dbName'.")
-        }
+      if (!ifExists && !catalog.functionExists(func)) {
+        throw new AnalysisException(
+          s"Function '$functionName' does not exist in database '$dbName'.")
       }
-      sqlContext.sessionState.catalog.dropFunction(func)
+      catalog.dropFunction(func)
     }
     Seq.empty[Row]
   }

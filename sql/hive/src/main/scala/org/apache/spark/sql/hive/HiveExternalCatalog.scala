@@ -288,10 +288,6 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     client.renameFunction(db, oldName, newName)
   }
 
-  override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = withClient {
-    client.alterFunction(db, funcDefinition)
-  }
-
   override def getFunction(db: String, funcName: String): CatalogFunction = withClient {
     client.getFunction(db, funcName)
   }

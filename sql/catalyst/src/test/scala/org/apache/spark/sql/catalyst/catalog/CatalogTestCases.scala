@@ -465,21 +465,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("alter function") {
-    val catalog = newBasicCatalog()
-    assert(catalog.getFunction("db2", "func1").className == funcClass)
-    catalog.alterFunction("db2", newFunc("func1").copy(className = "muhaha"))
-    assert(catalog.getFunction("db2", "func1").className == "muhaha")
-    intercept[AnalysisException] { catalog.alterFunction("db2", newFunc("funcky")) }
-  }
-
-  test("alter function when database does not exist") {
-    val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.alterFunction("does_not_exist", newFunc())
-    }
-  }
-
   test("list functions") {
     val catalog = newBasicCatalog()
     catalog.createFunction("db2", newFunc("func2"))

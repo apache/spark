@@ -434,8 +434,10 @@ class SessionCatalog(
     val db = name.database.getOrElse(currentDb)
     val qualified = name.copy(database = Some(db)).unquotedString
     if (functionRegistry.functionExists(qualified)) {
-      // If we have loaded this function into FunctionRegistry,
+      // If we have loaded this function into the FunctionRegistry,
       // also drop it from there.
+      // For a permanent function, because we loaded it to the FunctionRegistry
+      // when it's first used, we also need to drop it from the FunctionRegistry.
       functionRegistry.dropFunction(qualified)
     }
     externalCatalog.dropFunction(db, name.funcName)
@@ -454,8 +456,7 @@ class SessionCatalog(
   }
 
   /**
-   * Check if a function is already existing.
-   *
+   * Check if the specified function exists.
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
     if (functionRegistry.functionExists(name.unquotedString)) {
@@ -464,6 +465,8 @@ class SessionCatalog(
     } else {
       // Need to check if this function exists in the metastore.
       try {
+        // TODO: It's better to ask external catalog if this function exists.
+        // So, we can avoid of having this hacky try/catch block.
         getFunction(name) != null
       } catch {
         case _: NoSuchFunctionException => false
@@ -487,14 +490,14 @@ class SessionCatalog(
   }
 
   /**
-   * Loads resources such as JARs and Files for a function.
+   * Loads resources such as JARs and Files for a function. Every resource is represented
+   * by a tuple (resource type, resource uri).
    */
   def loadFunctionResources(resources: Seq[(String, String)]): Unit = {
-    resources.foreach {
-      case (resourceType, uri) =>
-        val functionResource =
-          FunctionResource(FunctionResourceType.fromString(resourceType.toLowerCase), uri)
-        functionResourceLoader.loadResource(functionResource)
+    resources.foreach { case (resourceType, uri) =>
+      val functionResource =
+        FunctionResource(FunctionResourceType.fromString(resourceType.toLowerCase), uri)
+      functionResourceLoader.loadResource(functionResource)
     }
   }
 
@@ -534,7 +537,16 @@ class SessionCatalog(
 
   /**
    * Return an [[Expression]] that represents the specified function, assuming it exists.
-   * Note: This is currently only used for temporary functions.
+   *
+   * For a temporary function or a permanent function that has been loaded,
+   * this method will simply lookup the function through the
+   * FunctionRegistry and create an expression based on the builder.
+   *
+   * For a permanent function that has not been loaded, we will first fetch its metadata
+   * from the underlying external catalog. Then, we will load all resources associated
+   * with this function (i.e. jars and files). Finally, we create a function builder
+   * based on the function class and put the builder into the FunctionRegistry.
+   * The name of this function in the FunctionRegistry will be `databaseName.functionName`.
    */
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     // TODO: Right now, the name can be qualified or not qualified.
@@ -551,7 +563,7 @@ class SessionCatalog(
     } else {
       // The function has not been loaded to the function registry, which means
       // that the function is a permanent function (if it actually has been registered
-      // in the metastore). We need to first put the function in FunctionRegistry.
+      // in the metastore). We need to first put the function in the FunctionRegistry.
       val catalogFunction = try {
         externalCatalog.getFunction(currentDb, name)
       } catch {
@@ -582,7 +594,7 @@ class SessionCatalog(
     val loadedFunctions = functionRegistry.listFunction()
       .filter { f => regex.pattern.matcher(f).matches() }
       .map { f => FunctionIdentifier(f) }
-    // TODO: Actually, there will be dbFunctions that have been loaded into FunctionRegistry.
+    // TODO: Actually, there will be dbFunctions that have been loaded into the FunctionRegistry.
     // So, the returned list may have two entries for the same function.
     dbFunctions ++ loadedFunctions
   }

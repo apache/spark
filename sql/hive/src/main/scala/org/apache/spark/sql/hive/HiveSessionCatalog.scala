@@ -188,7 +188,7 @@ private[sql] class HiveSessionCatalog(
   // xpath_double, xpath_float, xpath_int, xpath_long, xpath_number,
   // xpath_short, and xpath_string.
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    // TODO: Once lookupFunction accepts a TableIdentifier, we should refactor this method to
+    // TODO: Once lookupFunction accepts a FunctionIdentifier, we should refactor this method to
     // if (super.functionExists(name)) {
     //   super.lookupFunction(name, children)
     // } else {

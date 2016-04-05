@@ -52,7 +52,7 @@ trait FunctionRegistry {
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
 
-  /** Checks if a function with a given name exits. */
+  /** Checks if a function with a given name exists. */
   def functionExists(name: String): Boolean = lookupFunction(name).isDefined
 }
 
@@ -343,14 +343,9 @@ object FunctionRegistry {
   /** See usage above. */
   def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
-    expression(name, tag.runtimeClass.asInstanceOf[Class[T]])
-  }
 
-  def expression[T <: Expression](
-      name: String,
-      clazz: Class[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
     // See if we can find a constructor that accepts Seq[Expression]
-    val varargCtor = Try(clazz.getDeclaredConstructor(classOf[Seq[_]])).toOption
+    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
@@ -361,7 +356,7 @@ object FunctionRegistry {
       } else {
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(clazz.getDeclaredConstructor(params : _*)) match {
+        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
           case Success(e) =>
             e
           case Failure(e) =>
@@ -374,6 +369,7 @@ object FunctionRegistry {
       }
     }
 
+    val clazz = tag.runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
       (name,

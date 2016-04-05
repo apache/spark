@@ -402,13 +402,14 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val dbName = db.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+    // If pattern is not specified, we use '*', which is used to
+    // match any sequence of characters (including no characters).
     val functionNames =
       sqlContext.sessionState.catalog
-        .listFunctions(dbName, pattern.getOrElse(".*"))
+        .listFunctions(dbName, pattern.getOrElse("*"))
         .map(_.unquotedString)
-    // We use distinct at here because SessionCatalog's listFunctions will return
-    // duplicated entries for UDFs that have already been loaded into the
-    // FunctionRegistry.
+    // The session catalog caches some persistent functions in the FunctionRegistry
+    // so there can be duplicates.
     functionNames.distinct.sorted.map(Row(_))
   }
 }
