@@ -23,6 +23,8 @@ import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.mockito.Mockito.{mock, verify}
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ManualClock
@@ -787,6 +789,51 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(TaskLocation("host1") === HostTaskLocation("host1"))
     assert(TaskLocation("hdfs_cache_host1") === HDFSCacheTaskLocation("host1"))
     assert(TaskLocation("executor_host1_3") === ExecutorCacheTaskLocation("host1", "3"))
+  }
+
+  test("Kill other task attempts when one attempt belonging to the same task succeeds") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(4)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    val accumUpdatesByTask: Array[Seq[AccumulableInfo]] = taskSet.tasks.map { task =>
+      task.initialAccumulators.map { a => a.toInfo(Some(0L), None) }
+    }
+    // Offer resources for 4 tasks to start
+    for ((k, v) <- List(
+        "exec1" -> "host1",
+        "exec1" -> "host1",
+        "exec2" -> "host2",
+        "exec2" -> "host2")) {
+      val taskOption = manager.resourceOffer(k, v, NO_PREF)
+      assert(taskOption.isDefined)
+      val task = taskOption.get
+      assert(task.executorId === k)
+    }
+    assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
+    // Complete the 3 tasks and leave 1 task in running
+    for (id <- Set(0, 1, 2)) {
+      manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
+      assert(sched.endedTasks(id) === Success)
+    }
+
+    // Wait for the threshold time to start speculative attempt for the running task
+    Thread.sleep(100)
+    val speculation = manager.checkSpeculatableTasks
+    assert(speculation === true)
+    // Offer resource to start the speculative attempt for the running task
+    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption5.isDefined)
+    val task5 = taskOption5.get
+    assert(task5.taskId === 4)
+    assert(task5.executorId === "exec1")
+    assert(task5.attemptNumber === 1)
+    sched.backend = mock(classOf[SchedulerBackend])
+    // Complete the speculative attempt for the running task
+    manager.handleSuccessfulTask(4, createTaskResult(3, accumUpdatesByTask(3)))
+    assert(sched.endedTasks(3) === Success)
+    // Verify that it kills other running attempt
+    verify(sched.backend).killTask(3, "exec2", true)
   }
 
   private def createTaskResult(
