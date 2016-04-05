@@ -295,7 +295,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
           new Path(location, queryName).toUri.toString
         }
       }.getOrElse {
-        Utils.createTempDir("memory.stream").getCanonicalPath
+        Utils.createTempDir(namePrefix = "memory.stream").getCanonicalPath
       }
 
       // If offsets have already been created, we trying to resume a query.
