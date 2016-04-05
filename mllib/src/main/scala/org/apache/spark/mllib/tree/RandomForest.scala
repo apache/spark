@@ -61,9 +61,10 @@ import org.apache.spark.util.Utils
  *                                if numTrees > 1 (forest) set to "sqrt" for classification and
  *                                  to "onethird" for regression.
  *                              If a real value "(0.0-1.0]" is set, this parameter specifies
- *                              the fraction of features in each subset.
- *                              If an integer value "[1-n]" is set, this parameter specifies
- *                              the number of features in each subset.
+ *                                the fraction of features in each subset.
+ *                              If an integer value "n" is set, this parameter specifies
+ *                                the number of features used in each subset,
+ *                                for integer 0 < n <= (number of features).
  * @param seed Random seed for bootstrapping and choosing feature subsets.
  */
 private class RandomForest (
@@ -76,7 +77,7 @@ private class RandomForest (
   strategy.assertValid()
   require(numTrees > 0, s"RandomForest requires numTrees > 0, but was given numTrees = $numTrees.")
   require(RandomForest.supportedFeatureSubsetStrategies.contains(featureSubsetStrategy)
-    || featureSubsetStrategy.matches("^(?:[1-9]\\d*|0\\.\\d*[1-9]\\d*\\d*|1\\.0+)$"),
+    || featureSubsetStrategy.matches(NewRFParams.supportedFeatureSubsetStrategiesRegex),
     s"RandomForest given invalid featureSubsetStrategy: $featureSubsetStrategy." +
     s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}," +
     s" (0.0-1.0], [1-n].")

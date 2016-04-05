@@ -185,7 +185,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
     }
 
     val isIntRegex = "^([1-9]\\d*)$".r
-    val isFractionRegex = "^(0\\.\\d*[1-9]\\d*\\d*|1\\.0+)$".r
+    val isFractionRegex = "^(0?\\.\\d*[1-9]\\d*|1\\.0+)$".r
     val numFeaturesPerNode: Int = _featureSubsetStrategy match {
       case "all" => numFeatures
       case "sqrt" => math.sqrt(numFeatures).ceil.toInt

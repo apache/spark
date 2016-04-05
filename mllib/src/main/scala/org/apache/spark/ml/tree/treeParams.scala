@@ -330,7 +330,7 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    *  - "sqrt": use sqrt(number of features)
    *  - "log2": use log2(number of features)
    *  - "(0.0-1.0]": use the specified fraction of features
-   *  - "[1-n]": use the specified number of features
+   *  - "n": use n features, for integer 0 < n <= (number of features)
    * (default = "auto")
    *
    * These various settings are based on the following references:
@@ -349,7 +349,7 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
       s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}",
     (value: String) =>
       RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
-      || value.matches("^(?:[1-9]\\d*|0\\.\\d*[1-9]\\d*\\d*|1\\.0+)$"))
+      || value.matches(RandomForestParams.supportedFeatureSubsetStrategiesRegex))
 
   setDefault(featureSubsetStrategy -> "auto")
 
@@ -396,6 +396,9 @@ private[spark] object RandomForestParams {
   // These options should be lowercase.
   final val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
+
+  // The regex to capture "(0.0-1.0]", and "n" for integer 0 < n <= (number of features)
+  final val supportedFeatureSubsetStrategiesRegex = "^(?:[1-9]\\d*|0?\\.\\d*[1-9]\\d*|1\\.0+)$"
 }
 
 private[ml] trait RandomForestClassifierParams
