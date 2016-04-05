@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.types.LongType
 
-class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper {
+class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with PrivateMethodTester {
 
   test("time window is unevaluable") {
     intercept[UnsupportedOperationException] {
@@ -71,6 +74,38 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(TimeWindow(Literal(10L), text, validDuration, "0 seconds").windowDuration === seconds)
       assert(TimeWindow(Literal(10L), "interval " + text, validDuration, "0 seconds").windowDuration
         === seconds)
+    }
+  }
+
+  private val parseExpression = PrivateMethod[Long]('parseExpression)
+
+  test("parse sql expression for duration in microseconds - string") {
+    val dur = TimeWindow.invokePrivate(parseExpression(Literal("5 seconds")))
+    assert(dur.isInstanceOf[Long])
+    assert(dur === 5000000)
+  }
+
+  test("parse sql expression for duration in microseconds - integer") {
+    val dur = TimeWindow.invokePrivate(parseExpression(Literal(100)))
+    assert(dur.isInstanceOf[Long])
+    assert(dur === 100)
+  }
+
+  test("parse sql expression for duration in microseconds - long") {
+    val dur = TimeWindow.invokePrivate(parseExpression(Literal.create(2 << 52, LongType)))
+    assert(dur.isInstanceOf[Long])
+    assert(dur === (2 << 52))
+  }
+
+  test("parse sql expression for duration in microseconds - invalid interval") {
+    intercept[IllegalArgumentException] {
+      TimeWindow.invokePrivate(parseExpression(Literal("2 apples")))
+    }
+  }
+
+  test("parse sql expression for duration in microseconds - invalid expression") {
+    intercept[AnalysisException] {
+      TimeWindow.invokePrivate(parseExpression(Rand(123)))
     }
   }
 }

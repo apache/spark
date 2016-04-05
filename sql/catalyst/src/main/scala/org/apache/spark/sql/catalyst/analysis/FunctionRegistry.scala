@@ -364,7 +364,10 @@ object FunctionRegistry {
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
-          case Failure(e) => throw new AnalysisException(e.getMessage)
+          case Failure(e) =>
+            // the exception is an invocation exception. To get a meaningful message, we need the
+            // cause.
+            throw new AnalysisException(e.getCause.getMessage)
         }
       }
     }
