@@ -549,8 +549,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         Explode(expressions.head)
       case "json_tuple" =>
         JsonTuple(expressions)
-      case other =>
-        withGenerator(other, expressions, ctx)
+      case name =>
+        UnresolvedGenerator(name, expressions)
     }
 
     Generate(
@@ -560,16 +560,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       Some(ctx.tblName.getText.toLowerCase),
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),
       query)
-  }
-
-  /**
-   * Create a [[Generator]]. Override this method in order to support custom Generators.
-   */
-  protected def withGenerator(
-      name: String,
-      expressions: Seq[Expression],
-      ctx: LateralViewContext): Generator = {
-    throw new ParseException(s"Generator function '$name' is not supported", ctx)
   }
 
   /**

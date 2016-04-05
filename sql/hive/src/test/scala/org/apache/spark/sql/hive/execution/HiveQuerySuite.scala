@@ -62,7 +62,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       TestHive.cacheTables = false
       TimeZone.setDefault(originalTimeZone)
       Locale.setDefault(originalLocale)
-      sql("DROP TEMPORARY FUNCTION udtf_count2")
+      sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
     } finally {
       super.afterAll()
     }
@@ -1230,14 +1230,16 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val e = intercept[AnalysisException] {
       range(1).selectExpr("not_a_udf()")
     }
-    assert(e.getMessage.contains("undefined function not_a_udf"))
+    assert(e.getMessage.contains("Undefined function"))
+    assert(e.getMessage.contains("not_a_udf"))
     var success = false
     val t = new Thread("test") {
       override def run(): Unit = {
         val e = intercept[AnalysisException] {
           range(1).selectExpr("not_a_udf()")
         }
-        assert(e.getMessage.contains("undefined function not_a_udf"))
+        assert(e.getMessage.contains("Undefined function"))
+        assert(e.getMessage.contains("not_a_udf"))
         success = true
       }
     }
