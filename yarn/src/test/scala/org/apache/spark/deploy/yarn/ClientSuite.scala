@@ -273,7 +273,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   test("distribute local spark jars") {
     val temp = Utils.createTempDir()
-    val jarsDir = new File(temp, "lib")
+    val jarsDir = new File(temp, "jars")
     assert(jarsDir.mkdir())
     val jar = TestUtils.createJarWithFiles(Map(), jarsDir)
     new FileOutputStream(new File(temp, "RELEASE")).close()

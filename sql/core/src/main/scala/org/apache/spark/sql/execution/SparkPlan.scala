@@ -249,20 +249,24 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Decode the byte arrays back to UnsafeRows and put them into buffer.
    */
-  private def decodeUnsafeRows(bytes: Array[Byte], buffer: ArrayBuffer[InternalRow]): Unit = {
+  private def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
     val nFields = schema.length
 
     val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(codec.compressedInputStream(bis))
-    var sizeOfNextRow = ins.readInt()
-    while (sizeOfNextRow >= 0) {
-      val bs = new Array[Byte](sizeOfNextRow)
-      ins.readFully(bs)
-      val row = new UnsafeRow(nFields)
-      row.pointTo(bs, sizeOfNextRow)
-      buffer += row
-      sizeOfNextRow = ins.readInt()
+
+    new Iterator[InternalRow] {
+      private var sizeOfNextRow = ins.readInt()
+      override def hasNext: Boolean = sizeOfNextRow >= 0
+      override def next(): InternalRow = {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(nFields)
+        row.pointTo(bs, sizeOfNextRow)
+        sizeOfNextRow = ins.readInt()
+        row
+      }
     }
   }
 
@@ -274,9 +278,18 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
     val results = ArrayBuffer[InternalRow]()
     byteArrayRdd.collect().foreach { bytes =>
-      decodeUnsafeRows(bytes, results)
+      decodeUnsafeRows(bytes).foreach(results.+=)
     }
     results.toArray
+  }
+
+  /**
+   * Runs this query returning the result as an iterator of InternalRow.
+   *
+   * Note: this will trigger multiple jobs (one for each partition).
+   */
+  def executeToIterator(): Iterator[InternalRow] = {
+    getByteArrayRdd().toLocalIterator.flatMap(decodeUnsafeRows)
   }
 
   /**
@@ -325,7 +338,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         (it: Iterator[Array[Byte]]) => if (it.hasNext) it.next() else Array.empty, p)
 
       res.foreach { r =>
-        decodeUnsafeRows(r.asInstanceOf[Array[Byte]], buf)
+        decodeUnsafeRows(r.asInstanceOf[Array[Byte]]).foreach(buf.+=)
       }
 
       partsScanned += p.size

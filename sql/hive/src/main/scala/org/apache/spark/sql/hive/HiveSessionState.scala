@@ -58,7 +58,6 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
         catalog.OrcConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
-        python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
