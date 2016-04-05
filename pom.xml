@@ -1608,10 +1608,6 @@
             <artifactId>guava</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>janino</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.hsqldb</groupId>
             <artifactId>hsqldb</artifactId>
           </exclusion>
