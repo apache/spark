@@ -92,7 +92,8 @@ final class EMLDAOptimizer extends LDAOptimizer {
   /**
    * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
    * Deleting the checkpoint can cause failures if a data partition is lost, so set this bit with
-   * care.
+   * care.  Note that checkpoints will be cleaned up via reference counting, regardless.
+   *
    * Default: true
    */
   @Since("2.0.0")
@@ -101,9 +102,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
     this
   }
 
-  /**
-   * The following fields will only be initialized through the initialize() method
-   */
+  // The following fields will only be initialized through the initialize() method
   private[clustering] var graph: Graph[TopicCounts, TokenCount] = null
   private[clustering] var k: Int = 0
   private[clustering] var vocabSize: Int = 0

@@ -19,7 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -268,6 +268,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * For EM optimizer, if using checkpointing, this indicates whether to keep the last
    * checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can
    * cause failures if a data partition is lost, so set this bit with care.
+   * Note that checkpoints will be cleaned up via reference counting, regardless.
    *
    * See [[DistributedLDAModel.getCheckpointFiles]] for getting remaining checkpoints and
    * [[DistributedLDAModel.deleteCheckpointFiles]] for removing remaining checkpoints.
@@ -656,11 +657,14 @@ class DistributedLDAModel private[ml] (
   /**
    * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
+   *
    * Note that removing the checkpoints can cause failures if a partition is lost and is needed
-   * by certain [[DistributedLDAModel]] methods.
+   * by certain [[DistributedLDAModel]] methods.  Reference counting will clean up the checkpoints
+   * when this model and derivative data go out of scope.
    *
    * @return  Checkpoint files from training
    */
+  @DeveloperApi
   @Since("2.0.0")
   def getCheckpointFiles: Array[String] = _checkpointFiles
 
@@ -669,6 +673,7 @@ class DistributedLDAModel private[ml] (
    *
    * @see [[getCheckpointFiles]]
    */
+  @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
     val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
