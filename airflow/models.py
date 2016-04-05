@@ -2398,7 +2398,8 @@ class DAG(LoggingMixin):
             # AND there are unfinished tasks...
             any(ti.state in State.unfinished() for ti in task_instances) and
             # AND none of them have dependencies met...
-            all(not ti.are_dependencies_met() for ti in task_instances
+            all(not ti.are_dependencies_met(session=session)
+                for ti in task_instances
                 if ti.state in State.unfinished()))
 
         for run in active_runs:

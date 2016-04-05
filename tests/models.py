@@ -26,7 +26,6 @@ from airflow import models, AirflowException
 from airflow.models import TaskInstance as TI
 from airflow.operators import DummyOperator, BashOperator
 from airflow.utils.state import State
-from airflow.utils.tests import get_dag
 
 DEFAULT_DATE = datetime.datetime(2016, 1, 1)
 TEST_DAGS_FOLDER = os.path.join(
@@ -226,7 +225,9 @@ class TaskInstanceTest(unittest.TestCase):
         self.assertEqual(ti.try_number, 4)
 
     def test_depends_on_past(self):
-        dag = get_dag('test_depends_on_past', TEST_DAGS_FOLDER)
+        dagbag = models.DagBag()
+        dag = dagbag.get_dag('test_depends_on_past')
+        dag.clear()
         task = dag.tasks[0]
         run_date = task.start_date + datetime.timedelta(days=5)
         ti = TI(task, run_date)
