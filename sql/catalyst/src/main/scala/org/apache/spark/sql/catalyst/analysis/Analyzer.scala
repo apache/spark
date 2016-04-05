@@ -1827,8 +1827,8 @@ class Analyzer(
       case logical: LogicalPlan => logical transformExpressions {
         // Exclude clause only applies to WindowAggregation functions
         case WindowExpression(wf: WindowFunction,
-        WindowSpecDefinition(_, _, SpecifiedWindowFrame(_, _, _, es)))
-          if es.excludeType != ExcludeNoOthers && notSupportForExclude(wf) =>
+        WindowSpecDefinition(_, _, SpecifiedWindowFrame(_, _, _, et)))
+          if et != ExcludeNoOthers && notSupportForExclude(wf) =>
           failAnalysis(s"Window function ${wf.getClass} does not support exclude clause")
         case WindowExpression(wf: WindowFunction,
         WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))

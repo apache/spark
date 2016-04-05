@@ -59,7 +59,7 @@ case class WindowSpecDefinition(
         }
       }
 
-      (frame.frameType, frame.frameStart, frame.frameEnd, frame.excludeSpec.excludeType) match {
+      (frame.frameType, frame.frameStart, frame.frameEnd, frame.excludeType) match {
         case (RangeFrame, vp: ValuePreceding, _, _) => checkValueBasedBoundaryForRangeFrame()
         case (RangeFrame, vf: ValueFollowing, _, _) => checkValueBasedBoundaryForRangeFrame()
         case (RangeFrame, _, vp: ValuePreceding, _) => checkValueBasedBoundaryForRangeFrame()
@@ -234,7 +234,7 @@ case class SpecifiedWindowFrame(
     frameType: FrameType,
     frameStart: FrameBoundary,
     frameEnd: FrameBoundary,
-    excludeSpec: ExcludeClause = ExcludeClause.defaultExclude) extends WindowFrame {
+    excludeType: ExcludeType = ExcludeNoOthers) extends WindowFrame {
 
   /** If this WindowFrame is valid or not. */
   def validate: Option[String] = (frameType, frameStart, frameEnd) match {
@@ -256,8 +256,8 @@ case class SpecifiedWindowFrame(
   }
 
   override def toString: String = frameType match {
-    case RowFrame => s"ROWS BETWEEN $frameStart AND $frameEnd $excludeSpec"
-    case RangeFrame => s"RANGE BETWEEN $frameStart AND $frameEnd $excludeSpec"
+    case RowFrame => s"ROWS BETWEEN $frameStart AND $frameEnd EXCLUDE $excludeType"
+    case RangeFrame => s"RANGE BETWEEN $frameStart AND $frameEnd EXCLUDE $excludeType"
   }
 }
 
@@ -271,15 +271,15 @@ object SpecifiedWindowFrame {
   def defaultWindowFrame(
       hasOrderSpecification: Boolean,
       acceptWindowFrame: Boolean,
-      excludeSpec: ExcludeClause = ExcludeClause.defaultExclude): SpecifiedWindowFrame = {
+      excludeType: ExcludeType = ExcludeNoOthers): SpecifiedWindowFrame = {
     if (hasOrderSpecification && acceptWindowFrame) {
       // If order spec is defined and the window function supports user specified window frames,
       // the default frame is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
-      SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow, excludeSpec)
+      SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow, excludeType)
     } else {
       // Otherwise, the default frame is
       // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING.
-      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing, excludeSpec)
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing, excludeType)
     }
   }
 }
@@ -292,58 +292,31 @@ sealed trait ExcludeType
 /**
  * Represents the type of Excluding Current Row
  */
-case object ExcludeCurrentRow extends ExcludeType
+case object ExcludeCurrentRow extends ExcludeType {
+  override def toString: String = "CURRENT ROW"
+}
 
 /**
  * Specifies excluding the current row and all rows that are tied with it.
  * Ties occur when there is a match on the order-by column or columns
  */
-case object ExcludeGroup extends ExcludeType
+case object ExcludeGroup extends ExcludeType {
+  override def toString: String = "GROUP"
+}
 
 /**
  * Specifies excluding all rows that are tied with the current row (peer rows),
  * but retaining the current row.
  */
-case object ExcludeTies extends ExcludeType
+case object ExcludeTies extends ExcludeType {
+  override def toString: String = "TIES"
+}
 
 /**
  * Specifies not excluding any rows. This value is the default if you specify no exclusion.
  */
-case object ExcludeNoOthers extends ExcludeType
-
-/**
- * Exclude clause within window framing clause.
- *
- * 'EXCLUDE CURRENT ROW' means the current row for which the window function is calculated
- * is excluded from the current fame.
- * 'EXCLUDE GROUP' means that the nearby rows that match the current row with respect to
- * the orderby expression together with the current row will be excluded from the calculation
- * 'EXCLUDE TIES' means that the nearby rows that match the current row with respect to
- * the orderby expression except the current row will be excluded from the calculation
- * 'EXCLUDE NO OTHERS' means not excluding any rows from the calculation. This is the
- * default behavior. Exclude types, GROUP and TIES, requires ORDER BY clause in the window
- * specification clause.
- * For example, users want to exclude current row from a sliding range framing:
- * RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING EXCLUDE CURRENT ROW
- * @param excludeType The type of exclusion as defined above
- * @param valueOrdering The ordering operator that does the value comparison between 2 rows
- * @param toBeCompared The projection of the orderby expression from a row
- *
- */
-case class ExcludeClause (
-    excludeType: ExcludeType,
-    valueOrdering: Ordering[InternalRow] = null,
-    toBeCompared: Projection = null) {
-
-  override def toString: String = excludeType match {
-    case ExcludeCurrentRow => s"EXCLUDE CURRENT ROW"
-    case ExcludeGroup => s"EXCLUDE GROUP"
-    case ExcludeTies => s"EXCLUDE TIES"
-    case ExcludeNoOthers => s"EXCLUDE NO OTHERS"
-  }
-}
-object ExcludeClause {
-  def defaultExclude: ExcludeClause = ExcludeClause(ExcludeNoOthers)
+case object ExcludeNoOthers extends ExcludeType {
+  override def toString: String = "NO OTHERS"
 }
 
 case class UnresolvedWindowExpression(

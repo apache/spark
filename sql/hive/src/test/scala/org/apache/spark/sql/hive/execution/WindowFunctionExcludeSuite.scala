@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.{QueryTest, AnalysisException, Row}
 
 class WindowFunctionExcludeSuite extends QueryTest with SQLTestUtils with TestHiveSingleton{
 

@@ -248,8 +248,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         """.stripMargin))
   }
 
-  test("Exclude clause"){
-    withTable("table1", "table2"){
+  test("Exclude clause") {
+    withTable("table1", "table2") {
       sql("create table table1 (col1 int, col2 int, col3 int)")
       sql("insert into table1 select 6, 12, 10")
       sql("insert into table1 select 6, 11, 4")
@@ -261,7 +261,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("insert into table1 select 6, 7, 4")
       sql("insert into table1 select 6, 7, 8")
 
-      //sliding frame with exclude current row
+      // sliding frame with exclude current row
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between 2 preceding and 2 following exclude current row)" +
         " from table1 where col1 = 6"),
@@ -278,7 +278,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //sliding frame with exclude group
+      // sliding frame with exclude group
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between 2 preceding and " +
         " 2 following exclude group) " +
@@ -296,7 +296,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //sliding frame with exclude ties
+      // sliding frame with exclude ties
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between 2 preceding and " +
         " 2 following exclude ties) " +
@@ -314,7 +314,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //sliding frame with exclude no others
+      // sliding frame with exclude no others
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between 2 preceding and " +
         " 2 following) " +
@@ -333,7 +333,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       )
 
 
-      //expanding frame with exclude current row
+      // expanding frame with exclude current row
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " current row exclude current row) " +
@@ -351,7 +351,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //expanding frame with exclude group
+      // expanding frame with exclude group
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " current row exclude group) " +
@@ -369,7 +369,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //expanding frame with exclude ties
+      // expanding frame with exclude ties
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " current row exclude ties) " +
@@ -387,7 +387,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
       
-      //expanding frame with exclude no others
+      // expanding frame with exclude no others
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " current row) from table1 where col1 = 6"),
@@ -404,7 +404,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //shrinking frame with exclude current row
+      // shrinking frame with exclude current row
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between current row and " +
         " unbounded following exclude current row) " +
@@ -422,7 +422,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //shrinking frame with exclude current group
+      // shrinking frame with exclude current group
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between current row and " +
         " unbounded following exclude group) " +
@@ -439,7 +439,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           Row(6,  13,  11,  null)
         )
       )
-      //shrinking frame with exclude current ties
+      // shrinking frame with exclude current ties
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between current row and " +
         " unbounded following exclude ties) " +
@@ -457,7 +457,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //shrinking frame with exclude current no others
+      // shrinking frame with exclude current no others
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between current row and " +
         " unbounded following) from table1 where col1 = 6"),
@@ -475,7 +475,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       )
 
 
-      //whole partition frame with exclude current row
+      // whole partition frame with exclude current row
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " unbounded following exclude current row) " +
@@ -493,7 +493,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //whole partition frame with exclude group
+      // whole partition frame with exclude group
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " unbounded following exclude group) " +
@@ -511,7 +511,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //whole partition frame with exclude ties
+      // whole partition frame with exclude ties
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " unbounded following exclude ties) " +
@@ -529,7 +529,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         )
       )
 
-      //whole partition frame with exclude no others
+      // whole partition frame with exclude no others
       checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " unbounded following) from table1 where col1 = 6"),

@@ -1072,10 +1072,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
       val excludeSpec = Option(frame.exclude).map { excludeClause =>
         excludeClause.excludeType.getType match {
-          case SqlBaseParser.CURRENT => ExcludeClause(ExcludeCurrentRow)
-          case SqlBaseParser.GROUP => ExcludeClause(ExcludeGroup)
-          case SqlBaseParser.TIES => ExcludeClause(ExcludeTies)
-          case SqlBaseParser.NO => ExcludeClause(ExcludeNoOthers)
+          case SqlBaseParser.CURRENT => ExcludeCurrentRow
+          case SqlBaseParser.GROUP => ExcludeGroup
+          case SqlBaseParser.TIES => ExcludeTies
+          case SqlBaseParser.NO => ExcludeNoOthers
         }
       }
 
@@ -1083,7 +1083,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         frameType,
         visitFrameBound(frame.start),
         Option(frame.end).map(visitFrameBound).getOrElse(CurrentRow),
-        excludeSpec.getOrElse(ExcludeClause.defaultExclude))
+        excludeSpec.getOrElse(ExcludeNoOthers))
     }
 
     WindowSpecDefinition(

@@ -177,7 +177,7 @@ case class WindowExec(
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
       val key = (tpe, fr.frameType, FrameBoundary(fr.frameStart), FrameBoundary(fr.frameEnd),
-          fr.excludeSpec.excludeType)
+          fr.excludeType)
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e
@@ -997,7 +997,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
             processor.update(nextRow)
           }
           if (inputIndex == index) processor.update(nextRow)
-          nextRow = input.next();
+          nextRow = input.next()
           inputIndex += 1
         }
         bufferUpdated = true
@@ -1013,9 +1013,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
     }
 
     // Only recalculate and update when the buffer changes.
-    if (bufferUpdated) {
-      processor.evaluate(target)
-    }
+    if (bufferUpdated) processor.evaluate(target)
   }
 }
 
@@ -1073,32 +1071,69 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
       bufferUpdated = true
     }
 
-    // Only recalculate and update when the buffer changes.
     processor.initialize(input.size)
-    var progress = 0
-    while (nextRow != null) {
-      excludeSpec.excludeType match {
-        case ExcludeCurrentRow if inputIndex + progress == index =>
+    if (excludeSpec.excludeType == ExcludeNoOthers) {
+      // Only recalculate and update when the buffer changes
+      if (bufferUpdated) {
+        while (nextRow != null) {
+          processor.update(nextRow)
+          nextRow = tmp.next()
+        }
+        processor.evaluate(target)
+      }
+    } else {
+      var progress = 0
+      while (nextRow != null) {
+        excludeSpec.excludeType match {
+          case ExcludeCurrentRow if inputIndex + progress == index =>
           // don't update the processor when the row is physically the current row
-        case ExcludeGroup if excludeSpec.valueOrdering.compare(
-          excludeSpec.toBeCompared(nextRow).copy(),
-          excludeSpec.toBeCompared(current).copy()) == 0 =>
+          case ExcludeGroup if excludeSpec.valueOrdering.compare(
+            excludeSpec.toBeCompared(nextRow).copy(),
+            excludeSpec.toBeCompared(current).copy()) == 0 =>
           // don't update the processor when the row has the value of order by spec
           // that is the same as the current row
-        case ExcludeTies if excludeSpec.valueOrdering.compare(
-          excludeSpec.toBeCompared(nextRow).copy(),
-          excludeSpec.toBeCompared(current).copy()) == 0 =>
-          // don't update the processor when the row has the value of the order by spec
-          // that is the same as the current row, but include the physical current row
-          if (inputIndex + progress == index) processor.update(nextRow)
-        case _ =>
-          processor.update(nextRow)
+          case ExcludeTies if excludeSpec.valueOrdering.compare(
+            excludeSpec.toBeCompared(nextRow).copy(),
+            excludeSpec.toBeCompared(current).copy()) == 0 =>
+            // don't update the processor when the row has the value of the order by spec
+            // that is the same as the current row, but include the physical current row
+            if (inputIndex + progress == index) processor.update(nextRow)
+          case _ => processor.update(nextRow)
+        }
+        nextRow = tmp.next()
+        progress += 1
       }
-      nextRow = tmp.next()
-      progress += 1
+      processor.evaluate(target)
     }
-    processor.evaluate(target)
   }
+}
+
+/**
+ * Exclude clause within window framing clause.
+ *
+ * 'EXCLUDE CURRENT ROW' means the current row for which the window function is calculated
+ * is excluded from the current fame.
+ * 'EXCLUDE GROUP' means that the nearby rows that match the current row with respect to
+ * the orderby expression together with the current row will be excluded from the calculation
+ * 'EXCLUDE TIES' means that the nearby rows that match the current row with respect to
+ * the orderby expression except the current row will be excluded from the calculation
+ * 'EXCLUDE NO OTHERS' means not excluding any rows from the calculation. This is the
+ * default behavior. Exclude types, GROUP and TIES, requires ORDER BY clause in the window
+ * specification clause.
+ * For example, users want to exclude current row from a sliding range framing:
+ * RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING EXCLUDE CURRENT ROW
+ * @param excludeType The type of exclusion as defined above
+ * @param valueOrdering The ordering operator that does the value comparison between 2 rows
+ * @param toBeCompared The projection of the orderby expression from a row
+ *
+ */
+case class ExcludeClause (
+           excludeType: ExcludeType,
+           valueOrdering: Ordering[InternalRow] = null,
+           toBeCompared: Projection = null)
+
+object ExcludeClause {
+  def defaultExclude: ExcludeClause = ExcludeClause(ExcludeNoOthers)
 }
 
 /**
