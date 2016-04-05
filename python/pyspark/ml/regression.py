@@ -220,6 +220,15 @@ class LinearRegressionSummary(JavaCallable):
 
     @property
     @since("2.0.0")
+    def featuresCol(self):
+        """
+        Field in "predictions" which gives the features of each instance
+        as a vector.
+        """
+        return self._call_java("featuresCol")
+
+    @property
+    @since("2.0.0")
     def explainedVariance(self):
         """
         Returns the explained variance regression score.
@@ -346,15 +355,6 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
 
     .. versionadded:: 2.0.0
     """
-
-    @property
-    @since("2.0.0")
-    def featuresCol(self):
-        """
-        Field in "predictions" which gives the features of each instance
-        as a vector.
-        """
-        return self._call_java("featuresCol")
 
     @property
     @since("2.0.0")

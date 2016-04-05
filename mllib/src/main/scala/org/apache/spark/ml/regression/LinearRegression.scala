@@ -190,9 +190,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         summaryModel.transform(dataset),
         predictionColName,
         $(labelCol),
+        $(featuresCol),
         summaryModel,
         model.diagInvAtWA.toArray,
-        $(featuresCol),
         Array(0D))
 
       return lrModel.setSummary(trainingSummary)
@@ -249,9 +249,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           summaryModel.transform(dataset),
           predictionColName,
           $(labelCol),
+          $(featuresCol),
           model,
           Array(0D),
-          $(featuresCol),
           Array(0D))
         return copyValues(model.setSummary(trainingSummary))
       } else {
@@ -356,9 +356,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       summaryModel.transform(dataset),
       predictionColName,
       $(labelCol),
+      $(featuresCol),
       model,
       Array(0D),
-      $(featuresCol),
       objectiveHistory)
     model.setSummary(trainingSummary)
   }
@@ -421,7 +421,7 @@ class LinearRegressionModel private[ml] (
     // Handle possible missing or invalid prediction columns
     val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
     new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName,
-      $(labelCol), summaryModel, Array(0D))
+      $(labelCol), $(featuresCol), summaryModel, Array(0D))
   }
 
   /**
@@ -522,11 +522,17 @@ class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
     labelCol: String,
+    featuresCol: String,
     model: LinearRegressionModel,
     diagInvAtWA: Array[Double],
-    val featuresCol: String,
     val objectiveHistory: Array[Double])
-  extends LinearRegressionSummary(predictions, predictionCol, labelCol, model, diagInvAtWA) {
+  extends LinearRegressionSummary(
+    predictions,
+    predictionCol,
+    labelCol,
+    featuresCol,
+    model,
+    diagInvAtWA) {
 
   /** Number of training iterations until termination */
   @Since("1.5.0")
@@ -550,6 +556,7 @@ class LinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
     val predictionCol: String,
     val labelCol: String,
+    val featuresCol: String,
     val model: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
 
