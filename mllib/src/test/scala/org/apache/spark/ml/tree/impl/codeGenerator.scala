@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.tree
+package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.GiniCalculator
 import org.apache.spark.mllib.util.MLlibTestSparkContext
