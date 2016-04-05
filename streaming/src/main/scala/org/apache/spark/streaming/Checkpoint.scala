@@ -334,17 +334,13 @@ object CheckpointReader extends Logging {
       ignoreReadError: Boolean = false): Option[Checkpoint] = {
     val checkpointPath = new Path(checkpointDir)
 
-    // TODO(rxin): Why is this a def?!
-    def fs: FileSystem = checkpointPath.getFileSystem(hadoopConf)
+    val fs: FileSystem = checkpointPath.getFileSystem(hadoopConf)
 
     // Try to find the checkpoint files
     val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).reverse
-    if (checkpointFiles.isEmpty) {
-      return None
-    }
 
     // Try to read the checkpoint files in the order
-    logInfo("Checkpoint files found: " + checkpointFiles.mkString(","))
+    logInfo("Looking for checkpoint files in: " + checkpointFiles.mkString(","))
     var readError: Exception = null
     checkpointFiles.foreach(file => {
       logInfo("Attempting to load checkpoint from file " + file)

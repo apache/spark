@@ -34,7 +34,7 @@ import org.mockito.Mockito.mock
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, TestUtils}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
@@ -226,6 +226,11 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     } finally {
       super.afterFunction()
     }
+  }
+
+  test("non-existent checkpoint dir") {
+    // SPARK-13211
+    intercept[SparkException](new StreamingContext("nosuchdirectory"))
   }
 
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
