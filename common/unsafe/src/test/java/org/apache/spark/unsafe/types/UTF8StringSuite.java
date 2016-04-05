@@ -122,6 +122,7 @@ public class UTF8StringSuite {
     assertEquals(fromString("Ab Bc Cd"), fromString("ab bc cd").toTitleCase());
     assertEquals(fromString("Ѐ Ё Ђ Ѻ Ώ Ề"), fromString("ѐ ё ђ ѻ ώ ề").toTitleCase());
     assertEquals(fromString("大千世界 数据砖头"), fromString("大千世界 数据砖头").toTitleCase());
+    assertEquals(fromString("Spark Sql"), fromString("sPark sql").toTitleCase());
   }
 
   @Test
