@@ -22,110 +22,125 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
-class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton  {
+class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("show create table - hive table - no row format") {
-    withTable("t1") {
-      sql(
-        """
-          |create table t1(c1 int, c2 string)
-          |stored as parquet
-          |location 'file:///home/xwu0226/spark-test/data/t'
-        """.stripMargin)
-      sql("show create table t1").show(false)
+    withTempDir { tmpDir =>
+      withTable("t1") {
+        sql(
+          s"""
+            |create table t1(c1 int, c2 string)
+            |stored as parquet
+            |location '${tmpDir}'
+          """.stripMargin)
+        sql("show create table t1").show(false)
+      }
     }
   }
 
   test("show create table - hive non-external table") {
-    withTable("t1") {
-      sql(
-        """
-          |create table t1(c1 int COMMENT 'abc', c2 string) COMMENT 'my table'
-          |row format delimited fields terminated by ','
-          |stored as parquet
-          |location 'file:///home/xwu0226/spark-test/data/t'
-        """.stripMargin)
-      sql("show create table t1").show(false)
+    withTempDir { tmpDir =>
+      withTable("t1") {
+        sql(
+          s"""
+            |create table t1(c1 int COMMENT 'abc', c2 string) COMMENT 'my table'
+            |row format delimited fields terminated by ','
+            |stored as parquet
+            |location '${tmpDir}'
+          """.stripMargin)
+        sql("show create table t1").show(false)
+      }
     }
   }
 
   test("show create table - hive external table") {
-    withTable("t1") {
-      sql(
-        """
-          |create external table t1(c1 int, c2 string)
-          |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
-          |row format delimited fields terminated by ','
-          |stored as parquet
-          |location 'file:///home/xwu0226/spark-test/data/t'
-          |TBLPROPERTIES ('my.property.one'='true', 'my.property.two'='1',
-          |'my.property.three'='2', 'my.property.four'='false')
-        """.stripMargin)
-      sql("show create table t1").show(false)
+    withTempDir { tmpDir =>
+      withTable("t1") {
+        sql(
+          s"""
+            |create external table t1(c1 int, c2 string)
+            |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
+            |row format delimited fields terminated by ','
+            |stored as parquet
+            |location '${tmpDir}'
+            |TBLPROPERTIES ('my.property.one'='true', 'my.property.two'='1',
+            |'my.property.three'='2', 'my.property.four'='false')
+          """.stripMargin)
+        sql("show create table t1").show(false)
+      }
     }
   }
 
   test("show create table - hive table - cluster bucket and skew") {
-    withTable("t1") {
-      sql(
-        """
-          |create external table t1(c1 int COMMENT 'first column', c2 string)
-          |COMMENT 'xin\'s table'
-          |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
-          |CLUSTERED BY (c1, c2) SORTED BY (c1 ASC, C2 DESC) INTO 5 BUCKETS
-          |row format delimited fields terminated by ','
-          |COLLECTION ITEMS TERMINATED BY ','
-          |MAP KEYS TERMINATED BY ','
-          |NULL DEFINED AS '\N'
-          |stored as parquet
-          |location 'file:///home/xwu0226/spark-test/data/t'
-          |TBLPROPERTIES ('my.property.one'='true', 'my.property.two'='1',
-          |'my.property.three'='2', 'my.property.four'='false')
-        """.stripMargin)
-      sql("show create table t1").show(false)
+    withTempDir { tmpDir =>
+      withTable("t1") {
+        sql(
+          s"""
+            |create external table t1(c1 int COMMENT 'first column', c2 string)
+            |COMMENT 'some table'
+            |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
+            |CLUSTERED BY (c1, c2) SORTED BY (c1 ASC, C2 DESC) INTO 5 BUCKETS
+            |row format delimited fields terminated by ','
+            |COLLECTION ITEMS TERMINATED BY ','
+            |MAP KEYS TERMINATED BY ','
+            |NULL DEFINED AS 'NnN'
+            |stored as parquet
+            |location '${tmpDir}'
+            |TBLPROPERTIES ('my.property.one'='true', 'my.property.two'='1',
+            |'my.property.three'='2', 'my.property.four'='false')
+          """.stripMargin)
+        sql("show create table t1").show(false)
+      }
     }
   }
 
-  test("show create table - hive temp table") {
-    withTable("t1") {
-      sql(
-        """
-          |create TEMPORARY table t1(c1 int, c2 string)
-          |row format delimited fields terminated by ','
-          |stored as parquet
-          |location 'file:///home/xwu0226/spark-test/data/t'
-        """.stripMargin)
-      sql("show create table t1").show(false)
+  test(
+    "show create table - hive temp table") {
+    withTempDir { tmpDir =>
+      withTable("t1") {
+        sql(
+          s"""
+            |create TEMPORARY table t1(c1 int, c2 string)
+            |row format delimited fields terminated by ','
+            |stored as parquet
+            |location '${tmpDir}'
+          """.stripMargin)
+        sql("show create table t1").show(false)
+      }
     }
   }
 
   test("show create table - hive TEMPORARY external table") {
-    withTable("t1") {
-      sql(
-        """
-          |create TEMPORARY external table t1(c1 int, c2 string)
-          |row format delimited fields terminated by ','
-          |stored as parquet
-          |location 'file:///home/xwu0226/spark-test/data/t'
-        """.stripMargin)
-      sql("show create table t1").show(false)
+    withTempDir { tmpDir =>
+      withTable("t1") {
+        sql(
+          s"""
+            |create TEMPORARY external table t1(c1 int, c2 string)
+            |row format delimited fields terminated by ','
+            |stored as parquet
+            |location '${tmpDir}'
+          """.stripMargin)
+        sql("show create table t1").show(false)
+      }
     }
   }
 
   test("show create table - hive view") {
-    withTable("t1") {
-      withView("v1") {
-        sql(
-          """
-            |create table t1(c1 int, c2 string)
-            |row format delimited fields terminated by ','
-            |stored as parquet
-            |location 'file:///home/xwu0226/spark-test/data/t'
-          """.stripMargin)
-        sql(
-          """
-            |create view v1 as select * from t1
-          """.stripMargin)
-        sql("show create table v1").show(false)
+    withTempDir { tmpDir =>
+      withTable("t1") {
+        withView("v1") {
+          sql(
+            s"""
+              |create table t1(c1 int, c2 string)
+              |row format delimited fields terminated by ','
+              |stored as parquet
+              |location '${tmpDir}'
+            """.stripMargin)
+          sql(
+            """
+              |create view v1 as select * from t1
+            """.stripMargin)
+          sql("show create table v1").show(false)
+        }
       }
     }
   }
@@ -160,7 +175,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
     withTable("jsonTable") {
       sql(
-        s"""CREATE TABLE jsonTable
+        s"""
+           |CREATE TABLE jsonTable
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (
            |  path '$jsonFilePath'
@@ -174,7 +190,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
     withTable("jsonTable") {
       sql(
-        s"""CREATE TABLE jsonTable (c1 string, c2 string, c3 int)
+        s"""
+           |CREATE TABLE jsonTable (c1 string, c2 string, c3 int)
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (
            |  path '$jsonFilePath'
