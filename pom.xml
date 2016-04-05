@@ -1673,9 +1673,6 @@
             <groupId>org.codehaus.janino</groupId>
             <artifactId>janino</artifactId>
           </exclusion>
-          <!-- hsqldb interferes with the use of derby as the default db
-            in hive's use of datanucleus.
-          -->
           <exclusion>
             <groupId>org.hsqldb</groupId>
             <artifactId>hsqldb</artifactId>
@@ -1793,6 +1790,9 @@
                       -->
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
+                      <!-- hsqldb interferes with the use of Derby as the default db
+                           in Hive's use of Datanucleus. -->
+                      <exclude>org.hsqldb:hsqldb</exclude>
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
