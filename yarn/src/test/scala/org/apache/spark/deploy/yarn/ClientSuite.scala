@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
+import java.io.{File, FileOutputStream}
 import java.net.URI
 import java.util.Properties
 
@@ -118,10 +118,11 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val sparkConf = new SparkConf()
       .set(SPARK_JARS, Seq(SPARK))
       .set(USER_CLASS_PATH_FIRST, true)
+      .set("spark.yarn.dist.jars", ADDED)
     val env = new MutableHashMap[String, String]()
-    val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
+    val args = new ClientArguments(Array("--jar", USER))
 
-    populateClasspath(args, conf, sparkConf, env, true)
+    populateClasspath(args, conf, sparkConf, env)
 
     val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
@@ -138,9 +139,11 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("Jar path propagation through SparkConf") {
-    val sparkConf = new SparkConf().set(SPARK_JARS, Seq(SPARK))
-    val client = createClient(sparkConf,
-      args = Array("--jar", USER, "--addJars", ADDED))
+    val conf = new Configuration()
+    val sparkConf = new SparkConf()
+      .set(SPARK_JARS, Seq(SPARK))
+      .set("spark.yarn.dist.jars", ADDED)
+    val client = createClient(sparkConf, args = Array("--jar", USER))
 
     val tempDir = Utils.createTempDir()
     try {
@@ -178,8 +181,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       "/remotePath/1:/remotePath/2")
 
     val env = new MutableHashMap[String, String]()
-    populateClasspath(null, conf, sparkConf, env, false,
-      extraClassPath = Some("/localPath/my1.jar"))
+    populateClasspath(null, conf, sparkConf, env, extraClassPath = Some("/localPath/my1.jar"))
     val cp = classpath(env)
     cp should contain ("/remotePath/spark.jar")
     cp should contain ("/remotePath/my1.jar")
@@ -193,9 +195,9 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val sparkConf = new SparkConf()
       .set(APPLICATION_TAGS.key, ",tag1, dup,tag2 , ,multi word , dup")
       .set(MAX_APP_ATTEMPTS, 42)
-    val args = new ClientArguments(Array(
-      "--name", "foo-test-app",
-      "--queue", "staging-queue"), sparkConf)
+      .set("spark.app.name", "foo-test-app")
+      .set(QUEUE_NAME, "staging-queue")
+    val args = new ClientArguments(Array())
 
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
@@ -271,9 +273,10 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   test("distribute local spark jars") {
     val temp = Utils.createTempDir()
-    val jarsDir = new File(temp, "lib")
+    val jarsDir = new File(temp, "jars")
     assert(jarsDir.mkdir())
     val jar = TestUtils.createJarWithFiles(Map(), jarsDir)
+    new FileOutputStream(new File(temp, "RELEASE")).close()
 
     val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> temp.getAbsolutePath()))
     val client = createClient(sparkConf)
@@ -346,7 +349,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       sparkConf: SparkConf,
       conf: Configuration = new Configuration(),
       args: Array[String] = Array()): Client = {
-    val clientArgs = new ClientArguments(args, sparkConf)
+    val clientArgs = new ClientArguments(args)
     val client = spy(new Client(clientArgs, conf, sparkConf))
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
       any(classOf[Path]), anyShort())
@@ -355,7 +358,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   private def classpath(client: Client): Array[String] = {
     val env = new MutableHashMap[String, String]()
-    populateClasspath(null, client.hadoopConf, client.sparkConf, env, false)
+    populateClasspath(null, client.hadoopConf, client.sparkConf, env)
     classpath(env)
   }
 

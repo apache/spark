@@ -23,8 +23,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
-import org.apache.spark.ml.tree.{DecisionTreeModel, GBTParams, TreeEnsembleModel,
-  TreeRegressorParams}
+import org.apache.spark.ml.tree.{GBTParams, TreeEnsembleModel, TreeRegressorParams}
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
@@ -177,9 +176,9 @@ final class GBTRegressionModel private[ml](
     private val _treeWeights: Array[Double],
     override val numFeatures: Int)
   extends PredictionModel[Vector, GBTRegressionModel]
-  with TreeEnsembleModel with Serializable {
+  with TreeEnsembleModel[DecisionTreeRegressionModel] with Serializable {
 
-  require(numTrees > 0, "GBTRegressionModel requires at least 1 tree.")
+  require(_trees.nonEmpty, "GBTRegressionModel requires at least 1 tree.")
   require(_trees.length == _treeWeights.length, "GBTRegressionModel given trees, treeWeights of" +
     s" non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
@@ -193,7 +192,7 @@ final class GBTRegressionModel private[ml](
     this(uid, _trees, _treeWeights, -1)
 
   @Since("1.4.0")
-  override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
+  override def trees: Array[DecisionTreeRegressionModel] = _trees
 
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
@@ -213,6 +212,9 @@ final class GBTRegressionModel private[ml](
     blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 
+  /** Number of trees in ensemble */
+  val numTrees: Int = trees.length
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressionModel = {
     copyValues(new GBTRegressionModel(uid, _trees, _treeWeights, numFeatures),
@@ -223,6 +225,19 @@ final class GBTRegressionModel private[ml](
   override def toString: String = {
     s"GBTRegressionModel (uid=$uid) with $numTrees trees"
   }
+
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * Each feature's importance is the average of its importance across all trees in the ensemble
+   * The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+   * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+   * and follows the implementation from scikit-learn.
+   *
+   * @see [[DecisionTreeRegressionModel.featureImportances]]
+   */
+  @Since("2.0.0")
+  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
@@ -245,6 +260,6 @@ private[ml] object GBTRegressionModel {
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtr")
-    new GBTRegressionModel(parent.uid, newTrees, oldModel.treeWeights, numFeatures)
+    new GBTRegressionModel(uid, newTrees, oldModel.treeWeights, numFeatures)
   }
 }

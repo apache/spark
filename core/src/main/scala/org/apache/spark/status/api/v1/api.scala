@@ -38,7 +38,11 @@ class ApplicationAttemptInfo private[spark](
     val lastUpdated: Date,
     val duration: Long,
     val sparkUser: String,
-    val completed: Boolean = false)
+    val completed: Boolean = false) {
+    def getStartTimeEpoch: Long = startTime.getTime
+    def getEndTimeEpoch: Long = endTime.getTime
+    def getLastUpdatedEpoch: Long = lastUpdated.getTime
+}
 
 class ExecutorStageSummary private[spark](
     val taskTime : Long,
@@ -237,3 +241,6 @@ class AccumulableInfo private[spark](
     val name: String,
     val update: Option[String],
     val value: String)
+
+class VersionInfo private[spark](
+  val spark: String)

@@ -411,7 +411,7 @@ private object BisectingKMeans extends Serializable {
 private[clustering] class ClusteringTreeNode private[clustering] (
     val index: Int,
     val size: Long,
-    private val centerWithNorm: VectorWithNorm,
+    private[clustering] val centerWithNorm: VectorWithNorm,
     val cost: Double,
     val height: Double,
     val children: Array[ClusteringTreeNode]) extends Serializable {

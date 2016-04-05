@@ -215,10 +215,10 @@ conf.set("spark.mesos.coarse", "false")
 You may also make use of `spark.mesos.constraints` to set attribute based constraints on mesos resource offers. By default, all resource offers will be accepted.
 
 {% highlight scala %}
-conf.set("spark.mesos.constraints", "tachyon:true;us-east-1:false")
+conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
 {% endhighlight %}
 
-For example, Let's say `spark.mesos.constraints` is set to `tachyon:true;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
 
 # Mesos Docker Support
 
