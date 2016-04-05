@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, LogicalRelation}
 import org.apache.spark.sql.hive.HiveContext
@@ -71,7 +70,8 @@ case class DropTable(
     }
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.sessionState.catalog.unregisterTable(TableIdentifier(tableName))
+    hiveContext.sessionState.catalog.dropTable(
+      TableIdentifier(tableName), ignoreIfNotExists = true)
     Seq.empty[Row]
   }
 }
@@ -142,7 +142,8 @@ case class CreateMetastoreDataSource(
     val optionsWithPath =
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
-        options + ("path" -> hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" ->
+          hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
@@ -200,7 +201,8 @@ case class CreateMetastoreDataSourceAsSelect(
     val optionsWithPath =
       if (!options.contains("path")) {
         isExternal = false
-        options + ("path" -> hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" ->
+          hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }

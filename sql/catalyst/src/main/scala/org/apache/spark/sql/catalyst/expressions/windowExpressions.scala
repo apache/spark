@@ -451,7 +451,11 @@ abstract class RowNumberLike extends AggregateWindowFunction {
  * A [[SizeBasedWindowFunction]] needs the size of the current window for its calculation.
  */
 trait SizeBasedWindowFunction extends AggregateWindowFunction {
-  protected def n: AttributeReference = SizeBasedWindowFunction.n
+  // It's made a val so that the attribute created on driver side is serialized to executor side.
+  // Otherwise, if it's defined as a function, when it's called on executor side, it actually
+  // returns the singleton value instantiated on executor side, which has different expression ID
+  // from the one created on driver side.
+  val n: AttributeReference = SizeBasedWindowFunction.n
 }
 
 object SizeBasedWindowFunction {

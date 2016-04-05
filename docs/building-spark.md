@@ -180,14 +180,14 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 
 Running only Java 8 tests and nothing else.
 
-    mvn install -DskipTests -Pjava8-tests
+    mvn install -DskipTests
+    mvn -pl :java8-tests_2.11 test
 
 or
 
-    sbt -Pjava8-tests java8-tests/test
+    sbt java8-tests/test
 
-Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`.
-For these tests to run your system must have a JDK 8 installation.
+Java 8 tests are automatically enabled when a Java 8 JDK is detected.
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
 
 # Building for PySpark on YARN

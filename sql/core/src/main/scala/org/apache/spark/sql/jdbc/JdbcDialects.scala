@@ -126,7 +126,7 @@ object JdbcDialects {
 
   /**
    * Register a dialect for use on all new matching jdbc [[org.apache.spark.sql.DataFrame]].
-   * Readding an existing dialect will cause a move-to-front.
+   * Reading an existing dialect will cause a move-to-front.
    *
    * @param dialect The new dialect.
    */

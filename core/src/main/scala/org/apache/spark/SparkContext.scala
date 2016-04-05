@@ -147,8 +147,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       appName: String,
       sparkHome: String = null,
       jars: Seq[String] = Nil,
-      environment: Map[String, String] = Map()) =
-  {
+      environment: Map[String, String] = Map()) = {
     this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
   }
 
@@ -774,9 +773,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     parallelize(seq, numSlices)
   }
 
-  /** Distribute a local Scala collection to form an RDD, with one or more
-    * location preferences (hostnames of Spark nodes) for each object.
-    * Create a new partition for each collection item. */
+  /**
+   * Distribute a local Scala collection to form an RDD, with one or more
+   * location preferences (hostnames of Spark nodes) for each object.
+   * Create a new partition for each collection item.
+   */
   def makeRDD[T: ClassTag](seq: Seq[(T, Seq[String])]): RDD[T] = withScope {
     assertNotStopped()
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
@@ -1096,14 +1097,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     new NewHadoopRDD(this, fClass, kClass, vClass, jconf)
   }
 
-  /** Get an RDD for a Hadoop SequenceFile with given key and value types.
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
-    * operation will create many references to the same object.
-    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
-    * copy them using a `map` function.
-    */
+  /**
+   * Get an RDD for a Hadoop SequenceFile with given key and value types.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   */
   def sequenceFile[K, V](path: String,
       keyClass: Class[K],
       valueClass: Class[V],
@@ -1114,14 +1116,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions)
   }
 
-  /** Get an RDD for a Hadoop SequenceFile with given key and value types.
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
-    * operation will create many references to the same object.
-    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
-    * copy them using a `map` function.
-    * */
+  /**
+   * Get an RDD for a Hadoop SequenceFile with given key and value types.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   */
   def sequenceFile[K, V](
       path: String,
       keyClass: Class[K],
@@ -1765,7 +1768,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * has overridden the call site using `setCallSite()`, this will return the user's version.
    */
   private[spark] def getCallSite(): CallSite = {
-    val callSite = Utils.getCallSite()
+    lazy val callSite = Utils.getCallSite()
     CallSite(
       Option(getLocalProperty(CallSite.SHORT_FORM)).getOrElse(callSite.shortForm),
       Option(getLocalProperty(CallSite.LONG_FORM)).getOrElse(callSite.longForm)
