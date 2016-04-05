@@ -22,6 +22,7 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaCallable
 from pyspark.mllib.common import inherit_doc
+from pyspark.sql import DataFrame
 
 
 __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
@@ -177,8 +178,11 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Evaluates the model on a test dataset.
 
         :param dataset:
-          Test dataset to evaluate model on.
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
         """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lr_summary = self._call_java("evaluate", dataset)
         return LinearRegressionSummary(java_lr_summary)
 
