@@ -70,12 +70,42 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   /**
    * Create a [[ShowTablesCommand]] logical plan.
+   * Example SQL :
+   * {{{
+   *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+   * }}}
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.LIKE != null) {
-      logWarning("SHOW TABLES LIKE option is ignored.")
-    }
-    ShowTablesCommand(Option(ctx.db).map(_.getText))
+    ShowTablesCommand(
+      Option(ctx.db).map(_.getText),
+      Option(ctx.pattern).map(string))
+  }
+
+  /**
+   * Create a [[ShowDatabasesCommand]] logical plan.
+   * Example SQL:
+   * {{{
+   *   SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards'];
+   * }}}
+   */
+  override def visitShowDatabases(ctx: ShowDatabasesContext): LogicalPlan = withOrigin(ctx) {
+    ShowDatabasesCommand(Option(ctx.pattern).map(string))
+  }
+
+  /**
+   * A command for users to list the properties for a table. If propertyKey is specified, the value
+   * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
+   * corresponding values are returned.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW TBLPROPERTIES table_name[('propertyKey')];
+   * }}}
+   */
+  override def visitShowTblProperties(
+      ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
+    ShowTablePropertiesCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.key).map(visitTablePropertyKey))
   }
 
   /**
@@ -122,7 +152,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     // Create the explain comment.
     val statement = plan(ctx.statement)
     if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null))
+      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
+        codegen = options.exists(_.CODEGEN != null))
     } else {
       ExplainCommand(OneRowRelation)
     }
@@ -205,16 +236,23 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitTablePropertyList(
       ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
     ctx.tableProperty.asScala.map { property =>
-      // A key can either be a String or a collection of dot separated elements. We need to treat
-      // these differently.
-      val key = if (property.key.STRING != null) {
-        string(property.key.STRING)
-      } else {
-        property.key.getText
-      }
+      val key = visitTablePropertyKey(property.key)
       val value = Option(property.value).map(string).orNull
       key -> value
     }.toMap
+  }
+
+  /**
+   * A table property key can either be String or a collection of dot separated elements. This
+   * function extracts the property key based on whether its a string literal or a table property
+   * identifier.
+   */
+  override def visitTablePropertyKey(key: TablePropertyKeyContext): String = {
+    if (key.STRING != null) {
+      string(key.STRING)
+    } else {
+      key.getText
+    }
   }
 
   /**

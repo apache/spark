@@ -102,39 +102,9 @@ case class ShuffledHashJoin(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
       val hashed = buildHashedRelation(buildIter.asInstanceOf[Iterator[UnsafeRow]])
-      val joinedRow = new JoinedRow
-      joinType match {
-        case Inner =>
-          hashJoin(streamIter, hashed, numOutputRows)
-
-        case LeftSemi =>
-          hashSemiJoin(streamIter, hashed, numOutputRows)
-
-        case LeftOuter =>
-          val keyGenerator = streamSideKeyGenerator
-          val resultProj = createResultProjection
-          streamIter.flatMap(currentRow => {
-            val rowKey = keyGenerator(currentRow)
-            joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey), resultProj, numOutputRows)
-          })
-
-        case RightOuter =>
-          val keyGenerator = streamSideKeyGenerator
-          val resultProj = createResultProjection
-          streamIter.flatMap(currentRow => {
-            val rowKey = keyGenerator(currentRow)
-            joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow, resultProj, numOutputRows)
-          })
-
-        case x =>
-          throw new IllegalArgumentException(
-            s"ShuffledHashJoin should not take $x as the JoinType")
-      }
+      join(streamIter, hashed, numOutputRows)
     }
   }
 }

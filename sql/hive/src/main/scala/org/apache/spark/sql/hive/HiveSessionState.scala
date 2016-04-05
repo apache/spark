@@ -57,9 +57,9 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
+        catalog.OrcConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
-        python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
@@ -76,8 +76,9 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Planner that takes into account Hive-specific strategies.
    */
-  override lazy val planner: SparkPlanner = {
-    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods) with HiveStrategies {
+  override def planner: SparkPlanner = {
+    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
+      with HiveStrategies {
       override val hiveContext = ctx
 
       override def strategies: Seq[Strategy] = {
