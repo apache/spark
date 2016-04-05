@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.collection.Map
 import scala.collection.mutable.Stack
 
+import org.apache.commons.lang.ClassUtils
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -379,9 +380,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       if (ctor.getParameterTypes.length != allArgs.length) {
         false
       } else {
-        ctor.getParameterTypes.zip(allArgs.map(_.getClass)).forall { case (ctorParam, arg) =>
-          ctorParam.isAssignableFrom(arg)
-        }
+        val givenParams: Array[Class[_]] = allArgs.map(_.getClass)
+        ClassUtils.isAssignable(ctor.getParameterTypes, givenParams, true /* autoboxing */)
       }
     }.getOrElse(ctors.maxBy(_.getParameterTypes.length)) // fall back to older heuristic
 
