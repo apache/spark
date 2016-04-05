@@ -18,7 +18,13 @@
 package org.apache.spark.sql.expressions.java;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.TypedColumn;
+import org.apache.spark.sql.execution.aggregate.TypedAverage;
+import org.apache.spark.sql.execution.aggregate.TypedCount;
+import org.apache.spark.sql.execution.aggregate.TypedSumDouble;
+import org.apache.spark.sql.execution.aggregate.TypedSumLong;
 
 /**
  * :: Experimental ::
@@ -30,5 +36,41 @@ import org.apache.spark.sql.Dataset;
  */
 @Experimental
 public class typed {
+  // Note: make sure to keep in sync with typed.scala
 
+  /**
+   * Average aggregate function.
+   *
+   * @since 2.0.0
+   */
+  public static<T> TypedColumn<T, Double> avg(MapFunction<T, Double> f) {
+    return new TypedAverage<T>(f).toColumnJava();
+  }
+
+  /**
+   * Count aggregate function.
+   *
+   * @since 2.0.0
+   */
+  public static<T> TypedColumn<T, Long> count(MapFunction<T, Object> f) {
+    return new TypedCount<T>(f).toColumnJava();
+  }
+
+  /**
+   * Sum aggregate function for floating point (double) type.
+   *
+   * @since 2.0.0
+   */
+  public static<T> TypedColumn<T, Double> sum(MapFunction<T, Double> f) {
+    return new TypedSumDouble<T>(f).toColumnJava();
+  }
+
+  /**
+   * Sum aggregate function for integral (long, i.e. 64 bit integer) type.
+   *
+   * @since 2.0.0
+   */
+  public static<T> TypedColumn<T, Long> sumLong(MapFunction<T, Long> f) {
+    return new TypedSumLong<T>(f).toColumnJava();
+  }
 }
