@@ -17,10 +17,11 @@
 
 package org.apache.spark.mllib.util
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
-import org.apache.spark.ml.util.TempDirectory
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.ml.util.TempDirectory
 import org.apache.spark.sql.SQLContext
 
 trait MLlibTestSparkContext extends BeforeAndAfterAll with TempDirectory { self: Suite =>
@@ -37,7 +38,7 @@ trait MLlibTestSparkContext extends BeforeAndAfterAll with TempDirectory { self:
     SQLContext.clearActive()
     sqlContext = new SQLContext(sc)
     SQLContext.setActive(sqlContext)
-    checkpointDir = tempDir.getCanonicalPath
+    checkpointDir = new Path(tempDir.getCanonicalPath, "checkpoints").toString
     sc.setCheckpointDir(checkpointDir)
   }
 

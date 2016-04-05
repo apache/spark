@@ -807,11 +807,9 @@ class DistributedLDAModel private[clustering] (
 
   override protected def formatVersion = "1.0"
 
-  /**
-   * Java-friendly version of [[topicDistributions]]
-   */
   @Since("1.5.0")
   override def save(sc: SparkContext, path: String): Unit = {
+    // Note: This intentionally does not save checkpointFiles.
     DistributedLDAModel.SaveLoadV1_0.save(
       sc, path, graph, globalTopicTotals, k, vocabSize, docConcentration, topicConcentration,
       iterationTimes, gammaShape)
