@@ -45,10 +45,7 @@ object SimpleAnalyzer
     new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 class SimpleAnalyzer(functionRegistry: FunctionRegistry, conf: CatalystConf)
-  extends Analyzer(
-    new SessionCatalog(new InMemoryCatalog, functionRegistry, conf),
-    functionRegistry,
-    conf)
+  extends Analyzer(new SessionCatalog(new InMemoryCatalog, functionRegistry, conf), conf)
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
@@ -57,7 +54,6 @@ class SimpleAnalyzer(functionRegistry: FunctionRegistry, conf: CatalystConf)
  */
 class Analyzer(
     catalog: SessionCatalog,
-    registry: FunctionRegistry,
     conf: CatalystConf,
     maxIterations: Int = 100)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis {
@@ -756,9 +752,18 @@ class Analyzer(
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
+          case u @ UnresolvedGenerator(name, children) =>
+            withPosition(u) {
+              catalog.lookupFunction(name, children) match {
+                case generator: Generator => generator
+                case other =>
+                  failAnalysis(s"$name is expected to be a generator. However, " +
+                    s"its class is ${other.getClass.getCanonicalName}, which is not a generator.")
+              }
+            }
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
-              registry.lookupFunction(name, children) match {
+              catalog.lookupFunction(name, children) match {
                 // DISTINCT is not meaningful for a Max or a Min.
                 case max: Max if isDistinct =>
                   AggregateExpression(max, Complete, isDistinct = false)

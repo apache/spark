@@ -25,10 +25,10 @@ package org.apache.spark.sql.catalyst
  * Format (quoted): "`name`" or "`db`.`name`"
  */
 sealed trait IdentifierWithDatabase {
-  val name: String
+  val identifier: String
   def database: Option[String]
-  def quotedString: String = database.map(db => s"`$db`.`$name`").getOrElse(s"`$name`")
-  def unquotedString: String = database.map(db => s"$db.$name").getOrElse(name)
+  def quotedString: String = database.map(db => s"`$db`.`$identifier`").getOrElse(s"`$identifier`")
+  def unquotedString: String = database.map(db => s"$db.$identifier").getOrElse(identifier)
   override def toString: String = quotedString
 }
 
@@ -36,13 +36,15 @@ sealed trait IdentifierWithDatabase {
 /**
  * Identifies a table in a database.
  * If `database` is not defined, the current database is used.
+ * When we register a permenent function in the FunctionRegistry, we use
+ * unquotedString as the function name.
  */
 case class TableIdentifier(table: String, database: Option[String])
   extends IdentifierWithDatabase {
 
-  override val name: String = table
+  override val identifier: String = table
 
-  def this(name: String) = this(name, None)
+  def this(table: String) = this(table, None)
 
 }
 
@@ -58,9 +60,9 @@ object TableIdentifier {
 case class FunctionIdentifier(funcName: String, database: Option[String])
   extends IdentifierWithDatabase {
 
-  override val name: String = funcName
+  override val identifier: String = funcName
 
-  def this(name: String) = this(name, None)
+  def this(funcName: String) = this(funcName, None)
 }
 
 object FunctionIdentifier {

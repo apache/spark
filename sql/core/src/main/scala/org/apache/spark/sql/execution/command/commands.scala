@@ -426,8 +426,12 @@ case class ShowTablePropertiesCommand(
  * A command for users to list all of the registered functions.
  * The syntax of using this command in SQL is:
  * {{{
- *    SHOW FUNCTIONS
+ *    SHOW FUNCTIONS [LIKE pattern]
  * }}}
+ * For the pattern, '*' matches any sequence of characters (including no characters) and
+ * '|' is for alternation.
+ * For example, "show functions like 'yea*|windo*'" will return "window" and "year".
+ *
  * TODO currently we are simply ignore the db
  */
 case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
@@ -438,18 +442,17 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = pattern match {
-    case Some(p) =>
-      try {
-        val regex = java.util.regex.Pattern.compile(p)
-        sqlContext.sessionState.functionRegistry.listFunction()
-          .filter(regex.matcher(_).matches()).map(Row(_))
-      } catch {
-        // probably will failed in the regex that user provided, then returns empty row.
-        case _: Throwable => Seq.empty[Row]
-      }
-    case None =>
-      sqlContext.sessionState.functionRegistry.listFunction().map(Row(_))
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val dbName = db.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+    // If pattern is not specified, we use '*', which is used to
+    // match any sequence of characters (including no characters).
+    val functionNames =
+      sqlContext.sessionState.catalog
+        .listFunctions(dbName, pattern.getOrElse("*"))
+        .map(_.unquotedString)
+    // The session catalog caches some persistent functions in the FunctionRegistry
+    // so there can be duplicates.
+    functionNames.distinct.sorted.map(Row(_))
   }
 }
 

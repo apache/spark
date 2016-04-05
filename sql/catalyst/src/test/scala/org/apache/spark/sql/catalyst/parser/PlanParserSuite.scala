@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -296,10 +297,18 @@ class PlanParserSuite extends PlanTest {
         .insertInto("t2"),
         from.where('s < 10).select(star()).insertInto("t3")))
 
-    // Unsupported generator.
-    intercept(
+    // Unresolved generator.
+    val expected = table("t")
+      .generate(
+        UnresolvedGenerator("posexplode", Seq('x)),
+        join = true,
+        outer = false,
+        Some("posexpl"),
+        Seq("x", "y"))
+      .select(star())
+    assertEqual(
       "select * from t lateral view posexplode(x) posexpl as x, y",
-      "Generator function 'posexplode' is not supported")
+      expected)
   }
 
   test("joins") {
