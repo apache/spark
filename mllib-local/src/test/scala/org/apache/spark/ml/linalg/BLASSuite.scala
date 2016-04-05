@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.ml.linalg
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.BLAS._
-import org.apache.spark.mllib.util.TestingUtils
-import TestingUtils._
-import org.apache.spark.mllib.util.TestingUtils
+import org.apache.spark.ml.linalg.BLAS._
+import org.apache.spark.ml.util.TestingUtils._
 
 class BLASSuite extends SparkFunSuite {
 

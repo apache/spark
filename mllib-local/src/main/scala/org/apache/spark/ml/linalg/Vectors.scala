@@ -20,6 +20,8 @@ package org.apache.spark.ml.linalg
 import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
 import java.util
 
+import org.apache.spark.ml.util.NumericParser
+
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
 
@@ -28,10 +30,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
-//import org.apache.spark.SparkException
-import scala.{Exception => SparkException}
 //import org.apache.spark.annotation.{AlphaComponent, Since}
-import org.apache.spark.mllib.util.NumericParser
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
@@ -99,14 +98,14 @@ sealed trait Vector extends Serializable {
   /**
    * Converts the instance to a breeze vector.
    */
-  private[spark] def toBreeze: BV[Double]
+  private[spark] def asBreeze: BV[Double]
 
   /**
    * Gets the value of the ith element.
    * @param i index
    */
   //@Since("2.0.0")
-  def apply(i: Int): Double = toBreeze(i)
+  def apply(i: Int): Double = asBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
@@ -295,7 +294,7 @@ object Vectors {
       case Seq(size: Double, indices: Array[Double], values: Array[Double]) =>
         Vectors.sparse(size.toInt, indices.map(_.toInt), values)
       case other =>
-        throw new SparkException(s"Cannot parse $other.")
+        throw new IllegalArgumentException(s"Cannot parse $other.")
     }
   }
 
@@ -511,7 +510,7 @@ class DenseVector ( // @Since("1.0.0") (
   //@Since("2.0.0")
   override def toArray: Array[Double] = values
 
-  private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
+  private[spark] override def asBreeze: BV[Double] = new BDV[Double](values)
 
   //@Since("2.0.0")
   override def apply(i: Int): Double = values(i)
@@ -656,7 +655,7 @@ class SparseVector ( //@Since("1.0.0") (
     new SparseVector(size, indices.clone(), values.clone())
   }
 
-  private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
   //@Since("2.0.0")
   override def foreachActive(f: (Int, Double) => Unit): Unit = {

@@ -21,9 +21,9 @@ import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 
 /**
-  * BLAS routines for MLlib's vectors and matrices.
+  * BLAS routines for Spark ML's vectors and matrices.
   */
-private[spark] object BLAS extends Serializable {// with Logging {
+private[spark] object BLAS extends Serializable {
 
    @transient private var _f2jBLAS: NetlibBLAS = _
    @transient private var _nativeBLAS: NetlibBLAS = _

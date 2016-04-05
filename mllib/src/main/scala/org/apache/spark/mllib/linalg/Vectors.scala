@@ -24,7 +24,7 @@ import scala.language.implicitConversions
 
 import breeze.linalg.{Vector => BV}
 
-import org.apache.spark.annotation.{AlphaComponent, Since}
+import org.apache.spark.annotation.{Since, AlphaComponent}
 import org.apache.spark.ml.linalg.{DenseVector => MLDenseVector, SparseVector => MLSparseVector}
 import org.apache.spark.ml.linalg.{Vector => MLVector, Vectors => MLVectors}
 import org.apache.spark.mllib.linalg.ImplicitVectorCasts._
@@ -48,7 +48,7 @@ sealed trait Vector extends Serializable {
    * Size of the vector.
    */
   @Since("1.0.0")
-  def size: Int = this.asML.size
+  def size: Int
 
   /**
    * Converts the instance to a double array.
@@ -75,7 +75,7 @@ sealed trait Vector extends Serializable {
    * Note that the underneath data structure is shared, so changing
    * the data in one vector will reflect the other one
    */
-  private[spark] def asBreeze: BV[Double] = this.asML.toBreeze
+  private[spark] def asBreeze: BV[Double] = this.asML.asBreeze
 
   /**
    * Casts the instance to a standalone ml vector.
@@ -253,7 +253,7 @@ object Vectors {
    * Creates a dense vector from a double array.
    */
   @Since("1.0.0")
-  def dense(values: Array[Double]): Vector = new DenseVector(values)
+  def dense(values: Array[Double]): Vector = MLVectors.dense(values).asMLLib
 
   /**
    * Creates a sparse vector providing its index array and value array.
@@ -264,7 +264,7 @@ object Vectors {
    */
   @Since("1.0.0")
   def sparse(size: Int, indices: Array[Int], values: Array[Double]): Vector =
-    new SparseVector(size, indices, values)
+    MLVectors.sparse(size, indices, values).asMLLib
 
   /**
    * Creates a sparse vector using unordered (index, value) pairs.
@@ -293,9 +293,7 @@ object Vectors {
    * @return a zero vector
    */
   @Since("1.1.0")
-  def zeros(size: Int): Vector = {
-    new DenseVector(new Array[Double](size))
-  }
+  def zeros(size: Int): Vector = MLVectors.zeros(size).asMLLib
 
   private[mllib] def parseNumeric(any: Any): Vector = MLVectors.parseNumeric(any).asMLLib
 
@@ -338,7 +336,8 @@ object Vectors {
   /**
    * Returns the squared distance between DenseVector and SparseVector.
    */
-  private[mllib] def sqdist(v1: SparseVector, v2: DenseVector): Double = MLVectors.sqdist(v1.asML, v2.asML)
+  private[mllib] def sqdist(v1: SparseVector, v2: DenseVector): Double =
+    MLVectors.sqdist(v1.asML, v2.asML)
 
   /**
    * Check equality between sparse/dense vectors
@@ -347,7 +346,8 @@ object Vectors {
       v1Indices: IndexedSeq[Int],
       v1Values: Array[Double],
       v2Indices: IndexedSeq[Int],
-      v2Values: Array[Double]): Boolean = MLVectors.equals(v1Indices, v1Values, v2Indices,v2Values)
+      v2Values: Array[Double]): Boolean =
+    MLVectors.equals(v1Indices, v1Values, v2Indices, v2Values)
 }
 
 /**
@@ -355,15 +355,23 @@ object Vectors {
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[VectorUDT])
-class DenseVector @Since("1.0.0") (
-    @Since("1.0.0") val values: Array[Double]) extends Vector {
+class DenseVector private[linalg] (vectorImpl: MLDenseVector) extends Vector {
 
-  private[spark] override def asML = MLVectors.dense(this.values)
+  @Since("1.0.0")
+  override val size: Int = vectorImpl.size
+
+  @Since("1.0.0")
+  def this(values: Array[Double]) = this(new MLDenseVector(values))
+
+  @Since("1.0.0")
+  val values = vectorImpl.values
 
   @Since("1.1.0")
   override def copy: DenseVector = {
-    new DenseVector(values.clone())
+    new DenseVector(this.asML.copy)
   }
+
+  private[spark] override def asML: MLDenseVector = vectorImpl
 }
 
 
@@ -372,35 +380,38 @@ object DenseVector {
 
   /** Extracts the value array from a dense vector. */
   @Since("1.3.0")
-  def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
+  def unapply(dv: DenseVector): Option[Array[Double]] = MLDenseVector.unapply(dv.asML)
 }
 
 /**
  * A sparse vector represented by an index array and an value array.
- *
- * @param size size of the vector.
- * @param indices index array, assume to be strictly increasing.
- * @param values value array, must have the same length as the index array.
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[VectorUDT])
-class SparseVector @Since("1.0.0") (
-    @Since("1.0.0") override val size: Int,
-    @Since("1.0.0") val indices: Array[Int],
-    @Since("1.0.0") val values: Array[Double]) extends Vector {
+class SparseVector (vectorImpl: MLSparseVector) extends Vector {
 
-  require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
-    s" indices match the dimension of the values. You provided ${indices.length} indices and " +
-    s" ${values.length} values.")
-  require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
-    s"which exceeds the specified vector size ${size}.")
+  @Since("1.0.0")
+  override val size: Int = vectorImpl.size
+
+  @Since("1.0.0")
+  val indices: Array[Int] = vectorImpl.indices
+  @Since("1.0.0")
+  val values: Array[Double] = vectorImpl.values
+
+  /**
+   * @param size size of the vector.
+   * @param indices index array, assume to be strictly increasing.
+   * @param values value array, must have the same length as the index array.
+   */
+  @Since("1.0.0")
+  def this(size: Int, indices: Array[Int], values: Array[Double]) =
+    this(new MLSparseVector(size, indices, values))
 
   @Since("1.1.0")
-  override def copy: SparseVector = {
-    new SparseVector(size, indices.clone(), values.clone())
-  }
+  override def copy: SparseVector =
+    new SparseVector(this.asML.copy)
 
-  private[spark] override def asML = new MLSparseVector(size, indices, values)
+  private[spark] override def asML: MLSparseVector = vectorImpl
 
   /**
    * Create a slice of this vector based on the given indices.
@@ -419,7 +430,7 @@ class SparseVector @Since("1.0.0") (
 object SparseVector {
   @Since("1.3.0")
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
-    Some((sv.size, sv.indices, sv.values))
+    MLSparseVector.unapply(sv.asML)
 }
 
 private[spark] object ImplicitVectorCasts {
@@ -433,31 +444,31 @@ private[spark] object ImplicitVectorCasts {
     def asMLLib: Vector = {
       v match {
         case v: MLDenseVector =>
-          new DenseVector(v.values)
+          new DenseVector(v)
         case v: MLSparseVector =>
-          new SparseVector(v.size, v.indices, v.values)
+          new SparseVector(v)
         case v =>
           sys.error("Unsupported ML vector type: " + v.getClass.getName)
       }
     }
   }
 
-  class MLDenseVectorWithCast(val v: MLDenseVector) {
+  class MLDenseVectorWithCast(v: MLDenseVector) {
     /**
-     * Casts the instance to a mllib vector.
+     * Casts a ml dense vector to a mllib dense vector.
      * Note that the underneath data structure is shared, so changing
      * the data in one vector will reflect the other one.
      */
-    def asMLLib: DenseVector = new DenseVector(v.values)
+    def asMLLib: DenseVector = new DenseVector(v)
   }
 
-  class MLSparseVectorWithCast(val v: MLSparseVector) {
+  class MLSparseVectorWithCast(v: MLSparseVector) {
     /**
-     * Casts the instance to a mllib vector.
+     * Casts a ml sparse vector to a mllib sparse vector.
      * Note that the underneath data structure is shared, so changing
      * the data in one vector will reflect the other one.
      */
-    def asMLLib: SparseVector = new SparseVector(v.size, v.indices, v.values)
+    def asMLLib: SparseVector = new SparseVector(v)
   }
 
   implicit def MLVectorAsMLVectorWithCast(v: MLVector): MLVectorWithCast =
