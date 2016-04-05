@@ -22,6 +22,7 @@ import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
@@ -60,22 +61,24 @@ case class DropTable(
 
     // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
     // issue an exception.
-    val (dropTableUsingDropView, dropViewUsingDropTable) = try {
+    val catalogTable: Option[CatalogTable] = try {
       // If the table/view does not exist, it will throw an exception:
       // - AnalysisException, if it is from InMemoryCatalog.
       // - NoSuchTableException, if it is from HiveExternalCatalog
-      val catalogTable = sqlContext.sessionState.catalog.getTable(tableName)
-      (catalogTable.viewOriginalText.isEmpty && isView,
-        catalogTable.viewOriginalText.nonEmpty && !isView)
+      Option(sqlContext.sessionState.catalog.getTable(tableName))
     } catch {
-      case e: Throwable => log.warn(s"${e.getMessage}", e)
-        (false, false)
+      case _: org.apache.spark.sql.AnalysisException => None
+      case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException => None
+      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException => None
     }
-    if (dropTableUsingDropView) {
-      throw new AnalysisException(s"Cannot drop a table with DROP VIEW")
-    } else if (dropViewUsingDropTable) {
-      throw new AnalysisException(s"Cannot drop a view with DROP TABLE")
-    }
+
+    catalogTable.map(_.tableType match {
+      case CatalogTableType.VIRTUAL_VIEW if !isView =>
+        throw new AnalysisException(s"Cannot drop a view with DROP TABLE")
+      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+        throw new AnalysisException(s"Cannot drop a table with DROP VIEW")
+      case _ =>
+    })
 
     try {
       hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName.quotedString))
