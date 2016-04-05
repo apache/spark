@@ -379,6 +379,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val defaultCtor = ctors.find { ctor =>
       if (ctor.getParameterTypes.length != allArgs.length) {
         false
+      } else if (allArgs.contains(null)) {
+        // if there is a `null`, we can't figure out the class, therefore we should just fallback
+        // to older heuristic
+        false
       } else {
         val argsArray: Array[Class[_]] = allArgs.map(_.getClass)
         ClassUtils.isAssignable(argsArray, ctor.getParameterTypes, true /* autoboxing */)
