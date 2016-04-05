@@ -19,9 +19,9 @@ package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.DataFrame
+
 
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
@@ -70,7 +70,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
-  test("fit & transform") {
+  test("fit, transform, and summary") {
     val predictionColName = "gm_prediction"
     val probabilityColName = "gm_probability"
     val gm = new GaussianMixture().setK(k).setMaxIter(2).setPredictionCol(predictionColName)
@@ -85,6 +85,24 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     expectedColumns.foreach { column =>
       assert(transformed.columns.contains(column))
     }
+
+    // Check validity of model summary
+    val numRows = dataset.count()
+    assert(model.hasSummary)
+    val summary: GaussianMixtureSummary = model.summary
+    assert(summary.predictionCol === predictionColName)
+    assert(summary.probabilityCol === probabilityColName)
+    assert(summary.featuresCol === "features")
+    assert(summary.predictions.count() === numRows)
+    for (c <- Array(predictionColName, probabilityColName, "features")) {
+      assert(summary.predictions.columns.contains(c))
+    }
+    assert(summary.cluster.columns === Array(predictionColName))
+    assert(summary.probability.columns === Array(probabilityColName))
+    val clusterSizes = summary.clusterSizes
+    assert(clusterSizes.length === k)
+    assert(clusterSizes.sum === numRows)
+    assert(clusterSizes.forall(_ >= 0))
   }
 
   test("read/write") {
