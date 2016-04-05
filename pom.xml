@@ -562,6 +562,11 @@
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
@@ -1638,10 +1643,6 @@
         <artifactId>calcite-core</artifactId>
         <exclusions>
           <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
           </exclusion>
@@ -1660,16 +1661,6 @@
           <exclusion>
             <groupId>org.pentaho</groupId>
             <artifactId>pentaho-aggdesigner-algorithm</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica</artifactId>
-        <exclusions>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
