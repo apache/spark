@@ -119,20 +119,16 @@ case class Invoke(
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      cls
-        .getMethods
-        .find(_.getName == functionName)
-        .getOrElse(sys.error(s"Couldn't find $functionName on $cls"))
-    case _ => null
+      val m = cls.getMethods.find(_.getName == functionName)
+      if (m.isEmpty) {
+        sys.error(s"Couldn't find $functionName on $cls")
+      } else {
+        m
+      }
+    case _ => None
   }
 
-  private def returnType = if (method == null) {
-    ""
-  } else {
-    method.getReturnType.getName
-  }
-
-  lazy val unboxer = (dataType, returnType) match {
+  lazy val unboxer = (dataType, method.map(_.getReturnType.getName).getOrElse("")) match {
     case (IntegerType, "java.lang.Object") => (s: String) =>
       s"((java.lang.Integer)$s).intValue()"
     case (LongType, "java.lang.Object") => (s: String) =>
@@ -167,13 +163,13 @@ case class Invoke(
 
     val value = unboxer(s"${obj.value}.$functionName($argString)")
 
-    val evaluate = if (method == null || method.getExceptionTypes.isEmpty) {
+    val evaluate = if (method.forall(_.getExceptionTypes.isEmpty)) {
       s"$javaType ${ev.value} = ${obj.isNull} ? ${ctx.defaultValue(dataType)} : ($javaType) $value;"
     } else {
       s"""
-        $javaType ${ev.value} = null;
+        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
         try {
-          ${ev.value} = ${obj.isNull} ? ${ctx.defaultValue(dataType)} : ($javaType) $value;
+          ${ev.value} = ${obj.isNull} ? ${ctx.defaultValue(javaType)} : ($javaType) $value;
         } catch (Exception e) {
           org.apache.spark.unsafe.Platform.throwException(e);
         }
