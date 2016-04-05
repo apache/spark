@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.execution.{python, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.execution.HiveSqlParser
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.{Resource, SessionState, SQLConf}
 
 
 /**
@@ -40,7 +40,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    * Note that HiveUDFs will be overridden by functions registered in this context.
    */
   override lazy val functionRegistry: FunctionRegistry = {
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive)
+    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive, this)
   }
 
   /**
@@ -71,7 +71,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = HiveSqlParser
+  override lazy val sqlParser: ParserInterface = new HiveSqlParser(functionRegistry)
 
   /**
    * Planner that takes into account Hive-specific strategies.
@@ -105,4 +105,16 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
     }
   }
 
+  /**
+   * Loads resource to SQLContext.
+   */
+  override def loadResource(resource: Resource): Unit = {
+    resource.resourceType.toLowerCase match {
+      case "jar" =>
+        super.loadResource(resource)
+      case _ =>
+        ctx.runSqlHive(s"ADD FILE ${resource.path}")
+        super.loadResource(resource)
+    }
+  }
 }

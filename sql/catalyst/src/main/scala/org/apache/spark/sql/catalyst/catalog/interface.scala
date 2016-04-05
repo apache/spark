@@ -171,8 +171,12 @@ abstract class ExternalCatalog {
  *
  * @param identifier name of the function
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
+ * @param resources resource types and Uris used by the function
  */
-case class CatalogFunction(identifier: FunctionIdentifier, className: String)
+case class CatalogFunction(
+    identifier: FunctionIdentifier,
+    className: String,
+    resources: Seq[(String, String)])
 
 
 /**

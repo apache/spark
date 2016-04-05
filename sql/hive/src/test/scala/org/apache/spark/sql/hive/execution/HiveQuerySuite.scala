@@ -62,7 +62,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       TestHive.cacheTables = false
       TimeZone.setDefault(originalTimeZone)
       Locale.setDefault(originalLocale)
-      sql("DROP TEMPORARY FUNCTION udtf_count2")
+      sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
     } finally {
       super.afterAll()
     }

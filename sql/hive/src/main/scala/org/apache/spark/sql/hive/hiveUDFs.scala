@@ -32,19 +32,22 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.Obje
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{analysis, InternalRow}
+import org.apache.spark.sql.catalyst.{analysis, FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.internal.Resource
 import org.apache.spark.sql.types._
 
 
 private[hive] class HiveFunctionRegistry(
     underlying: analysis.FunctionRegistry,
-    executionHive: HiveClientImpl)
+    executionHive: HiveClientImpl,
+    sessionState: HiveSessionState)
   extends analysis.FunctionRegistry with HiveInspectors {
 
   def getFunctionInfo(name: String): FunctionInfo = {
@@ -55,62 +58,141 @@ private[hive] class HiveFunctionRegistry(
     }
   }
 
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    Try(underlying.lookupFunction(name, children)).getOrElse {
-      // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
-      // not always serializable.
-      val functionInfo: FunctionInfo =
-        Option(getFunctionInfo(name.toLowerCase)).getOrElse(
-          throw new AnalysisException(s"undefined function $name"))
+  /**
+   * Returns CatalogFunction for the given function name.
+   *
+   * This function looks up the given function name in SessionCatalog. For Hive, it turns to
+   * look up the function in Hive permanent functions in current database. These permanent
+   * functions are registered in Hive with `Create Function` DDL command.
+   *
+   * It is necessary to load related resources (JARs, Files) before calling the function.
+   * We will load these resources here.
+   */
+  private def getHivePermanentFunction(name: String): Option[CatalogFunction] = {
+    val databaseName = sessionState.catalog.getCurrentDatabase
+    val func = FunctionIdentifier(name, Option(databaseName))
+    val catalogFunc =
+      if (sessionState.catalog.functionExists(func)) {
+        Some(sessionState.catalog.getFunction(func))
+      } else {
+        None
+      }
+    val resourcesToLoad = catalogFunc.map(_.resources.map { case (rType, rPath) =>
+      Resource(rType, rPath)
+    }).getOrElse(Seq.empty[Resource])
+    sessionState.loadResources(resourcesToLoad)
+    catalogFunc
+  }
 
-      val functionClassName = functionInfo.getFunctionClass.getName
+  override def makeFunctionBuilder(
+      name: String,
+      functionClassName: String): FunctionBuilder = {
+    val hiveUDFWrapper = new HiveFunctionWrapper(functionClassName)
+    val hiveUDFClass = hiveUDFWrapper.createFunction().getClass
+    makeFunctionBuilder(name, functionClassName, hiveUDFClass, hiveUDFWrapper)
+  }
 
-      // When we instantiate hive UDF wrapper class, we may throw exception if the input expressions
-      // don't satisfy the hive UDF, such as type mismatch, input number mismatch, etc. Here we
-      // catch the exception and throw AnalysisException instead.
+  /**
+   * Generates a FunctionBuilder for a Hive UDF which is specified by a given classname.
+   */
+  private def makeFunctionBuilder(
+      name: String,
+      functionClassName: String,
+      hiveUDFClass: Class[_],
+      hiveUDFWrapper: HiveFunctionWrapper): FunctionBuilder = {
+    val builder = (children: Seq[Expression]) => {
       try {
-        if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
+        if (classOf[GenericUDFMacro].isAssignableFrom(hiveUDFClass)) {
           val udf = HiveGenericUDF(
-            name, new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF), children)
-          udf.dataType // Force it to check input data types.
+            name, hiveUDFWrapper, children)
+          if (udf.resolved) {
+            udf.dataType // Force it to check input data types.
+          }
           udf
-        } else if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          val udf = HiveSimpleUDF(name, new HiveFunctionWrapper(functionClassName), children)
-          udf.dataType // Force it to check input data types.
+        } else if (classOf[UDF].isAssignableFrom(hiveUDFClass)) {
+          val udf = HiveSimpleUDF(name, hiveUDFWrapper, children)
+          if (udf.resolved) {
+            udf.dataType // Force it to check input data types.
+          }
           udf
-        } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          val udf = HiveGenericUDF(name, new HiveFunctionWrapper(functionClassName), children)
-          udf.dataType // Force it to check input data types.
+        } else if (classOf[GenericUDF].isAssignableFrom(hiveUDFClass)) {
+          val udf = HiveGenericUDF(name, hiveUDFWrapper, children)
+          if (udf.resolved) {
+            udf.dataType // Force it to check input data types.
+          }
           udf
         } else if (
-          classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
-          val udaf = HiveUDAFFunction(name, new HiveFunctionWrapper(functionClassName), children)
-          udaf.dataType // Force it to check input data types.
+          classOf[AbstractGenericUDAFResolver].isAssignableFrom(hiveUDFClass)) {
+          val udaf = HiveUDAFFunction(name, hiveUDFWrapper, children)
+          if (udaf.resolved) {
+            udaf.dataType // Force it to check input data types.
+          }
           udaf
-        } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
+        } else if (classOf[UDAF].isAssignableFrom(hiveUDFClass)) {
           val udaf = HiveUDAFFunction(
-            name, new HiveFunctionWrapper(functionClassName), children, isUDAFBridgeRequired = true)
-          udaf.dataType  // Force it to check input data types.
+            name, hiveUDFWrapper, children, isUDAFBridgeRequired = true)
+          if (udaf.resolved) {
+            udaf.dataType  // Force it to check input data types.
+          }
           udaf
-        } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(functionClassName), children)
-          udtf.elementTypes // Force it to check input data types.
+        } else if (classOf[GenericUDTF].isAssignableFrom(hiveUDFClass)) {
+          val udtf = HiveGenericUDTF(name, hiveUDFWrapper, children)
+          if (udtf.resolved) {
+            udtf.elementTypes // Force it to check input data types.
+          }
           udtf
         } else {
-          throw new AnalysisException(s"No handler for udf ${functionInfo.getFunctionClass}")
+          throw new AnalysisException(s"No handler for udf ${hiveUDFClass}")
         }
       } catch {
         case analysisException: AnalysisException =>
-          // If the exception is an AnalysisException, just throw it.
           throw analysisException
         case throwable: Throwable =>
-          // If there is any other error, we throw an AnalysisException.
-          val errorMessage = s"No handler for Hive udf ${functionInfo.getFunctionClass} " +
+          val errorMessage = s"No handler for Hive udf ${hiveUDFClass} " +
             s"because: ${throwable.getMessage}."
           val analysisException = new AnalysisException(errorMessage)
           analysisException.setStackTrace(throwable.getStackTrace)
           throw analysisException
       }
+    }
+    builder
+  }
+
+  /**
+   * Returns the Expression for the function name and given children Expressions.
+   * This function will first look up existing FunctionBuilder in underlying FunctionRegistry.
+   * If not found, it will get function info from Hive Function Registry.
+   *
+   * If not found again, it will try to find this function in Hive permanent functions.
+   * If found, we load necessary JARs, Files and create the Expression.
+   */
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    underlying.lookupFunctionBuilder(name).map { f => f(children) }.getOrElse {
+      // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
+      // not always serializable.
+      val functionInfo = getFunctionInfo(name.toLowerCase)
+      val builder: FunctionBuilder =
+        if (functionInfo == null) {
+          val catalogFunc = getHivePermanentFunction(name).getOrElse(
+            throw new AnalysisException(s"undefined function $name"))
+
+          val functionClassName = catalogFunc.className
+          makeFunctionBuilder(name, functionClassName)
+        } else {
+          val functionClassName = functionInfo.getFunctionClass.getName
+
+          // When we instantiate hive UDF wrapper class, we may throw exception if the input
+          // expressions don't satisfy the hive UDF, such as type mismatch, input number mismatch,
+          // etc. Here we catch the exception and throw AnalysisException instead.
+          if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
+            val wrapper = new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF)
+            makeFunctionBuilder(name, functionClassName, functionInfo.getFunctionClass, wrapper)
+          } else {
+            val wrapper = new HiveFunctionWrapper(functionClassName)
+            makeFunctionBuilder(name, functionClassName, functionInfo.getFunctionClass, wrapper)
+          }
+        }
+      builder(children)
     }
   }
 

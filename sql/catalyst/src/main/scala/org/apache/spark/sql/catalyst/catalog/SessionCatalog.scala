@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, SimpleFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, SimpleFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -458,6 +458,18 @@ class SessionCatalog(
     externalCatalog.getFunction(db, name.funcName)
   }
 
+  /**
+   * Check if a function is already existing.
+   *
+   */
+  def functionExists(name: FunctionIdentifier): Boolean = {
+    try {
+      getFunction(name) != null
+    } catch {
+      case _: NoSuchFunctionException => false
+      case _: AnalysisException => false // HiveExternalCatalog wraps all exceptions with it.
+    }
+  }
 
   // ----------------------------------------------------------------
   // | Methods that interact with temporary and metastore functions |
@@ -469,12 +481,13 @@ class SessionCatalog(
    */
   def createTempFunction(
       name: String,
+      info: ExpressionInfo,
       funcDefinition: FunctionBuilder,
       ignoreIfExists: Boolean): Unit = {
     if (functionRegistry.lookupFunctionBuilder(name).isDefined && !ignoreIfExists) {
       throw new AnalysisException(s"Temporary function '$name' already exists.")
     }
-    functionRegistry.registerFunction(name, funcDefinition)
+    functionRegistry.registerFunction(name, info, funcDefinition)
   }
 
   /**

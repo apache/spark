@@ -202,7 +202,8 @@ class TestHiveContext private[hive](
 
     override lazy val functionRegistry = {
       new TestHiveFunctionRegistry(
-        org.apache.spark.sql.catalyst.analysis.FunctionRegistry.builtin.copy(), self.executionHive)
+        org.apache.spark.sql.catalyst.analysis.FunctionRegistry.builtin.copy(), self.executionHive,
+        this)
     }
   }
 
@@ -528,8 +529,10 @@ class TestHiveContext private[hive](
 
 }
 
-private[hive] class TestHiveFunctionRegistry(fr: SimpleFunctionRegistry, client: HiveClientImpl)
-  extends HiveFunctionRegistry(fr, client) {
+private[hive] class TestHiveFunctionRegistry(
+    fr: SimpleFunctionRegistry,
+    client: HiveClientImpl,
+    sessionState: HiveSessionState) extends HiveFunctionRegistry(fr, client, sessionState) {
 
   private val removedFunctions =
     collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]

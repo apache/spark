@@ -25,10 +25,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.plans.logical.Generate
-import org.apache.spark.sql.hive.execution.HiveSqlParser
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
-  val parser = HiveSqlParser
+class HiveQlSuite extends TestHiveSingleton {
+  val parser = hiveSqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
