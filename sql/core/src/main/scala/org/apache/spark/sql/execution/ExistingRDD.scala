@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.DataType
 
 object RDDConversions {

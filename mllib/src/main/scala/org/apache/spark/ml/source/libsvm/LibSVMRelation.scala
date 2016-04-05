@@ -31,11 +31,12 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, HadoopFileLinesReader, PartitionedFile}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -182,7 +183,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sqlContext: SQLContext,
       dataSchema: StructType,
       requiredColumns: Array[String],
-      filters: Array[Filter],
+      filters: Array[sources.Filter],
       bucketSet: Option[BitSet],
       inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
@@ -216,7 +217,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
-      filters: Seq[Filter],
+      filters: Seq[sources.Filter],
       options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
     val numFeatures = options("numFeatures").toInt
     assert(numFeatures > 0)

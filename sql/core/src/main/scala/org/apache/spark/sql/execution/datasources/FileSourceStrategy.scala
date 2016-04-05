@@ -27,8 +27,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{DataSourceScan, SparkPlan}
-import org.apache.spark.sql.sources._
+import org.apache.spark.sql.execution.{DataSourceScan, HadoopFsRelation, SparkPlan}
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed

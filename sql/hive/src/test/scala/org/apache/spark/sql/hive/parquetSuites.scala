@@ -21,13 +21,12 @@ import java.io.File
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.DataSourceScan
+import org.apache.spark.sql.execution.{DataSourceScan, HadoopFsRelation}
 import org.apache.spark.sql.execution.command.ExecutedCommand
 import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -536,8 +535,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
  * A suite of tests for the Parquet support through the data sources API.
  */
 class ParquetSourceSuite extends ParquetPartitioningTest {
-  import testImplicits._
   import hiveContext._
+  import testImplicits._
 
   override def beforeAll(): Unit = {
     super.beforeAll()
