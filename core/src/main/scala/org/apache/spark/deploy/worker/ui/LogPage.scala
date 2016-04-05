@@ -107,20 +107,18 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       }
 
     val content =
-      <html>
-        <body>
-          {linkToMaster}
-          <div>
-            <div style="float:left; margin-right:10px">{backButton}</div>
-            <div style="float:left;">{range}</div>
-            <div style="float:right; margin-left:10px">{nextButton}</div>
-          </div>
-          <br />
-          <div style="height:500px; overflow:auto; padding:5px;">
-            <pre>{logText}</pre>
-          </div>
-        </body>
-      </html>
+      <div>
+        {linkToMaster}
+        <div>
+          <div style="float:left; margin-right:10px">{backButton}</div>
+          <div style="float:left;">{range}</div>
+          <div style="float:right; margin-left:10px">{nextButton}</div>
+        </div>
+        <br />
+        <div style="height:500px; overflow:auto; padding:5px;">
+          <pre>{logText}</pre>
+        </div>
+      </div>
     UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
   }
 
