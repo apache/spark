@@ -211,8 +211,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       UnresolvedRelation(tableIdent, None),
       partitionKeys,
       query,
-      ctx.OVERWRITE != null,
-      ctx.EXISTS != null)
+      overwrite = ctx.OVERWRITE != null,
+      ifNotExists = ctx.EXISTS != null,
+      isMatchByName = false /* SQL always matches by position */)
   }
 
   /**

@@ -408,7 +408,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         partitions.getOrElse(Map.empty[String, Option[String]]),
         input,
         overwrite,
-        ifNotExists = false)).toRdd
+        ifNotExists = false,
+        isMatchByName = matchOutputColumnsByName)).toRdd
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
@@ -462,6 +463,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       throw new IllegalArgumentException(
         "Currently we don't support writing bucketed data to this data source.")
     }
+  }
+
+  def byName: DataFrameWriter = {
+    extraOptions.put("matchByName", "true")
+    this
+  }
+
+  private def matchOutputColumnsByName: Boolean = {
+    extraOptions.getOrElse("matchByName", "false").toBoolean
   }
 
   /**

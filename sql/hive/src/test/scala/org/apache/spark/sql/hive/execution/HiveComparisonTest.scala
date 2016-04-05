@@ -348,6 +348,7 @@ abstract class HiveComparisonTest
               val containsCommands = originalQuery.analyzed.collectFirst {
                 case _: Command => ()
                 case _: LogicalInsertIntoHiveTable => ()
+                case _: InsertIntoTable => ()
               }.nonEmpty
 
               if (containsCommands) {

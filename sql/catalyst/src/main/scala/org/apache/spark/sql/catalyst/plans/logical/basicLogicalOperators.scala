@@ -348,7 +348,8 @@ case class InsertIntoTable(
     partition: Map[String, Option[String]],
     child: LogicalPlan,
     overwrite: Boolean,
-    ifNotExists: Boolean)
+    ifNotExists: Boolean,
+    isMatchByName: Boolean)
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
@@ -358,18 +359,26 @@ case class InsertIntoTable(
     if (table.output.isEmpty) {
       None
     } else {
-      val numDynamicPartitions = partition.values.count(_.isEmpty)
+      val dynamicPartitionNames = partition.filter {
+        case (name, Some(_)) => false
+        case (name, None) => true
+      }.keySet
       val (partitionColumns, dataColumns) = table.output
           .partition(a => partition.keySet.contains(a.name))
-      Some(dataColumns ++ partitionColumns.takeRight(numDynamicPartitions))
+      Some(dataColumns ++ partitionColumns.filter(col => dynamicPartitionNames.contains(col.name)))
     }
   }
 
   assert(overwrite || !ifNotExists)
-  override lazy val resolved: Boolean = childrenResolved && expectedColumns.forall { expected =>
-    child.output.size == expected.size && child.output.zip(expected).forall {
-      case (childAttr, tableAttr) =>
-        DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
+  override lazy val resolved: Boolean = childrenResolved && {
+    expectedColumns match {
+      case Some(expected) =>
+        child.output.size == expected.size && child.output.zip(expected).forall {
+          case (childAttr, tableAttr) =>
+            childAttr.name == tableAttr.name && // required by some relations
+            DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
+        }
+      case None => true
     }
   }
 }
