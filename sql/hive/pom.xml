@@ -86,14 +86,9 @@
       <artifactId>avro-mapred</artifactId>
       <classifier>${avro.mapred.classifier}</classifier>
     </dependency>
-    <!-- transitive dependencies of hive-exec-core doesn't declare -->
     <dependency>
       <groupId>org.apache.thrift</groupId>
       <artifactId>libthrift</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libfb303</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>

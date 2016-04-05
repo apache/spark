@@ -1315,10 +1315,6 @@
             <artifactId>libthrift</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libfb303</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.zookeeper</groupId>
             <artifactId>zookeeper</artifactId>
           </exclusion>
@@ -1358,10 +1354,6 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libfb303</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.thrift</groupId>
@@ -1407,10 +1399,6 @@
           <exclusion>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libfb303</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.slf4j</groupId>
@@ -1464,10 +1452,6 @@
           <exclusion>
             <groupId>org.apache.curator</groupId>
             <artifactId>curator-recipes</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libfb303</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.thrift</groupId>
