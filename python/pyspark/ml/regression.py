@@ -389,7 +389,7 @@ class GBTParams(TreeEnsembleParams):
 @inherit_doc
 class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                             DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
-                            HasSeed):
+                            HasSeed, JavaMLWritable, JavaMLReadable):
     """
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for regression.
@@ -413,6 +413,18 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> dtr_path = temp_path + "/dtr"
+    >>> dt.save(dtr_path)
+    >>> dt2 = DecisionTreeRegressor.load(dtr_path)
+    >>> dt2.getMaxDepth()
+    2
+    >>> model_path = temp_path + "/dtr_model"
+    >>> model.save(model_path)
+    >>> model2 = DecisionTreeRegressionModel.load(model_path)
+    >>> model.numNodes == model2.numNodes
+    True
+    >>> model.depth == model2.depth
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -498,7 +510,7 @@ class TreeEnsembleModels(JavaModel):
 
 
 @inherit_doc
-class DecisionTreeRegressionModel(DecisionTreeModel):
+class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by DecisionTreeRegressor.
 
@@ -521,7 +533,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel):
           - Normalize importances for tree to sum to 1.
 
         Note: Feature importance for single decision trees can have high variance due to
-              correlated predictor variables. Consider using a :class:`RandomForestRegressor`
+              correlated predictor variables. Consider using a :py:class:`RandomForestRegressor`
               to determine feature importance instead.
         """
         return self._call_java("featureImportances")
@@ -614,16 +626,12 @@ class RandomForestRegressionModel(TreeEnsembleModels):
         """
         Estimate of the importance of each feature.
 
-        This generalizes the idea of "Gini" importance to other losses,
-        following the explanation of Gini importance from "Random Forests" documentation
-        by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+        Each feature's importance is the average of its importance across all trees in the ensemble
+        The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+        (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+        and follows the implementation from scikit-learn.
 
-        This feature importance is calculated as follows:
-         - Average over trees:
-            - importance(feature j) = sum (over nodes which split on feature j) of the gain,
-              where gain is scaled by the number of instances passing through node
-            - Normalize importances for tree to sum to 1.
-         - Normalize feature importance vector to sum to 1.
+        .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
         """
         return self._call_java("featureImportances")
 
@@ -641,8 +649,10 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> gbt = GBTRegressor(maxIter=5, maxDepth=2)
+    >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42)
     >>> model = gbt.fit(df)
+    >>> model.featureImportances
+    SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
@@ -664,18 +674,19 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1):
+                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1)
+                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None)
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                         checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1)
+                         checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
+                         seed=None)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -684,12 +695,12 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1):
+                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1)
+                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None)
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -720,6 +731,21 @@ class GBTRegressionModel(TreeEnsembleModels):
 
     .. versionadded:: 1.4.0
     """
+
+    @property
+    @since("2.0.0")
+    def featureImportances(self):
+        """
+        Estimate of the importance of each feature.
+
+        Each feature's importance is the average of its importance across all trees in the ensemble
+        The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+        (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+        and follows the implementation from scikit-learn.
+
+        .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
+        """
+        return self._call_java("featureImportances")
 
 
 @inherit_doc

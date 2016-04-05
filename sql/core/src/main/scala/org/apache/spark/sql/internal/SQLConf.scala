@@ -26,7 +26,6 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -288,9 +287,9 @@ object SQLConf {
     defaultValue = Some(true),
     doc = "Whether the query analyzer should be case sensitive or not.")
 
-  val PARQUET_FILE_SCAN = booleanConf("spark.sql.parquet.fileScan",
+  val USE_FILE_SCAN = booleanConf("spark.sql.sources.fileScan",
     defaultValue = Some(true),
-    doc = "Use the new FileScanRDD path for reading parquet data.",
+    doc = "Use the new FileScanRDD path for reading HDSF based data sources.",
     isPublic = false)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = booleanConf("spark.sql.parquet.mergeSchema",
@@ -445,6 +444,11 @@ object SQLConf {
     doc = "When true, the ordinal numbers are treated as the position in the select list. " +
           "When false, the ordinal numbers in order/sort By clause are ignored.")
 
+  val GROUP_BY_ORDINAL = booleanConf("spark.sql.groupByOrdinal",
+    defaultValue = Some(true),
+    doc = "When true, the ordinal numbers in group by clauses are treated as the position " +
+      "in the select list. When false, the ordinal numbers are ignored.")
+
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   //
@@ -495,19 +499,6 @@ object SQLConf {
     doc = "When true, we could use `datasource`.`path` as table in SQL query."
   )
 
-  val PARSER_SUPPORT_QUOTEDID = booleanConf("spark.sql.parser.supportQuotedIdentifiers",
-    defaultValue = Some(true),
-    isPublic = false,
-    doc = "Whether to use quoted identifier.\n  false: default(past) behavior. Implies only" +
-      "alphaNumeric and underscore are valid characters in identifiers.\n" +
-      "  true: implies column names can contain any character.")
-
-  val PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS = booleanConf(
-    "spark.sql.parser.supportSQL11ReservedKeywords",
-    defaultValue = Some(false),
-    isPublic = false,
-    doc = "This flag should be set to true to enable support for SQL2011 reserved keywords.")
-
   val WHOLESTAGE_CODEGEN_ENABLED = booleanConf("spark.sql.codegen.wholeStage",
     defaultValue = Some(true),
     doc = "When true, the whole stage (of multiple operators) will be compiled into single java" +
@@ -518,6 +509,14 @@ object SQLConf {
     defaultValue = Some(128 * 1024 * 1024), // parquet.block.size
     doc = "The maximum number of bytes to pack into a single partition when reading files.",
     isPublic = true)
+
+  val FILES_OPEN_COST_IN_BYTES = longConf("spark.sql.files.openCostInBytes",
+    defaultValue = Some(4 * 1024 * 1024),
+    doc = "The estimated cost to open a file, measured by the number of bytes could be scanned in" +
+      " the same time. This is used when putting multiple files into a partition. It's better to" +
+      " over estimated, then the partitions with small files will be faster than partitions with" +
+      " bigger files (which is scheduled first).",
+    isPublic = false)
 
   val EXCHANGE_REUSE_ENABLED = booleanConf("spark.sql.exchange.reuse",
     defaultValue = Some(true),
@@ -563,7 +562,7 @@ object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-class SQLConf extends Serializable with CatalystConf with ParserConf with Logging {
+class SQLConf extends Serializable with CatalystConf with Logging {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -576,11 +575,13 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
+  def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
+
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
-  def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+  def useFileScan: Boolean = getConf(USE_FILE_SCAN)
 
-  def parquetFileScan: Boolean = getConf(PARQUET_FILE_SCAN)
+  def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
@@ -662,12 +663,9 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
 
   def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
-  def supportQuotedId: Boolean = getConf(PARSER_SUPPORT_QUOTEDID)
-
-  def supportSQL11ReservedKeywords: Boolean = getConf(PARSER_SUPPORT_SQL11_RESERVED_KEYWORDS)
-
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
+  override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
