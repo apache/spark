@@ -440,12 +440,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       val stat = BDM.zeros[Double](k, vocabSize)
       var gammaPart = List[BDV[Double]]()
       nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
-        val ids: List[Int] = termCounts match {
-          case v: DenseVector => (0 until v.size).toList
-          case v: SparseVector => v.indices.toList
-        }
+        val ids: List[Int] = LDAUtils.vectorAsList(termCounts)
         val (gammad, sstats) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, expElogbetaBc.value, alpha, gammaShape, k)
+          termCounts, expElogbetaBc.value, alpha, gammaShape, k, ids)
         stat(::, ids) := stat(::, ids).toDenseMatrix + sstats
         gammaPart = gammad :: gammaPart
       }
@@ -542,10 +539,11 @@ private[clustering] object OnlineLDAOptimizer {
       expElogbeta: BDM[Double],
       alpha: breeze.linalg.Vector[Double],
       gammaShape: Double,
-      k: Int): (BDV[Double], BDM[Double]) = {
-    val (ids: List[Int], cts: Array[Double]) = termCounts match {
-      case v: DenseVector => ((0 until v.size).toList, v.values)
-      case v: SparseVector => (v.indices.toList, v.values)
+      k: Int,
+      ids: List[Int]): (BDV[Double], BDM[Double]) = {
+    val cts: Array[Double] = termCounts match {
+      case v: DenseVector => v.values
+      case v: SparseVector => v.values
     }
     // Initialize the variational distribution q(theta|gamma) for the mini-batch
     val gammad: BDV[Double] =

@@ -19,6 +19,8 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{max, sum, DenseMatrix => BDM, DenseVector => BDV}
 import breeze.numerics._
 
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
+
 /**
  * Utility methods for LDA.
  */
@@ -52,4 +54,13 @@ private[clustering] object LDAUtils {
     result
   }
 
+  /**
+   *  Helper method to get [[Vector]] as a List of Int.
+   */
+  private[clustering] def vectorAsList(vector: Vector): List[Int] = {
+    vector match {
+      case v: DenseVector => (0 until v.size).toList
+      case v: SparseVector => v.indices.toList
+    }
+  }
 }
