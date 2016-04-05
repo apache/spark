@@ -627,10 +627,10 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
   override def dataType: DataType = StringType
 
   override def nullSafeEval(string: Any): Any = {
-    string.asInstanceOf[UTF8String].toTitleCase
+    string.asInstanceOf[UTF8String].toLowerCase.toTitleCase
   }
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    defineCodeGen(ctx, ev, str => s"$str.toTitleCase()")
+    defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")
   }
 }
 

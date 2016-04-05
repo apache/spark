@@ -399,12 +399,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         }
         bytes[i] = (byte) upper;
       } else {
-        int lower = Character.toLowerCase(b);
-        if (lower > 127) {
-          // fallback
-          return toTitleCaseSlow();
-        }
-        bytes[i] = (byte) lower;
+        bytes[i] = b;
       }
     }
     return fromBytes(bytes);
@@ -413,7 +408,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private UTF8String toTitleCaseSlow() {
     StringBuffer sb = new StringBuffer();
     String s = toString();
-    sb.append(s.toLowerCase());
+    sb.append(s);
     sb.setCharAt(0, Character.toTitleCase(sb.charAt(0)));
     for (int i = 1; i < s.length(); i++) {
       if (sb.charAt(i - 1) == ' ') {
