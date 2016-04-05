@@ -80,12 +80,18 @@
     </dependency>
     <!-- This direct dependency shouldn't be strictly necessary, since Hive will transitively
          include the required Calcite dependencies, but we need to add this explicit dependency
-         so that our dependencyManament excludes prevent pentaho-aggdesigner-algorithm from being
+         so that our dependencyManagement excludes prevent pentaho-aggdesigner-algorithm from being
          resolved: that artifact is not present in Maven Central and therefore breaks the SBT
          build. For discussion and details, see https://github.com/apache/spark/pull/12171 -->
     <dependency>
       <groupId>org.apache.calcite</groupId>
       <artifactId>calcite-core</artifactId>
+    </dependency>
+    <!-- Although Spark doesn't directly depend on joda-time, Hive seems to need it because removing
+         this dependency breaks the Hive tests; see https://github.com/apache/spark/pull/12171. -->
+    <dependency>
+      <groupId>joda-time</groupId>
+      <artifactId>joda-time</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.thrift</groupId>
