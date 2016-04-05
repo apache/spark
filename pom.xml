@@ -272,11 +272,7 @@
         <exclusions>
           <exclusion>
             <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm-commons</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -287,11 +283,7 @@
         <exclusions>
           <exclusion>
             <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm-commons</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -693,6 +685,21 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <!-- ASM is actually relocated inside of the docker-client JAR but is not relocated.
+               Ordinarily, this would be a problem but in our case it's fine because this package
+               is only used in a handful of unit tests which are isolated to their own Maven
+               project. For more details, see https://github.com/spotify/docker-client/pull/272.
+               We need to add these exclusions here because the 'shaded' classifier only affects
+               the JAR contents and does not impact the resolution of transitive dependencies.
+               These exclusions are here to make Maven Enforcer happy. -->
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-commons</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -751,7 +758,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
@@ -879,7 +886,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
@@ -903,7 +910,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
@@ -932,7 +939,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
@@ -1569,6 +1576,11 @@
                       <!-- hsqldb interferes with the use of Derby as the default db
                            in Hive's use of Datanucleus. -->
                       <exclude>org.hsqldb:hsqldb</exclude>
+                      <!-- Our direct ASM dependency is via a shaded JAR, but our transitive deps.
+                           depend on a mixture of ASM artifacts which publish the same classes
+                           in different artifacts. To avoid hard-to-debug conflicts, we choose to
+                           exclude org.ow2.asm (ASM 4) in favor of asm.asm (ASM 3). -->
+                      <exclude>org.ow2.asm</exclude>
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
