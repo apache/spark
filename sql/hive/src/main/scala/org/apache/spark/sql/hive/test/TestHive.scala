@@ -201,8 +201,8 @@ class TestHiveContext private[hive](
     }
 
     override lazy val functionRegistry = {
-      // TestHiveFunctionRegistry tracks removed functions. So, we cannot simply use
-      // org.apache.spark.sql.catalyst.analysis.FunctionRegistry.builtIn.copy.
+      // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
+      // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
       val fr = new TestHiveFunctionRegistry
       org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
         case (name, (info, builder)) => fr.registerFunction(name, info, builder)

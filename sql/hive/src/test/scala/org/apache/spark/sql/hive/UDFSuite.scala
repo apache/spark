@@ -38,7 +38,10 @@ class UDFSuite
 
   import hiveContext.implicits._
 
-  private[this] val functionName = "myUpper"
+  private[this] val functionName = "myUPper"
+  private[this] val functionNameUpper = "MYUPPER"
+  private[this] val functionNameLower = "myupper"
+
   private[this] val functionClass =
     classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
 
@@ -76,7 +79,7 @@ class UDFSuite
       }
       sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$functionClass'")
       checkAnswer(
-        sql(s"SELECT myupper(value) from $testTableName"),
+        sql(s"SELECT $functionNameLower(value) from $testTableName"),
         expectedDF
       )
       intercept[AnalysisException] {
@@ -90,19 +93,22 @@ class UDFSuite
       sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
       checkAnswer(
         sql("SHOW functions like '.*upper'"),
-        Row("default.myupper")
+        Row(s"default.$functionNameLower")
       )
       checkAnswer(
-        sql(s"SELECT myupper(value) from $testTableName"),
+        sql(s"SELECT $functionName(value) from $testTableName"),
         expectedDF
       )
-      assert(sql("SHOW functions").collect().map(_.getString(0)).contains("default.myupper"))
+      assert(
+        sql("SHOW functions").collect()
+          .map(_.getString(0))
+          .contains(s"default.$functionNameLower"))
     }
   }
 
   test("permanent function: create and drop with a db name") {
     // For this block, drop function command uses functionName as the function name.
-    withUserDefinedFunction(functionName.toUpperCase -> false) {
+    withUserDefinedFunction(functionNameUpper -> false) {
       sql(s"CREATE FUNCTION default.$functionName AS '$functionClass'")
       // TODO: Re-enable it after can distinguish qualified and unqualified function name
       // in SessionCatalog.lookupFunction.
@@ -111,20 +117,20 @@ class UDFSuite
       //  expectedDF
       // )
       checkAnswer(
-        sql(s"SELECT myuppER(value) from $testTableName"),
+        sql(s"SELECT $functionName(value) from $testTableName"),
         expectedDF
       )
       checkAnswer(
-        sql(s"SELECT default.MYupper(value) from $testTableName"),
+        sql(s"SELECT default.$functionName(value) from $testTableName"),
         expectedDF
       )
     }
 
     // For this block, drop function command uses default.functionName as the function name.
-    withUserDefinedFunction(s"DEfault.$functionName" -> false) {
+    withUserDefinedFunction(s"DEfault.$functionNameLower" -> false) {
       sql(s"CREATE FUNCTION dEFault.$functionName AS '$functionClass'")
       checkAnswer(
-        sql(s"SELECT myUpper(value) from $testTableName"),
+        sql(s"SELECT $functionNameUpper(value) from $testTableName"),
         expectedDF
       )
     }
@@ -142,21 +148,21 @@ class UDFSuite
         // )
 
         checkAnswer(
-          sql(s"SHOW FUNCTIONS like $dbName.myupper"),
-          Row(s"$dbName.myupper")
+          sql(s"SHOW FUNCTIONS like $dbName.$functionNameUpper"),
+          Row(s"$dbName.$functionNameLower")
         )
 
         sql(s"USE $dbName")
 
         checkAnswer(
-          sql(s"SELECT myuppER(value) from $testTableName"),
+          sql(s"SELECT $functionName(value) from $testTableName"),
           expectedDF
         )
 
         sql(s"USE default")
 
         checkAnswer(
-          sql(s"SELECT $dbName.MYupper(value) from $testTableName"),
+          sql(s"SELECT $dbName.$functionName(value) from $testTableName"),
           expectedDF
         )
 
@@ -166,7 +172,7 @@ class UDFSuite
       sql(s"USE default")
 
       // For this block, drop function command uses default.functionName as the function name.
-      withUserDefinedFunction(s"$dbName.$functionName" -> false) {
+      withUserDefinedFunction(s"$dbName.$functionNameUpper" -> false) {
         sql(s"CREATE FUNCTION $dbName.$functionName AS '$functionClass'")
         // TODO: Re-enable it after can distinguish qualified and unqualified function name
         // checkAnswer(
@@ -176,9 +182,12 @@ class UDFSuite
 
         sql(s"USE $dbName")
 
-        assert(sql("SHOW functions").collect().map(_.getString(0)).contains(s"$dbName.myupper"))
+        assert(
+          sql("SHOW functions").collect()
+            .map(_.getString(0))
+            .contains(s"$dbName.$functionNameLower"))
         checkAnswer(
-          sql(s"SELECT myupper(value) from $testTableName"),
+          sql(s"SELECT $functionNameLower(value) from $testTableName"),
           expectedDF
          )
 
