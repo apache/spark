@@ -1669,7 +1669,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
             Literal(WINDOW_END) :: windowEnd :: Nil)
         }
 
-        val projections = windows.map(Alias(_, "window")() +: p.children.head.output)
+        val projections =
+          windows.map(Alias(_, "window")(exprId = windowAttr.exprId) +: p.children.head.output)
 
         val filterExpr =
           window.timeColumn >= windowAttr.getField(WINDOW_START) &&
