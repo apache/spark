@@ -360,14 +360,14 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    */
   def pregel[A: ClassTag](
-      initialMsg: Option[A],
+      initialMsg: A,
       maxIterations: Int = Int.MaxValue,
       activeDirection: EdgeDirection = EdgeDirection.Either)(
       vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
-    Pregel(graph, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
+    Pregel(graph, Some(initialMsg), maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
   }
 
   /**
@@ -388,9 +388,6 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
     * for `maxIterations` iterations.
     *
     * @tparam A the Pregel message type
-    *
-    * @param initialMsg the message each vertex will receive at the on
-    * the first iteration
     *
     * @param maxIterations the maximum number of iterations to run for
     *
@@ -419,14 +416,13 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
     *
     */
   def pregel[A: ClassTag](
-      initialMsg: A,
       maxIterations: Int = Int.MaxValue,
       activeDirection: EdgeDirection = EdgeDirection.Either)(
       vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
-    Pregel(graph, Some(initialMsg), maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
+    Pregel(graph, None, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
   }
 
   /**
