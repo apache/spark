@@ -433,12 +433,12 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
-                 seed=None, variance="varianceCol"):
+                 seed=None, variance=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 impurity="variance", seed=None, variance="varianceCol")
+                 impurity="variance", seed=None, variance=None)
         """
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -454,12 +454,12 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="variance", seed=None, variance="varianceCol"):
+                  impurity="variance", seed=None, variance=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  impurity="variance", seed=None, variance="varianceCol")
+                  impurity="variance", seed=None, variance=None)
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self.setParams._input_kwargs
