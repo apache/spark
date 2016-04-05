@@ -530,12 +530,13 @@ class SparkSqlAstBuilder extends AstBuilder {
    *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
    *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
    * }}}
+   *
+   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
+   * is associated with physical tables
    */
   override def visitAddTablePartition(
       ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.kind.getType == SqlBaseParser.VIEW) {
-      throw new ParseException(s"Unsupported partitioned view", ctx)
-    }
+    if (ctx.VIEW != null) throw new ParseException(s"Unsupported partitioned view", ctx)
     // Create partition spec to location mapping.
     val specsAndLocs = if (ctx.partitionSpec.isEmpty) {
       ctx.partitionSpecLocation.asScala.map {
@@ -597,12 +598,13 @@ class SparkSqlAstBuilder extends AstBuilder {
    *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
    *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
    * }}}
+   *
+   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
+   * is associated with physical tables
    */
   override def visitDropTablePartitions(
       ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.kind.getType == SqlBaseParser.VIEW) {
-      throw new ParseException(s"Unsupported partitioned view", ctx)
-    }
+    if (ctx.VIEW != null) throw new ParseException(s"Unsupported partitioned view", ctx)
     AlterTableDropPartition(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
