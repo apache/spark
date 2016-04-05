@@ -404,12 +404,6 @@
         <artifactId>selenium-java</artifactId>
         <version>2.45.0</version> <!-- 2.46.0+ requires Jetty 9 -->
         <scope>test</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <!-- Added for selenium only, and should match its dependent version: -->
       <dependency>
@@ -565,18 +559,10 @@
         <artifactId>jackson-annotations</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
-      <!-- Guava is excluded because of SPARK-6149.  The Guava version referenced in this module is
-           15.0, which causes runtime incompatibility issues. -->
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
         <version>${fasterxml.jackson.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.sun.jersey</groupId>
@@ -675,10 +661,6 @@
         <version>3.4.0</version>
         <scope>test</scope>
         <exclusions>
-          <exclusion>
-            <artifactId>guava</artifactId>
-            <groupId>com.google.guava</groupId>
-          </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
@@ -1280,10 +1262,6 @@
             <groupId>org.mortbay.jetty</groupId>
             <artifactId>servlet-api</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1367,10 +1345,6 @@
         <scope>${hive.deps.scope}</scope>
         <exclusions>
           <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
           </exclusion>
@@ -1450,10 +1424,6 @@
         <!-- Version matches Hive 1.2.1's version -->
         <version>1.2.0-incubating</version>
         <exclusions>
-          <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.hsqldb</groupId>
             <artifactId>hsqldb</artifactId>
