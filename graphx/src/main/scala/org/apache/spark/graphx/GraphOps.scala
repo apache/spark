@@ -335,9 +335,10 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @param maxIterations the maximum number of iterations to run for
    *
-   * @param activeDirection the direction of edges incident to a vertex that received a message in
-   * the previous round on which to run `sendMsg`. For example, if this is `EdgeDirection.Out`, only
-   * out-edges of vertices that received a message in the previous round will run.
+   * @param activeDirection the direction of edges incident to a vertex
+   * that received a message in the previous round on which to run `sendMsg`.
+   * For example, if this is `EdgeDirection.Out`, only out-edges of vertices
+   * that received a message in the previous round will run.
    *
    * @param vprog the user-defined vertex program which runs on each
    * vertex and receives the inbound message and computes a new vertex
@@ -393,9 +394,10 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
     *
     * @param maxIterations the maximum number of iterations to run for
     *
-    * @param activeDirection the direction of edges incident to a vertex that received a message in
-    * the previous round on which to run `sendMsg`. For example, if this is `EdgeDirection.Out`, only
-    * out-edges of vertices that received a message in the previous round will run.
+    * @param activeDirection the direction of edges incident to a vertex
+    * that received a message in the previous round on which to run `sendMsg`.
+    * For example, if this is `EdgeDirection.Out`, only out-edges of vertices
+    * that received a message in the previous round will run.
     *
     * @param vprog the user-defined vertex program which runs on each
     * vertex and receives the inbound message and computes a new vertex
