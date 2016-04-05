@@ -144,7 +144,6 @@
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.2</codahale.metrics.version>
     <avro.version>1.7.7</avro.version>
-    <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
     <aws.kinesis.client.version>1.6.1</aws.kinesis.client.version>
     <!-- the producer is used in tests -->
@@ -827,10 +826,7 @@
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-mapred</artifactId>
         <version>${avro.version}</version>
-        <!-- use the build matching the hadoop api of avro-mapred (i.e. no classifier for hadoop 1
-             API, adoop2 classifier for hadoop 2 API. avro-mapred is a dependency of
-             org.spark-project.hive:hive-serde -->
-        <classifier>${avro.mapred.classifier}</classifier>
+        <classifier>hadoop2</classifier>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
           <exclusion>
