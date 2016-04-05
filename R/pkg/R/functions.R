@@ -2170,15 +2170,19 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'}
 setMethod("window", signature(x = "Column"),
           function(x, windowDuration, slideDuration = NULL, startTime = NULL) {
+            stopifnot(is.character(windowDuration))
             if (!is.null(slideDuration) && !is.null(startTime)) {
+              stopifnot(is.character(slideDuration) && is.character(startTime))
               jc <- callJStatic("org.apache.spark.sql.functions",
                                 "window",
                                 x@jc, windowDuration, slideDuration, startTime)
             } else if (!is.null(slideDuration)) {
+              stopifnot(is.character(slideDuration))
               jc <- callJStatic("org.apache.spark.sql.functions",
                                 "window",
                                 x@jc, windowDuration, slideDuration)
             } else if (!is.null(startTime)) {
+              stopifnot(is.character(startTime))
               jc <- callJStatic("org.apache.spark.sql.functions",
                                 "window",
                                 x@jc, windowDuration, windowDuration, startTime)
