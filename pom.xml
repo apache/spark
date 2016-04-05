@@ -1567,6 +1567,9 @@
                            in different artifacts. To avoid hard-to-debug conflicts, we choose to
                            exclude org.ow2.asm (ASM 4) in favor of asm.asm (ASM 3). -->
                       <exclude>org.ow2.asm</exclude>
+                      <!-- We don't want to depend on mockito-all, which bundles its transitive
+                           dependencies; we use the regular mockito-core dependency instead. -->
+                      <exclude>org.mockito:mockito-all</exclude>
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
