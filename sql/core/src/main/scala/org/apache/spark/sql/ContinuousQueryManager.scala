@@ -179,11 +179,11 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
           s"Cannot start query with name $name as a query with that name is already active")
       }
       val logicalPlan = df.logicalPlan.transform {
-        case StreamingRelation(dataSource, output) =>
+        case StreamingRelation(dataSource, _, output) =>
           // Materialize source to avoid creating it in every batch
           val source = dataSource.createSource()
           // We still need to use the previous `output` instead of `source.schema` as attributes in
-          // "_logicalPlan" has already used attributes of the previous `output`.
+          // "df.logicalPlan" has already used attributes of the previous `output`.
           StreamingExecutionRelation(source, output)
       }
       val query = new StreamExecution(

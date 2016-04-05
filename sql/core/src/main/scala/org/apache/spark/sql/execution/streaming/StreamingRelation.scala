@@ -24,16 +24,20 @@ import org.apache.spark.sql.execution.datasources.DataSource
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
     val source = dataSource.createSource()
-    StreamingRelation(dataSource, source.schema.toAttributes)
+    StreamingRelation(dataSource, source.toString, source.schema.toAttributes)
   }
 }
 
 /**
  * Used to link a streaming [[DataSource]] into a
- * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
+ * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]]. This is only used for creating
+ * a streaming [[org.apache.spark.sql.DataFrame]] from [[org.apache.spark.sql.DataFrameReader]].
+ * It should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
+ * passing to [StreamExecution]] to run a query.
  */
-case class StreamingRelation(dataSource: DataSource, output: Seq[Attribute]) extends LeafNode {
-  override def toString: String = dataSource.createSource().toString
+case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
+  extends LeafNode {
+  override def toString: String = sourceName
 }
 
 /**
