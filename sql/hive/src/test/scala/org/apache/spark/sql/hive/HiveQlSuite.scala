@@ -18,16 +18,19 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans
+import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
-import org.apache.spark.sql.catalyst.plans.logical.Generate
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
 import org.apache.spark.sql.hive.execution.HiveSqlParser
 
-class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
+class HiveQlSuite extends PlanTest {
   val parser = HiveSqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
@@ -199,6 +202,26 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
       """.stripMargin)
 
     assert(plan.children.head.asInstanceOf[Generate].generator.isInstanceOf[JsonTuple])
+  }
+
+  test("transform query spec") {
+    val plan1 = parser.parsePlan("select transform(a, b) using 'func' from e where f < 10")
+      .asInstanceOf[ScriptTransformation].copy(ioschema = null)
+    val plan2 = parser.parsePlan("map a, b using 'func' as c, d from e")
+      .asInstanceOf[ScriptTransformation].copy(ioschema = null)
+    val plan3 = parser.parsePlan("reduce a, b using 'func' as (c: int, d decimal(10, 0)) from e")
+      .asInstanceOf[ScriptTransformation].copy(ioschema = null)
+
+    val p = ScriptTransformation(
+      Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+      "func", Seq.empty, plans.table("e"), null)
+
+    comparePlans(plan1,
+      p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
+    comparePlans(plan2,
+      p.copy(output = Seq('c.string, 'd.string)))
+    comparePlans(plan3,
+      p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {
