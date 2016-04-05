@@ -134,6 +134,24 @@ private[mllib] abstract class PeriodicCheckpointer[T](
   }
 
   /**
+   * Call this at the end to delete any remaining checkpoint files, except for the last checkpoint.
+   * Note that there may not be any checkpoints at all.
+   */
+  def deleteAllCheckpointsButLast(): Unit = {
+    while (checkpointQueue.size > 1) {
+      removeCheckpointFile()
+    }
+  }
+
+  /**
+   * Get all current checkpoint files.
+   * This is useful in combination with [[deleteAllCheckpointsButLast()]].
+   */
+  def getAllCheckpointFiles: Array[String] = {
+    checkpointQueue.flatMap(getCheckpointFiles).toArray
+  }
+
+  /**
    * Dequeue the oldest checkpointed Dataset, and remove its checkpoint files.
    * This prints a warning but does not fail if the files cannot be removed.
    */
@@ -141,15 +159,20 @@ private[mllib] abstract class PeriodicCheckpointer[T](
     val old = checkpointQueue.dequeue()
     // Since the old checkpoint is not deleted by Spark, we manually delete it.
     val fs = FileSystem.get(sc.hadoopConfiguration)
-    getCheckpointFiles(old).foreach { checkpointFile =>
-      try {
-        fs.delete(new Path(checkpointFile), true)
-      } catch {
-        case e: Exception =>
-          logWarning("PeriodicCheckpointer could not remove old checkpoint file: " +
-            checkpointFile)
-      }
+    getCheckpointFiles(old).foreach(PeriodicCheckpointer.removeCheckpointFile(_, fs))
+  }
+}
+
+private[spark] object PeriodicCheckpointer extends Logging {
+
+  /** Delete a checkpoint file, and log a warning if deletion fails. */
+  def removeCheckpointFile(path: String, fs: FileSystem): Unit = {
+    try {
+      fs.delete(new Path(path), true)
+    } catch {
+      case e: Exception =>
+        logWarning("PeriodicCheckpointer could not remove old checkpoint file: " +
+          path)
     }
   }
-
 }

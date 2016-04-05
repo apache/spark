@@ -80,6 +80,27 @@ final class EMLDAOptimizer extends LDAOptimizer {
 
   import LDA._
 
+  // Adjustable parameters
+  private var deleteLastCheckpoint: Boolean = false
+
+  /**
+   * If using checkpointing, this indicates whether to delete the last checkpoint to clean up.
+   */
+  @Since("2.0.0")
+  def getDeleteLastCheckpoint: Boolean = this.deleteLastCheckpoint
+
+  /**
+   * If using checkpointing, this indicates whether to delete the last
+   * checkpoint to clean up. Deleting the checkpoint can cause failures if a data partition
+   * is lost, so set this bit with care.
+   * Default: false
+   */
+  @Since("2.0.0")
+  def setDeleteLastCheckpoint(deleteLastCheckpoint: Boolean): this.type = {
+    this.deleteLastCheckpoint = deleteLastCheckpoint
+    this
+  }
+
   /**
    * The following fields will only be initialized through the initialize() method
    */
@@ -208,12 +229,18 @@ final class EMLDAOptimizer extends LDAOptimizer {
 
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
-    this.graphCheckpointer.deleteAllCheckpoints()
+    val checkpointFiles: Array[String] = if (deleteLastCheckpoint) {
+      this.graphCheckpointer.deleteAllCheckpoints()
+      Array.empty[String]
+    } else {
+      this.graphCheckpointer.deleteAllCheckpointsButLast()
+      this.graphCheckpointer.getAllCheckpointFiles
+    }
     // The constructor's default arguments assume gammaShape = 100 to ensure equivalence in
-    // LDAModel.toLocal conversion
+    // LDAModel.toLocal conversion.
     new DistributedLDAModel(this.graph, this.globalTopicTotals, this.k, this.vocabSize,
       Vectors.dense(Array.fill(this.k)(this.docConcentration)), this.topicConcentration,
-      iterationTimes)
+      iterationTimes, DistributedLDAModel.defaultGammaShape, checkpointFiles)
   }
 }
 

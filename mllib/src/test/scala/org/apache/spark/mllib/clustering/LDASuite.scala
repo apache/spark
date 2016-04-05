@@ -561,7 +561,6 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val model = lda.run(distributedEmptyDocs)
     assert(model.vocabSize === vocabSize)
   }
-
 }
 
 private[clustering] object LDASuite {

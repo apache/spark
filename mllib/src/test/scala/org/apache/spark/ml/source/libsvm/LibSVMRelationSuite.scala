@@ -29,7 +29,7 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.util.Utils
 
 class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
-  var tempDir: File = _
+  var suiteTempDir: File = _
   var path: String = _
 
   override def beforeAll(): Unit = {
@@ -40,15 +40,15 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
         |0
         |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
-    tempDir = Utils.createTempDir()
-    val file = new File(tempDir, "part-00000")
+    suiteTempDir = new File(tempDir, "LibSVMRelationSuite")
+    val file = new File(suiteTempDir, "part-00000")
     Files.write(lines, file, StandardCharsets.UTF_8)
-    path = tempDir.toURI.toString
+    path = suiteTempDir.toURI.toString
   }
 
   override def afterAll(): Unit = {
     try {
-      Utils.deleteRecursively(tempDir)
+      Utils.deleteRecursively(suiteTempDir)
     } finally {
       super.afterAll()
     }
@@ -86,7 +86,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("write libsvm data and read it again") {
     val df = sqlContext.read.format("libsvm").load(path)
-    val tempDir2 = Utils.createTempDir()
+    val tempDir2 = new File(suiteTempDir, "read_write_test")
     val writepath = tempDir2.toURI.toString
     // TODO: Remove requirement to coalesce by supporting multiple reads.
     df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writepath)

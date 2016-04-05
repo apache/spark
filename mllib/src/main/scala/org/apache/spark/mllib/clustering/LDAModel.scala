@@ -534,7 +534,8 @@ class DistributedLDAModel private[clustering] (
     @Since("1.5.0") override val docConcentration: Vector,
     @Since("1.5.0") override val topicConcentration: Double,
     private[spark] val iterationTimes: Array[Double],
-    override protected[clustering] val gammaShape: Double = 100)
+    override protected[clustering] val gammaShape: Double = DistributedLDAModel.defaultGammaShape,
+    private[spark] val checkpointFiles: Array[String] = Array.empty[String])
   extends LDAModel {
 
   import LDA._
@@ -821,6 +822,12 @@ class DistributedLDAModel private[clustering] (
 @Experimental
 @Since("1.5.0")
 object DistributedLDAModel extends Loader[DistributedLDAModel] {
+
+  /**
+   * The [[DistributedLDAModel]] constructor's default arguments assume gammaShape = 100
+   * to ensure equivalence in LDAModel.toLocal conversion.
+   */
+  private[clustering] val defaultGammaShape: Double = 100
 
   private object SaveLoadV1_0 {
 
