@@ -122,16 +122,6 @@ class PlanParserSuite extends PlanTest {
       table("a").union(table("b")).as("c").select(star()))
   }
 
-  test("transform query spec") {
-    val p = ScriptTransformation(Seq('a, 'b), "func", Seq.empty, table("e"), null)
-    assertEqual("select transform(a, b) using 'func' from e where f < 10",
-      p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
-    assertEqual("map a, b using 'func' as c, d from e",
-      p.copy(output = Seq('c.string, 'd.string)))
-    assertEqual("reduce a, b using 'func' as (c: int, d decimal(10, 0)) from e",
-      p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
-  }
-
   test("multi select query") {
     assertEqual(
       "from a select * select * where s < 10",
