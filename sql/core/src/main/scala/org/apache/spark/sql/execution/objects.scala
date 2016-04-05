@@ -73,10 +73,11 @@ case class MapPartitions(
 /**
  * Applies the given function to each input row and encodes the result.
  *
- * TODO: Each serializer expression needs the result object which is returned by the given function,
- * as input. This operator uses some tricks to make sure we only calculate the result object once,
- * we can use [[Project]] to replace this operator after we make subexpression elimination work in
- * whole stage codegen.
+ * Note that, each serializer expression needs the result object which is returned by the given
+ * function, as input. This operator uses some tricks to make sure we only calculate the result
+ * object once. We don't use [[Project]] directly as subexpression elimination doesn't work with
+ * whole stage codegen and it's confusing to show the un-common-subexpression-eliminated version of
+ * a project while explain.
  */
 case class MapElements(
     func: AnyRef,
@@ -126,7 +127,7 @@ case class MapElements(
     child.execute().mapPartitionsInternal { iter =>
       val getObject = generateToObject(deserializer, child.output)
       val outputObject = generateToRow(serializer)
-      iter.map(getObject).map(callFunc).map(outputObject)
+      iter.map(row => outputObject(callFunc(getObject(row))))
     }
   }
 

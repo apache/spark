@@ -748,7 +748,8 @@ class Dataset[T] private[sql](
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
       ExpressionEncoder.tuple(this.unresolvedTEncoder, other.unresolvedTEncoder)
-    withTypedPlan[(T, U)](other, encoderFor[(T, U)]) { (left, right) =>
+
+    withTypedPlan {
       Project(
         leftData :: rightData :: Nil,
         joined.analyzed)
@@ -1882,11 +1883,8 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def map[U : Encoder](func: T => U): Dataset[U] = {
-    new Dataset[U](
-      sqlContext,
-      MapElements[T, U](func, logicalPlan),
-      implicitly[Encoder[U]])
+  def map[U : Encoder](func: T => U): Dataset[U] = withTypedPlan {
+    MapElements[T, U](func, logicalPlan)
   }
 
   /**
@@ -1900,10 +1898,7 @@ class Dataset[T] private[sql](
   @Experimental
   def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     implicit val uEnc = encoder
-    new Dataset[U](
-      sqlContext,
-      MapElements[T, U](func, logicalPlan),
-      uEnc)
+    withTypedPlan(MapElements[T, U](func, logicalPlan))
   }
 
   /**
@@ -2380,12 +2375,7 @@ class Dataset[T] private[sql](
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
-  @inline private def withTypedPlan(logicalPlan: => LogicalPlan): Dataset[T] = {
-    new Dataset[T](sqlContext, logicalPlan, encoder)
+  @inline private def withTypedPlan[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
+    Dataset(sqlContext, logicalPlan)
   }
-
-  private[sql] def withTypedPlan[R](
-      other: Dataset[_], encoder: Encoder[R])(
-      f: (LogicalPlan, LogicalPlan) => LogicalPlan): Dataset[R] =
-    new Dataset[R](sqlContext, f(logicalPlan, other.logicalPlan), encoder)
 }
