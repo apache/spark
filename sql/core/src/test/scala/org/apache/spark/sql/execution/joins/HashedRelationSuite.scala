@@ -37,8 +37,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     val unsafeData = data.map(toUnsafe(_).copy())
 
     val buildKey = Seq(BoundReference(0, IntegerType, false))
-    val keyGenerator = UnsafeProjection.create(buildKey)
-    val hashed = UnsafeHashedRelation(unsafeData.iterator, keyGenerator, 1)
+    val hashed = UnsafeHashedRelation(unsafeData.iterator, buildKey, 1)
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
 
     assert(hashed.get(unsafeData(0)).toArray === Array(unsafeData(0)))
@@ -100,31 +99,45 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
   }
 
-  test("LongArrayRelation") {
+  test("LongToUnsafeRowMap") {
     val unsafeProj = UnsafeProjection.create(
       Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, true)))
     val rows = (0 until 100).map(i => unsafeProj(InternalRow(i, i + 1)).copy())
-    val keyProj = UnsafeProjection.create(Seq(BoundReference(0, IntegerType, false)))
-    val longRelation = LongHashedRelation(rows.iterator, keyProj, 100)
-    assert(longRelation.isInstanceOf[LongArrayRelation])
-    val longArrayRelation = longRelation.asInstanceOf[LongArrayRelation]
+    val key = Seq(BoundReference(0, IntegerType, false))
+    val longRelation = LongHashedRelation(rows.iterator, key, 10)
+    assert(longRelation.keyIsUnique)
     (0 until 100).foreach { i =>
-      val row = longArrayRelation.getValue(i)
+      val row = longRelation.getValue(i)
       assert(row.getInt(0) === i)
       assert(row.getInt(1) === i + 1)
     }
 
+    val longRelation2 = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100)
+    assert(!longRelation2.keyIsUnique)
+    (0 until 100).foreach { i =>
+      val rows = longRelation2.get(i).toArray
+      assert(rows.length === 2)
+      assert(rows(0).getInt(0) === i)
+      assert(rows(0).getInt(1) === i + 1)
+      assert(rows(1).getInt(0) === i)
+      assert(rows(1).getInt(1) === i + 1)
+    }
+
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
-    longArrayRelation.writeExternal(out)
+    longRelation2.writeExternal(out)
     out.flush()
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
-    val relation = new LongArrayRelation()
+    val relation = new LongHashedRelation()
     relation.readExternal(in)
+    assert(!relation.keyIsUnique)
     (0 until 100).foreach { i =>
-      val row = longArrayRelation.getValue(i)
-      assert(row.getInt(0) === i)
-      assert(row.getInt(1) === i + 1)
+      val rows = relation.get(i).toArray
+      assert(rows.length === 2)
+      assert(rows(0).getInt(0) === i)
+      assert(rows(0).getInt(1) === i + 1)
+      assert(rows(1).getInt(0) === i)
+      assert(rows(1).getInt(1) === i + 1)
     }
   }
 }

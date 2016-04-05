@@ -84,17 +84,8 @@ trait HashJoin {
             width = dt.defaultSize
           } else {
             val bits = dt.defaultSize * 8
-            // hashCode of Long is (l >> 32) ^ l.toInt, it means the hash code of an long with same
-            // value in high 32 bit and low 32 bit will be 0. To avoid the worst case that keys
-            // with two same ints have hash code 0, we rotate the bits of second one.
-            val rotated = if (e.dataType == IntegerType) {
-              // (e >>> 15) | (e << 17)
-              BitwiseOr(ShiftRightUnsigned(e, Literal(15)), ShiftLeft(e, Literal(17)))
-            } else {
-              e
-            }
             keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
-              BitwiseAnd(Cast(rotated, LongType), Literal((1L << bits) - 1)))
+              BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
             width -= bits
           }
         // TODO: support BooleanType, DateType and TimestampType

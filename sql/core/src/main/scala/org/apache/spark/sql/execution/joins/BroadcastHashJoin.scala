@@ -51,10 +51,8 @@ case class BroadcastHashJoin(
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(
-      canJoinKeyFitWithinLong,
-      rewriteKeyExpr(buildKeys),
-      buildPlan.output)
+    val key = rewriteKeyExpr(buildKeys).map(BindReferences.bindReference(_, buildPlan.output))
+    val mode = HashedRelationBroadcastMode(key)
     buildSide match {
       case BuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
