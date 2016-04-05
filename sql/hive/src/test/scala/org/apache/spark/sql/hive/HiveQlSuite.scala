@@ -22,11 +22,13 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JsonTuple}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans
+import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
+import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
 import org.apache.spark.sql.hive.execution.HiveSqlParser
-import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType}
 
 class HiveQlSuite extends PlanTest {
   val parser = HiveSqlParser
@@ -203,28 +205,23 @@ class HiveQlSuite extends PlanTest {
   }
 
   test("transform query spec") {
-    val plan1 = parser.parsePlan("select transform(a, b) using 'func' as c, d from e")
+    val plan1 = parser.parsePlan("select transform(a, b) using 'func' from e where f < 10")
+      .asInstanceOf[ScriptTransformation].copy(ioschema = null)
     val plan2 = parser.parsePlan("map a, b using 'func' as c, d from e")
-    val plan3 = parser.parsePlan("reduce a, b using 'func' as c, d from e")
-    comparePlans(plan1, plan2)
-    comparePlans(plan2, plan3)
+      .asInstanceOf[ScriptTransformation].copy(ioschema = null)
+    val plan3 = parser.parsePlan("reduce a, b using 'func' as (c: int, d decimal(10, 0)) from e")
+      .asInstanceOf[ScriptTransformation].copy(ioschema = null)
 
-    assert(plan1.isInstanceOf[ScriptTransformation])
-    assert(plan1.asInstanceOf[ScriptTransformation].input
-      == Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")))
-    assert(plan1.asInstanceOf[ScriptTransformation].script
-      == "func")
-    assert(plan1.asInstanceOf[ScriptTransformation].output.map(_.name)
-      == Seq("c", "d"))
-    assert(plan1.asInstanceOf[ScriptTransformation].output.map(_.dataType)
-      == Seq(StringType, StringType))
+    val p = ScriptTransformation(
+      Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+      "func", Seq.empty, plans.table("e"), null)
 
-    val plan4 = parser.parsePlan("reduce a, b using 'func' as (c: int, d decimal(10, 0)) from e")
-    assert(plan4.isInstanceOf[ScriptTransformation])
-    assert(plan1.asInstanceOf[ScriptTransformation].output.map(_.name)
-      == Seq("c", "d"))
-    assert(plan4.asInstanceOf[ScriptTransformation].output.map(_.dataType)
-      == Seq(IntegerType, DecimalType(10, 0)))
+    comparePlans(plan1,
+      p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
+    comparePlans(plan2,
+      p.copy(output = Seq('c.string, 'd.string)))
+    comparePlans(plan3,
+      p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {

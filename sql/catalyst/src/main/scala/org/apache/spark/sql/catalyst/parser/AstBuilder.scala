@@ -418,8 +418,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       outRowFormat: RowFormatContext,
       recordReader: Token,
       schemaLess: Boolean): ScriptInputOutputSchema = {
-    throw new ParseException(
-      "Script Transform is not supported in SQLContext. Use a HiveContext instead", ctx)
+    throw new ParseException("Script Transform is not supported", ctx)
   }
 
   /**
