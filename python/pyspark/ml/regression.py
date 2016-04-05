@@ -325,6 +325,9 @@ class LinearRegressionSummary(JavaCallable):
     def coefficientStandardErrors(self):
         """
         Standard error of estimated coefficients and intercept.
+        This value is only available when using the "normal" solver.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
         """
         return self._call_java("coefficientStandardErrors")
 
@@ -333,6 +336,9 @@ class LinearRegressionSummary(JavaCallable):
     def tValues(self):
         """
         T-statistic of estimated coefficients and intercept.
+        This value is only available when using the "normal" solver.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
         """
         return self._call_java("tValues")
 
@@ -341,6 +347,9 @@ class LinearRegressionSummary(JavaCallable):
     def pValues(self):
         """
         Two-sided p-value of estimated coefficients and intercept.
+        This value is only available when using the "normal" solver.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
         """
         return self._call_java("pValues")
 
@@ -362,6 +371,9 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
         """
         Objective function (scaled loss + regularization) at each
         iteration.
+        This value is only available when using the "l-bfgs" solver.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
         """
         return self._call_java("objectiveHistory")
 
@@ -370,6 +382,9 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
     def totalIterations(self):
         """
         Number of training iterations until termination.
+        This value is only available when using the "l-bfgs" solver.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
         """
         return self._call_java("totalIterations")
 
