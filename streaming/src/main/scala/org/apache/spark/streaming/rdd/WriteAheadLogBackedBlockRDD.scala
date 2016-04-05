@@ -115,6 +115,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
     assertValid()
     val hadoopConf = broadcastedHadoopConf.value
     val blockManager = SparkEnv.get.blockManager
+    val serializerManager = SparkEnv.get.serializerManager
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
     val blockId = partition.blockId
 
@@ -161,7 +162,9 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
-      blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+      serializerManager
+        .dataDeserializeStream(blockId, new ChunkedByteBuffer(dataRead).toInputStream())
+        .asInstanceOf[Iterator[T]]
     }
 
     if (partition.isBlockIdValid) {

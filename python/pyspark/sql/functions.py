@@ -25,7 +25,7 @@ if sys.version < "3":
     from itertools import imap as map
 
 from pyspark import since, SparkContext
-from pyspark.rdd import _wrap_function, ignore_unicode_prefix
+from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
@@ -1498,6 +1498,26 @@ def translate(srcCol, matching, replace):
 
 # ---------------------- Collection functions ------------------------------
 
+@ignore_unicode_prefix
+@since(2.0)
+def create_map(*cols):
+    """Creates a new map column.
+
+    :param cols: list of column names (string) or list of :class:`Column` expressions that grouped
+        as key-value pairs, e.g. (key1, value1, key2, value2, ...).
+
+    >>> df.select(create_map('name', 'age').alias("map")).collect()
+    [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
+    >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
+    [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
+    """
+    sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 @since(1.4)
 def array(*cols):
     """Creates a new array column.
@@ -1628,6 +1648,13 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
+def _wrap_function(sc, func, returnType):
+    command = (func, returnType)
+    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
+                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
@@ -1642,14 +1669,12 @@ class UserDefinedFunction(object):
 
     def _create_judf(self, name):
         from pyspark.sql import SQLContext
-        f, returnType = self.func, self.returnType  # put them in closure `func`
-        func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
-        ser = AutoBatchedSerializer(PickleSerializer())
         sc = SparkContext.getOrCreate()
-        wrapped_func = _wrap_function(sc, func, ser, ser)
+        wrapped_func = _wrap_function(sc, self.func, self.returnType)
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:
+            f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             name, wrapped_func, jdt)

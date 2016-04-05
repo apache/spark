@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.CharArrayWriter
 
 import com.fasterxml.jackson.core.JsonFactory
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
@@ -32,7 +33,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.{JoinedRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -51,6 +53,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       None
     } else {
       val parsedOptions: JSONOptions = new JSONOptions(options)
+      val columnNameOfCorruptRecord =
+        parsedOptions.columnNameOfCorruptRecord
+          .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
       val jsonFiles = files.filterNot { status =>
         val name = status.getPath.getName
         name.startsWith("_") || name.startsWith(".")
@@ -58,7 +63,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
       val jsonSchema = InferSchema.infer(
         createBaseRdd(sqlContext, jsonFiles),
-        sqlContext.conf.columnNameOfCorruptRecord,
+        columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
 
@@ -102,15 +107,52 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
     val parsedOptions: JSONOptions = new JSONOptions(options)
     val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
+    val columnNameOfCorruptRecord =
+      parsedOptions.columnNameOfCorruptRecord
+        .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
     val rows = JacksonParser.parse(
       createBaseRdd(sqlContext, jsonFiles),
       requiredDataSchema,
-      sqlContext.conf.columnNameOfCorruptRecord,
+      columnNameOfCorruptRecord,
       parsedOptions)
 
     rows.mapPartitions { iterator =>
       val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
       iterator.map(unsafeProjection)
+    }
+  }
+
+  override def buildReader(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
+    val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+    val broadcastedConf =
+      sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+
+    val parsedOptions: JSONOptions = new JSONOptions(options)
+    val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
+      .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
+
+    val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+    val joinedRow = new JoinedRow()
+
+    file => {
+      val lines = new HadoopFileLinesReader(file, broadcastedConf.value.value).map(_.toString)
+
+      val rows = JacksonParser.parseJson(
+        lines,
+        requiredSchema,
+        columnNameOfCorruptRecord,
+        parsedOptions)
+
+      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+      rows.map { row =>
+        appendPartitionColumns(joinedRow(row, file.partitionValues))
+      }
     }
   }
 

@@ -409,7 +409,10 @@ abstract class HiveComparisonTest
                 }
 
                 try {
-                  new TestHive.QueryExecution(convertedSQL)
+                  val queryExecution = new TestHive.QueryExecution(convertedSQL)
+                  // Trigger the analysis of this converted SQL query.
+                  queryExecution.analyzed
+                  queryExecution
                 } catch {
                   case NonFatal(e) => fail(
                     s"""Failed to analyze the converted SQL string:
@@ -477,7 +480,11 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHive.QueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
-                  case (q, e) => e.sparkPlan.collect {
+                  // We should take executedPlan instead of sparkPlan, because in following codes we
+                  // will run the collected plans. As we will do extra processing for sparkPlan such
+                  // as adding exchange, collapsing codegen stages, etc., collecting sparkPlan here
+                  // will cause some errors when running these plans later.
+                  case (q, e) => e.executedPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
                   }

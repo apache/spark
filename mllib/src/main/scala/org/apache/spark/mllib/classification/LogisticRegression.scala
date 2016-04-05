@@ -418,7 +418,7 @@ class LogisticRegressionWithLBFGS
 
   private def run(input: RDD[LabeledPoint], initialWeights: Vector, userSuppliedWeights: Boolean):
       LogisticRegressionModel = {
-    // ml's Logisitic regression only supports binary classifcation currently.
+    // ml's Logistic regression only supports binary classification currently.
     if (numOfLinearPredictor == 1) {
       def runWithMlLogisitcRegression(elasticNetParam: Double) = {
         // Prepare the ml LogisticRegression based on our settings

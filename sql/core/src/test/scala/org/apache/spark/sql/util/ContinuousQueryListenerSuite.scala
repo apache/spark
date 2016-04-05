@@ -61,7 +61,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
           // The source and sink offsets must be None as this must be called before the
           // batches have started
           assert(status.sourceStatuses(0).offset === None)
-          assert(status.sinkStatus.offset === None)
+          assert(status.sinkStatus.offset === CompositeOffset(None :: Nil))
 
           // No progress events or termination events
           assert(listener.progressStatuses.isEmpty)
@@ -78,7 +78,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
             assert(status != null)
             assert(status.active == true)
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
-            assert(status.sinkStatus.offset === Some(CompositeOffset.fill(LongOffset(0))))
+            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
 
             // No termination events
             assert(listener.terminationStatus === null)
@@ -92,7 +92,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
             assert(status.active === false) // must be inactive by the time onQueryTerm is called
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
-            assert(status.sinkStatus.offset === Some(CompositeOffset.fill(LongOffset(0))))
+            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
           }
           listener.checkAsyncErrors()
         }
