@@ -618,9 +618,14 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 }
 
 /**
- * Returns string, with the first letter of each word in uppercase.
+ * Returns string, with the first letter of each word in uppercase, all other letters in lowercase.
  * Words are delimited by whitespace.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - " +
+    "Returns str, with the first letter of each word in uppercase, all other letters in " +
+    "lowercase. Words are delimited by white space.",
+  extended = "> SELECT initcap('sPark sql');\n 'Spark Sql'")
 case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
