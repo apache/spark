@@ -94,8 +94,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("union all") {
-    val unionDF = testData.unionAll(testData).unionAll(testData)
-      .unionAll(testData).unionAll(testData)
+    val unionDF = testData.union(testData).union(testData)
+      .union(testData).union(testData)
 
     // Before optimizer, Union should be combined.
     assert(unionDF.queryExecution.analyzed.collect {
@@ -107,7 +107,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("unionAll should union DataFrames with UDTs (SPARK-13410)") {
+  test("union should union DataFrames with UDTs (SPARK-13410)") {
     val rowRDD1 = sparkContext.parallelize(Seq(Row(1, new ExamplePoint(1.0, 2.0))))
     val schema1 = StructType(Array(StructField("label", IntegerType, false),
                     StructField("point", new ExamplePointUDT(), false)))
@@ -118,7 +118,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df2 = sqlContext.createDataFrame(rowRDD2, schema2)
 
     checkAnswer(
-      df1.unionAll(df2).orderBy("label"),
+      df1.union(df2).orderBy("label"),
       Seq(Row(1, new ExamplePoint(1.0, 2.0)), Row(2, new ExamplePoint(3.0, 4.0)))
     )
   }
@@ -179,6 +179,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // CreateStruct and CreateArray in project list (alias)
     assert(structDf.select(struct($"record.*").as("a")).first() == Row(Row(1, 1)))
     assert(structDf.select(array($"record.*").as("a")).first().getAs[Seq[Int]](0) === Seq(1, 1))
+  }
+
+  test("Star Expansion - hash") {
+    val structDf = testData2.select("a", "b").as("record")
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(min(hash($"a", $"*"))),
+      structDf.groupBy($"a", $"b").agg(min(hash($"a", $"a", $"b"))))
+
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(hash($"a", $"*")),
+      structDf.groupBy($"a", $"b").agg(hash($"a", $"a", $"b")))
+
+    checkAnswer(
+      structDf.select(hash($"*")),
+      structDf.select(hash($"record.*")))
+
+    checkAnswer(
+      structDf.select(hash($"a", $"*")),
+      structDf.select(hash($"a", $"record.*")))
   }
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
@@ -617,7 +636,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val jsonDF = sqlContext.read.json(jsonDir)
       assert(parquetDF.inputFiles.nonEmpty)
 
-      val unioned = jsonDF.unionAll(parquetDF).inputFiles.sorted
+      val unioned = jsonDF.union(parquetDF).inputFiles.sorted
       val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
       assert(unioned === allFiles)
     }
@@ -956,7 +975,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      Dataset.newDataFrame(sqlContext, OneRowRelation).registerTempTable("one_row")
+      Dataset.ofRows(sqlContext, OneRowRelation).registerTempTable("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
@@ -1085,7 +1104,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       }
     }
 
-    val union = df1.unionAll(df2)
+    val union = df1.union(df2)
     checkAnswer(
       union.filter('i < rand(7) * 10),
       expected(union)

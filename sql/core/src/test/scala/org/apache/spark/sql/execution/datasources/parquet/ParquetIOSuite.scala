@@ -469,7 +469,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  testQuietly("SPARK-9849 DirectParquetOutputCommitter qualified name backwards compatiblity") {
+  testQuietly("SPARK-9849 DirectParquetOutputCommitter qualified name backwards compatibility") {
     val clonedConf = new Configuration(hadoopConfiguration)
 
     // Write to a parquet file and let it fail.

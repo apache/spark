@@ -51,11 +51,11 @@ case class DescribeCommand(
 }
 
 /**
-  * Used to represent the operation of create table using a data source.
+ * Used to represent the operation of create table using a data source.
  *
-  * @param allowExisting If it is true, we will do nothing when the table already exists.
-  *                      If it is false, an exception will be thrown
-  */
+ * @param allowExisting If it is true, we will do nothing when the table already exists.
+ *                      If it is false, an exception will be thrown
+ */
 case class CreateTableUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
@@ -93,15 +93,21 @@ case class CreateTempTableUsing(
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
+  if (tableIdent.database.isDefined) {
+    throw new AnalysisException(
+      s"Temporary table '$tableIdent' should not have specified a database")
+  }
+
   def run(sqlContext: SQLContext): Seq[Row] = {
     val dataSource = DataSource(
       sqlContext,
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       options = options)
-    sqlContext.sessionState.catalog.registerTable(
-      tableIdent,
-      Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan)
+    sqlContext.sessionState.catalog.createTempTable(
+      tableIdent.table,
+      Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
+      overrideIfExists = true)
 
     Seq.empty[Row]
   }
@@ -115,8 +121,13 @@ case class CreateTempTableUsingAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
+  if (tableIdent.database.isDefined) {
+    throw new AnalysisException(
+      s"Temporary table '$tableIdent' should not have specified a database")
+  }
+
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val df = Dataset.newDataFrame(sqlContext, query)
+    val df = Dataset.ofRows(sqlContext, query)
     val dataSource = DataSource(
       sqlContext,
       className = provider,
@@ -124,9 +135,10 @@ case class CreateTempTableUsingAsSelect(
       bucketSpec = None,
       options = options)
     val result = dataSource.write(mode, df)
-    sqlContext.sessionState.catalog.registerTable(
-      tableIdent,
-      Dataset.newDataFrame(sqlContext, LogicalRelation(result)).logicalPlan)
+    sqlContext.sessionState.catalog.createTempTable(
+      tableIdent.table,
+      Dataset.ofRows(sqlContext, LogicalRelation(result)).logicalPlan,
+      overrideIfExists = true)
 
     Seq.empty[Row]
   }
@@ -147,7 +159,7 @@ case class RefreshTable(tableIdent: TableIdentifier)
     if (isCached) {
       // Create a data frame to represent the table.
       // TODO: Use uncacheTable once it supports database name.
-      val df = Dataset.newDataFrame(sqlContext, logicalPlan)
+      val df = Dataset.ofRows(sqlContext, logicalPlan)
       // Uncache the logicalPlan.
       sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
       // Cache it again.

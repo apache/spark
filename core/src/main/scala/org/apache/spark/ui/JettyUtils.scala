@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 
-import org.eclipse.jetty.server.{AbstractConnector, Connector, Request, Server}
+import org.eclipse.jetty.server.{Connector, Request, Server}
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.server.nio.SelectChannelConnector
 import org.eclipse.jetty.server.ssl.SslSelectChannelConnector

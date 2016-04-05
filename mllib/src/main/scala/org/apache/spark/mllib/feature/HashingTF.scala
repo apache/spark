@@ -36,10 +36,22 @@ import org.apache.spark.util.Utils
 @Since("1.1.0")
 class HashingTF(val numFeatures: Int) extends Serializable {
 
+  private var binary = false
+
   /**
    */
   @Since("1.1.0")
   def this() = this(1 << 20)
+
+  /**
+   * If true, term frequency vector will be binary such that non-zero term counts will be set to 1
+   * (default: false)
+   */
+  @Since("2.0.0")
+  def setBinary(value: Boolean): this.type = {
+    binary = value
+    this
+  }
 
   /**
    * Returns the index of the input term.
@@ -53,9 +65,10 @@ class HashingTF(val numFeatures: Int) extends Serializable {
   @Since("1.1.0")
   def transform(document: Iterable[_]): Vector = {
     val termFrequencies = mutable.HashMap.empty[Int, Double]
+    val setTF = if (binary) (i: Int) => 1.0 else (i: Int) => termFrequencies.getOrElse(i, 0.0) + 1.0
     document.foreach { term =>
       val i = indexOf(term)
-      termFrequencies.put(i, termFrequencies.getOrElse(i, 0.0) + 1.0)
+      termFrequencies.put(i, setTF(i))
     }
     Vectors.sparse(numFeatures, termFrequencies.toSeq)
   }

@@ -21,11 +21,7 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A collection of implicit methods for converting common Scala objects into [[DataFrame]]s.
@@ -35,6 +31,17 @@ import org.apache.spark.unsafe.types.UTF8String
 abstract class SQLImplicits {
 
   protected def _sqlContext: SQLContext
+
+  /**
+   * Converts $"col name" into an [[Column]].
+   *
+   * @since 2.0.0
+   */
+  implicit class StringToColumn(val sc: StringContext) {
+    def $(args: Any*): ColumnName = {
+      new ColumnName(sc.s(args: _*))
+    }
+  }
 
   /** @since 1.6.0 */
   implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()

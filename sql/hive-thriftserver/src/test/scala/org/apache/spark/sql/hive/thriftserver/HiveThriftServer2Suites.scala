@@ -491,46 +491,50 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
   test("SPARK-11595 ADD JAR with input path having URL scheme") {
     withJdbcStatement { statement =>
-      val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-      val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+      try {
+        val jarPath = "../hive/src/test/resources/TestUDTF.jar"
+        val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
-      Seq(
-        s"ADD JAR $jarURL",
-        s"""CREATE TEMPORARY FUNCTION udtf_count2
-           |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-         """.stripMargin
-      ).foreach(statement.execute)
+        Seq(
+          s"ADD JAR $jarURL",
+          s"""CREATE TEMPORARY FUNCTION udtf_count2
+             |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+           """.stripMargin
+        ).foreach(statement.execute)
 
-      val rs1 = statement.executeQuery("DESCRIBE FUNCTION udtf_count2")
+        val rs1 = statement.executeQuery("DESCRIBE FUNCTION udtf_count2")
 
-      assert(rs1.next())
-      assert(rs1.getString(1) === "Function: udtf_count2")
+        assert(rs1.next())
+        assert(rs1.getString(1) === "Function: udtf_count2")
 
-      assert(rs1.next())
-      assertResult("Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2") {
-        rs1.getString(1)
+        assert(rs1.next())
+        assertResult("Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2") {
+          rs1.getString(1)
+        }
+
+        assert(rs1.next())
+        assert(rs1.getString(1) === "Usage: To be added.")
+
+        val dataPath = "../hive/src/test/resources/data/files/kv1.txt"
+
+        Seq(
+          s"CREATE TABLE test_udtf(key INT, value STRING)",
+          s"LOAD DATA LOCAL INPATH '$dataPath' OVERWRITE INTO TABLE test_udtf"
+        ).foreach(statement.execute)
+
+        val rs2 = statement.executeQuery(
+          "SELECT key, cc FROM test_udtf LATERAL VIEW udtf_count2(value) dd AS cc")
+
+        assert(rs2.next())
+        assert(rs2.getInt(1) === 97)
+        assert(rs2.getInt(2) === 500)
+
+        assert(rs2.next())
+        assert(rs2.getInt(1) === 97)
+        assert(rs2.getInt(2) === 500)
+      } finally {
+        statement.executeQuery("DROP TEMPORARY FUNCTION udtf_count2")
       }
-
-      assert(rs1.next())
-      assert(rs1.getString(1) === "Usage: To be added.")
-
-      val dataPath = "../hive/src/test/resources/data/files/kv1.txt"
-
-      Seq(
-        s"CREATE TABLE test_udtf(key INT, value STRING)",
-        s"LOAD DATA LOCAL INPATH '$dataPath' OVERWRITE INTO TABLE test_udtf"
-      ).foreach(statement.execute)
-
-      val rs2 = statement.executeQuery(
-        "SELECT key, cc FROM test_udtf LATERAL VIEW udtf_count2(value) dd AS cc")
-
-      assert(rs2.next())
-      assert(rs2.getInt(1) === 97)
-      assert(rs2.getInt(2) === 500)
-
-      assert(rs2.next())
-      assert(rs2.getInt(1) === 97)
-      assert(rs2.getInt(2) === 500)
     }
   }
 
@@ -565,24 +569,28 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
       },
 
       { statement =>
-        val rs1 = statement.executeQuery("SET foo")
+        try {
+          val rs1 = statement.executeQuery("SET foo")
 
-        assert(rs1.next())
-        assert(rs1.getString(1) === "foo")
-        assert(rs1.getString(2) === "bar")
+          assert(rs1.next())
+          assert(rs1.getString(1) === "foo")
+          assert(rs1.getString(2) === "bar")
 
-        val rs2 = statement.executeQuery("DESCRIBE FUNCTION udtf_count2")
+          val rs2 = statement.executeQuery("DESCRIBE FUNCTION udtf_count2")
 
-        assert(rs2.next())
-        assert(rs2.getString(1) === "Function: udtf_count2")
+          assert(rs2.next())
+          assert(rs2.getString(1) === "Function: udtf_count2")
 
-        assert(rs2.next())
-        assertResult("Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2") {
-          rs2.getString(1)
+          assert(rs2.next())
+          assertResult("Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2") {
+            rs2.getString(1)
+          }
+
+          assert(rs2.next())
+          assert(rs2.getString(1) === "Usage: To be added.")
+        } finally {
+          statement.executeQuery("DROP TEMPORARY FUNCTION udtf_count2")
         }
-
-        assert(rs2.next())
-        assert(rs2.getString(1) === "Usage: To be added.")
       }
     )
   }
@@ -763,11 +771,15 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         extraEnvironment = Map(
           // Disables SPARK_TESTING to exclude log4j.properties in test directories.
           "SPARK_TESTING" -> "0",
+          // But set SPARK_SQL_TESTING to make spark-class happy.
+          "SPARK_SQL_TESTING" -> "1",
           // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be
           // started at a time, which is not Jenkins friendly.
           "SPARK_PID_DIR" -> pidDir.getCanonicalPath),
         redirectStderr = true)
 
+      logInfo(s"COMMAND: $command")
+      logInfo(s"OUTPUT: $lines")
       lines.split("\n").collectFirst {
         case line if line.contains(LOG_FILE_MARK) => new File(line.drop(LOG_FILE_MARK.length))
       }.getOrElse {

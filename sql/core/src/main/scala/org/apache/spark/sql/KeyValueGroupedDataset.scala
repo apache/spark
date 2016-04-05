@@ -57,13 +57,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private def logicalPlan = queryExecution.analyzed
   private def sqlContext = queryExecution.sqlContext
 
-  private def groupedData = {
-    new RelationalGroupedDataset(
-      Dataset.newDataFrame(sqlContext, logicalPlan),
-      groupingAttributes,
-      RelationalGroupedDataset.GroupByType)
-  }
-
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
    * specified type. The mapping of key columns to the type follows the same rules as `as` on
@@ -190,7 +183,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def reduce(f: (V, V) => V): Dataset[(K, V)] = {
+  def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
     val func = (key: K, it: Iterator[V]) => Iterator((key, it.reduce(f)))
 
     implicit val resultEncoder = ExpressionEncoder.tuple(unresolvedKEncoder, unresolvedVEncoder)
@@ -203,19 +196,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def reduce(f: ReduceFunction[V]): Dataset[(K, V)] = {
-    reduce(f.call _)
-  }
-
-  // This is here to prevent us from adding overloads that would be ambiguous.
-  @scala.annotation.varargs
-  private def agg(exprs: Column*): DataFrame =
-    groupedData.agg(withEncoder(exprs.head), exprs.tail.map(withEncoder): _*)
-
-  private def withEncoder(c: Column): Column = c match {
-    case tc: TypedColumn[_, _] =>
-      tc.withInputType(resolvedVEncoder.bind(dataAttributes), dataAttributes)
-    case _ => c
+  def reduceGroups(f: ReduceFunction[V]): Dataset[(K, V)] = {
+    reduceGroups(f.call _)
   }
 
   /**
