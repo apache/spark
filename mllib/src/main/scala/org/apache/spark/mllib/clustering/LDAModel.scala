@@ -303,9 +303,8 @@ class LocalLDAModel private[spark] (
       documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
         val localElogbeta = ElogbetaBc.value
         var docBound = 0.0D
-        val ids: List[Int] = LDAUtils.vectorAsList(termCounts)
-        val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, exp(localElogbeta), brzAlpha, gammaShape, k, ids)
+        val (gammad: BDV[Double], _, _) = OnlineLDAOptimizer.variationalTopicInference(
+          termCounts, exp(localElogbeta), brzAlpha, gammaShape, k)
         val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
         // E[log p(doc | theta, beta)]
@@ -355,14 +354,12 @@ class LocalLDAModel private[spark] (
       if (termCounts.numNonzeros == 0) {
         (id, Vectors.zeros(k))
       } else {
-        val ids: List[Int] = LDAUtils.vectorAsList(termCounts)
-        val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
           expElogbetaBc.value,
           docConcentrationBrz,
           gammaShape,
-          k,
-          ids)
+          k)
         (id, Vectors.dense(normalize(gamma, 1.0).toArray))
       }
     }
@@ -380,14 +377,12 @@ class LocalLDAModel private[spark] (
       if (termCounts.numNonzeros == 0) {
         Vectors.zeros(k)
       } else {
-        val ids: List[Int] = LDAUtils.vectorAsList(termCounts)
-        val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
           expElogbetaBc.value,
           docConcentrationBrz,
           gammaShape,
-          k,
-          ids)
+          k)
         Vectors.dense(normalize(gamma, 1.0).toArray)
       }
   }
@@ -408,14 +403,12 @@ class LocalLDAModel private[spark] (
     if (document.numNonzeros == 0) {
       Vectors.zeros(this.k)
     } else {
-      val ids: List[Int] = LDAUtils.vectorAsList(document)
-      val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+      val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
         document,
         expElogbeta,
         this.docConcentration.toBreeze,
         gammaShape,
-        this.k,
-        ids)
+        this.k)
       Vectors.dense(normalize(gamma, 1.0).toArray)
     }
   }
