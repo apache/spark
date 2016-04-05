@@ -209,7 +209,7 @@ class SQLContext private[sql](
   }
 
   /** A [[FunctionResourceLoader]] that can be used in SessionCatalog. */
-  protected[sql] lazy val functionResourceLoader: FunctionResourceLoader = {
+  @transient protected[sql] lazy val functionResourceLoader: FunctionResourceLoader = {
     new FunctionResourceLoader {
       override def loadResource(resource: FunctionResource): Unit = {
         resource.resourceType match {
