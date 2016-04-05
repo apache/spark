@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.api.java.function.MapFunction
-import org.apache.spark.sql.{Encoders, TypedColumn, SQLContext, SQLImplicits}
+import org.apache.spark.sql.TypedColumn
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 
