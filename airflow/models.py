@@ -1602,7 +1602,7 @@ class BaseOperator(object):
             # TODO remove *args and **kwargs in Airflow 2.0
             warnings.warn(
                 'Invalid arguments were passed to {c}. Support for '
-                'passing such arguments will be dropped in Airflow 2.0.'
+                'passing such arguments will be dropped in Airflow 2.0. '
                 'Invalid arguments were:'
                 '\n*args: {a}\n**kwargs: {k}'.format(
                     c=self.__class__.__name__, a=args, k=kwargs),
