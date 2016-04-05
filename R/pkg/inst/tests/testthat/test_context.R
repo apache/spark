@@ -36,7 +36,7 @@ test_that("Check masked functions", {
                                         any(grepl("=\"ANY\"", capture.output(showMethods(x)[-1])))
                                       }))
   maskedCompletely <- masked[!funcHasAny]
-  namesOfMaskedCompletely <- c("cov", "filter", "sample")
+  namesOfMaskedCompletely <- c("cov", "filter", "sample", "window")
   expect_equal(length(maskedCompletely), length(namesOfMaskedCompletely))
   expect_equal(sort(maskedCompletely), sort(namesOfMaskedCompletely))
 })
