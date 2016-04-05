@@ -26,7 +26,6 @@ import org.apache.spark.sql.SQLContext
 trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
   protected val sqlContext: SQLContext = TestHive
   protected val hiveContext: TestHiveContext = TestHive
-  protected val hiveSqlParser = hiveContext.sessionState.sqlParser
 
   protected override def afterAll(): Unit = {
     try {
