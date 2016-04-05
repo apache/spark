@@ -1077,7 +1077,7 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
     >>> df = sqlContext.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
     >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
     >>> w.select(w.window.start.cast("string").alias("start"),
-                 w.window.end.cast("string").alias("end"), "sum").collect()
+    ...          w.window.end.cast("string").alias("end"), "sum").collect()
     [Row(start=u"2016-03-11 09:00:05", end=u"2016-03-11 09:00:10", sum=1)]
     """
     def check_string_field(field, fieldName):
