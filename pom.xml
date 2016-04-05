@@ -1188,10 +1188,6 @@
             <artifactId>kryo</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>commons-httpclient</groupId>
-            <artifactId>commons-httpclient</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
           </exclusion>
