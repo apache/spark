@@ -78,6 +78,15 @@
       <groupId>org.apache.avro</groupId>
       <artifactId>avro</artifactId>
     </dependency>
+    <!-- This direct dependency shouldn't be strictly necessary, since Hive will transitively
+         include the required Calcite dependencies, but we need to add this explicit dependency
+         so that our dependencyManament excludes prevent pentaho-aggdesigner-algorithm from being
+         resolved: that artifact is not present in Maven Central and therefore breaks the SBT
+         build. For discussion and details, see https://github.com/apache/spark/pull/12171 -->
+    <dependency>
+      <groupId>org.apache.calcite</groupId>
+      <artifactId>calcite-core</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.thrift</groupId>
       <artifactId>libthrift</artifactId>

@@ -1175,6 +1175,12 @@
             <groupId>ant</groupId>
             <artifactId>ant</artifactId>
           </exclusion>
+          <!-- Calcite is excluded here and explicitly re-added in hive/pom.xml;
+               see comments there for full explanation. -->
+          <exclusion>
+            <groupId>org.apache.calcite</groupId>
+            <artifactId>calcite-core</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>org.apache.ant</groupId>
             <artifactId>ant</artifactId>
@@ -1444,6 +1450,8 @@
       <dependency>
         <groupId>org.apache.calcite</groupId>
         <artifactId>calcite-core</artifactId>
+        <!-- Version matches Hive 1.2.1's version -->
+        <version>1.2.0-incubating</version>
         <exclusions>
           <exclusion>
             <groupId>com.google.guava</groupId>
