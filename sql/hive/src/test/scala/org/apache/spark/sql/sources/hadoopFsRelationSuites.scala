@@ -17,18 +17,21 @@
 
 package org.apache.spark.sql.sources
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{FileScanRDD, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -668,6 +671,41 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       df.write.format(dataSourceName).partitionBy("c", "d", "e").saveAsTable("t")
     }
   }
+
+  test("Locality support for FileScanRDD") {
+    withHadoopConf(
+      "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true"
+    ) {
+      withTempPath { dir =>
+        val path = "file://" + dir.getCanonicalPath
+        val df1 = sqlContext.range(4)
+        df1.repartition(2).write.format(dataSourceName).save(path)
+
+        val df2 = sqlContext.read
+          .format(dataSourceName)
+          .option("dataSchema", df1.schema.json)
+          .load(path)
+
+        val Some(fileScanRDD) = {
+          def allRDDsInDAG(rdd: RDD[_]): Seq[RDD[_]] = {
+            rdd +: rdd.dependencies.map(_.rdd).flatMap(allRDDsInDAG)
+          }
+
+          // We have to search for the `FileScanRDD` along the RDD DAG since
+          // RDD.preferredLocations doesn't propagate along the DAG to the root RDD.
+          allRDDsInDAG(df2.rdd).collectFirst {
+            case f: FileScanRDD => f
+          }
+        }
+
+        val partitions = fileScanRDD.partitions
+        val preferredLocations = partitions.flatMap(fileScanRDD.preferredLocations)
+
+        assert(preferredLocations.distinct.length == 2)
+      }
+    }
+  }
 }
 
 // This class is used to test SPARK-8578. We should not use any custom output committer when
@@ -691,5 +729,18 @@ class AlwaysFailParquetOutputCommitter(
 
   override def commitJob(context: JobContext): Unit = {
     sys.error("Intentional job commitment failure for testing purpose.")
+  }
+}
+
+class LocalityTestFileSystem extends RawLocalFileSystem {
+  private val invocations = new AtomicInteger(0)
+
+  override def getFileBlockLocations(
+      file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
+    if (invocations.getAndAdd(1) % 2 == 0) {
+      Array(new BlockLocation(Array("host1:50010"), Array("host1"), 0, len))
+    } else {
+      Array(new BlockLocation(Array("host2:50010"), Array("host2"), 0, len))
+    }
   }
 }
