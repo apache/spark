@@ -111,7 +111,7 @@ package object config {
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .stringConf
-    .optional
+    .createOptional
 
   /* Cluster-mode launcher configuration. */
 
