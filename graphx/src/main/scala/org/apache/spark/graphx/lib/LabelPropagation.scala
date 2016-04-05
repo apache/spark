@@ -58,7 +58,7 @@ object LabelPropagation {
       if (message.isEmpty) attr else message.maxBy(_._2)._1
     }
     val initialMessage = Map[VertexId, Long]()
-    Pregel(lpaGraph, initialMessage, maxIterations = maxSteps)(
+    Pregel(lpaGraph, Some(initialMessage), maxIterations = maxSteps)(
       vprog = vertexProgram,
       sendMsg = sendMessage,
       mergeMsg = mergeMessage)

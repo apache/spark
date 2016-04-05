@@ -72,7 +72,7 @@ object StronglyConnectedComponents {
       // collect min of all my neighbor's scc values, update if it's smaller than mine
       // then notify any neighbors with scc values larger than mine
       sccWorkGraph = Pregel[(VertexId, Boolean), ED, VertexId](
-        sccWorkGraph, Long.MaxValue, activeDirection = EdgeDirection.Out)(
+        sccWorkGraph, Some(Long.MaxValue), activeDirection = EdgeDirection.Out)(
         (vid, myScc, neighborScc) => (math.min(myScc._1, neighborScc), myScc._2),
         e => {
           if (e.srcAttr._1 < e.dstAttr._1) {
@@ -86,7 +86,7 @@ object StronglyConnectedComponents {
       // start at root of SCCs. Traverse values in reverse, notify all my neighbors
       // do not propagate if colors do not match!
       sccWorkGraph = Pregel[(VertexId, Boolean), ED, Boolean](
-        sccWorkGraph, false, activeDirection = EdgeDirection.In)(
+        sccWorkGraph, Some(false), activeDirection = EdgeDirection.In)(
         // vertex is final if it is the root of a color
         // or it has the same color as a neighbor that is final
         (vid, myScc, existsSameColorFinalNeighbor) => {

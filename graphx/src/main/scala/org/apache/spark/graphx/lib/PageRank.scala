@@ -257,7 +257,7 @@ object PageRank extends Logging {
         vertexProgram(id, attr, msgSum)
     }
 
-    Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
+    Pregel(pagerankGraph, Some(initialMessage), activeDirection = EdgeDirection.Out)(
       vp, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
   } // end of deltaPageRank
