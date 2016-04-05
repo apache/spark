@@ -1558,6 +1558,7 @@
                       -->
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
+                      <exclude>javax.servlet:servlet-api</exclude>
                       <!-- hsqldb interferes with the use of Derby as the default db
                            in Hive's use of Datanucleus. -->
                       <exclude>org.hsqldb:hsqldb</exclude>
