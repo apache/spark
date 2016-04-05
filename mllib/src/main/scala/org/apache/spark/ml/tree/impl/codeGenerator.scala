@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.tree
+package org.apache.spark.ml.tree.impl
 
 import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
