@@ -1375,8 +1375,16 @@ class DataFrame(object):
           accepted but give the same result as 1.
         :return:  the approximate quantiles at the given probabilities
         """
-        if not isinstance(col, str):
-            raise ValueError("col should be a string.")
+        if not isinstance(col, (str, list, tuple)):
+            raise ValueError("col should be a string or list or tuple.")
+        if isinstance(col, str):
+            col = [col]
+        if isinstance(col, tuple):
+            col = list(col)
+        for c in col:
+            if not isinstance(col, str):
+                raise ValueError("columns should be strings.")
+        col = _to_list(self._sc, col)
 
         if not isinstance(probabilities, (list, tuple)):
             raise ValueError("probabilities should be a list or tuple")
@@ -1391,7 +1399,10 @@ class DataFrame(object):
             raise ValueError("relativeError should be numerical (float, int, long) >= 0.")
         relativeError = float(relativeError)
 
-        jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
+        jaq = self._jdf.stat().approxQuantileMultiCols(col, probabilities, relativeError)
+        jaq = list(jaq)
+        if len(jaq) == 1:
+            return list(jaq[0])
         return list(jaq)
 
     @since(1.4)
