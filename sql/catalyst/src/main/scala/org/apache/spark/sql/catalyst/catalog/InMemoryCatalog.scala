@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-
+import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
  * An in-memory (ephemeral) implementation of the system catalog.
@@ -46,11 +46,6 @@ class InMemoryCatalog extends ExternalCatalog {
 
   // Database name -> description
   private val catalog = new scala.collection.mutable.HashMap[String, DatabaseDesc]
-
-  private def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
-    val regex = pattern.replaceAll("\\*", ".*").r
-    names.filter { funcName => regex.pattern.matcher(funcName).matches() }
-  }
 
   private def functionExists(db: String, funcName: String): Boolean = {
     requireDbExists(db)
@@ -141,7 +136,7 @@ class InMemoryCatalog extends ExternalCatalog {
   }
 
   override def listDatabases(pattern: String): Seq[String] = synchronized {
-    filterPattern(listDatabases(), pattern)
+    StringUtils.filterPattern(listDatabases(), pattern)
   }
 
   override def setCurrentDatabase(db: String): Unit = { /* no-op */ }
@@ -208,7 +203,7 @@ class InMemoryCatalog extends ExternalCatalog {
   }
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
-    filterPattern(listTables(db), pattern)
+    StringUtils.filterPattern(listTables(db), pattern)
   }
 
   // --------------------------------------------------------------------------
@@ -322,7 +317,7 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def listFunctions(db: String, pattern: String): Seq[String] = synchronized {
     requireDbExists(db)
-    filterPattern(catalog(db).functions.keysIterator.toSeq, pattern)
+    StringUtils.filterPattern(catalog(db).functions.keysIterator.toSeq, pattern)
   }
 
 }
