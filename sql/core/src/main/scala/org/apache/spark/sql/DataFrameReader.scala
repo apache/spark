@@ -176,7 +176,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.ofRows(sqlContext, StreamingRelation(dataSource.createSource()))
+    Dataset.ofRows(sqlContext, StreamingRelation(dataSource))
   }
 
   /**

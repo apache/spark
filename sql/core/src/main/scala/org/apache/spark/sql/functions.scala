@@ -2574,8 +2574,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time can be as TimestampType or LongType, however when using LongType,
-   *                   the time must be given in seconds.
+   *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
    *                       valid duration identifiers.
@@ -2629,8 +2628,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time can be as TimestampType or LongType, however when using LongType,
-   *                   the time must be given in seconds.
+   *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
    *                       valid duration identifiers.
@@ -2672,8 +2670,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time can be as TimestampType or LongType, however when using LongType,
-   *                   the time must be given in seconds.
+   *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
    *                       valid duration identifiers.

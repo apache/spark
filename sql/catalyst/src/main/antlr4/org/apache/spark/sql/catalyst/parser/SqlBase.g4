@@ -116,6 +116,8 @@ statement
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
+    | SHOW TBLPROPERTIES table=tableIdentifier
+        ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
@@ -466,15 +468,15 @@ booleanExpression
 //  https://github.com/antlr/antlr4/issues/780
 //  https://github.com/antlr/antlr4/issues/781
 predicated
-    : valueExpression predicate[$valueExpression.ctx]?
+    : valueExpression predicate?
     ;
 
-predicate[ParserRuleContext value]
-    : NOT? BETWEEN lower=valueExpression AND upper=valueExpression        #between
-    | NOT? IN '(' expression (',' expression)* ')'                        #inList
-    | NOT? IN '(' query ')'                                               #inSubquery
-    | NOT? like=(RLIKE | LIKE) pattern=valueExpression                    #like
-    | IS NOT? NULL                                                        #nullPredicate
+predicate
+    : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
+    | NOT? kind=IN '(' expression (',' expression)* ')'
+    | NOT? kind=IN '(' query ')'
+    | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
+    | IS NOT? kind=NULL
     ;
 
 valueExpression

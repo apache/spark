@@ -182,8 +182,8 @@ private[spark] class Client(
     val appStagingDir = getAppStagingDir(appId)
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
-      val stagingDirPath = new Path(appStagingDir)
       val fs = FileSystem.get(hadoopConf)
+      val stagingDirPath = getAppStagingDirPath(sparkConf, fs, appStagingDir)
       if (!preserveFiles && fs.exists(stagingDirPath)) {
         logInfo("Deleting staging directory " + stagingDirPath)
         fs.delete(stagingDirPath, true)
@@ -357,7 +357,7 @@ private[spark] class Client(
     // Upload Spark and the application JAR to the remote file system if necessary,
     // and add them as local resources to the application master.
     val fs = FileSystem.get(hadoopConf)
-    val dst = new Path(fs.getHomeDirectory(), appStagingDir)
+    val dst = getAppStagingDirPath(sparkConf, fs, appStagingDir)
     val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
     YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
@@ -447,9 +447,6 @@ private[spark] class Client(
      *
      * Note that the archive cannot be a "local" URI. If none of the above settings are found,
      * then upload all files found in $SPARK_HOME/jars.
-     *
-     * TODO: currently the code looks in $SPARK_HOME/lib while the work to replace assemblies
-     * with a directory full of jars is ongoing.
      */
     val sparkArchive = sparkConf.get(SPARK_ARCHIVE)
     if (sparkArchive.isDefined) {
@@ -671,7 +668,7 @@ private[spark] class Client(
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
     if (loginFromKeytab) {
       val remoteFs = FileSystem.get(hadoopConf)
-      val stagingDirPath = new Path(remoteFs.getHomeDirectory, stagingDir)
+      val stagingDirPath = getAppStagingDirPath(sparkConf, remoteFs, stagingDir)
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
       logInfo(s"Credentials file set to: $credentialsFile")
@@ -1439,6 +1436,18 @@ private object Client extends Logging {
   /** Returns whether the URI is a "local:" URI. */
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
+  }
+
+  /**
+   *  Returns the app staging dir based on the STAGING_DIR configuration if configured
+   *  otherwise based on the users home directory.
+   */
+  private def getAppStagingDirPath(
+      conf: SparkConf,
+      fs: FileSystem,
+      appStagingDir: String): Path = {
+    val baseDir = conf.get(STAGING_DIR).map { new Path(_) }.getOrElse(fs.getHomeDirectory())
+    new Path(baseDir, appStagingDir)
   }
 
 }

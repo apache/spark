@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.execution.streaming.{StreamingExecutionRelation, StreamingRelation}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -448,6 +449,22 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+
+  /**
+   * Returns true if this [[Dataset]] contains one or more sources that continuously
+   * return data as it arrives. A [[Dataset]] that reads data from a streaming source
+   * must be executed as a [[ContinuousQuery]] using the `startStream()` method in
+   * [[DataFrameWriter]].  Methods that return a single answer, (e.g., `count()` or
+   * `collect()`) will throw an [[AnalysisException]] when there is a streaming
+   * source present.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  @Experimental
+  def isStreaming: Boolean = logicalPlan.find { n =>
+      n.isInstanceOf[StreamingRelation] || n.isInstanceOf[StreamingExecutionRelation]
+    }.isDefined
 
   /**
    * Displays the [[Dataset]] in a tabular form. Strings more than 20 characters will be truncated,

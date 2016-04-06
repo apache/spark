@@ -315,11 +315,6 @@ class InMemoryCatalog extends ExternalCatalog {
     catalog(db).functions.put(newName, newFunc)
   }
 
-  override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = synchronized {
-    requireFunctionExists(db, funcDefinition.identifier.funcName)
-    catalog(db).functions.put(funcDefinition.identifier.funcName, funcDefinition)
-  }
-
   override def getFunction(db: String, funcName: String): CatalogFunction = synchronized {
     requireFunctionExists(db, funcName)
     catalog(db).functions(funcName)
