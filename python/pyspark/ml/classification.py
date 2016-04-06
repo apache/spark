@@ -17,6 +17,7 @@
 
 import operator
 import warnings
+from multiprocessing.dummy import Pool
 
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
@@ -926,6 +927,10 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr).setPredictionCol("indexed")
     >>> model = ovr.fit(df)
+    >>> [x.coefficients for x in model.models]
+    [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
+    >>> [x.intercept for x in model.models]
+    [-3.6474708290602034, 2.5507881951814495, -1.1016513228162115]
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0))]).toDF()
     >>> model.transform(test0).head().indexed
     1.0
@@ -982,6 +987,7 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         labelCol = self.getLabelCol()
         featuresCol = self.getFeaturesCol()
         predictionCol = self.getPredictionCol()
+        classifier = self.getClassifier()
 
         numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
 
@@ -993,18 +999,21 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
-        models = []
-
-        for index in range(0, numClasses):
+        def trainSingleClass(index):
             binaryLabelCol = "mc2b$" + str(index)
             trainingDataset = multiclassLabeled.withColumn(
                 binaryLabelCol,
-                when(dataset[labelCol] == float(index), 1.0).otherwise(0.0))
-            classifier = self.getClassifier()
+                when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0))
             paramMap = dict([(classifier.labelCol, binaryLabelCol),
                             (classifier.featuresCol, featuresCol),
                             (classifier.predictionCol, predictionCol)])
-            models.append(classifier.fit(trainingDataset, paramMap))
+            duplicatedClassifier = classifier.__class__()
+            duplicatedClassifier._resetUid(classifier.uid)
+            classifier._copyValues(duplicatedClassifier)
+            return duplicatedClassifier.fit(trainingDataset, paramMap)
+
+        pool = Pool()
+        models = pool.map(trainSingleClass, range(numClasses))
 
         if handlePersistence:
             multiclassLabeled.unpersist()
