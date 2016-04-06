@@ -643,6 +643,14 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
+    // Attempt to read the block from local or remote storage. If it's present, then we don't need
+    // to go through the local-get-or-put path.
+    get(blockId) match {
+      case Some(block) =>
+        return Left(block)
+      case _ =>
+        // Need to compute the block.
+    }
     // Initially we hold no locks on this block.
     doPutIterator(blockId, makeIterator, level, classTag, keepReadLock = true) match {
       case None =>
