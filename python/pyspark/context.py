@@ -437,6 +437,8 @@ class SparkContext(object):
         tempFile.close()
         readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
         jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
+        # readRDDFromFile eagerily reads the file so we can delete right after.
+        os.unlink(tempFile.name)
         return RDD(jrdd, self, serializer)
 
     def pickleFile(self, name, minPartitions=None):
