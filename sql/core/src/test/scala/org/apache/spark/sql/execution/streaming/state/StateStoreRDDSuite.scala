@@ -155,9 +155,11 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
         coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 0), "host1", "exec1")
         coordinatorRef.reportActiveInstance(StateStoreId(path, opId, 1), "host2", "exec2")
 
-        assert(
-          coordinatorRef.getLocation(StateStoreId(path, opId, 0)) ===
-            Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
+        eventually(timeout(10 seconds)) {
+          assert(
+            coordinatorRef.getLocation(StateStoreId(path, opId, 0)) ===
+              Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
+        }
 
         val rdd = makeRDD(sc, Seq("a", "b", "a")).mapPartitionsWithStateStore(
           sqlContext, path, opId, storeVersion = 0, keySchema, valueSchema)(increment)
