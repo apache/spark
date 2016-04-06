@@ -1204,6 +1204,42 @@ test_that("greatest() and least() on a DataFrame", {
   expect_equal(collect(select(df, least(df$a, df$b)))[, 1], c(1, 3))
 })
 
+test_that("time windowing (window()) with all inputs", {
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
+  df$window <- window(df$t, "5 seconds", "5 seconds", "0 seconds")
+  local <- collect(df)$v
+  # Not checking time windows because of possible time zone issues. Just checking that the function
+  # works
+  expect_equal(local, c(1))
+})
+
+test_that("time windowing (window()) with slide duration", {
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
+  df$window <- window(df$t, "5 seconds", "2 seconds")
+  local <- collect(df)$v
+  # Not checking time windows because of possible time zone issues. Just checking that the function
+  # works
+  expect_equal(local, c(1, 1))
+})
+
+test_that("time windowing (window()) with start time", {
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
+  df$window <- window(df$t, "5 seconds", startTime = "2 seconds")
+  local <- collect(df)$v
+  # Not checking time windows because of possible time zone issues. Just checking that the function
+  # works
+  expect_equal(local, c(1))
+})
+
+test_that("time windowing (window()) with just window duration", {
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
+  df$window <- window(df$t, "5 seconds")
+  local <- collect(df)$v
+  # Not checking time windows because of possible time zone issues. Just checking that the function
+  # works
+  expect_equal(local, c(1))
+})
+
 test_that("when(), otherwise() and ifelse() on a DataFrame", {
   l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
   df <- createDataFrame(sqlContext, l)
