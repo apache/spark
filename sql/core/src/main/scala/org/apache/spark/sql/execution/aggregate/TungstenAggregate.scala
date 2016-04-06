@@ -444,7 +444,7 @@ case class TungstenAggregate(
     val aggregateHashMapTerm = ctx.freshName("aggregateHashMap")
     val aggregateHashMapClassName = ctx.freshName("AggregateHashMap")
     val aggregateHashMapGenerator =
-      new TungstenAggregateHashMap(aggregateHashMapClassName, groupingKeySchema, bufferSchema)
+      new TungstenAggregateHashMap(ctx, aggregateHashMapClassName, groupingKeySchema, bufferSchema)
     if (isAggregateHashMapEnabled && isAggregateHashMapSupported) {
       ctx.addMutableState(aggregateHashMapClassName, aggregateHashMapTerm,
         s"$aggregateHashMapTerm = new $aggregateHashMapClassName();")

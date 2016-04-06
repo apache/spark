@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types.StructType
 
 class TungstenAggregateHashMap(
+    ctx: CodegenContext,
     generatedClassName: String,
     groupingKeySchema: StructType,
     bufferSchema: StructType) {
-  val groupingKeys = groupingKeySchema.map(key => (key.dataType.typeName, key.name))
-  val bufferValues = bufferSchema.map(key => (key.name, key.dataType.typeName))
+  val groupingKeys = groupingKeySchema.map(key => (key.dataType.typeName, ctx.freshName("key")))
+  val bufferValues = bufferSchema.map(key => (ctx.freshName("value"), key.dataType.typeName))
   val groupingKeySignature = groupingKeys.map(_.productIterator.toList.mkString(" ")).mkString(", ")
 
   def generate(): String = {
