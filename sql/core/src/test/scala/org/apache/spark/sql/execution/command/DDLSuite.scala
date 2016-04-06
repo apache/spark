@@ -106,13 +106,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("Create/Drop Database - location") {
     val catalog = sqlContext.sessionState.catalog
-
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
       try {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-
         sql(s"CREATE DATABASE $dbName Location '${System.getProperty("java.io.tmpdir")}'")
         val db1 = catalog.getDatabase(dbNameWithoutBackTicks)
         assert(db1 == CatalogDatabase(
