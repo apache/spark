@@ -51,7 +51,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
   // Submit tasks only after (registered resources / total expected resources)
   // is equal to at least this value, that is double between 0 and 1.
-  protected val minRegisteredRatio =
+  private val _minRegisteredRatio =
     math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0))
   // Submit tasks after maxRegisteredWaitingTime milliseconds
   // if minRegisteredRatio has not yet been reached
@@ -323,6 +323,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   var driverEndpoint: RpcEndpointRef = null
+
+  protected def minRegisteredRatio: Double = _minRegisteredRatio
 
   override def start() {
     val properties = new ArrayBuffer[(String, String)]
