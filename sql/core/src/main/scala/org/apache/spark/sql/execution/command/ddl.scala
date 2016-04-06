@@ -337,11 +337,27 @@ case class AlterTableAddPartition(
 
 }
 
+/**
+ * Alter a table partition's spec.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table PARTITION spec1 RENAME TO PARTITION spec2;
+ * }}}
+ */
 case class AlterTableRenamePartition(
     tableName: TableIdentifier,
     oldPartition: TablePartitionSpec,
-    newPartition: TablePartitionSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    newPartition: TablePartitionSpec)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.sessionState.catalog.renamePartitions(
+      tableName, Seq(oldPartition), Seq(newPartition))
+    Seq.empty[Row]
+  }
+
+}
 
 /**
  * Drop Partition in ALTER TABLE/VIEW: to drop a particular partition for a table/view.

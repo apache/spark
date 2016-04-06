@@ -379,7 +379,7 @@ class DDLCommandSuite extends PlanTest {
     val expected = AlterTableRenamePartition(
       TableIdentifier("table_name", None),
       Map("dt" -> "2008-08-08", "country" -> "us"),
-      Map("dt" -> "2008-09-09", "country" -> "uk"))(sql)
+      Map("dt" -> "2008-09-09", "country" -> "uk"))
     comparePlans(parsed, expected)
   }
 

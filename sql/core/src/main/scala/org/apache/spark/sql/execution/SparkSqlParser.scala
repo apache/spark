@@ -526,8 +526,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableRenamePartition(
       visitTableIdentifier(ctx.tableIdentifier),
       visitNonOptionalPartitionSpec(ctx.from),
-      visitNonOptionalPartitionSpec(ctx.to))(
-      command(ctx))
+      visitNonOptionalPartitionSpec(ctx.to))
   }
 
   /**
