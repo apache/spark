@@ -44,7 +44,7 @@ import numpy as np
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import LogisticRegression, DecisionTreeClassifier
 from pyspark.ml.clustering import KMeans
-from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
@@ -53,7 +53,7 @@ from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
 from pyspark.ml.util import MLWritable, MLWriter
 from pyspark.ml.wrapper import JavaWrapper
-from pyspark.mllib.linalg import DenseVector, SparseVector
+from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
@@ -237,6 +237,17 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
+
+
+class HasThrowableProperty(Params):
+
+    def __init__(self):
+        super(HasThrowableProperty, self).__init__()
+        self.p = Param(self, "none", "empty param")
+
+    @property
+    def test_property(self):
+        raise RuntimeError("Test property to raise error when invoked")
 
 
 class ParamTests(PySparkTestCase):
@@ -479,6 +490,32 @@ class CrossValidatorTests(PySparkTestCase):
                          "Best model should have zero induced error")
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
+    def test_save_load(self):
+        temp_path = tempfile.mkdtemp()
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        cvModel = cv.fit(dataset)
+        cvPath = temp_path + "/cv"
+        cv.save(cvPath)
+        loadedCV = CrossValidator.load(cvPath)
+        self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
+        self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
+        self.assertEqual(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedModel = CrossValidatorModel.load(cvModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+
 
 class TrainValidationSplitTests(PySparkTestCase):
 
@@ -529,6 +566,32 @@ class TrainValidationSplitTests(PySparkTestCase):
         self.assertEqual(0.0, bestModel.getOrDefault('inducedError'),
                          "Best model should have zero induced error")
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
+
+    def test_save_load(self):
+        temp_path = tempfile.mkdtemp()
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        tvsModel = tvs.fit(dataset)
+        tvsPath = temp_path + "/tvs"
+        tvs.save(tvsPath)
+        loadedTvs = TrainValidationSplit.load(tvsPath)
+        self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
+        self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
+        self.assertEqual(loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
 
 
 class PersistenceTest(PySparkTestCase):
@@ -697,15 +760,75 @@ class PersistenceTest(PySparkTestCase):
             pass
 
 
-class HasThrowableProperty(Params):
+class TrainingSummaryTest(PySparkTestCase):
 
-    def __init__(self):
-        super(HasThrowableProperty, self).__init__()
-        self.p = Param(self, "none", "empty param")
+    def test_linear_regression_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight",
+                              fitIntercept=False)
+        model = lr.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.featuresCol, "features")
+        objHist = s.objectiveHistory
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertAlmostEqual(s.explainedVariance, 0.25, 2)
+        self.assertAlmostEqual(s.meanAbsoluteError, 0.0)
+        self.assertAlmostEqual(s.meanSquaredError, 0.0)
+        self.assertAlmostEqual(s.rootMeanSquaredError, 0.0)
+        self.assertAlmostEqual(s.r2, 1.0, 2)
+        self.assertTrue(isinstance(s.residuals, DataFrame))
+        self.assertEqual(s.numInstances, 2)
+        devResiduals = s.devianceResiduals
+        self.assertTrue(isinstance(devResiduals, list) and isinstance(devResiduals[0], float))
+        coefStdErr = s.coefficientStandardErrors
+        self.assertTrue(isinstance(coefStdErr, list) and isinstance(coefStdErr[0], float))
+        tValues = s.tValues
+        self.assertTrue(isinstance(tValues, list) and isinstance(tValues[0], float))
+        pValues = s.pValues
+        self.assertTrue(isinstance(pValues, list) and isinstance(pValues[0], float))
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.explainedVariance, s.explainedVariance)
 
-    @property
-    def test_property(self):
-        raise RuntimeError("Test property to raise error when invoked")
+    def test_logistic_regression_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
+        model = lr.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.probabilityCol, "probability")
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.featuresCol, "features")
+        objHist = s.objectiveHistory
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.roc, DataFrame))
+        self.assertAlmostEqual(s.areaUnderROC, 1.0, 2)
+        self.assertTrue(isinstance(s.pr, DataFrame))
+        self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
 
 if __name__ == "__main__":

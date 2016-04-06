@@ -566,6 +566,18 @@ public abstract class ColumnVector {
     }
   }
 
+
+  public final void putDecimal(int rowId, Decimal value, int precision) {
+    if (precision <= Decimal.MAX_INT_DIGITS()) {
+      putInt(rowId, value.toInt());
+    } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      putLong(rowId, value.toLong());
+    } else {
+      BigInteger bigInteger = value.toJavaBigDecimal().unscaledValue();
+      putByteArray(rowId, bigInteger.toByteArray());
+    }
+  }
+
   /**
    * Returns the UTF8String for rowId.
    */

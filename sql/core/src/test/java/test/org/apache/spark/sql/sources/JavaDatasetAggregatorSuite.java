@@ -41,46 +41,7 @@ import org.apache.spark.sql.test.TestSQLContext;
 /**
  * Suite for testing the aggregate functionality of Datasets in Java.
  */
-public class JavaDatasetAggregatorSuite implements Serializable {
-  private transient JavaSparkContext jsc;
-  private transient TestSQLContext context;
-
-  @Before
-  public void setUp() {
-    // Trigger static initializer of TestData
-    SparkContext sc = new SparkContext("local[*]", "testing");
-    jsc = new JavaSparkContext(sc);
-    context = new TestSQLContext(sc);
-    context.loadTestData();
-  }
-
-  @After
-  public void tearDown() {
-    context.sparkContext().stop();
-    context = null;
-    jsc = null;
-  }
-
-  private <T1, T2> Tuple2<T1, T2> tuple2(T1 t1, T2 t2) {
-    return new Tuple2<>(t1, t2);
-  }
-
-  private KeyValueGroupedDataset<String, Tuple2<String, Integer>> generateGroupedDataset() {
-    Encoder<Tuple2<String, Integer>> encoder = Encoders.tuple(Encoders.STRING(), Encoders.INT());
-    List<Tuple2<String, Integer>> data =
-      Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
-    Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
-
-    return ds.groupByKey(
-      new MapFunction<Tuple2<String, Integer>, String>() {
-        @Override
-        public String call(Tuple2<String, Integer> value) throws Exception {
-          return value._1();
-        }
-      },
-      Encoders.STRING());
-  }
-
+public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
   @Test
   public void testTypedAggregationAnonClass() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
@@ -100,7 +61,6 @@ public class JavaDatasetAggregatorSuite implements Serializable {
   }
 
   static class IntSumOf extends Aggregator<Tuple2<String, Integer>, Integer, Integer> {
-
     @Override
     public Integer zero() {
       return 0;
@@ -168,5 +128,49 @@ public class JavaDatasetAggregatorSuite implements Serializable {
         }
       }));
     Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
+  }
+}
+
+/**
+ * Common test base shared across this and Java8DatasetAggregatorSuite.
+ */
+class JavaDatasetAggregatorSuiteBase implements Serializable {
+  protected transient JavaSparkContext jsc;
+  protected transient TestSQLContext context;
+
+  @Before
+  public void setUp() {
+    // Trigger static initializer of TestData
+    SparkContext sc = new SparkContext("local[*]", "testing");
+    jsc = new JavaSparkContext(sc);
+    context = new TestSQLContext(sc);
+    context.loadTestData();
+  }
+
+  @After
+  public void tearDown() {
+    context.sparkContext().stop();
+    context = null;
+    jsc = null;
+  }
+
+  protected <T1, T2> Tuple2<T1, T2> tuple2(T1 t1, T2 t2) {
+    return new Tuple2<>(t1, t2);
+  }
+
+  protected KeyValueGroupedDataset<String, Tuple2<String, Integer>> generateGroupedDataset() {
+    Encoder<Tuple2<String, Integer>> encoder = Encoders.tuple(Encoders.STRING(), Encoders.INT());
+    List<Tuple2<String, Integer>> data =
+      Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
+    Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
+
+    return ds.groupByKey(
+      new MapFunction<Tuple2<String, Integer>, String>() {
+        @Override
+        public String call(Tuple2<String, Integer> value) throws Exception {
+          return value._1();
+        }
+      },
+      Encoders.STRING());
   }
 }

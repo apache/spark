@@ -25,6 +25,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row, SQLContext}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.types.StructType
 
 object MemoryStream {
@@ -136,3 +138,9 @@ class MemorySink(val schema: StructType) extends Sink with Logging {
   }
 }
 
+/**
+ * Used to query the data that has been written into a [[MemorySink]].
+ */
+case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode {
+  def this(sink: MemorySink) = this(sink, sink.schema.toAttributes)
+}

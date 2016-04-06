@@ -694,6 +694,21 @@ class RDDTests(ReusedPySparkTestCase):
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEqual(N, m)
 
+    def test_unpersist(self):
+        N = 1000
+        data = [[float(i) for i in range(300)] for i in range(N)]
+        bdata = self.sc.broadcast(data)  # 3MB
+        bdata.unpersist()
+        m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
+        self.assertEqual(N, m)
+        bdata.destroy()
+        try:
+            self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
+        except Exception as e:
+            pass
+        else:
+            raise Exception("job should fail after destroy the broadcast")
+
     def test_multiple_broadcasts(self):
         N = 1 << 21
         b1 = self.sc.broadcast(set(range(N)))  # multiple blocks in JVM
