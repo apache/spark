@@ -279,6 +279,17 @@ case class CreateMetastoreDataSourceAsSelect(
         optionsWithPath,
         isExternal)
     }
+    // Under appending mode, we need to check the writen Dataset. If new partitions are created,
+    // we have to add corresponding metadata to Hive metastore.
+    if (mode == SaveMode.Append) {
+      hiveContext.sessionState.catalog.updateDataSourceTablePartitions(
+        tableIdent,
+        Some(result.schema),
+        partitionColumns,
+        bucketSpec,
+        provider,
+        optionsWithPath)
+    }
 
     // Refresh the cache of the table in the catalog.
     hiveContext.sessionState.catalog.refreshTable(tableIdent)

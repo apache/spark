@@ -48,6 +48,7 @@ import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
 import org.apache.spark.sql.sources.{FileFormat, HadoopFsRelation, HDFSFileCatalog}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[hive] case class HiveSerDe(
     inputFormat: Option[String] = None,
@@ -327,9 +328,13 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     def newHiveCompatibleMetastoreTable(
         relation: HadoopFsRelation,
         serde: HiveSerDe): CatalogTable = {
-      //assert(partitionColumns.isEmpty)
-      //assert(relation.partitionSchema.isEmpty)
-
+      // Exclude partition columns from data columns: as HadoopFsRelation's dataSchema
+      // can preserve partition columns if these columns are in actual data files. Hive
+      // doesn't allow partition columns to conflict with data columns. So we need to
+      // exclude partition columns first.
+      val dataSchema = relation.dataSchema.filterNot { f =>
+        relation.partitionSchema.fieldNames.contains(f.name)
+      }
       CatalogTable(
         identifier = TableIdentifier(tblName, Option(dbName)),
         tableType = tableType,
@@ -340,7 +345,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
           serde = serde.serde,
           serdeProperties = options
         ),
-        schema = relation.schema.map { f =>
+        schema = dataSchema.map { f =>
+          CatalogColumn(f.name, HiveMetastoreTypes.toMetastoreType(f.dataType))
+        },
+        partitionColumns = relation.partitionSchema.map { f =>
           CatalogColumn(f.name, HiveMetastoreTypes.toMetastoreType(f.dataType))
         },
         properties = tableProperties.toMap,
@@ -350,55 +358,45 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     // TODO: Support persisting partitioned data source relations in Hive compatible format
     val qualifiedTableName = tableIdent.quotedString
     val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
-    val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.resolveRelation()) match {
+    val (hiveTable, hiveParts, logMessage) = (maybeSerDe, dataSource.resolveRelation()) match {
       case _ if skipHiveMetadata =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
-        (None, message)
+        (None, None, message)
 
-      case (Some(serde), relation: HadoopFsRelation) =>
-        //if relation.location.paths.length == 1 && relation.partitionSchema.isEmpty =>
-        println(s"relation.location: ${relation.location}")
-        relation.location.paths.foreach(println(_))
-        println(s"partitionSpec: ${relation.location.partitionSpec()}")
+      case (Some(serde), relation: HadoopFsRelation) if relation.location.paths.length == 1 =>
         val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
+        val hivePartitions = newHiveMetastorePartitions(relation, serde, options)
         val message =
           s"Persisting data source relation $qualifiedTableName with a single input path " +
             s"into Hive metastore in Hive compatible format. Input path: " +
             s"${relation.location.paths.head}."
-        (Some(hiveTable), message)
-      /*
-      case (Some(serde), relation: HadoopFsRelation) if relation.partitionSchema.nonEmpty =>
-        val message =
-          s"Persisting partitioned data source relation $qualifiedTableName into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
-            "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
-        (None, message)
+        (Some(hiveTable), Some(hivePartitions), message)
 
       case (Some(serde), relation: HadoopFsRelation) =>
         val message =
           s"Persisting data source relation $qualifiedTableName with multiple input paths into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
             s"Input paths: " + relation.location.paths.mkString("\n", "\n", "")
-        (None, message)
-      */
+        (None, None, message)
+
       case (Some(serde), _) =>
         val message =
           s"Data source relation $qualifiedTableName is not a " +
             s"${classOf[HadoopFsRelation].getSimpleName}. Persisting it into Hive metastore " +
             "in Spark SQL specific format, which is NOT compatible with Hive."
-        (None, message)
+        (None, None, message)
 
       case _ =>
         val message =
           s"Couldn't find corresponding Hive SerDe for data source provider $provider. " +
             s"Persisting data source relation $qualifiedTableName into Hive metastore in " +
             s"Spark SQL specific format, which is NOT compatible with Hive."
-        (None, message)
+        (None, None, message)
     }
 
-    (hiveCompatibleTable, logMessage) match {
+    (hiveTable, logMessage) match {
       case (Some(table), message) =>
         // We first try to save the metadata of the table in a Hive compatible way.
         // If Hive throws an error, we fall back to save its metadata in the Spark SQL
@@ -406,6 +404,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         try {
           logInfo(message)
           client.createTable(table, ignoreIfExists = false)
+          hiveParts.map(client.createPartitions(dbName, tblName, _, ignoreIfExists = false))
         } catch {
           case throwable: Throwable =>
             val warningMessage =
@@ -418,11 +417,86 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
       case (None, message) =>
         logWarning(message)
-        val hiveTable = newSparkSQLSpecificMetastoreTable()
-        client.createTable(hiveTable, ignoreIfExists = false)
+        val hiveSparkSQLTable = newSparkSQLSpecificMetastoreTable()
+        client.createTable(hiveSparkSQLTable, ignoreIfExists = false)
     }
   }
 
+  private def newHiveMetastorePartitions(
+      relation: HadoopFsRelation,
+      serde: HiveSerDe,
+      options: Map[String, String]): Seq[CatalogTablePartition] = {
+    if (relation.partitionSchema.isEmpty) {
+      Seq.empty[CatalogTablePartition]
+    } else {
+      val columns = relation.location.partitionSpec.partitionColumns
+      relation.location.partitionSpec.partitions.map { part =>
+        val specs = columns.fieldNames.zip(part.values.toSeq(columns).map { c =>
+          c match {
+            case i: Int => s"$i"
+            case l: Long => s"$l"
+            case d: Double => s"$d"
+            case d: Decimal => d.toString
+            case s: UTF8String => s.toString
+          }
+        }).toMap
+
+        val storage = CatalogStorageFormat(
+          locationUri = Some(part.path.toUri.toString),
+          inputFormat = serde.inputFormat,
+          outputFormat = serde.outputFormat,
+          serde = serde.serde,
+          serdeProperties = options
+        )
+        CatalogTablePartition(specs, storage)
+      }
+    }
+  }
+
+  def updateDataSourceTablePartitions(
+      tableIdent: TableIdentifier,
+      userSpecifiedSchema: Option[StructType],
+      partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
+      provider: String,
+      options: Map[String, String]): Unit = {
+    val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)
+
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.hiveconf)
+    val dataSource =
+      DataSource(
+        hive,
+        userSpecifiedSchema = userSpecifiedSchema,
+        partitionColumns = partitionColumns,
+        bucketSpec = bucketSpec,
+        className = provider,
+        options = options)
+
+    val existingPartitionSpecs = client.getAllPartitions(dbName, tblName).map(_.spec)
+
+    val qualifiedTableName = tableIdent.quotedString
+    val hiveParts = (maybeSerDe, dataSource.resolveRelation()) match {
+      case (Some(serde), relation: HadoopFsRelation) =>
+        val hivePartitions = newHiveMetastorePartitions(relation, serde, options).filterNot { p =>
+          existingPartitionSpecs.contains(p.spec)
+        }
+
+        if (hivePartitions.size > 0) {
+          Some(hivePartitions)
+        } else {
+          None
+        }
+
+      case _ =>
+        None
+    }
+
+    if (hiveParts.isDefined) {
+      logInfo(s"Persisting partitions of data source relation $qualifiedTableName " +
+        "into Hive metastore in Hive compatible format.")
+      hiveParts.map(client.createPartitions(dbName, tblName, _, ignoreIfExists = false))
+    }
+  }
   def hiveDefaultTableFilePath(tableIdent: TableIdentifier): String = {
     // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
     val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)

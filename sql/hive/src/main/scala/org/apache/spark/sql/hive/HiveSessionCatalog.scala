@@ -114,6 +114,17 @@ private[sql] class HiveSessionCatalog(
       name, userSpecifiedSchema, partitionColumns, bucketSpec, provider, options, isExternal)
   }
 
+  def updateDataSourceTablePartitions(
+      name: TableIdentifier,
+      userSpecifiedSchema: Option[StructType],
+      partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
+      provider: String,
+      options: Map[String, String]): Unit = {
+    metastoreCatalog.updateDataSourceTablePartitions(
+      name, userSpecifiedSchema, partitionColumns, bucketSpec, provider, options)
+  }
+
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }

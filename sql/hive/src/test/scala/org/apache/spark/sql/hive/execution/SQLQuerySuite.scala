@@ -76,6 +76,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
     val df = sqlContext.createDataFrame(sparkContext.parallelize(Array(Row(1L, "test", "NW", 1))), schema)
     df.write.partitionBy("c", "d").saveAsTable("testDFTABLE1")
+
+    val dfLoad = sqlContext.table("testDFTABLE1")
+    dfLoad.collect().foreach(println(_))
   }
 
   /*
