@@ -247,7 +247,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
 
-    addPermGenSizeOpt(cmd);
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;

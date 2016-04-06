@@ -112,21 +112,6 @@ class CommandBuilderUtils {
     return os.startsWith("Windows");
   }
 
-  /** Returns an enum value indicating whose JVM is being used. */
-  static JavaVendor getJavaVendor() {
-    String vendorString = System.getProperty("java.vendor");
-    if (vendorString.contains("Oracle")) {
-      return JavaVendor.Oracle;
-    }
-    if (vendorString.contains("IBM")) {
-      return JavaVendor.IBM;
-    }
-    if (vendorString.contains("OpenJDK")) {
-      return JavaVendor.OpenJDK;
-    }
-    return JavaVendor.Unknown;
-  }
-
   /**
    * Updates the user environment, appending the given pathList to the existing value of the given
    * environment variable (or setting it if it hasn't yet been set).
@@ -310,27 +295,6 @@ class CommandBuilderUtils {
       quoted.appendCodePoint(cp);
     }
     return quoted.append('"').toString();
-  }
-
-  /**
-   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
-   * set it.
-   */
-  static void addPermGenSizeOpt(List<String> cmd) {
-    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
-    if (getJavaVendor() == JavaVendor.IBM) {
-      return;
-    }
-    if (javaMajorVersion(System.getProperty("java.version")) > 7) {
-      return;
-    }
-    for (String arg : cmd) {
-      if (arg.startsWith("-XX:MaxPermSize=")) {
-        return;
-      }
-    }
-
-    cmd.add("-XX:MaxPermSize=256m");
   }
 
   /**

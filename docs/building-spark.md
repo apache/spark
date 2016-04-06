@@ -7,7 +7,7 @@ redirect_from: "building-with-maven.html"
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-Building Spark using Maven requires Maven 3.3.9 or newer and Java 7+.
+Building Spark using Maven requires Maven 3.3.9 or newer and Java 8+.
 The Spark build can supply a suitable Maven binary; see below.
 
 # Building with `build/mvn`
@@ -47,23 +47,10 @@ For more information on usage, run `./dev/make-distribution.sh --help`
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`. We recommend the following settings:
 
 {% highlight bash %}
-export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
 {% endhighlight %}
 
-If you don't run this, you may see errors like the following:
-
-    [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
-    [ERROR] PermGen space -> [Help 1]
-
-    [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
-    [ERROR] Java heap space -> [Help 1]
-
-You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
-
-**Note:**
-
-* For Java 8 and above this step is not required.
-* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automate this for you.
+If using `build/mvn` with no `MAVEN_OPTS` set, the script will automate this for you.
 
 # Specifying the Hadoop Version
 
