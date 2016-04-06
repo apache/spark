@@ -95,7 +95,7 @@ class SessionCatalog(
     externalCatalog.alterDatabase(dbDefinition)
   }
 
-  def getDatabase(db: String): CatalogDatabase = {
+  def getDatabaseMetadata(db: String): CatalogDatabase = {
     externalCatalog.getDatabase(db)
   }
 
@@ -169,7 +169,7 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    * If the specified table is not found in the database then an [[AnalysisException]] is thrown.
    */
-  def getTable(name: TableIdentifier): CatalogTable = {
+  def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
     externalCatalog.getTable(db, table)
@@ -476,8 +476,7 @@ class SessionCatalog(
    * If a database is specified in `name`, this will return the function in that database.
    * If no database is specified, this will return the function in the current database.
    */
-  // TODO: have a better name. This method is actually for fetching the metadata of a function.
-  def getFunction(name: FunctionIdentifier): CatalogFunction = {
+  def getFunctionMetadata(name: FunctionIdentifier): CatalogFunction = {
     val db = name.database.getOrElse(currentDb)
     externalCatalog.getFunction(db, name.funcName)
   }

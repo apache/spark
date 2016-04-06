@@ -62,7 +62,7 @@ class SessionCatalogSuite extends SparkFunSuite {
 
   test("get database when a database exists") {
     val catalog = new SessionCatalog(newBasicCatalog())
-    val db1 = catalog.getDatabase("db1")
+    val db1 = catalog.getDatabaseMetadata("db1")
     assert(db1.name == "db1")
     assert(db1.description.contains("db1"))
   }
@@ -70,7 +70,7 @@ class SessionCatalogSuite extends SparkFunSuite {
   test("get database should throw exception when the database does not exist") {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[AnalysisException] {
-      catalog.getDatabase("db_that_does_not_exist")
+      catalog.getDatabaseMetadata("db_that_does_not_exist")
     }
   }
 
@@ -128,10 +128,10 @@ class SessionCatalogSuite extends SparkFunSuite {
 
   test("alter database") {
     val catalog = new SessionCatalog(newBasicCatalog())
-    val db1 = catalog.getDatabase("db1")
+    val db1 = catalog.getDatabaseMetadata("db1")
     // Note: alter properties here because Hive does not support altering other fields
     catalog.alterDatabase(db1.copy(properties = Map("k" -> "v3", "good" -> "true")))
-    val newDb1 = catalog.getDatabase("db1")
+    val newDb1 = catalog.getDatabaseMetadata("db1")
     assert(db1.properties.isEmpty)
     assert(newDb1.properties.size == 2)
     assert(newDb1.properties.get("k") == Some("v3"))
@@ -346,21 +346,21 @@ class SessionCatalogSuite extends SparkFunSuite {
   test("get table") {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
-    assert(sessionCatalog.getTable(TableIdentifier("tbl1", Some("db2")))
+    assert(sessionCatalog.getTableMetadata(TableIdentifier("tbl1", Some("db2")))
       == externalCatalog.getTable("db2", "tbl1"))
     // Get table without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
-    assert(sessionCatalog.getTable(TableIdentifier("tbl1"))
+    assert(sessionCatalog.getTableMetadata(TableIdentifier("tbl1"))
       == externalCatalog.getTable("db2", "tbl1"))
   }
 
   test("get table when database/table does not exist") {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[AnalysisException] {
-      catalog.getTable(TableIdentifier("tbl1", Some("unknown_db")))
+      catalog.getTableMetadata(TableIdentifier("tbl1", Some("unknown_db")))
     }
     intercept[AnalysisException] {
-      catalog.getTable(TableIdentifier("unknown_table", Some("db2")))
+      catalog.getTableMetadata(TableIdentifier("unknown_table", Some("db2")))
     }
   }
 
@@ -386,7 +386,7 @@ class SessionCatalogSuite extends SparkFunSuite {
   test("lookup table relation with alias") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val alias = "monster"
-    val tableMetadata = catalog.getTable(TableIdentifier("tbl1", Some("db2")))
+    val tableMetadata = catalog.getTableMetadata(TableIdentifier("tbl1", Some("db2")))
     val relation = SubqueryAlias("tbl1", CatalogRelation("db2", tableMetadata))
     val relationWithAlias =
       SubqueryAlias(alias,
@@ -758,19 +758,19 @@ class SessionCatalogSuite extends SparkFunSuite {
     val expected =
       CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
       Seq.empty[(String, String)])
-    assert(catalog.getFunction(FunctionIdentifier("func1", Some("db2"))) == expected)
+    assert(catalog.getFunctionMetadata(FunctionIdentifier("func1", Some("db2"))) == expected)
     // Get function without explicitly specifying database
     catalog.setCurrentDatabase("db2")
-    assert(catalog.getFunction(FunctionIdentifier("func1")) == expected)
+    assert(catalog.getFunctionMetadata(FunctionIdentifier("func1")) == expected)
   }
 
   test("get function when database/function does not exist") {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[AnalysisException] {
-      catalog.getFunction(FunctionIdentifier("func1", Some("does_not_exist")))
+      catalog.getFunctionMetadata(FunctionIdentifier("func1", Some("does_not_exist")))
     }
     intercept[AnalysisException] {
-      catalog.getFunction(FunctionIdentifier("does_not_exist", Some("db2")))
+      catalog.getFunctionMetadata(FunctionIdentifier("does_not_exist", Some("db2")))
     }
   }
 
