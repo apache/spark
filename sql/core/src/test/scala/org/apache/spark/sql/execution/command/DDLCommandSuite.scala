@@ -336,11 +336,11 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
         (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)(sql1)
+      ifNotExists = true)
     val expected2 = AlterTableAddPartition(
       TableIdentifier("table_name", None),
       Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
-      ifNotExists = false)(sql2)
+      ifNotExists = false)
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
@@ -383,18 +383,12 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed, expected)
   }
 
-  test("alter table: exchange partition") {
-    val sql =
+  test("alter table: exchange partition (not supported)") {
+    assertUnsupported(
       """
        |ALTER TABLE table_name_1 EXCHANGE PARTITION
        |(dt='2008-08-08', country='us') WITH TABLE table_name_2
-      """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableExchangePartition(
-      TableIdentifier("table_name_1", None),
-      TableIdentifier("table_name_2", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"))(sql)
-    comparePlans(parsed, expected)
+      """.stripMargin)
   }
 
   // ALTER TABLE table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE]

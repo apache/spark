@@ -496,8 +496,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableAddPartition(
       visitTableIdentifier(ctx.tableIdentifier),
       specsAndLocs,
-      ctx.EXISTS != null)(
-      command(ctx))
+      ctx.EXISTS != null)
   }
 
   /**
@@ -510,11 +509,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitExchangeTablePartition(
       ctx: ExchangeTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableExchangePartition(
-      visitTableIdentifier(ctx.from),
-      visitTableIdentifier(ctx.to),
-      visitNonOptionalPartitionSpec(ctx.partitionSpec))(
-      command(ctx))
+    throw new AnalysisException(
+      "Operation not allowed: ALTER TABLE ... EXCHANGE PARTITION ...")
   }
 
   /**

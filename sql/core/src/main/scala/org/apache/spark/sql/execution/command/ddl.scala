@@ -317,7 +317,7 @@ case class AlterTableSerDeProperties(
 case class AlterTableAddPartition(
     tableName: TableIdentifier,
     partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
-    ifNotExists: Boolean)(sql: String)
+    ifNotExists: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -341,12 +341,6 @@ case class AlterTableRenamePartition(
     tableName: TableIdentifier,
     oldPartition: TablePartitionSpec,
     newPartition: TablePartitionSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableExchangePartition(
-    fromTableName: TableIdentifier,
-    toTableName: TableIdentifier,
-    spec: TablePartitionSpec)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
 /**

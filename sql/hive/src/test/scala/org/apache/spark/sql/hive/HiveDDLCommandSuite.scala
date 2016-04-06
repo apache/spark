@@ -313,7 +313,7 @@ class HiveDDLCommandSuite extends PlanTest {
     }
   }
 
-  test("MSCK repair table is not supported") {
+  test("MSCK repair table (not supported)") {
     assertUnsupported("MSCK REPAIR TABLE tab1")
   }
 
