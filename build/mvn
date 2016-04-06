@@ -72,7 +72,7 @@ install_mvn() {
   local MVN_VERSION="3.3.9"
 
   install_app \
-    "http://archive.apache.org/dist/maven/maven-3/${MVN_VERSION}/binaries" \
+    "https://archive.apache.org/dist/maven/maven-3/${MVN_VERSION}/binaries" \
     "apache-maven-${MVN_VERSION}-bin.tar.gz" \
     "apache-maven-${MVN_VERSION}/bin/mvn"
 
@@ -84,7 +84,7 @@ install_zinc() {
   local zinc_path="zinc-0.3.9/bin/zinc"
   [ ! -f "${_DIR}/${zinc_path}" ] && ZINC_INSTALL_FLAG=1
   install_app \
-    "http://downloads.typesafe.com/zinc/0.3.9" \
+    "https://downloads.typesafe.com/zinc/0.3.9" \
     "zinc-0.3.9.tgz" \
     "${zinc_path}"
   ZINC_BIN="${_DIR}/${zinc_path}"
@@ -100,7 +100,7 @@ install_scala() {
   local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
 
   install_app \
-    "http://downloads.typesafe.com/scala/${scala_version}" \
+    "https://downloads.typesafe.com/scala/${scala_version}" \
     "scala-${scala_version}.tgz" \
     "scala-${scala_version}/bin/scala"
 
