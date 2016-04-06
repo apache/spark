@@ -1120,7 +1120,7 @@ abstract class RDD[T: ClassTag](
    * Aggregates the elements of this RDD in a multi-level tree pattern.
    *
    * @param depth suggested depth of the tree (default: 2)
-   * @see [[org.apache.spark.rdd.RDD#aggregate]]
+   * @see [[org.apache.spark.rdd.RDD#aggregate]] These two methods have identical semantics.
    */
   def treeAggregate[U: ClassTag](zeroValue: U)(
       seqOp: (U, T) => U,
@@ -1146,9 +1146,9 @@ abstract class RDD[T: ClassTag](
         val curNumPartitions = numPartitions
         partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex {
           (i, iter) => iter.map((i % curNumPartitions, _))
-        }.reduceByKey(new HashPartitioner(curNumPartitions), cleanCombOp).values
+        }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
       }
-      partiallyAggregated.reduce(cleanCombOp)
+      partiallyAggregated.fold(zeroValue)(cleanCombOp)
     }
   }
 
