@@ -169,6 +169,41 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
     require(ratingType == FloatType || ratingType == DoubleType)
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
+
+  /** storage level for user/product in/out links */
+  private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
+  private var finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
+
+  /**
+    * :: DeveloperApi ::
+    * Sets storage level for intermediate RDDs (user/product in/out links). The default value is
+    * `MEMORY_AND_DISK`. Users can change it to a serialized storage, e.g., `MEMORY_AND_DISK_SER`
+    * and set `spark.rdd.compress` to `true` to reduce the space requirement, at the cost of speed.
+    * @group expertParam
+    */
+  @DeveloperApi
+  @Since("2.0.0")
+  def setIntermediateRDDStorageLevel(storageLevel: StorageLevel): this.type = {
+    require(storageLevel != StorageLevel.NONE,
+      "ALS is not designed to run without persisting intermediate RDDs.")
+    this.intermediateRDDStorageLevel = storageLevel
+    this
+  }
+
+  /**
+    * :: DeveloperApi ::
+    * Sets storage level for final RDDs (user/product used in MatrixFactorizationModel). The default
+    * value is `MEMORY_AND_DISK`. Users can change it to a serialized storage, e.g.
+    * `MEMORY_AND_DISK_SER` and set `spark.rdd.compress` to `true` to reduce the space requirement,
+    * at the cost of speed.
+    * @group expertParam
+    */
+  @DeveloperApi
+  @Since("2.0.0")
+  def setFinalRDDStorageLevel(storageLevel: StorageLevel): this.type = {
+    this.finalRDDStorageLevel = storageLevel
+    this
+  }
 }
 
 /**
