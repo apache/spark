@@ -163,7 +163,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param features Vector of features representing a single data point.
    * @param prediction The existing prediction.
    * @param tree New Decision Tree model.
-   * @param weight Learning rate.
+   * @param weight Tree weight.
    * @return Updated prediction.
    */
   def updatePrediction(

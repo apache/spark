@@ -58,10 +58,12 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
         if (algo == Classification) {
           val remappedRdd = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))
           (GradientBoostedTrees.computeError(remappedRdd, trees, treeWeights, loss),
-            GradientBoostedTrees.computeError(remappedRdd, trees, treeWeights, loss))
+            GradientBoostedTrees.computeError(remappedRdd, validateTrees,
+              validateTreeWeights, loss))
         } else {
           (GradientBoostedTrees.computeError(validateRdd, trees, treeWeights, loss),
-            GradientBoostedTrees.computeError(validateRdd, trees, treeWeights, loss))
+            GradientBoostedTrees.computeError(validateRdd, validateTrees,
+              validateTreeWeights, loss))
         }
       }
       assert(errorWithValidation <= errorWithoutValidation)
