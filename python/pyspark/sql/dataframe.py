@@ -1365,7 +1365,8 @@ class DataFrame(object):
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
-        :param col: the name of the numerical column
+        :param col: the name of the numerical column, or a list/tuple of
+          numerical columns.
         :param probabilities: a list of quantile probabilities
           Each number must belong to [0, 1].
           For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
@@ -1399,11 +1400,13 @@ class DataFrame(object):
             raise ValueError("relativeError should be numerical (float, int, long) >= 0.")
         relativeError = float(relativeError)
 
-        jaq = self._jdf.stat().approxQuantileMultiCols(col, probabilities, relativeError)
-        jaq = list(jaq)
-        if len(jaq) == 1:
-            return list(jaq[0])
-        return list(jaq)
+        jaqs = self._jdf.stat().approxQuantileMultiCols(col, probabilities, relativeError)
+        res = []
+        for jaq in jaqs:
+            res.append(list(jaq))
+        if len(res) == 1:
+            return res[0]
+        return res
 
     @since(1.4)
     def corr(self, col1, col2, method=None):
