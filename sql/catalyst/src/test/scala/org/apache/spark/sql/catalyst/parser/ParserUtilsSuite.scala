@@ -23,6 +23,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   import ParserUtils._
 
   test("unescapeSQLString") {
+    // scalastyle:off nonascii
 
     // String not including escaped characters and enclosed by double quotes.
     assert(unescapeSQLString(""""abcdefg"""") == "abcdefg")
@@ -56,6 +57,8 @@ class ParserUtilsSuite extends SparkFunSuite {
     // String including a surrogate pair character
     // (\uD867\uDE3D is Okhotsk atka mackerel in Kanji).
     assert(unescapeSQLString(""""\uD867\uDE3D is a fish"""") == "\uD867\uDE3D is a fish")
+
+    // scalastyle:on nonascii
   }
 
   // TODO: Add test cases for other methods in ParserUtils
