@@ -78,7 +78,7 @@ class TestHiveContext private[hive](
     executionHive: HiveClientImpl,
     metadataHive: HiveClient,
     isRootContext: Boolean,
-    hiveCatalog: HiveCatalog,
+    hiveCatalog: HiveExternalCatalog,
     val warehousePath: File,
     val scratchDirPath: File,
     metastoreTemporaryConf: Map[String, String])
@@ -110,7 +110,7 @@ class TestHiveContext private[hive](
       executionHive,
       metadataHive,
       true,
-      new HiveCatalog(metadataHive),
+      new HiveExternalCatalog(metadataHive),
       warehousePath,
       scratchDirPath,
       metastoreTemporaryConf)
@@ -201,8 +201,13 @@ class TestHiveContext private[hive](
     }
 
     override lazy val functionRegistry = {
-      new TestHiveFunctionRegistry(
-        org.apache.spark.sql.catalyst.analysis.FunctionRegistry.builtin.copy(), self.executionHive)
+      // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
+      // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
+      val fr = new TestHiveFunctionRegistry
+      org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
+        case (name, (info, builder)) => fr.registerFunction(name, info, builder)
+      }
+      fr
     }
   }
 
@@ -380,8 +385,8 @@ class TestHiveContext private[hive](
        """.stripMargin.cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/episodes.avro")}' INTO TABLE episodes".cmd
     ),
-    // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC PARITIONING
-    // IS NOT YET SUPPORTED
+    // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC
+    // PARTITIONING IS NOT YET SUPPORTED
     TestTable("episodes_part",
       s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
          |PARTITIONED BY (doctor_pt INT)
@@ -528,19 +533,18 @@ class TestHiveContext private[hive](
 
 }
 
-private[hive] class TestHiveFunctionRegistry(fr: SimpleFunctionRegistry, client: HiveClientImpl)
-  extends HiveFunctionRegistry(fr, client) {
+private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
 
   private val removedFunctions =
     collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
 
   def unregisterFunction(name: String): Unit = {
-    fr.functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
+    functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
   }
 
   def restore(): Unit = {
     removedFunctions.foreach {
-      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
+      case (name, (info, builder)) => registerFunction(name, info, builder)
     }
   }
 }

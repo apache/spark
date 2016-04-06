@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{BooleanParam, IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
@@ -52,7 +52,18 @@ class HashingTF(override val uid: String)
   val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
     ParamValidators.gt(0))
 
-  setDefault(numFeatures -> (1 << 18))
+  /**
+   * Binary toggle to control term frequency counts.
+   * If true, all non-zero counts are set to 1.  This is useful for discrete probabilistic
+   * models that model binary events rather than integer counts.
+   * (default = false)
+   * @group param
+   */
+  val binary = new BooleanParam(this, "binary", "If true, all non zero counts are set to 1. " +
+    "This is useful for discrete probabilistic models that model binary events rather " +
+    "than integer counts")
+
+  setDefault(numFeatures -> (1 << 18), binary -> false)
 
   /** @group getParam */
   def getNumFeatures: Int = $(numFeatures)
@@ -60,9 +71,15 @@ class HashingTF(override val uid: String)
   /** @group setParam */
   def setNumFeatures(value: Int): this.type = set(numFeatures, value)
 
+  /** @group getParam */
+  def getBinary: Boolean = $(binary)
+
+  /** @group setParam */
+  def setBinary(value: Boolean): this.type = set(binary, value)
+
   override def transform(dataset: DataFrame): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashingTF = new feature.HashingTF($(numFeatures))
+    val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
     val t = udf { terms: Seq[_] => hashingTF.transform(terms) }
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))

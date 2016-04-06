@@ -39,7 +39,7 @@ abstract class ExternalCatalog {
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"Database $db does not exist")
+      throw new AnalysisException(s"Database '$db' does not exist")
     }
   }
 
@@ -150,15 +150,6 @@ abstract class ExternalCatalog {
 
   def renameFunction(db: String, oldName: String, newName: String): Unit
 
-  /**
-   * Alter a function whose name that matches the one specified in `funcDefinition`,
-   * assuming the function exists.
-   *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
-   */
-  def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
-
   def getFunction(db: String, funcName: String): CatalogFunction
 
   def listFunctions(db: String, pattern: String): Seq[String]
@@ -169,10 +160,15 @@ abstract class ExternalCatalog {
 /**
  * A function defined in the catalog.
  *
- * @param name name of the function
+ * @param identifier name of the function
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
+ * @param resources resource types and Uris used by the function
  */
-case class CatalogFunction(name: FunctionIdentifier, className: String)
+// TODO: Use FunctionResource instead of (String, String) as the element type of resources.
+case class CatalogFunction(
+    identifier: FunctionIdentifier,
+    className: String,
+    resources: Seq[(String, String)])
 
 
 /**
@@ -216,7 +212,7 @@ case class CatalogTablePartition(
  * future once we have a better understanding of how we want to handle skewed columns.
  */
 case class CatalogTable(
-    name: TableIdentifier,
+    identifier: TableIdentifier,
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
@@ -230,12 +226,12 @@ case class CatalogTable(
     viewText: Option[String] = None) {
 
   /** Return the database this table was specified to belong to, assuming it exists. */
-  def database: String = name.database.getOrElse {
-    throw new AnalysisException(s"table $name did not specify database")
+  def database: String = identifier.database.getOrElse {
+    throw new AnalysisException(s"table $identifier did not specify database")
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
-  def qualifiedName: String = name.unquotedString
+  def qualifiedName: String = identifier.unquotedString
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -290,6 +286,6 @@ case class CatalogRelation(
   // TODO: implement this
   override def output: Seq[Attribute] = Seq.empty
 
-  require(metadata.name.database == Some(db),
-    "provided database does not much the one specified in the table definition")
+  require(metadata.identifier.database == Some(db),
+    "provided database does not match the one specified in the table definition")
 }
