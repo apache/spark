@@ -336,7 +336,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   private List<String> findExamplesJars() {
-    boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     List<String> examplesJars = new ArrayList<>();
     String sparkHome = getSparkHome();
 
@@ -347,15 +346,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       jarsDir = new File(sparkHome,
         String.format("examples/target/scala-%s/jars", getScalaVersion()));
     }
-
-    boolean foundDir = jarsDir.isDirectory();
-    checkState(isTesting || foundDir, "Examples jars directory '%s' does not exist.",
+    checkState(jarsDir.isDirectory(), "Examples jars directory '%s' does not exist.",
         jarsDir.getAbsolutePath());
 
-    if (foundDir) {
-      for (File f: jarsDir.listFiles()) {
-        examplesJars.add(f.getAbsolutePath());
-      }
+    for (File f: jarsDir.listFiles()) {
+      examplesJars.add(f.getAbsolutePath());
     }
     return examplesJars;
   }

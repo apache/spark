@@ -29,10 +29,11 @@ if "x%1"=="x" (
 )
 
 rem Find Spark jars.
+rem TODO: change the directory name when Spark jars move from "lib".
 if exist "%SPARK_HOME%\RELEASE" (
-  set SPARK_JARS_DIR="%SPARK_HOME%\jars"
+  set SPARK_JARS_DIR="%SPARK_HOME%\lib"
 ) else (
-  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars"
+  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%"
 )
 
 if not exist "%SPARK_JARS_DIR%"\ (
