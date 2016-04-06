@@ -422,13 +422,18 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     checkFeatureSubsetStrategy(numTrees = 1, "log2",
       (math.log(numFeatures) / math.log(2)).ceil.toInt)
     checkFeatureSubsetStrategy(numTrees = 1, "onethird", (numFeatures / 3.0).ceil.toInt)
-    checkFeatureSubsetStrategy(numTrees = 1, "0.1", (0.1 * numFeatures).ceil.toInt)
-    checkFeatureSubsetStrategy(numTrees = 1, "0.5", (0.5 * numFeatures).ceil.toInt)
-    checkFeatureSubsetStrategy(numTrees = 1, "1.0", (1.0 * numFeatures).ceil.toInt)
-    checkFeatureSubsetStrategy(numTrees = 1, "1", 1)
-    checkFeatureSubsetStrategy(numTrees = 1, "2", 2)
-    checkFeatureSubsetStrategy(numTrees = 1, numFeatures.toString, numFeatures)
-    checkFeatureSubsetStrategy(numTrees = 1, (numFeatures * 2).toString, numFeatures)
+
+    val realStrategies = Array(".1", ".10", "0.10", "0.1", "0.9", "1.0")
+    for (strategy <- realStrategies) {
+      val expected = (strategy.toDouble * numFeatures).ceil.toInt
+      checkFeatureSubsetStrategy(numTrees = 1, strategy, expected)
+    }
+
+    val integerStrategies = Array("1", "10", "100", "1000", "10000")
+    for (strategy <- integerStrategies) {
+      val expected = if (strategy.toInt < numFeatures) strategy.toInt else numFeatures
+      checkFeatureSubsetStrategy(numTrees = 1, strategy, expected)
+    }
 
     checkFeatureSubsetStrategy(numTrees = 2, "all", numFeatures)
     checkFeatureSubsetStrategy(numTrees = 2, "auto", math.sqrt(numFeatures).ceil.toInt)
@@ -436,13 +441,16 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     checkFeatureSubsetStrategy(numTrees = 2, "log2",
       (math.log(numFeatures) / math.log(2)).ceil.toInt)
     checkFeatureSubsetStrategy(numTrees = 2, "onethird", (numFeatures / 3.0).ceil.toInt)
-    checkFeatureSubsetStrategy(numTrees = 2, "0.1", (0.1 * numFeatures).ceil.toInt)
-    checkFeatureSubsetStrategy(numTrees = 2, "0.5", (0.5 * numFeatures).ceil.toInt)
-    checkFeatureSubsetStrategy(numTrees = 2, "1.0", (1.0 * numFeatures).ceil.toInt)
-    checkFeatureSubsetStrategy(numTrees = 2, "1", 1)
-    checkFeatureSubsetStrategy(numTrees = 2, "2", 2)
-    checkFeatureSubsetStrategy(numTrees = 2, numFeatures.toString, numFeatures)
-    checkFeatureSubsetStrategy(numTrees = 2, (numFeatures * 2).toString, numFeatures)
+
+    for (strategy <- realStrategies) {
+      val expected = (strategy.toDouble * numFeatures).ceil.toInt
+      checkFeatureSubsetStrategy(numTrees = 2, strategy, expected)
+    }
+
+    for (strategy <- integerStrategies) {
+      val expected = if (strategy.toInt < numFeatures) strategy.toInt else numFeatures
+      checkFeatureSubsetStrategy(numTrees = 2, strategy, expected)
+    }
   }
 
   test("Binary classification with continuous features: subsampling features") {

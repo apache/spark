@@ -80,15 +80,14 @@ public class JavaRandomForestClassifierSuite implements Serializable {
     for (String featureSubsetStrategy: RandomForestClassifier.supportedFeatureSubsetStrategies()) {
       rf.setFeatureSubsetStrategy(featureSubsetStrategy);
     }
-    rf.setFeatureSubsetStrategy(".1");
-    rf.setFeatureSubsetStrategy(".10");
-    rf.setFeatureSubsetStrategy("0.10");
-    rf.setFeatureSubsetStrategy("0.1");
-    rf.setFeatureSubsetStrategy("0.9");
-    rf.setFeatureSubsetStrategy("1.0");
-    rf.setFeatureSubsetStrategy("1");
-    rf.setFeatureSubsetStrategy("100");
-    rf.setFeatureSubsetStrategy("1000");
+    String realStrategies[] = {".1", ".10", "0.10", "0.1", "0.9", "1.0"};
+    for (String strategy: realStrategies) {
+      rf.setFeatureSubsetStrategy(strategy);
+    }
+    String integerStrategies[] = {"1", "10", "100", "1000", "10000"};
+    for (String strategy: integerStrategies) {
+      rf.setFeatureSubsetStrategy(strategy);
+    }
     RandomForestClassificationModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);
