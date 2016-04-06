@@ -22,6 +22,7 @@ import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -179,7 +180,8 @@ private[spark] class Executor(
     @volatile private var killed = false
 
     /** Whether this task has been finished. */
-    @volatile private var finished = false
+    @GuardedBy("TaskRunner.this")
+    private var finished = false
 
     /** How much the JVM process has spent in GC when the task starts to run. */
     @volatile var startGCTime: Long = _
@@ -202,8 +204,15 @@ private[spark] class Executor(
       }
     }
 
-    private def setTaskFinished(finished: Boolean): Unit = synchronized {
+    /**
+     * Set the finished flag to true and clear the current thread's interrupt status
+     */
+    private def setTaskFinishedAndClearInterruptStatus(): Unit = synchronized {
       this.finished = true
+      // SPARK-14234 - Reset the interrupted status of the thread to avoid the
+      // ClosedByInterruptException during execBackend.statusUpdate which causes
+      // Executor to crash
+      Thread.interrupted()
     }
 
     override def run(): Unit = {
@@ -326,23 +335,17 @@ private[spark] class Executor(
       } catch {
         case ffe: FetchFailedException =>
           val reason = ffe.toTaskEndReason
-          setTaskFinished(true)
-          // Reset the interrupted status of the thread to update the status
-          Thread.interrupted()
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case _: TaskKilledException | _: InterruptedException if task.killed =>
           logInfo(s"Executor killed $taskName (TID $taskId)")
-          setTaskFinished(true)
-          // Reset the interrupted status of the thread to update the status
-          Thread.interrupted()
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
 
         case cDE: CommitDeniedException =>
           val reason = cDE.toTaskEndReason
-          setTaskFinished(true)
-          // Reset the interrupted status of the thread to update the status
-          Thread.interrupted()
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case t: Throwable =>
@@ -372,9 +375,7 @@ private[spark] class Executor(
                 ser.serialize(new ExceptionFailure(t, accumulatorUpdates, preserveCause = false))
             }
           }
-          setTaskFinished(true)
-          // Reset the interrupted status of the thread to update the status
-          Thread.interrupted()
+          setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
