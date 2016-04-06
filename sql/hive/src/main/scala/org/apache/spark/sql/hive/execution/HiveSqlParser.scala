@@ -21,16 +21,16 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.parse.EximUtil
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.ng._
-import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
+import org.apache.spark.sql.catalyst.parser._
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
 import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView}
@@ -134,6 +134,18 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
+   * Create a [[CatalogStorageFormat]]. This is part of the [[CreateTableAsSelect]] command.
+   */
+  override def visitCreateFileFormat(
+      ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    if (ctx.storageHandler == null) {
+      typedVisit[CatalogStorageFormat](ctx.fileFormat)
+    } else {
+      visitStorageHandler(ctx.storageHandler)
+    }
+  }
+
+  /**
    * Create a [[CreateTableAsSelect]] command.
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = {
@@ -161,18 +173,10 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       }
 
       // Create the schema.
-      val schema = Option(ctx.colTypeList).toSeq.flatMap(_.colType.asScala).map { col =>
-        CatalogColumn(
-          col.identifier.getText,
-          col.dataType.getText.toLowerCase, // TODO validate this?
-          nullable = true,
-          Option(col.STRING).map(string))
-      }
+      val schema = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns(_, _.toLowerCase))
 
       // Get the column by which the table is partitioned.
-      val partitionCols = Option(ctx.identifierList).toSeq.flatMap(visitIdentifierList).map {
-        CatalogColumn(_, null, nullable = true, None)
-      }
+      val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns(_))
 
       // Create the storage.
       def format(fmt: ParserRuleContext): CatalogStorageFormat = {
@@ -274,22 +278,10 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[Generator]]. Override this method in order to support custom Generators.
-   */
-  override protected def withGenerator(
-      name: String,
-      expressions: Seq[Expression],
-      ctx: LateralViewContext): Generator = {
-    val info = Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse {
-      throw new ParseException(s"Couldn't find Generator function '$name'", ctx)
-    }
-    HiveGenericUDTF(name, new HiveFunctionWrapper(info.getFunctionClass.getName), expressions)
-  }
-
-  /**
    * Create a [[HiveScriptIOSchema]].
    */
   override protected def withScriptIOSchema(
+      ctx: QuerySpecificationContext,
       inRowFormat: RowFormatContext,
       recordWriter: Token,
       outRowFormat: RowFormatContext,
@@ -399,7 +391,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   /**
    * Storage Handlers are currently not supported in the statements we support (CTAS).
    */
-  override def visitStorageHandler(ctx: StorageHandlerContext): AnyRef = withOrigin(ctx) {
+  override def visitStorageHandler(
+      ctx: StorageHandlerContext): CatalogStorageFormat = withOrigin(ctx) {
     throw new ParseException("Storage Handlers are currently unsupported.", ctx)
   }
 
@@ -438,5 +431,20 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
         serdeConstants.LINE_DELIM -> value
       }
     EmptyStorageFormat.copy(serdeProperties = entries.toMap)
+  }
+
+  /**
+   * Create a sequence of [[CatalogColumn]]s from a column list
+   */
+  private def visitCatalogColumns(
+      ctx: ColTypeListContext,
+      formatter: String => String = identity): Seq[CatalogColumn] = withOrigin(ctx) {
+    ctx.colType.asScala.map { col =>
+      CatalogColumn(
+        formatter(col.identifier.getText),
+        col.dataType.getText.toLowerCase, // TODO validate this?
+        nullable = true,
+        Option(col.STRING).map(string))
+    }
   }
 }

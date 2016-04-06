@@ -54,17 +54,10 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     var store: StateStore = null
-
-    Utils.tryWithSafeFinally {
-      val storeId = StateStoreId(checkpointLocation, operatorId, partition.index)
-      store = StateStore.get(
-        storeId, keySchema, valueSchema, storeVersion, storeConf, confBroadcast.value.value)
-      val inputIter = dataRDD.iterator(partition, ctxt)
-      val outputIter = storeUpdateFunction(store, inputIter)
-      assert(store.hasCommitted)
-      outputIter
-    } {
-      if (store != null) store.cancel()
-    }
+    val storeId = StateStoreId(checkpointLocation, operatorId, partition.index)
+    store = StateStore.get(
+      storeId, keySchema, valueSchema, storeVersion, storeConf, confBroadcast.value.value)
+    val inputIter = dataRDD.iterator(partition, ctxt)
+    storeUpdateFunction(store, inputIter)
   }
 }

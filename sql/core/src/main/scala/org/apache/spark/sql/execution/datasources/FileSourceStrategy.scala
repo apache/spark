@@ -59,6 +59,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       if (files.fileFormat.toString == "TestFileFormat" ||
          files.fileFormat.isInstanceOf[parquet.DefaultSource] ||
          files.fileFormat.toString == "ORC" ||
+         files.fileFormat.toString == "LibSVM" ||
+         files.fileFormat.isInstanceOf[csv.DefaultSource] ||
+         files.fileFormat.isInstanceOf[text.DefaultSource] ||
          files.fileFormat.isInstanceOf[json.DefaultSource]) &&
          files.sqlContext.conf.useFileScan =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
@@ -78,14 +81,6 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val dataColumns =
         l.resolve(files.dataSchema, files.sqlContext.sessionState.analyzer.resolver)
-
-      val bucketColumns =
-        AttributeSet(
-          files.bucketSpec
-            .map(_.bucketColumnNames)
-            .getOrElse(Nil)
-            .map(l.resolveQuoted(_, files.sqlContext.conf.resolver)
-              .getOrElse(sys.error(""))))
 
       // Partition keys are not available in the statistics of the files.
       val dataFilters = filters.filter(_.references.intersect(partitionSet).isEmpty)
@@ -112,8 +107,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val readFile = files.fileFormat.buildReader(
         sqlContext = files.sqlContext,
+        dataSchema = files.dataSchema,
         partitionSchema = files.partitionSchema,
-        dataSchema = prunedDataSchema,
+        requiredSchema = prunedDataSchema,
         filters = pushedDownFilters,
         options = files.options)
 
@@ -135,7 +131,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
         case _ =>
           val maxSplitBytes = files.sqlContext.conf.filesMaxPartitionBytes
-          logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes")
+          val openCostInBytes = files.sqlContext.conf.filesOpenCostInBytes
+          logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
+            s"open cost is considered as scanning $openCostInBytes bytes.")
 
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
@@ -153,7 +151,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
           /** Add the given file to the current partition. */
           def addFile(file: PartitionedFile): Unit = {
-            currentSize += file.length
+            currentSize += file.length + openCostInBytes
             currentFiles.append(file)
           }
 
@@ -175,10 +173,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           splitFiles.foreach { file =>
             if (currentSize + file.length > maxSplitBytes) {
               closePartition()
-              addFile(file)
-            } else {
-              addFile(file)
             }
+            addFile(file)
           }
           closePartition()
           partitions

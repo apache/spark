@@ -276,38 +276,26 @@ private[sql] class DefaultSource
         file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
   }
 
-  /**
-   * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
-   *
-   * @param partitionSchema The schema of the partition column row that will be present in each
-   *                        PartitionedFile.  These columns should be prepended to the rows that
-   *                        are produced by the iterator.
-   * @param dataSchema The schema of the data that should be output for each row.  This may be a
-   *                   subset of the columns that are present in the file if  column pruning has
-   *                   occurred.
-   * @param filters A set of filters than can optionally be used to reduce the number of rows output
-   * @param options A set of string -> string configuration options.
-   * @return
-   */
   override def buildReader(
       sqlContext: SQLContext,
-      partitionSchema: StructType,
       dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
     val parquetConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
     parquetConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
     parquetConf.set(
       CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      CatalystSchemaConverter.checkFieldNames(dataSchema).json)
+      CatalystSchemaConverter.checkFieldNames(requiredSchema).json)
     parquetConf.set(
       CatalystWriteSupport.SPARK_ROW_SCHEMA,
-      CatalystSchemaConverter.checkFieldNames(dataSchema).json)
+      CatalystSchemaConverter.checkFieldNames(requiredSchema).json)
 
     // We want to clear this temporary metadata from saving into Parquet file.
     // This metadata is only useful for detecting optional columns when pushdowning filters.
     val dataSchemaToWrite = StructType.removeMetadata(StructType.metadataKeyForOptionalField,
-      dataSchema).asInstanceOf[StructType]
+      requiredSchema).asInstanceOf[StructType]
     CatalystWriteSupport.setSchema(dataSchemaToWrite, parquetConf)
 
     // Sets flags for `CatalystSchemaConverter`
@@ -324,7 +312,7 @@ private[sql] class DefaultSource
         // Collects all converted Parquet filter predicates. Notice that not all predicates can be
         // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
         // is used here.
-        .flatMap(ParquetFilters.createFilter(dataSchema, _))
+        .flatMap(ParquetFilters.createFilter(requiredSchema, _))
         .reduceOption(FilterApi.and)
     } else {
       None
@@ -394,7 +382,7 @@ private[sql] class DefaultSource
           enableVectorizedParquetReader) {
         iter.asInstanceOf[Iterator[InternalRow]]
       } else {
-        val fullSchema = dataSchema.toAttributes ++ partitionSchema.toAttributes
+        val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
         val joinedRow = new JoinedRow()
         val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 

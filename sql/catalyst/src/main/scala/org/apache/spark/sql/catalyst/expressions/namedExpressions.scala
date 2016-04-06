@@ -97,7 +97,7 @@ trait NamedExpression extends Expression {
     }
 }
 
-abstract class Attribute extends LeafExpression with NamedExpression {
+abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {
 
   override def references: AttributeSet = AttributeSet(this)
 
@@ -329,7 +329,7 @@ case class PrettyAttribute(
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
-  override def nullable: Boolean = throw new UnsupportedOperationException
+  override def nullable: Boolean = true
 }
 
 object VirtualColumn {

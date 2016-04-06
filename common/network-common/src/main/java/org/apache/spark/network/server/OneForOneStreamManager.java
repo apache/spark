@@ -63,7 +63,7 @@ public class OneForOneStreamManager extends StreamManager {
     // For debugging purposes, start with a random stream id to help identifying different streams.
     // This does not need to be globally unique, only unique to this class.
     nextStreamId = new AtomicLong((long) new Random().nextInt(Integer.MAX_VALUE) * 1000);
-    streams = new ConcurrentHashMap<Long, StreamState>();
+    streams = new ConcurrentHashMap<>();
   }
 
   @Override
