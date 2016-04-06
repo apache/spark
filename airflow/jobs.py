@@ -415,8 +415,6 @@ class SchedulerJob(BaseJob):
                     # Migrating from previous version
                     # make the past 5 runs active
                     next_run_date = dag.date_range(latest_run, -5)[0]
-                    if dag.start_date:
-                        next_run_date = max(next_run_date, dag.start_date)
                 else:
                     task_start_dates = [t.start_date for t in dag.tasks]
                     if task_start_dates:
@@ -425,6 +423,10 @@ class SchedulerJob(BaseJob):
                         next_run_date = None
             elif dag.schedule_interval != '@once':
                 next_run_date = dag.following_schedule(last_scheduled_run)
+
+            # don't ever schedule prior to the dag's start_date
+            if dag.start_date:
+                next_run_date = max(next_run_date, dag.start_date)
 
             # this structure is necessary to avoid a TypeError from concatenating
             # NoneType
