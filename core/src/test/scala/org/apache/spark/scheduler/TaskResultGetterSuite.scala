@@ -21,10 +21,15 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 
+import com.google.common.util.concurrent.MoreExecutors
+import org.mockito.ArgumentCaptor
+import org.mockito.Matchers.{any, anyLong}
+import org.mockito.Mockito.{spy, times, verify}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
@@ -33,13 +38,14 @@ import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, Utils}
 
+
 /**
  * Removes the TaskResult from the BlockManager before delegating to a normal TaskResultGetter.
  *
  * Used to test the case where a BlockManager evicts the task result (or dies) before the
  * TaskResult is retrieved.
  */
-class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedulerImpl)
+private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedulerImpl)
   extends TaskResultGetter(sparkEnv, scheduler) {
   var removedResult = false
 
@@ -71,6 +77,31 @@ class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedule
     super.enqueueSuccessfulTask(taskSetManager, tid, serializedData)
   }
 }
+
+
+/**
+ * A [[TaskResultGetter]] that stores the [[DirectTaskResult]]s it receives from executors
+ * _before_ modifying the results in any way.
+ */
+private class MyTaskResultGetter(env: SparkEnv, scheduler: TaskSchedulerImpl)
+  extends TaskResultGetter(env, scheduler) {
+
+  // Use the current thread so we can access its results synchronously
+  protected override val getTaskResultExecutor = MoreExecutors.sameThreadExecutor()
+
+  // DirectTaskResults that we receive from the executors
+  private val _taskResults = new ArrayBuffer[DirectTaskResult[_]]
+
+  def taskResults: Seq[DirectTaskResult[_]] = _taskResults
+
+  override def enqueueSuccessfulTask(tsm: TaskSetManager, tid: Long, data: ByteBuffer): Unit = {
+    // work on a copy since the super class still needs to use the buffer
+    val newBuffer = data.duplicate()
+    _taskResults += env.closureSerializer.newInstance().deserialize[DirectTaskResult[_]](newBuffer)
+    super.enqueueSuccessfulTask(tsm, tid, data)
+  }
+}
+
 
 /**
  * Tests related to handling task results (both direct and indirect).
@@ -182,5 +213,39 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
       Thread.currentThread.setContextClassLoader(originalClassLoader)
     }
   }
+
+  test("task result size is set on the driver, not the executors") {
+    import InternalAccumulator._
+
+    // Set up custom TaskResultGetter and TaskSchedulerImpl spy
+    sc = new SparkContext("local", "test", conf)
+    val scheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
+    val spyScheduler = spy(scheduler)
+    val resultGetter = new MyTaskResultGetter(sc.env, spyScheduler)
+    val newDAGScheduler = new DAGScheduler(sc, spyScheduler)
+    scheduler.taskResultGetter = resultGetter
+    sc.dagScheduler = newDAGScheduler
+    sc.taskScheduler = spyScheduler
+    sc.taskScheduler.setDAGScheduler(newDAGScheduler)
+
+    // Just run 1 task and capture the corresponding DirectTaskResult
+    sc.parallelize(1 to 1, 1).count()
+    val captor = ArgumentCaptor.forClass(classOf[DirectTaskResult[_]])
+    verify(spyScheduler, times(1)).handleSuccessfulTask(any(), anyLong(), captor.capture())
+
+    // When a task finishes, the executor sends a serialized DirectTaskResult to the driver
+    // without setting the result size so as to avoid serializing the result again. Instead,
+    // the result size is set later in TaskResultGetter on the driver before passing the
+    // DirectTaskResult on to TaskSchedulerImpl. In this test, we capture the DirectTaskResult
+    // before and after the result size is set.
+    assert(resultGetter.taskResults.size === 1)
+    val resBefore = resultGetter.taskResults.head
+    val resAfter = captor.getValue
+    val resSizeBefore = resBefore.accumUpdates.find(_.name == Some(RESULT_SIZE)).flatMap(_.update)
+    val resSizeAfter = resAfter.accumUpdates.find(_.name == Some(RESULT_SIZE)).flatMap(_.update)
+    assert(resSizeBefore.exists(_ == 0L))
+    assert(resSizeAfter.exists(_.toString.toLong > 0L))
+  }
+
 }
 

@@ -92,7 +92,7 @@ private[graphx] object BytecodeUtils {
 
   /**
    * Given the class name, return whether we should look into the class or not. This is used to
-   * skip examing a large quantity of Java or Scala classes that we know for sure wouldn't access
+   * skip examining a large quantity of Java or Scala classes that we know for sure wouldn't access
    * the closures. Note that the class name is expected in ASM style (i.e. use "/" instead of ".").
    */
   private def skipClass(className: String): Boolean = {

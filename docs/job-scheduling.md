@@ -54,8 +54,7 @@ an application to gain back cores on one node when it has work to do. To use thi
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
-the same RDDs. In future releases, in-memory storage systems such as [Tachyon](http://tachyon-project.org) will
-provide another approach to share RDDs.
+the same RDDs.
 
 ## Dynamic Resource Allocation
 
@@ -89,7 +88,7 @@ In YARN mode, start the shuffle service on each `NodeManager` as follows:
 1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
 pre-packaged distribution.
 2. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
-`$SPARK_HOME/network/yarn/target/scala-<version>` if you are building Spark yourself, and under
+`$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under
 `lib` if you are using a distribution.
 2. Add this jar to the classpath of all `NodeManager`s in your cluster.
 3. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,

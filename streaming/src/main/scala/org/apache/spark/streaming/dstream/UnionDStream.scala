@@ -29,8 +29,8 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
   extends DStream[T](parents.head.ssc) {
 
   require(parents.length > 0, "List of DStreams to union is empty")
-  require(parents.map(_.ssc).distinct.size == 1, "Some of the DStreams have different contexts")
-  require(parents.map(_.slideDuration).distinct.size == 1,
+  require(parents.map(_.ssc).distinct.length == 1, "Some of the DStreams have different contexts")
+  require(parents.map(_.slideDuration).distinct.length == 1,
     "Some of the DStreams have different slide durations")
 
   override def dependencies: List[DStream[_]] = parents.toList
@@ -44,7 +44,7 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
       case None => throw new SparkException("Could not generate RDD from a parent for unifying at" +
         s" time $validTime")
     }
-    if (rdds.size > 0) {
+    if (rdds.nonEmpty) {
       Some(new UnionRDD(ssc.sc, rdds))
     } else {
       None

@@ -104,6 +104,8 @@ def determine_modules_to_test(changed_modules):
 
     >>> [x.name for x in determine_modules_to_test([modules.root])]
     ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.build])]
+    ['root']
     >>> [x.name for x in determine_modules_to_test([modules.graphx])]
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
@@ -111,15 +113,13 @@ def determine_modules_to_test(changed_modules):
     ['sql', 'hive', 'mllib', 'examples', 'hive-thriftserver', 'pyspark-sql', 'sparkr',
      'pyspark-mllib', 'pyspark-ml']
     """
-    # If we're going to have to run all of the tests, then we can just short-circuit
-    # and return 'root'. No module depends on root, so if it appears then it will be
-    # in changed_modules.
-    if modules.root in changed_modules:
-        return [modules.root]
     modules_to_test = set()
     for module in changed_modules:
         modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
     modules_to_test = modules_to_test.union(set(changed_modules))
+    # If we need to run all of the tests, then we should short-circuit and return 'root'
+    if modules.root in modules_to_test:
+        return [modules.root]
     return toposort_flatten(
         {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True)
 
@@ -336,17 +336,24 @@ def build_spark_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["package",
-                 "assembly/assembly",
                  "streaming-kafka-assembly/assembly",
                  "streaming-flume-assembly/assembly",
-                 "streaming-mqtt-assembly/assembly",
-                 "streaming-mqtt/test:assembly",
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
     print("[info] Building Spark (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
+    exec_sbt(profiles_and_goals)
+
+
+def build_spark_assembly_sbt(hadoop_version):
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    sbt_goals = ["assembly/assembly"]
+    profiles_and_goals = build_profiles + sbt_goals
+    print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
 
 
@@ -488,7 +495,7 @@ def main():
     if which("R"):
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
     else:
-        print("Can't install SparkR as R is was not found in PATH")
+        print("Cannot install SparkR as R was not found in PATH")
 
     if os.environ.get("AMPLAB_JENKINS"):
         # if we're on the Amplab Jenkins build servers setup variables
@@ -563,8 +570,11 @@ def main():
 
     # backwards compatibility checks
     if build_tool == "sbt":
-        # Note: compatiblity tests only supported in sbt for now
+        # Note: compatibility tests only supported in sbt for now
         detect_binary_inop_with_mima()
+        # Since we did not build assembly/assembly before running dev/mima, we need to
+        # do it here because the tests still rely on it; see SPARK-13294 for details.
+        build_spark_assembly_sbt(hadoop_version)
 
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)

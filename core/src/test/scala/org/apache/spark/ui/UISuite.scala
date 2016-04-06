@@ -21,7 +21,6 @@ import java.net.{BindException, ServerSocket}
 
 import scala.io.Source
 
-import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._

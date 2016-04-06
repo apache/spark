@@ -30,7 +30,7 @@ private[v1] class OneJobResource(ui: SparkUI) {
   def oneJob(@PathParam("jobId") jobId: Int): JobData = {
     val statusToJobs: Seq[(JobExecutionStatus, Seq[JobUIData])] =
       AllJobsResource.getStatusToJobs(ui)
-    val jobOpt = statusToJobs.map {_._2} .flatten.find { jobInfo => jobInfo.jobId == jobId}
+    val jobOpt = statusToJobs.flatMap(_._2).find { jobInfo => jobInfo.jobId == jobId}
     jobOpt.map { job =>
       AllJobsResource.convertJobData(job, ui.jobProgressListener, false)
     }.getOrElse {

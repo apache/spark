@@ -240,7 +240,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val taskFailedReasons = Seq(
       Resubmitted,
       new FetchFailed(null, 0, 0, 0, "ignored"),
-      ExceptionFailure("Exception", "description", null, null, None, None),
+      ExceptionFailure("Exception", "description", null, null, None),
       TaskResultLost,
       TaskKilled,
       ExecutorLostFailure("0", true, Some("Induced failure")),
@@ -269,20 +269,22 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val execId = "exe-1"
 
     def makeTaskMetrics(base: Int): TaskMetrics = {
-      val taskMetrics = new TaskMetrics()
-      taskMetrics.setExecutorRunTime(base + 4)
-      taskMetrics.incDiskBytesSpilled(base + 5)
-      taskMetrics.incMemoryBytesSpilled(base + 6)
+      val accums = InternalAccumulator.createAll()
+      accums.foreach(Accumulators.register)
+      val taskMetrics = new TaskMetrics(accums)
       val shuffleReadMetrics = taskMetrics.registerTempShuffleReadMetrics()
+      val shuffleWriteMetrics = taskMetrics.registerShuffleWriteMetrics()
+      val inputMetrics = taskMetrics.registerInputMetrics(DataReadMethod.Hadoop)
+      val outputMetrics = taskMetrics.registerOutputMetrics(DataWriteMethod.Hadoop)
       shuffleReadMetrics.incRemoteBytesRead(base + 1)
       shuffleReadMetrics.incLocalBytesRead(base + 9)
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
       taskMetrics.mergeShuffleReadMetrics()
-      val shuffleWriteMetrics = taskMetrics.registerShuffleWriteMetrics()
       shuffleWriteMetrics.incBytesWritten(base + 3)
-      val inputMetrics = taskMetrics.registerInputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.incBytesRead(base + 7)
-      val outputMetrics = taskMetrics.registerOutputMetrics(DataWriteMethod.Hadoop)
+      taskMetrics.setExecutorRunTime(base + 4)
+      taskMetrics.incDiskBytesSpilled(base + 5)
+      taskMetrics.incMemoryBytesSpilled(base + 6)
+      inputMetrics.setBytesRead(base + 7)
       outputMetrics.setBytesWritten(base + 8)
       taskMetrics
     }
@@ -300,9 +302,9 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     listener.onTaskStart(SparkListenerTaskStart(1, 0, makeTaskInfo(1237L)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(execId, Array(
-      (1234L, 0, 0, makeTaskMetrics(0)),
-      (1235L, 0, 0, makeTaskMetrics(100)),
-      (1236L, 1, 0, makeTaskMetrics(200)))))
+      (1234L, 0, 0, makeTaskMetrics(0).accumulatorUpdates()),
+      (1235L, 0, 0, makeTaskMetrics(100).accumulatorUpdates()),
+      (1236L, 1, 0, makeTaskMetrics(200).accumulatorUpdates()))))
 
     var stage0Data = listener.stageIdToData.get((0, 0)).get
     var stage1Data = listener.stageIdToData.get((1, 0)).get

@@ -453,7 +453,7 @@ class DStream(object):
         2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
         This is more efficient than `invReduceFunc` is None.
 
-        @param reduceFunc:     associative reduce function
+        @param reduceFunc:     associative and commutative reduce function
         @param invReduceFunc:  inverse reduce function of `reduceFunc`
         @param windowDuration: width of the window; must be a multiple of this DStream's
                                batching interval
@@ -524,7 +524,7 @@ class DStream(object):
         `invFunc` can be None, then it will reduce all the RDDs in window, could be slower
         than having `invFunc`.
 
-        @param func:           associative reduce function
+        @param func:           associative and commutative reduce function
         @param invFunc:        inverse function of `reduceFunc`
         @param windowDuration: width of the window; must be a multiple of this DStream's
                               batching interval

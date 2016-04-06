@@ -140,27 +140,27 @@ object Encoders {
   def STRING: Encoder[java.lang.String] = ExpressionEncoder()
 
   /**
-    * An encoder for nullable decimal type.
-    * @since 1.6.0
-    */
+   * An encoder for nullable decimal type.
+   * @since 1.6.0
+   */
   def DECIMAL: Encoder[java.math.BigDecimal] = ExpressionEncoder()
 
   /**
-    * An encoder for nullable date type.
-    * @since 1.6.0
-    */
+   * An encoder for nullable date type.
+   * @since 1.6.0
+   */
   def DATE: Encoder[java.sql.Date] = ExpressionEncoder()
 
   /**
-    * An encoder for nullable timestamp type.
-    * @since 1.6.0
-    */
+   * An encoder for nullable timestamp type.
+   * @since 1.6.0
+   */
   def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
 
   /**
-    * An encoder for arrays of bytes.
-    * @since 1.6.1
-    */
+   * An encoder for arrays of bytes.
+   * @since 1.6.1
+   */
   def BINARY: Encoder[Array[Byte]] = ExpressionEncoder()
 
   /**
@@ -245,10 +245,10 @@ object Encoders {
     ExpressionEncoder[T](
       schema = new StructType().add("value", BinaryType),
       flat = true,
-      toRowExpressions = Seq(
+      serializer = Seq(
         EncodeUsingSerializer(
           BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo)),
-      fromRowExpression =
+      deserializer =
         DecodeUsingSerializer[T](
           BoundReference(0, BinaryType, nullable = true), classTag[T], kryo = useKryo),
       clsTag = classTag[T]

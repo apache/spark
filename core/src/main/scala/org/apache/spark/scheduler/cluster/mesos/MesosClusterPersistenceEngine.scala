@@ -23,8 +23,9 @@ import org.apache.curator.framework.CuratorFramework
 import org.apache.zookeeper.CreateMode
 import org.apache.zookeeper.KeeperException.NoNodeException
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkCuratorUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -53,9 +54,9 @@ private[spark] trait MesosClusterPersistenceEngine {
  * all of them reuses the same connection pool.
  */
 private[spark] class ZookeeperMesosClusterPersistenceEngineFactory(conf: SparkConf)
-  extends MesosClusterPersistenceEngineFactory(conf) {
+  extends MesosClusterPersistenceEngineFactory(conf) with Logging {
 
-  lazy val zk = SparkCuratorUtil.newClient(conf, "spark.mesos.deploy.zookeeper.url")
+  lazy val zk = SparkCuratorUtil.newClient(conf)
 
   def createEngine(path: String): MesosClusterPersistenceEngine = {
     new ZookeeperMesosClusterPersistenceEngine(path, zk, conf)

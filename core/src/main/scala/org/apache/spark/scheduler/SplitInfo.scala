@@ -45,7 +45,7 @@ class SplitInfo(
     hashCode
   }
 
-  // This is practically useless since most of the Split impl's dont seem to implement equals :-(
+  // This is practically useless since most of the Split impl's don't seem to implement equals :-(
   // So unless there is identity equality between underlyingSplits, it will always fail even if it
   // is pointing to same block.
   override def equals(other: Any): Boolean = other match {

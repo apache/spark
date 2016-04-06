@@ -32,7 +32,7 @@ import org.jboss.netty.channel.{ChannelPipeline, ChannelPipelineFactory, Channel
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
@@ -185,13 +185,14 @@ class FlumeReceiver(
 
   override def preferredLocation: Option[String] = Option(host)
 
-  /** A Netty Pipeline factory that will decompress incoming data from
-    * and the Netty client and compress data going back to the client.
-    *
-    * The compression on the return is required because Flume requires
-    * a successful response to indicate it can remove the event/batch
-    * from the configured channel
-    */
+  /**
+   * A Netty Pipeline factory that will decompress incoming data from
+   * and the Netty client and compress data going back to the client.
+   *
+   * The compression on the return is required because Flume requires
+   * a successful response to indicate it can remove the event/batch
+   * from the configured channel
+   */
   private[streaming]
   class CompressionChannelPipelineFactory extends ChannelPipelineFactory {
     def getPipeline(): ChannelPipeline = {

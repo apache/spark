@@ -54,16 +54,16 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(!nums.isEmpty())
     assert(nums.max() === 4)
     assert(nums.min() === 1)
-    val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
+    val partitionSums = nums.mapPartitions(iter => Iterator(iter.sum))
     assert(partitionSums.collect().toList === List(3, 7))
 
     val partitionSumsWithSplit = nums.mapPartitionsWithIndex {
-      case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
+      case(split, iter) => Iterator((split, iter.sum))
     }
     assert(partitionSumsWithSplit.collect().toList === List((0, 3), (1, 7)))
 
     val partitionSumsWithIndex = nums.mapPartitionsWithIndex {
-      case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
+      case(split, iter) => Iterator((split, iter.sum))
     }
     assert(partitionSumsWithIndex.collect().toList === List((0, 3), (1, 7)))
 
@@ -912,6 +912,24 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     def addDependency(dep: Dependency[_]) {
       mutableDependencies += dep
     }
+  }
+
+  test("RDD.partitions() fails fast when partitions indicies are incorrect (SPARK-13021)") {
+    class BadRDD[T: ClassTag](prev: RDD[T]) extends RDD[T](prev) {
+
+      override def compute(part: Partition, context: TaskContext): Iterator[T] = {
+        prev.compute(part, context)
+      }
+
+      override protected def getPartitions: Array[Partition] = {
+        prev.partitions.reverse // breaks contract, which is that `rdd.partitions(i).index == i`
+      }
+    }
+    val rdd = new BadRDD(sc.parallelize(1 to 100, 100))
+    val e = intercept[IllegalArgumentException] {
+      rdd.partitions
+    }
+    assert(e.getMessage.contains("partitions"))
   }
 
   test("nested RDDs are not supported (SPARK-5063)") {

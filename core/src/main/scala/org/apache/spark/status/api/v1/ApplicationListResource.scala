@@ -70,6 +70,13 @@ private[spark] object ApplicationsListResource {
           attemptId = internalAttemptInfo.attemptId,
           startTime = new Date(internalAttemptInfo.startTime),
           endTime = new Date(internalAttemptInfo.endTime),
+          duration =
+            if (internalAttemptInfo.endTime > 0) {
+              internalAttemptInfo.endTime - internalAttemptInfo.startTime
+            } else {
+              0
+            },
+          lastUpdated = new Date(internalAttemptInfo.lastUpdated),
           sparkUser = internalAttemptInfo.sparkUser,
           completed = internalAttemptInfo.completed
         )

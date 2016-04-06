@@ -184,6 +184,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+   * Remove self edges.
+   *
+   * @return a graph with all self edges removed
+   */
+  def removeSelfEdges(): Graph[VD, ED] = {
+    graph.subgraph(epred = e => e.srcId != e.dstId)
+  }
+
+  /**
    * Join the vertices with an RDD and then apply a function from the
    * vertex and RDD entry to a new vertex value.  The input table
    * should contain at most one entry for each vertex.  If no entry is
@@ -227,11 +236,11 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * @param preprocess a function to compute new vertex and edge data before filtering
    * @param epred edge pred to filter on after preprocess, see more details under
    *  [[org.apache.spark.graphx.Graph#subgraph]]
-   * @param vpred vertex pred to filter on after prerocess, see more details under
+   * @param vpred vertex pred to filter on after preprocess, see more details under
    *  [[org.apache.spark.graphx.Graph#subgraph]]
    * @tparam VD2 vertex type the vpred operates on
    * @tparam ED2 edge type the epred operates on
-   * @return a subgraph of the orginal graph, with its data unchanged
+   * @return a subgraph of the original graph, with its data unchanged
    *
    * @example This function can be used to filter the graph based on some property, without
    * changing the vertex and edge values in your program. For example, we could remove the vertices
@@ -267,10 +276,10 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         if (Random.nextDouble() < probability) { Some(vidVvals._1) }
         else { None }
       }
-      if (selectedVertices.count > 1) {
+      if (selectedVertices.count > 0) {
         found = true
         val collectedVertices = selectedVertices.collect()
-        retVal = collectedVertices(Random.nextInt(collectedVertices.size))
+        retVal = collectedVertices(Random.nextInt(collectedVertices.length))
       }
     }
    retVal
@@ -413,6 +422,16 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    */
   def connectedComponents(): Graph[VertexId, ED] = {
     ConnectedComponents.run(graph)
+  }
+
+  /**
+   * Compute the connected component membership of each vertex and return a graph with the vertex
+   * value containing the lowest vertex id in the connected component containing that vertex.
+   *
+   * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
+   */
+  def connectedComponents(maxIterations: Int): Graph[VertexId, ED] = {
+    ConnectedComponents.run(graph, maxIterations)
   }
 
   /**

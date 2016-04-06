@@ -53,14 +53,14 @@ trait ObjectOperator extends SparkPlan {
  */
 case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
-    input: Expression,
+    deserializer: Expression,
     serializer: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with ObjectOperator {
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
-      val getObject = generateToObject(input, child.output)
+      val getObject = generateToObject(deserializer, child.output)
       val outputObject = generateToRow(serializer)
       func(iter.map(getObject)).map(outputObject)
     }
@@ -72,7 +72,7 @@ case class MapPartitions(
  */
 case class AppendColumns(
     func: Any => Any,
-    input: Expression,
+    deserializer: Expression,
     serializer: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with ObjectOperator {
 
@@ -82,7 +82,7 @@ case class AppendColumns(
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
-      val getObject = generateToObject(input, child.output)
+      val getObject = generateToObject(deserializer, child.output)
       val combiner = GenerateUnsafeRowJoiner.create(child.schema, newColumnSchema)
       val outputObject = generateToRow(serializer)
 
@@ -103,10 +103,11 @@ case class AppendColumns(
  */
 case class MapGroups(
     func: (Any, Iterator[Any]) => TraversableOnce[Any],
-    keyObject: Expression,
-    input: Expression,
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
     serializer: Seq[NamedExpression],
     groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
     child: SparkPlan) extends UnaryNode with ObjectOperator {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
@@ -121,8 +122,8 @@ case class MapGroups(
     child.execute().mapPartitionsInternal { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
 
-      val getKey = generateToObject(keyObject, groupingAttributes)
-      val getValue = generateToObject(input, child.output)
+      val getKey = generateToObject(keyDeserializer, groupingAttributes)
+      val getValue = generateToObject(valueDeserializer, dataAttributes)
       val outputObject = generateToRow(serializer)
 
       grouped.flatMap { case (key, rowIter) =>
@@ -142,12 +143,14 @@ case class MapGroups(
  */
 case class CoGroup(
     func: (Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any],
-    keyObject: Expression,
-    leftObject: Expression,
-    rightObject: Expression,
+    keyDeserializer: Expression,
+    leftDeserializer: Expression,
+    rightDeserializer: Expression,
     serializer: Seq[NamedExpression],
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
+    leftAttr: Seq[Attribute],
+    rightAttr: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode with ObjectOperator {
 
@@ -164,9 +167,9 @@ case class CoGroup(
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
       val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
 
-      val getKey = generateToObject(keyObject, leftGroup)
-      val getLeft = generateToObject(leftObject, left.output)
-      val getRight = generateToObject(rightObject, right.output)
+      val getKey = generateToObject(keyDeserializer, leftGroup)
+      val getLeft = generateToObject(leftDeserializer, leftAttr)
+      val getRight = generateToObject(rightDeserializer, rightAttr)
       val outputObject = generateToRow(serializer)
 
       new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {

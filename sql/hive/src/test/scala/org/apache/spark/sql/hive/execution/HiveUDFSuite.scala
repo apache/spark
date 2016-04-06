@@ -47,7 +47,7 @@ case class ListStringCaseClass(l: Seq[String])
  */
 class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
-  import hiveContext.{udf, sql}
+  import hiveContext.udf
   import hiveContext.implicits._
 
   test("spark sql udf test that returns a struct") {
@@ -361,7 +361,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
-  test("SPARK-11522 select input_file_name from non-parquet table"){
+  test("SPARK-11522 select input_file_name from non-parquet table") {
 
     withTempDir { tempDir =>
 

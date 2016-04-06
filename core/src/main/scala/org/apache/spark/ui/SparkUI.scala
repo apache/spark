@@ -21,7 +21,8 @@ import java.util.{Date, ServiceLoader}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
   UIRoot}
@@ -114,6 +115,8 @@ private[spark] class SparkUI private (
         attemptId = None,
         startTime = new Date(startTime),
         endTime = new Date(-1),
+        duration = 0,
+        lastUpdated = new Date(startTime),
         sparkUser = "",
         completed = false
       ))
@@ -194,7 +197,7 @@ private[spark] object SparkUI {
     }
 
     val environmentListener = new EnvironmentListener
-    val storageStatusListener = new StorageStatusListener
+    val storageStatusListener = new StorageStatusListener(conf)
     val executorsListener = new ExecutorsListener(storageStatusListener, conf)
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)

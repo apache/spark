@@ -35,8 +35,14 @@ class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
     val startTime: Date,
     val endTime: Date,
+    val lastUpdated: Date,
+    val duration: Long,
     val sparkUser: String,
-    val completed: Boolean = false)
+    val completed: Boolean = false) {
+    def getStartTimeEpoch: Long = startTime.getTime
+    def getEndTimeEpoch: Long = endTime.getTime
+    def getLastUpdatedEpoch: Long = lastUpdated.getTime
+}
 
 class ExecutorStageSummary private[spark](
     val taskTime : Long,
@@ -52,9 +58,11 @@ class ExecutorStageSummary private[spark](
 class ExecutorSummary private[spark](
     val id: String,
     val hostPort: String,
+    val isActive: Boolean,
     val rddBlocks: Int,
     val memoryUsed: Long,
     val diskUsed: Long,
+    val totalCores: Int,
     val maxTasks: Int,
     val activeTasks: Int,
     val failedTasks: Int,
@@ -233,3 +241,6 @@ class AccumulableInfo private[spark](
     val name: String,
     val update: Option[String],
     val value: String)
+
+class VersionInfo private[spark](
+  val spark: String)

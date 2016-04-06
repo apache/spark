@@ -146,16 +146,16 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
 
 
 /**
-  * Handle via which a "run" function passed to a [[ComplexFutureAction]]
-  * can submit jobs for execution.
-  */
+ * Handle via which a "run" function passed to a [[ComplexFutureAction]]
+ * can submit jobs for execution.
+ */
 @DeveloperApi
 trait JobSubmitter {
   /**
-    * Submit a job for execution and return a FutureAction holding the result.
-    * This is a wrapper around the same functionality provided by SparkContext
-    * to enable cancellation.
-    */
+   * Submit a job for execution and return a FutureAction holding the result.
+   * This is a wrapper around the same functionality provided by SparkContext
+   * to enable cancellation.
+   */
   def submitJob[T, U, R](
     rdd: RDD[T],
     processPartition: Iterator[T] => U,

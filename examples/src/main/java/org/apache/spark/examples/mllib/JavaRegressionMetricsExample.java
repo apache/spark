@@ -88,5 +88,7 @@ public class JavaRegressionMetricsExample {
     LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(),
       "target/tmp/LogisticRegressionModel");
     // $example off$
+
+    sc.stop();
   }
 }

@@ -19,19 +19,18 @@ package org.apache.spark.sql.catalyst.encoders
 
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
-import java.util.concurrent.ConcurrentMap
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import com.google.common.collect.MapMaker
-
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.{ArrayType, StructType}
+import org.apache.spark.sql.types.{ArrayType, Decimal, ObjectType, StructType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -77,8 +76,8 @@ class JavaSerializable(val value: Int) extends Serializable {
   }
 }
 
-class ExpressionEncoderSuite extends SparkFunSuite {
-  OuterScopes.outerScopes.put(getClass.getName, this)
+class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
+  OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
 
@@ -101,6 +100,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
   // encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
+
+  encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
@@ -152,6 +153,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
   case class InnerClass(i: Int)
   productTest(InnerClass(1))
   encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
+
+  encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
@@ -308,6 +311,15 @@ class ExpressionEncoderSuite extends SparkFunSuite {
             """.stripMargin, e)
       }
 
+      // Test the correct resolution of serialization / deserialization.
+      val attr = AttributeReference("obj", ObjectType(encoder.clsTag.runtimeClass))()
+      val inputPlan = LocalRelation(attr)
+      val plan =
+        Project(Alias(encoder.deserializer, "obj")() :: Nil,
+          Project(encoder.namedExpressions,
+            inputPlan))
+      assertAnalysisSuccess(plan)
+
       val isCorrect = (input, convertedBack) match {
         case (b1: Array[Byte], b2: Array[Byte]) => Arrays.equals(b1, b2)
         case (b1: Array[Int], b2: Array[Int]) => Arrays.equals(b1, b2)
@@ -348,7 +360,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
              |${encoder.schema.treeString}
              |
              |fromRow Expressions:
-             |${boundEncoder.fromRowExpression.treeString}
+             |${boundEncoder.deserializer.treeString}
          """.stripMargin)
       }
     }
