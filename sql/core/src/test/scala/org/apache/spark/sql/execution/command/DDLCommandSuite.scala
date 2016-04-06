@@ -425,14 +425,14 @@ class DDLCommandSuite extends PlanTest {
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
       ifExists = true,
-      purge = false)(sql1_table)
+      purge = false)
     val expected2_table = AlterTableDropPartition(
       tableIdent,
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
       ifExists = false,
-      purge = true)(sql2_table)
+      purge = true)
 
     comparePlans(parsed1_table, expected1_table)
     comparePlans(parsed2_table, expected2_table)

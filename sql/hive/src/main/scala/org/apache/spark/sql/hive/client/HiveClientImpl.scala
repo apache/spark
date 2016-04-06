@@ -367,9 +367,10 @@ private[hive] class HiveClientImpl(
   override def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec]): Unit = withHiveState {
+      specs: Seq[ExternalCatalog.TablePartitionSpec],
+      purge: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
-    specs.foreach { s => client.dropPartition(db, table, s.values.toList.asJava, true) }
+    specs.foreach { s => client.dropPartition(db, table, s.values.toList.asJava, purge) }
   }
 
   override def renamePartitions(

@@ -331,6 +331,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testAddPartitions(isDatasourceTable = true)
   }
 
+  test("alter table: drop partition") {
+    testDropPartitions(isDatasourceTable = false)
+  }
+
+  test("alter table: drop partition (datasource table)") {
+    testDropPartitions(isDatasourceTable = true)
+  }
+
   // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
 
   test("show tables") {
@@ -560,6 +568,54 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     if (!isDatasourceTable) {
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
         Set(part1, part2, part3, part4))
+    }
+  }
+
+  private def testDropPartitions(isDatasourceTable: Boolean): Unit = {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val part1 = Map("a" -> "1")
+    val part2 = Map("b" -> "2")
+    val part3 = Map("c" -> "3")
+    val part4 = Map("d" -> "4")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, part1, tableIdent)
+    createTablePartition(catalog, part2, tableIdent)
+    createTablePartition(catalog, part3, tableIdent)
+    createTablePartition(catalog, part4, tableIdent)
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(part1, part2, part3, part4))
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (d='4'), PARTITION (c='3')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2))
+    }
+    // drop partitions without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (b='2')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec) == Seq(part1))
+    }
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist DROP IF EXISTS PARTITION (b='2')")
+    }
+    // partition to drop does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 DROP PARTITION (x='300')")
+    }
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (x='300')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec) == Seq(part1))
     }
   }
 

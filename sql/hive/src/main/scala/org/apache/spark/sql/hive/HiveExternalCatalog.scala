@@ -213,7 +213,8 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       db: String,
       table: String,
       parts: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = withClient {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = withClient {
     requireTableExists(db, table)
     // Note: Unfortunately Hive does not currently support `ignoreIfNotExists` so we
     // need to implement it here ourselves. This is currently somewhat expensive because
@@ -233,7 +234,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
         parts
       }
     if (partsToDrop.nonEmpty) {
-      client.dropPartitions(db, table, partsToDrop)
+      client.dropPartitions(db, table, partsToDrop, purge)
     }
   }
 

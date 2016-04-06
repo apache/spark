@@ -111,7 +111,8 @@ abstract class ExternalCatalog {
       db: String,
       table: String,
       parts: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit
 
   /**
    * Override the specs of one or many existing table partitions, assuming they exist.

@@ -129,7 +129,8 @@ private[hive] trait HiveClient {
   def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec]): Unit
+      specs: Seq[ExternalCatalog.TablePartitionSpec],
+      purge: Boolean): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.

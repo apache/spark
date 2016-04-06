@@ -549,8 +549,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
       ctx.EXISTS != null,
-      ctx.PURGE != null)(
-      command(ctx))
+      ctx.PURGE != null)
   }
 
   /**

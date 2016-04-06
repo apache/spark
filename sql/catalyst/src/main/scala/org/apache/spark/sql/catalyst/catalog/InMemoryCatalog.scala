@@ -232,7 +232,8 @@ class InMemoryCatalog extends ExternalCatalog {
       db: String,
       table: String,
       partSpecs: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = synchronized {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = synchronized {
     requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
     if (!ignoreIfNotExists) {

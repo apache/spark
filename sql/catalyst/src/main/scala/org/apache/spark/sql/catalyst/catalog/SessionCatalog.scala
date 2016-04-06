@@ -362,10 +362,11 @@ class SessionCatalog(
   def dropPartitions(
       tableName: TableIdentifier,
       parts: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
-    externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
+    externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists, purge)
   }
 
   /**

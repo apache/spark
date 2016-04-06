@@ -350,13 +350,32 @@ case class AlterTableRenamePartition(
  * unless 'purge' is true, but the metadata is completely lost.
  * An error message will be issued if the partition does not exist, unless 'ifExists' is true.
  * Note: purge is always false when the target is a view.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
+ *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+ * }}}
  */
 case class AlterTableDropPartition(
     tableName: TableIdentifier,
     specs: Seq[TablePartitionSpec],
     ifExists: Boolean,
-    purge: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    purge: Boolean)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTable(tableName)
+    if (DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        "alter table drop partition is not allowed for tables defined using the datasource API")
+    }
+    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists, purge = purge)
+    Seq.empty[Row]
+  }
+
+}
 
 case class AlterTableSetFileFormat(
     tableName: TableIdentifier,
