@@ -17,12 +17,15 @@
 
 package org.apache.spark.ml.clustering
 
+import java.io.File
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.util.Utils
 
 
 object LDASuite {
@@ -260,5 +263,23 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset,
       LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData)
+  }
+
+  test("load LDAModel") {
+    val lda = new LDA().setK(k).setSeed(1).setOptimizer("em").setMaxIter(2)
+    val distributedModel = lda.fit(dataset)
+    val localModel = lda.setOptimizer("online").fit(dataset)
+
+    val tempDir1 = Utils.createTempDir()
+    val distributedPath = new File(tempDir1, "distributed").getPath
+    val localPath = new File(tempDir1, "local").getPath
+    try {
+      distributedModel.save(distributedPath)
+      localModel.save(localPath)
+      assert(LDAModel.load(distributedPath).isInstanceOf[DistributedLDAModel])
+      assert(LDAModel.load(localPath).isInstanceOf[LocalLDAModel])
+    } finally {
+      Utils.deleteRecursively(tempDir1)
+    }
   }
 }
