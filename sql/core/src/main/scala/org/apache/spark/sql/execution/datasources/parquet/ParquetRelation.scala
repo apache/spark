@@ -24,7 +24,6 @@ import java.util.logging.{Logger => JLogger}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Try}
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -53,7 +52,7 @@ import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{AtomicType, DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
 
@@ -276,6 +275,16 @@ private[sql] class DefaultSource
         file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
   }
 
+  /**
+   * Returns whether the reader will the rows as batch or not.
+   */
+  override def supportBatch(sqlContext: SQLContext, schema: StructType): Boolean = {
+    val conf = SQLContext.getActive().get.conf
+    conf.useFileScan && conf.parquetVectorizedReaderEnabled &&
+      conf.wholeStageEnabled && schema.length <= conf.wholeStageMaxNumFields &&
+      schema.forall(_.dataType.isInstanceOf[AtomicType])
+  }
+
   override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,
@@ -306,6 +315,10 @@ private[sql] class DefaultSource
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sqlContext.conf.getConf(SQLConf.PARQUET_INT96_AS_TIMESTAMP))
 
+    // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
+    val returningBatch =
+      supportBatch(sqlContext, StructType(partitionSchema.fields ++ dataSchema.fields))
+
     // Try to push down filters when filter push-down is enabled.
     val pushed = if (sqlContext.getConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key).toBoolean) {
       filters
@@ -324,10 +337,8 @@ private[sql] class DefaultSource
     // TODO: if you move this into the closure it reverts to the default values.
     // If true, enable using the custom RecordReader for parquet. This only works for
     // a subset of the types (no complex types).
-    val enableVectorizedParquetReader: Boolean =
-      sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
-    val enableWholestageCodegen: Boolean =
-      sqlContext.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key).toBoolean
+    val enableVectorizedParquetReader: Boolean = sqlContext.conf.parquetVectorizedReaderEnabled &&
+          dataSchema.forall(_.dataType.isInstanceOf[AtomicType])
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
@@ -347,32 +358,27 @@ private[sql] class DefaultSource
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext = new TaskAttemptContextImpl(broadcastedConf.value.value, attemptId)
 
-      val parquetReader = try {
-        if (!enableVectorizedParquetReader) sys.error("Vectorized reader turned off.")
+      val parquetReader = if (enableVectorizedParquetReader) {
         val vectorizedReader = new VectorizedParquetRecordReader()
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
-        // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
-        // TODO: fix column appending
-        if (enableWholestageCodegen) {
-          logDebug(s"Enabling batch returning")
+        if (returningBatch) {
           vectorizedReader.enableReturningBatches()
         }
         vectorizedReader
-      } catch {
-        case NonFatal(e) =>
-          logDebug(s"Falling back to parquet-mr: $e", e)
-          val reader = pushed match {
-            case Some(filter) =>
-              new ParquetRecordReader[InternalRow](
-                new CatalystReadSupport,
-                FilterCompat.get(filter, null))
-            case _ =>
-              new ParquetRecordReader[InternalRow](new CatalystReadSupport)
-          }
-          reader.initialize(split, hadoopAttemptContext)
-          reader
+      } else {
+        logDebug(s"Falling back to parquet-mr")
+        val reader = pushed match {
+          case Some(filter) =>
+            new ParquetRecordReader[InternalRow](
+              new CatalystReadSupport,
+              FilterCompat.get(filter, null))
+          case _ =>
+            new ParquetRecordReader[InternalRow](new CatalystReadSupport)
+        }
+        reader.initialize(split, hadoopAttemptContext)
+        reader
       }
 
       val iter = new RecordReaderIterator(parquetReader)
@@ -432,13 +438,21 @@ private[sql] class DefaultSource
     val setInputPaths =
       ParquetRelation.initializeDriverSideJobFunc(inputFiles, parquetBlockSize) _
 
+    val allPrimitiveTypes = dataSchema.forall(_.dataType.isInstanceOf[AtomicType])
+    val inputFormatCls = if (sqlContext.conf.parquetVectorizedReaderEnabled
+      && allPrimitiveTypes) {
+      classOf[VectorizedParquetInputFormat]
+    } else {
+      classOf[ParquetInputFormat[InternalRow]]
+    }
+
     Utils.withDummyCallSite(sqlContext.sparkContext) {
       new SqlNewHadoopRDD(
         sqlContext = sqlContext,
         broadcastedConf = broadcastedConf,
         initDriverSideJobFuncOpt = Some(setInputPaths),
         initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
-        inputFormatClass = classOf[ParquetInputFormat[InternalRow]],
+        inputFormatClass = inputFormatCls,
         valueClass = classOf[InternalRow]) {
 
         val cacheMetadata = useMetadataCache
@@ -478,6 +492,17 @@ private[sql] class DefaultSource
         }
       }
     }
+  }
+}
+
+/**
+ * The ParquetInputFormat that create VectorizedParquetRecordReader.
+ */
+final class VectorizedParquetInputFormat extends ParquetInputFormat[InternalRow] {
+  override def createRecordReader(
+    inputSplit: InputSplit,
+    taskAttemptContext: TaskAttemptContext): ParquetRecordReader[InternalRow] = {
+    new VectorizedParquetRecordReader().asInstanceOf[ParquetRecordReader[InternalRow]]
   }
 }
 
