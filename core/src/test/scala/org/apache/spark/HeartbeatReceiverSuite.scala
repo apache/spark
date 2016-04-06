@@ -174,9 +174,9 @@ class HeartbeatReceiverSuite
     val dummyExecutorEndpoint2 = new FakeExecutorEndpoint(rpcEnv)
     val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
     val dummyExecutorEndpointRef2 = rpcEnv.setupEndpoint("fake-executor-2", dummyExecutorEndpoint2)
-    fakeSchedulerBackend.driverEndpoint.askWithRetry[RegisterExecutorResponse](
+    fakeSchedulerBackend.driverEndpoint.askWithRetry[Boolean](
       RegisterExecutor(executorId1, dummyExecutorEndpointRef1, 0, Map.empty))
-    fakeSchedulerBackend.driverEndpoint.askWithRetry[RegisterExecutorResponse](
+    fakeSchedulerBackend.driverEndpoint.askWithRetry[Boolean](
       RegisterExecutor(executorId2, dummyExecutorEndpointRef2, 0, Map.empty))
     heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
@@ -255,7 +255,12 @@ class HeartbeatReceiverSuite
 /**
  * Dummy RPC endpoint to simulate executors.
  */
-private class FakeExecutorEndpoint(override val rpcEnv: RpcEnv) extends RpcEndpoint
+private class FakeExecutorEndpoint(override val rpcEnv: RpcEnv) extends RpcEndpoint {
+
+  override def receive: PartialFunction[Any, Unit] = {
+    case _ =>
+  }
+}
 
 /**
  * Dummy scheduler backend to simulate executor allocation requests to the cluster manager.
