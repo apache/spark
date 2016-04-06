@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.ref.WeakReference
 
 import org.scalatest.Matchers
@@ -261,6 +262,81 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     acc.value should be > (5050)
     c.count()
     acc.value should be (10100)
+  }
+
+  test("coalesce with partial partition reading") {
+    // when coalescing, one task can completely read partitions of the input RDDs while not reading
+    // complete partitions of the post-coalesce RDD.  We make sure that the accumulator has
+    // consistent semantics in these cases.
+    sc = new SparkContext("local[2]", "test")
+    val List(acc1, acc2, acc3) = 1.to(3).map(x => sc.accumulator(0, consistent = true)).toList
+    val a = sc.parallelize(1 to 20, 10)
+    val b = a.map{x => acc1 += x; acc2 += x; 2 * x}
+    val c = b.coalesce(2).map{x => acc1 += x; acc3 += x; x}
+    // we read all of partition 1 from RDD's a & b, and part of partition 2
+    // however, for RDD c, we don't read any of the partitions fully
+    // so we should get updates for 1 partition from b, and nothing from c
+    c.take(3) should be ((1 to 3).map(_*2).toArray)
+    acc1.value should be (3) // only elements 1 & 2 came from fully read partitions
+    acc2.value should be (3)
+    acc3.value should be (0)
+
+    // now we read a few more parts:
+    c.take(9) should be ((1 to 9).map(_*2).toArray)
+    acc1.value should be (36)
+    acc2.value should be (36)
+    acc3.value should be (0)
+
+
+    // a couple more, this time we read 1 of c's partitions fully
+    c.take(15) should be ((1 to 15).map(_*2).toArray)
+    acc1.value should be (215)
+    acc2.value should be (105)
+    acc3.value should be (110)
+
+    // and if we read the entire data, we get the entire value
+    c.count()
+    acc1.value should be (630)
+    acc2.value should be (210)
+    acc3.value should be (420)
+  }
+
+  test("async jobs same rdd with consistent accumulator") {
+    sc = new SparkContext("local[2]", "test")
+    val acc = sc.accumulator(0, consistent = true)
+    val a = sc.parallelize(1 to 20, 10)
+    val b = a.map{x => acc += x}
+    val futures = List(b, b).map(_.countAsync)
+    futures.foreach(_.onComplete{_ => acc.value should be (210)})
+    futures.foreach{_.get()}
+    acc.value should be (210)
+  }
+
+  test("async jobs shared parent with consistent accumulators") {
+    // We want to ensure that two consistent jobs with a shared parent
+    // work with consistent accumulators.
+    sc = new SparkContext("local[2]", "test")
+    val List(acc1, acc2, acc3, acc4) = 1.to(4).map(x => sc.accumulator(0, consistent = true)).toList
+    val a = sc.parallelize(1 to 20, 10)
+    val b = a.map{x => acc1 += x; acc2 += x; 2 * x}
+    val c = b.map{x => acc3 += x; acc2 += x}
+    val d = b.map{x => acc4 += x + 1; acc2 += x}
+    val future1 = c.countAsync()
+    val future2 = d.countAsync()
+    future1.onComplete({_ =>
+      acc1.value should be (210)
+      acc3.value should be (420)
+    })
+    future2.onComplete({_ =>
+      acc1.value should be (210)
+      acc4.value should be (440)
+    })
+    val futures = List(future1, future2)
+    futures.foreach{f => f.get()}
+    acc1.value should be (210)
+    acc2.value should be (1050)
+    acc3.value should be (420)
+    acc4.value should be (440)
   }
 
   test ("garbage collection") {
