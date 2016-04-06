@@ -342,8 +342,6 @@ class SchedulerJobTest(unittest.TestCase):
         Test that the scheduler respects start_dates, even when DAGS have run
         """
 
-        session = settings.Session()
-
         dag_id = 'test_start_date_scheduling'
         dag = self.dagbag.get_dag(dag_id)
         dag.clear()
@@ -353,6 +351,7 @@ class SchedulerJobTest(unittest.TestCase):
         scheduler.run()
 
         # zero tasks ran
+        session = settings.Session()
         self.assertEqual(
             len(session.query(TI).filter(TI.dag_id == dag_id).all()), 0)
 
@@ -367,6 +366,7 @@ class SchedulerJobTest(unittest.TestCase):
         backfill.run()
 
         # one task ran
+        session = settings.Session()
         self.assertEqual(
             len(session.query(TI).filter(TI.dag_id == dag_id).all()), 1)
 
@@ -374,5 +374,6 @@ class SchedulerJobTest(unittest.TestCase):
         scheduler.run()
 
         # still one task
+        session = settings.Session()
         self.assertEqual(
             len(session.query(TI).filter(TI.dag_id == dag_id).all()), 1)
