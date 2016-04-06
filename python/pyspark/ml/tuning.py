@@ -290,7 +290,7 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
     @since("2.0.0")
@@ -371,7 +371,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
     @since("2.0.0")
@@ -535,7 +535,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
     @since("2.0.0")
@@ -615,7 +615,7 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
     @since("2.0.0")
