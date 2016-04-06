@@ -60,11 +60,10 @@ import org.apache.spark.util.Utils
  *                                if numTrees == 1, set to "all";
  *                                if numTrees > 1 (forest) set to "sqrt" for classification and
  *                                  to "onethird" for regression.
- *                              If a real value "(0.0-1.0]" is set, this parameter specifies
- *                                the fraction of features in each subset.
- *                              If an integer value "n" is set, this parameter specifies
- *                                the number of features used in each subset,
- *                                for integer 0 < n <= (number of features).
+ *                              If a real value "n" in the range (0, 1.0] is set,
+ *                                use n * number of features.
+ *                              If an integer value "n" in the range (1, num features) is set,
+ *                                use n features.
  * @param seed Random seed for bootstrapping and choosing feature subsets.
  */
 private class RandomForest (

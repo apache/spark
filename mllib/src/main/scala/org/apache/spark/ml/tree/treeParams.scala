@@ -329,8 +329,8 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    *  - "onethird": use 1/3 of the features
    *  - "sqrt": use sqrt(number of features)
    *  - "log2": use log2(number of features)
-   *  - "(0.0-1.0]": use the specified fraction of features
-   *  - "n": use n features, for integer 0 < n <= (number of features)
+   *  - "n": when n is in the range (0, 1.0], use n * number of features. When n
+   *         is in the range (1, number of features), use n features.
    * (default = "auto")
    *
    * These various settings are based on the following references:
