@@ -42,8 +42,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
    * vocabSize terms ordered by term frequency across the corpus.
    *
    * Default: 2^18^
-    *
-    * @group param
+   *
+   * @group param
    */
   val vocabSize: IntParam =
     new IntParam(this, "vocabSize", "max size of the vocabulary", ParamValidators.gt(0))
@@ -113,9 +113,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
     * @group param
     */
   val binary: BooleanParam =
-    new BooleanParam(this, "binary", "If True, all non zero counts are set to 1. " +
-      "This is useful for discrete probabilistic models that model binary events rather " +
-      "than integer counts")
+    new BooleanParam(this, "binary", "If True, all non zero counts are set to 1.")
 
   /** @group getParam */
   def getBinary: Boolean = $(binary)
@@ -208,8 +206,8 @@ object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
 /**
  * :: Experimental ::
  * Converts a text document to a sparse vector of token counts.
-  *
-  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
+ *
+ * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
  */
 @Experimental
 class CountVectorizerModel(override val uid: String, val vocabulary: Array[String])

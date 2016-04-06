@@ -114,28 +114,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
         assert(features ~== expected absTol 1e-14)
     }
   }
-
-  test("CountVectorizer with binary") {
-    val df = sqlContext.createDataFrame(Seq(
-      (0, split("a b c d e a b"),
-        Vectors.sparse(5, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0), (4, 1.0)))),
-      (1, split("a a a a a a"), Vectors.sparse(5, Seq((0, 1.0)))),
-      (2, split("c c"), Vectors.sparse(5, Seq((2, 1.0)))),
-      (3, split("b b b b b"), Vectors.sparse(5, Seq((1, 1.0)))))
-    ).toDF("id", "words", "expected")
-    val cv = new CountVectorizer()
-      .setInputCol("words")
-      .setOutputCol("features")
-      .setBinary(true)
-      .fit(df)
-    assert(cv.vocabulary === Array("a", "b", "c", "d", "e"))
-
-    cv.transform(df).select("features", "expected").collect().foreach {
-      case Row(features: Vector, expected: Vector) =>
-        assert(features ~== expected absTol 1e-14)
-    }
-  }
-
+  
   test("CountVectorizer throws exception when vocab is empty") {
     intercept[IllegalArgumentException] {
       val df = sqlContext.createDataFrame(Seq(
@@ -189,7 +168,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
-  test("CountVectorizerModel with binary") {
+  test("CountVectorizerModel and CountVectorizer with binary") {
     val df = sqlContext.createDataFrame(Seq(
       (0, split("a a a b b c"), Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
       (1, split("c c c"), Vectors.sparse(4, Seq((2, 1.0)))),
@@ -201,6 +180,26 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setOutputCol("features")
       .setBinary(true)
     cv.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+
+    // CountVectorizer test
+    val df2 = sqlContext.createDataFrame(Seq(
+      (0, split("a b c d e a b"),
+        Vectors.sparse(5, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0), (4, 1.0)))),
+      (1, split("a a a a a a"), Vectors.sparse(5, Seq((0, 1.0)))),
+      (2, split("c c"), Vectors.sparse(5, Seq((2, 1.0)))),
+      (3, split("b b b b b"), Vectors.sparse(5, Seq((1, 1.0)))))
+    ).toDF("id", "words", "expected")
+    val cv2 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setBinary(true)
+      .fit(df2)
+    assert(cv2.vocabulary === Array("a", "b", "c", "d", "e"))
+
+    cv2.transform(df2).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
