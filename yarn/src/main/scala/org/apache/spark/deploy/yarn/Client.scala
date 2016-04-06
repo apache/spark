@@ -819,21 +819,12 @@ private[spark] class Client(
       javaOpts += "-XX:CMSIncrementalDutyCycle=10"
     }
 
-    val driverOpts = sparkConf.get(DRIVER_JAVA_OPTIONS).orElse(sys.env.get("SPARK_JAVA_OPTS"))
-    // Validate the driver specific options and add only if running in cluster mode
-    driverOpts.foreach { opts =>
-      if (opts.contains("-Xmx")) {
-        val msg = s"${DRIVER_JAVA_OPTIONS.key} is not allowed to specify max heap memory " +
-        s"settings (was '$opts'). Use spark.driver.memory instead."
-        throw new SparkException(msg)
-      }
-      if (isClusterMode) {
-        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
-      }
-    }
-
     // Include driver-specific java options if we are launching a driver
     if (isClusterMode) {
+      val driverOpts = sparkConf.get(DRIVER_JAVA_OPTIONS).orElse(sys.env.get("SPARK_JAVA_OPTS"))
+      driverOpts.foreach { opts =>
+        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+      }
       val libraryPaths = Seq(sparkConf.get(DRIVER_LIBRARY_PATH),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {

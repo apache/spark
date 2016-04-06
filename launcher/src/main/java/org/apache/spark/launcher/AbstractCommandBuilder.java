@@ -86,7 +86,8 @@ abstract class AbstractCommandBuilder {
    * Callers should still add at least the class to run, as well as any arguments to pass to the
    * class.
    */
-  List<String> buildJavaCommand(String extraClassPath) throws IOException {
+  List<String> buildJavaCommand(String extraClassPath)
+          throws IOException, IllegalArgumentException {
     List<String> cmd = new ArrayList<>();
     String envJavaHome;
 
