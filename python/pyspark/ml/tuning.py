@@ -192,20 +192,6 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
     >>> cvModel = cv.fit(dataset)
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
-    >>> cvPath = temp_path + "/cv"
-    >>> cv.save(cvPath)
-    >>> loadedCV = CrossValidator.load(cvPath)
-    >>> loadedCV.getEstimator().uid == cv.getEstimator().uid
-    True
-    >>> loadedCV.getEvaluator().uid == cv.getEvaluator().uid
-    True
-    >>> loadedCV.getEstimatorParamMaps() == cv.getEstimatorParamMaps()
-    True
-    >>> cvModelPath = temp_path + "/cvModel"
-    >>> cvModel.save(cvModelPath)
-    >>> loadedModel = CrossValidatorModel.load(cvModelPath)
-    >>> loadedModel.bestModel.uid == cvModel.bestModel.uid
-    True
 
     .. versionadded:: 1.4.0
     """
@@ -457,20 +443,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
     >>> tvsModel = tvs.fit(dataset)
     >>> evaluator.evaluate(tvsModel.transform(dataset))
     0.8333...
-    >>> tvsPath = temp_path + "/tvs"
-    >>> tvs.save(tvsPath)
-    >>> loadedTVS = TrainValidationSplit.load(tvsPath)
-    >>> loadedTVS.getEstimator().uid == tvs.getEstimator().uid
-    True
-    >>> loadedTVS.getEvaluator().uid == tvs.getEvaluator().uid
-    True
-    >>> loadedTVS.getEstimatorParamMaps() == tvs.getEstimatorParamMaps()
-    True
-    >>> tvsModelPath = temp_path + "/tvsModel"
-    >>> tvsModel.save(tvsModelPath)
-    >>> loadedModel = TrainValidationSplitModel.load(tvsModelPath)
-    >>> loadedModel.bestModel.uid == tvsModel.bestModel.uid
-    True
 
     .. versionadded:: 2.0.0
     """
@@ -698,14 +670,10 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
 
 if __name__ == "__main__":
     import doctest
-    import tempfile
 
-    import pyspark.ml.tuning
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
     globs = globals().copy()
-    features = pyspark.ml.tuning.__dict__.copy()
-    globs.update(features)
 
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
@@ -713,16 +681,7 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    temp_path = tempfile.mkdtemp()
-    globs['temp_path'] = temp_path
-    try:
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-        sc.stop()
-    finally:
-        from shutil import rmtree
-        try:
-            rmtree(temp_path)
-        except OSError:
-            pass
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    sc.stop()
     if failure_count:
         exit(-1)
