@@ -430,6 +430,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   private def numExistingExecutors: Int = executorDataMap.size
 
+  override def getExecutorIds(): Seq[String] = {
+    executorDataMap.keySet.toSeq
+  }
+
   /**
    * Request an additional number of executors from the cluster manager.
    * @return whether the request is acknowledged.
