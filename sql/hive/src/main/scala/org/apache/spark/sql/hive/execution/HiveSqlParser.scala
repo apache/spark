@@ -215,11 +215,19 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
 
   /**
    * Create or replace a view. This creates a [[CreateViewAsSelect]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE VIEW [IF NOT EXISTS] [db_name.]view_name
+   *   [(column_name [COMMENT column_comment], ...) ]
+   *   [COMMENT view_comment]
+   *   [TBLPROPERTIES (property_name = property_value, ...)]
+   *   AS SELECT ...;
+   * }}}
    */
   override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
-    // Pass a partitioned view on to hive.
     if (ctx.identifierList != null) {
-      HiveNativeCommand(command(ctx))
+      throw new ParseException(s"Operation not allowed: partitioned views", ctx)
     } else {
       if (ctx.STRING != null) {
         logWarning("COMMENT clause is ignored.")
