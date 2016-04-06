@@ -1879,7 +1879,12 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def filter(func: T => Boolean): Dataset[T] = mapPartitions(_.filter(func))
+  def filter(func: T => Boolean): Dataset[T] = {
+    val deserializer = unresolvedTEncoder.deserializer
+    val function = Literal.create(func, ObjectType(classOf[T => Boolean]))
+    val condition = Invoke(function, "apply", BooleanType, deserializer :: Nil)
+    withTypedPlan(Filter(condition, logicalPlan))
+  }
 
   /**
    * :: Experimental ::
@@ -1890,7 +1895,12 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def filter(func: FilterFunction[T]): Dataset[T] = filter(t => func.call(t))
+  def filter(func: FilterFunction[T]): Dataset[T] = {
+    val deserializer = unresolvedTEncoder.deserializer
+    val function = Literal.create(func, ObjectType(classOf[FilterFunction[T]]))
+    val condition = Invoke(function, "call", BooleanType, deserializer :: Nil)
+    withTypedPlan(Filter(condition, logicalPlan))
+  }
 
   /**
    * :: Experimental ::

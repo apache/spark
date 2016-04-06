@@ -82,4 +82,13 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
         p.asInstanceOf[WholeStageCodegen].child.isInstanceOf[MapElements]).isDefined)
     assert(ds.collect() === 0.until(10).map(_.toString).toArray)
   }
+
+  test("typed filter should be included in WholeStageCodegen") {
+    val ds = sqlContext.range(10).filter(_ % 2 == 0)
+    val plan = ds.queryExecution.executedPlan
+    assert(plan.find(p =>
+      p.isInstanceOf[WholeStageCodegen] &&
+        p.asInstanceOf[WholeStageCodegen].child.isInstanceOf[Filter]).isDefined)
+    assert(ds.collect() === Array(0, 2, 4, 6, 8))
+  }
 }

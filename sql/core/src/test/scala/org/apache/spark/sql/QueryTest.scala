@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.types.ObjectType
 
 abstract class QueryTest extends PlanTest {
 
@@ -202,6 +203,7 @@ abstract class QueryTest extends PlanTest {
       case _: LogicalRelation => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
+      case Literal(_, _: ObjectType) => return
     }
 
     // bypass hive tests before we fix all corner cases in hive module.
