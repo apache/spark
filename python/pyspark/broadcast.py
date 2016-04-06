@@ -99,7 +99,11 @@ class Broadcast(object):
 
     def unpersist(self, blocking=False):
         """
-        Delete cached copies of this broadcast on the executors.
+        Delete cached copies of this broadcast on the executors. If the
+        broadcast is used after this is called, it will need to be
+        re-sent to each executor.
+
+        :param blocking: Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
             raise Exception("Broadcast can only be unpersisted in driver")
