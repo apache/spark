@@ -19,9 +19,10 @@ package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.clustering.DpMeans
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.{SparkConf, SparkContext}
+
 
 /**
  * An example DP-means app. Run with
@@ -99,7 +100,7 @@ object DenseDpMeans {
     }
     println()
 
-    val labels = clusterLabels.collect().groupBy(x => x) map { case (k, v) => k-> v.length }
+    val labels = clusterLabels.collect().groupBy(x => x) map { case (k, v) => k -> v.length }
     println(s"Cluster Count:: $labels")
 
     val cost = clusters.computeCost(data)

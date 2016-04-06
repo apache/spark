@@ -48,7 +48,7 @@ class DpMeansSuite  extends SparkFunSuite with MLlibTestSparkContext {
     assert(predictedClusters(0) != predictedClusters(7))
   }
 
-  test("Intra-cluster distance"){
+  test("Intra-cluster distance") {
     val data = sc.parallelize(DpMeansSuite.data)
     val lambdaVal = 12.0
     val model = new DpMeans().setLambdaValue(lambdaVal).setConvergenceTol(1.0).run(data)

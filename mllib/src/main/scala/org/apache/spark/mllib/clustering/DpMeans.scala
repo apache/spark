@@ -172,7 +172,7 @@ class DpMeans private (
           val (closestClusterId, cost) = DpMeans.assignCluster(globalCenters, point)
           val (sum, count) = clusterStat(closestClusterId)
           axpy(1.0, point.vector, sum)
-          clusterStat + (closestClusterId ->(sum, count + 1L))
+          clusterStat + (closestClusterId -> (sum, count + 1L))
         },
         combOp = (agg1: Map[Int, (Vector, Long)], agg2: Map[Int, (Vector, Long)]) => {
           agg1.keySet.map { case clusterIdx =>
