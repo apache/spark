@@ -345,7 +345,7 @@ case class UnresolvedAlias(child: Expression, aliasName: Option[String] = None)
  * @param inputAttributes The input attributes used to resolve deserializer expression, can be empty
  *                        if we want to resolve deserializer by children output.
  */
-case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq[Attribute])
+case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq[Attribute] = Nil)
   extends UnaryExpression with Unevaluable with NonSQLExpression {
   // The input attributes used to resolve deserializer expression must be all resolved.
   require(inputAttributes.forall(_.resolved), "Input attributes must all be resolved.")

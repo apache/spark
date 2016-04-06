@@ -152,7 +152,7 @@ trait CodegenSupport extends SparkPlan {
     s"""
        |
        |/*** CONSUME: ${toCommentSafeString(parent.simpleString)} */
-       |${evaluated}
+       |$evaluated
        |${parent.doConsume(ctx, inputVars, rowVar)}
      """.stripMargin
   }
@@ -169,20 +169,20 @@ trait CodegenSupport extends SparkPlan {
 
   /**
    * Returns source code to evaluate the variables for required attributes, and clear the code
-   * of evaluated variables, to prevent them to be evaluated twice..
+   * of evaluated variables, to prevent them to be evaluated twice.
    */
   protected def evaluateRequiredVariables(
       attributes: Seq[Attribute],
       variables: Seq[ExprCode],
       required: AttributeSet): String = {
-    var evaluateVars = ""
+    val evaluateVars = new StringBuilder
     variables.zipWithIndex.foreach { case (ev, i) =>
       if (ev.code != "" && required.contains(attributes(i))) {
-        evaluateVars += ev.code.trim + "\n"
+        evaluateVars.append(ev.code.trim + "\n")
         ev.code = ""
       }
     }
-    evaluateVars
+    evaluateVars.toString()
   }
 
   /**
@@ -305,7 +305,6 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
   def doCodeGen(): (CodegenContext, String) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
-    val references = ctx.references.toArray
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
