@@ -36,15 +36,16 @@ object DatasetBenchmark {
 
     val numRows = 10000000
     val df = sqlContext.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
+    val numChains = 10
 
     val benchmark = new Benchmark("back-to-back map", numRows)
 
-    val scalaFunc = (d: Data) => Data(d.l + 1, d.s)
+    val func = (d: Data) => Data(d.l + 1, d.s)
     benchmark.addCase("Dataset") { iter =>
       var res = df.as[Data]
       var i = 0
-      while (i < 10) {
-        res = res.map(scalaFunc)
+      while (i < numChains) {
+        res = res.map(func)
         i += 1
       }
       res.queryExecution.toRdd.foreach(_ => Unit)
@@ -53,7 +54,7 @@ object DatasetBenchmark {
     benchmark.addCase("DataFrame") { iter =>
       var res = df
       var i = 0
-      while (i < 10) {
+      while (i < numChains) {
         res = res.select($"l" + 1 as "l")
         i += 1
       }
@@ -64,8 +65,8 @@ object DatasetBenchmark {
     benchmark.addCase("RDD") { iter =>
       var res = rdd
       var i = 0
-      while (i < 10) {
-        res = rdd.map(scalaFunc)
+      while (i < numChains) {
+        res = rdd.map(func)
         i += 1
       }
       res.foreach(_ => Unit)
