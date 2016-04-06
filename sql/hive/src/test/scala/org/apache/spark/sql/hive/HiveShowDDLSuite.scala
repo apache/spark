@@ -15,9 +15,9 @@
 * limitations under the License.
 */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
@@ -57,7 +57,7 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       withTable("t1") {
         sql(
           s"""
-            |create external table t1(c1 int, c2 string)
+            |create external table t1(c1 long, c2 string)
             |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
             |row format delimited fields terminated by ','
             |stored as parquet
@@ -157,7 +157,9 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("show create table -- datasource table") {
     withTable("t_datasource") {
-      sql("select 1, 'abc'").write.saveAsTable("t_datasource")
+      val df = sql("select 1, 'abc'")
+      df.write.saveAsTable("t_datasource")
+      sql("select * from t_datasource").show
       sql("show create table t_datasource").show(false)
     }
   }
@@ -166,7 +168,7 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
     withTable("t_datasource") {
       val df = sqlContext.read.json(jsonFilePath)
-      df.write.format("json").saveAsTable("t_datasource")
+      df.write.partitionBy("a").format("json").saveAsTable("t_datasource")
       sql("show create table t_datasource").show(false)
     }
   }
@@ -179,7 +181,9 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
            |CREATE TABLE jsonTable
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (
-           |  path '$jsonFilePath'
+           |  path '$jsonFilePath',
+           |  key.key1 'value1',
+           |  'key.key2' 'value2'
            |)
          """.stripMargin)
       sql("show create table jsonTable").show(false)
@@ -187,6 +191,7 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show create table -- USING and OPTIONS with column definition") {
+
     val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
     withTable("jsonTable") {
       sql(
