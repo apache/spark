@@ -78,3 +78,4 @@ public class JavaDatasetAggregatorSuiteBase implements Serializable {
       Encoders.STRING());
   }
 }
+
