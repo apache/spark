@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -1520,7 +1519,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def randomSplitAsList(weights: Array[Double], seed: Long): List[Dataset[T]] = {
+  def randomSplitAsList(weights: Array[Double], seed: Long): java.util.List[Dataset[T]] = {
     // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
     // constituent partitions each time a split is materialized which could result in
     // overlapping splits. To prevent this, we explicitly sort each input partition to make the
@@ -1528,10 +1527,11 @@ class Dataset[T] private[sql](
     val sorted = Sort(logicalPlan.output.map(SortOrder(_, Ascending)), global = false, logicalPlan)
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
-    normalizedCumWeights.sliding(2).map { x =>
+    val values= normalizedCumWeights.sliding(2).map { x =>
       new Dataset[T](
         sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)(), encoder)
-    }.toList
+    }.toArray
+    java.util.Arrays.asList(values : _*)
   }
 
   /**
