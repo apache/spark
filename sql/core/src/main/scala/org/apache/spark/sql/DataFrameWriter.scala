@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
-import org.apache.spark.internal.config.ConfigEntry
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
@@ -288,7 +286,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       }.orElse {
         val checkpointConfig: Option[String] =
           df.sqlContext.conf.getConf(
-            SQLConf.CHECKPOINT_LOCATION.asInstanceOf[ConfigEntry[Option[String]]],
+            SQLConf.CHECKPOINT_LOCATION,
             None)
 
         checkpointConfig.map { location =>
