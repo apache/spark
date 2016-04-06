@@ -753,19 +753,19 @@ class SessionCatalogSuite extends SparkFunSuite {
     val expected =
       CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
       Seq.empty[(String, String)])
-    assert(catalog.getFunction(FunctionIdentifier("func1", Some("db2"))) == expected)
+    assert(catalog.getMetadataOfFunction(FunctionIdentifier("func1", Some("db2"))) == expected)
     // Get function without explicitly specifying database
     catalog.setCurrentDatabase("db2")
-    assert(catalog.getFunction(FunctionIdentifier("func1")) == expected)
+    assert(catalog.getMetadataOfFunction(FunctionIdentifier("func1")) == expected)
   }
 
   test("get function when database/function does not exist") {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[AnalysisException] {
-      catalog.getFunction(FunctionIdentifier("func1", Some("does_not_exist")))
+      catalog.getMetadataOfFunction(FunctionIdentifier("func1", Some("does_not_exist")))
     }
     intercept[AnalysisException] {
-      catalog.getFunction(FunctionIdentifier("does_not_exist", Some("db2")))
+      catalog.getMetadataOfFunction(FunctionIdentifier("does_not_exist", Some("db2")))
     }
   }
 

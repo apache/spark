@@ -84,15 +84,21 @@ class SessionCatalog(
   // ----------------------------------------------------------------------------
 
   def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {
-    externalCatalog.createDatabase(dbDefinition, ignoreIfExists)
+    if (!databaseExists(dbDefinition.name)) {
+      externalCatalog.createDatabase(dbDefinition, ignoreIfExists)
+    }
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
-    externalCatalog.dropDatabase(db, ignoreIfNotExists, cascade)
+    if (databaseExists(db)) {
+      externalCatalog.dropDatabase(db, ignoreIfNotExists, cascade)
+    }
   }
 
   def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
-    externalCatalog.alterDatabase(dbDefinition)
+    if (databaseExists(dbDefinition.name)) {
+      externalCatalog.alterDatabase(dbDefinition)
+    }
   }
 
   def getDatabase(db: String): CatalogDatabase = {
@@ -467,8 +473,7 @@ class SessionCatalog(
    * If a database is specified in `name`, this will return the function in that database.
    * If no database is specified, this will return the function in the current database.
    */
-  // TODO: have a better name. This method is actually for fetching the metadata of a function.
-  def getFunction(name: FunctionIdentifier): CatalogFunction = {
+  def getMetadataOfFunction(name: FunctionIdentifier): CatalogFunction = {
     val db = name.database.getOrElse(currentDb)
     externalCatalog.getFunction(db, name.funcName)
   }
@@ -481,15 +486,8 @@ class SessionCatalog(
       // This function exists in the FunctionRegistry.
       true
     } else {
-      // Need to check if this function exists in the metastore.
-      try {
-        // TODO: It's better to ask external catalog if this function exists.
-        // So, we can avoid of having this hacky try/catch block.
-        getFunction(name) != null
-      } catch {
-        case _: NoSuchFunctionException => false
-        case _: AnalysisException => false // HiveExternalCatalog wraps all exceptions with it.
-      }
+      val db = name.database.getOrElse(currentDb)
+      externalCatalog.listFunctions(db,name.unquotedString).size > 0
     }
   }
 
