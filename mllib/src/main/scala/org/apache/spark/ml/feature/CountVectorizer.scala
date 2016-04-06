@@ -42,7 +42,6 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
    * vocabSize terms ordered by term frequency across the corpus.
    *
    * Default: 2^18^
-   *
    * @group param
    */
   val vocabSize: IntParam =
@@ -58,8 +57,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
    * if this is a double in [0,1), then this specifies the fraction of documents.
    *
    * Default: 1
-    *
-    * @group param
+   * @group param
    */
   val minDF: DoubleParam = new DoubleParam(this, "minDF", "Specifies the minimum number of" +
     " different documents a term must appear in to be included in the vocabulary." +
@@ -89,8 +87,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
    * affect fitting.
    *
    * Default: 1
-    *
-    * @group param
+   * @group param
    */
   val minTF: DoubleParam = new DoubleParam(this, "minTF", "Filter to ignore rare words in" +
     " a document. For each document, terms with frequency/count less than the given threshold are" +
@@ -105,13 +102,12 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   def getMinTF: Double = $(minTF)
 
   /**
-    * Binary toggle to control the output vector values.
-    * If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful for
-    * discrete probabilistic models that model binary events rather than integer counts.
-    * Default: false
-    *
-    * @group param
-    */
+   * Binary toggle to control the output vector values.
+   * If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful for
+   * discrete probabilistic models that model binary events rather than integer counts.
+   * Default: false
+   * @group param
+   */
   val binary: BooleanParam =
     new BooleanParam(this, "binary", "If True, all non zero counts are set to 1.")
 

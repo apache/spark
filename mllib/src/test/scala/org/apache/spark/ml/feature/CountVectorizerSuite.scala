@@ -114,7 +114,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
         assert(features ~== expected absTol 1e-14)
     }
   }
-  
+ 
   test("CountVectorizer throws exception when vocab is empty") {
     intercept[IllegalArgumentException] {
       val df = sqlContext.createDataFrame(Seq(
