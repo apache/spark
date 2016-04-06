@@ -226,7 +226,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
    * }}}
    */
   override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
-    // Pass a partitioned view on to hive.
     if (ctx.identifierList != null) {
       throw new ParseException(s"Operation not allowed: partitioned views", ctx)
     } else {
