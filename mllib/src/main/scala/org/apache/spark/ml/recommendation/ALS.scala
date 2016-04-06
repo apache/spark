@@ -673,7 +673,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, solver = solver)
         if (shouldCheckpoint(iter)) {
-          itemFactors.checkpoint()
+          ALS.checkpointAndCleanParents(itemFactors)
           itemFactors.count() // checkpoint item factors and cut lineage
           deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
