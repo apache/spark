@@ -128,7 +128,7 @@
     <slf4j.version>1.7.10</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>2.2.0</hadoop.version>
-    <protobuf.version>2.5.0</protobuf.version>
+    <protobuf.version>2.6.1</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <hbase.version>0.98.7-hadoop2</hbase.version>
     <hbase.artifact>hbase</hbase.artifact>
@@ -153,7 +153,7 @@
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.7.1</jets3t.version>
-    <aws.kinesis.client.version>1.4.0</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.6.2</aws.kinesis.client.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.1</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->

@@ -60,11 +60,13 @@
       <artifactId>commons-lang</artifactId>
       <scope>provided</scope>
     </dependency>
+<!--
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <scope>provided</scope>
     </dependency>
+-->
     <dependency>
       <groupId>com.sun.jersey</groupId>
       <artifactId>jersey-server</artifactId>
