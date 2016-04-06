@@ -441,7 +441,7 @@ case class TungstenAggregate(
     val thisPlan = ctx.addReferenceObj("plan", this)
     hashMapTerm = ctx.freshName("hashMap")
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
-    ctx.addMutableState(hashMapClassName, hashMapTerm, s"$hashMapTerm = $thisPlan.createHashMap();")
+    ctx.addMutableState(hashMapClassName, hashMapTerm, s"")
     sorterTerm = ctx.freshName("sorter")
     ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, sorterTerm, "")
 
@@ -453,6 +453,7 @@ case class TungstenAggregate(
     ctx.addNewFunction(doAgg,
       s"""
         private void $doAgg() throws java.io.IOException {
+          $hashMapTerm = $thisPlan.createHashMap();
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
 
           $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm);

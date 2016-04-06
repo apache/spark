@@ -30,14 +30,23 @@ import org.apache.spark.util.collection.CompactBuffer
 
 class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
+  val mm = new TaskMemoryManager(
+    new StaticMemoryManager(
+      new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+      Long.MaxValue,
+      Long.MaxValue,
+      1),
+    0)
+
   test("UnsafeHashedRelation") {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
     val toUnsafe = UnsafeProjection.create(schema)
     val unsafeData = data.map(toUnsafe(_).copy())
 
+
     val buildKey = Seq(BoundReference(0, IntegerType, false))
-    val hashed = UnsafeHashedRelation(unsafeData.iterator, buildKey, 1)
+    val hashed = UnsafeHashedRelation(unsafeData.iterator, buildKey, 1, mm)
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
 
     assert(hashed.get(unsafeData(0)).toArray === Array(unsafeData(0)))
@@ -104,7 +113,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, true)))
     val rows = (0 until 100).map(i => unsafeProj(InternalRow(i, i + 1)).copy())
     val key = Seq(BoundReference(0, IntegerType, false))
-    val longRelation = LongHashedRelation(rows.iterator, key, 10)
+    val longRelation = LongHashedRelation(rows.iterator, key, 10, mm)
     assert(longRelation.keyIsUnique)
     (0 until 100).foreach { i =>
       val row = longRelation.getValue(i)
@@ -112,7 +121,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       assert(row.getInt(1) === i + 1)
     }
 
-    val longRelation2 = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100)
+    val longRelation2 = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
     assert(!longRelation2.keyIsUnique)
     (0 until 100).foreach { i =>
       val rows = longRelation2.get(i).toArray

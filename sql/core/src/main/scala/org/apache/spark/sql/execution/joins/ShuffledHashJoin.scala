@@ -58,7 +58,7 @@ case class ShuffledHashJoin(
   private def buildHashedRelation(iter: Iterator[UnsafeRow]): HashedRelation = {
     val context = TaskContext.get()
     val key = rewriteKeyExpr(buildKeys).map(BindReferences.bindReference(_, buildPlan.output))
-    val relation = HashedRelation(iter, key)
+    val relation = HashedRelation(iter, key, taskMemoryManager = context.taskMemoryManager())
     // This relation is usually used until the end of task.
     context.addTaskCompletionListener((t: TaskContext) =>
       relation.close()
