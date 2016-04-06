@@ -515,7 +515,8 @@ class DDLCommandSuite extends PlanTest {
 
   test("alter table: concatenate (not supported)") {
     assertUnsupported("ALTER TABLE table_name CONCATENATE")
-    assertUnsupported("ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE")
+    assertUnsupported(
+      "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE")
   }
 
   test("alter table: change column name/type/position/comment") {
