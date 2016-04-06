@@ -47,62 +47,6 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
   }
 }
 
-/**
- * Drops a table/view from the metastore and removes it if it is cached.
- */
-private[hive]
-case class DropTable(
-    tableName: TableIdentifier,
-    ifExists: Boolean,
-    isView: Boolean) extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
-
-    // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
-    // issue an exception.
-    val catalogTable: Option[CatalogTable] = try {
-      // If the table/view does not exist, it will throw an exception:
-      // - AnalysisException, if it is from InMemoryCatalog.
-      // - NoSuchTableException, if it is from HiveExternalCatalog
-      Option(sqlContext.sessionState.catalog.getTable(tableName))
-    } catch {
-      case _: org.apache.spark.sql.AnalysisException => None
-      case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException => None
-      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException => None
-    }
-
-    catalogTable.map(_.tableType match {
-      case CatalogTableType.VIRTUAL_VIEW if !isView =>
-        throw new AnalysisException(s"Cannot drop a view with DROP TABLE")
-      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
-        throw new AnalysisException(s"Cannot drop a table with DROP VIEW")
-      case _ =>
-    })
-
-    try {
-      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName.quotedString))
-    } catch {
-      // This table's metadata is not in Hive metastore (e.g. the table does not exist).
-      case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
-      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
-      // Other Throwables can be caused by users providing wrong parameters in OPTIONS
-      // (e.g. invalid paths). We catch it and log a warning message.
-      // Users should be able to drop such kinds of tables regardless if there is an error.
-      case e: Throwable => log.warn(s"${e.getMessage}", e)
-    }
-    hiveContext.invalidateTable(tableName.quotedString)
-    val ifExistsClause = if (ifExists) "IF EXISTS " else ""
-    if (isView) {
-      hiveContext.runSqlHive(s"DROP VIEW $ifExistsClause${tableName.quotedString}")
-    } else {
-      hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause${tableName.quotedString}")
-    }
-    hiveContext.sessionState.catalog.dropTable(tableName, ignoreIfNotExists = true)
-    Seq.empty[Row]
-  }
-}
-
 private[hive]
 case class AddJar(path: String) extends RunnableCommand {
 

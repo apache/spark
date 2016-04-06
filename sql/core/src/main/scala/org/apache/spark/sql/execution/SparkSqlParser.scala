@@ -20,7 +20,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.parser.{AbstractSqlParser, AstBuilder, ParseException}
+import org.apache.spark.sql.catalyst.parser.{SqlBaseParser, AbstractSqlParser, AstBuilder, ParseException}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.command.{DescribeCommand => _, _}
@@ -365,6 +365,22 @@ class SparkSqlAstBuilder extends AstBuilder {
       case Seq(fn) => (None, fn)
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
+  }
+
+  /**
+   * Create a [[DropTable]] command.
+   */
+  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.PURGE != null) {
+      logWarning("PURGE option is ignored.")
+    }
+    if (ctx.REPLICATION != null) {
+      logWarning("REPLICATION clause is ignored.")
+    }
+    DropTable(
+      visitTableIdentifier(ctx.tableIdentifier),
+      ctx.EXISTS != null,
+      ctx.kind.getType == SqlBaseParser.VIEW)
   }
 
   /**

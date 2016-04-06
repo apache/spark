@@ -171,6 +171,10 @@ class SessionCatalog(
     externalCatalog.getTable(db, table)
   }
 
+  def getTableOption(name: TableIdentifier): Option[CatalogTable] = {
+    Option(getTable(name))
+  }
+
   // -------------------------------------------------------------
   // | Methods that interact with temporary and metastore tables |
   // -------------------------------------------------------------

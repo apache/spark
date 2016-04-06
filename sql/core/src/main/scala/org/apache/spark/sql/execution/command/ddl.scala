@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogTable, CatalogDatabase}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.BucketSpec
@@ -194,6 +194,60 @@ case class DropFunction(
     ifExists: Boolean,
     isTemp: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
+
+/**
+ * Drops a table/view from the metastore and removes it if it is cached.
+ */
+case class DropTable(
+    tableName: TableIdentifier,
+    ifExists: Boolean,
+    isView: Boolean) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
+    // issue an exception.
+    val catalogTable: Option[CatalogTable] = try {
+      // If the table/view does not exist, it will throw an exception:
+      // - AnalysisException, if it is from InMemoryCatalog.
+      // - NoSuchTableException, if it is from HiveExternalCatalog
+      catalog.getTableOption(tableName)
+    } catch {
+      case _: org.apache.spark.sql.AnalysisException => None
+      case e if e.getClass.getName == "org.apache.hadoop.hive.ql.metadata.InvalidTableException" =>
+        None
+      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException => None
+    }
+
+    catalogTable.map(_.tableType match {
+      case CatalogTableType.VIRTUAL_VIEW if !isView =>
+        throw new AnalysisException(s"Cannot drop a view with DROP TABLE")
+      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+        throw new AnalysisException(s"Cannot drop a table with DROP VIEW")
+      case _ =>
+    })
+
+    try {
+      sqlContext.cacheManager.tryUncacheQuery(sqlContext.table(tableName.quotedString))
+    } catch {
+      // This table's metadata is not in Hive metastore (e.g. the table does not exist).
+      case e if e.getClass.getName == "org.apache.hadoop.hive.ql.metadata.InvalidTableException" =>
+      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
+      // Other Throwables can be caused by users providing wrong parameters in OPTIONS
+      // (e.g. invalid paths). We catch it and log a warning message.
+      // Users should be able to drop such kinds of tables regardless if there is an error.
+      case e: Throwable => log.warn(s"${e.getMessage}", e)
+    }
+    catalog.invalidateTable(tableName.quotedString)
+    try {
+      catalog.dropTable(tableName, ifExists)
+    } catch {
+      case e: org.apache.spark.sql.AnalysisException
+        if e.getMessage.contains("NoSuchObjectException") => logError(s"${e.getMessage}", e)
+    }
+    Seq.empty[Row]
+  }
+}
 
 /** Rename in ALTER TABLE/VIEW: change the name of a table/view to a different name. */
 case class AlterTableRename(
