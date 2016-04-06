@@ -1360,6 +1360,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     listenerBus.addListener(listener)
   }
 
+  private[spark] override def getExecutorIds(): Seq[String] = {
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.getExecutorIds()
+      case _ =>
+        logWarning("Requesting executors is only supported in coarse-grained mode")
+        Nil
+    }
+  }
+
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
