@@ -67,21 +67,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import hiveContext.implicits._
 
-  test("writing to Hive") {
-    val schema = StructType(
-      Array(StructField("a", LongType, false),
-        StructField("b", StringType, false),
-        StructField("c", StringType, false),
-        StructField("d", IntegerType, false)))
-
-    val df = sqlContext.createDataFrame(sparkContext.parallelize(Array(Row(1L, "test", "NW", 1))), schema)
-    df.write.partitionBy("c", "d").saveAsTable("testDFTABLE1")
-
-    val dfLoad = sqlContext.table("testDFTABLE1")
-    dfLoad.collect().foreach(println(_))
-  }
-
-  /*
   test("UDTF") {
     withUserDefinedFunction("udtf_count2" -> true) {
       sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
@@ -1852,5 +1837,94 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
-  */
+
+  test("writing partitioned DataFrame to Hive compatible format") {
+    val schema = StructType(
+      Array(StructField("a", LongType, false),
+        StructField("b", StringType, false),
+        StructField("c", StringType, false),
+        StructField("d", IntegerType, false)))
+
+    val rdd = sparkContext.parallelize(Array(
+      Row(1L, "test", "NW", 1),
+      Row(2L, "test2", "SF", 1),
+      Row(3L, "test3", "NW", 1),
+      Row(1L, "test", "CA", 2)))
+
+    val df = sqlContext.createDataFrame(rdd, schema)
+    df.write.partitionBy("c", "d").saveAsTable("testDFTABLE1")
+
+    val dfLoad = sqlContext.table("testDFTABLE1")
+    checkAnswer(dfLoad,
+      Row(1L, "test", "NW", 1) ::
+      Row(2L, "test2", "SF", 1) ::
+      Row(3L, "test3", "NW", 1) ::
+      Row(1L, "test", "CA", 2) :: Nil)
+
+    assertResult(
+      Array(
+        Array("a", "bigint"),
+        Array("b", "string"),
+        Array("c", "string"),
+        Array("d", "int"),
+        Array(""),
+        Array("# Partition Information"),
+        Array("# col_name", "data_type", "comment"),
+        Array(""),
+        Array("c", "string"),
+        Array("d", "int"))
+    ) {
+      sql("DESCRIBE testDFTABLE1 PARTITION (c='NW', d='1')")
+        .select('result)
+        .collect()
+        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
+    }
+  }
+
+  test("appending data to Hive compatible format with new partitions") {
+    val schema = StructType(
+      Array(StructField("a", LongType, false),
+        StructField("b", StringType, false),
+        StructField("c", StringType, false),
+        StructField("d", IntegerType, false)))
+
+    val rdd = sparkContext.parallelize(Array(
+      Row(2L, "test2", "NW", 1), // old partition
+      Row(4L, "test3", "SF", 1), // old partition
+      Row(1L, "test", "LA", 2),  // new partition
+      Row(2L, "test", "NY", 1))) // new partition
+
+    val df = sqlContext.createDataFrame(rdd, schema)
+    df.write.mode(SaveMode.Append).partitionBy("c", "d").saveAsTable("testDFTABLE1")
+
+    val dfLoad = sqlContext.table("testDFTABLE1")
+    checkAnswer(dfLoad,
+      Row(1L, "test", "NW", 1) ::
+      Row(2L, "test2", "SF", 1) ::
+      Row(3L, "test3", "NW", 1) ::
+      Row(1L, "test", "CA", 2) ::
+      Row(2L, "test2", "NW", 1) ::
+      Row(4L, "test3", "SF", 1) ::
+      Row(1L, "test", "LA", 2) ::
+      Row(2L, "test", "NY", 1) :: Nil)
+
+    assertResult(
+      Array(
+        Array("a", "bigint"),
+        Array("b", "string"),
+        Array("c", "string"),
+        Array("d", "int"),
+        Array(""),
+        Array("# Partition Information"),
+        Array("# col_name", "data_type", "comment"),
+        Array(""),
+        Array("c", "string"),
+        Array("d", "int"))
+    ) {
+      sql("DESCRIBE testDFTABLE1 PARTITION (c='LA', d='2')")
+        .select('result)
+        .collect()
+        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
+    }
+  }
 }

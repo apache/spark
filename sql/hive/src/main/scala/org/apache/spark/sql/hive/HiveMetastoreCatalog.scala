@@ -355,7 +355,6 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         viewText = None) // TODO: We need to place the SQL string here
     }
 
-    // TODO: Support persisting partitioned data source relations in Hive compatible format
     val qualifiedTableName = tableIdent.quotedString
     val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
     val (hiveTable, hiveParts, logMessage) = (maybeSerDe, dataSource.resolveRelation()) match {
