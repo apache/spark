@@ -340,16 +340,6 @@ case class AlterTableDropPartition(
     purge: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
-case class AlterTableArchivePartition(
-    tableName: TableIdentifier,
-    spec: TablePartitionSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableUnarchivePartition(
-    tableName: TableIdentifier,
-    spec: TablePartitionSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
 case class AlterTableSetFileFormat(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],

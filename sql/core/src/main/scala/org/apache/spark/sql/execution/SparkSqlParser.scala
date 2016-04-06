@@ -567,10 +567,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitArchiveTablePartition(
       ctx: ArchiveTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableArchivePartition(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitNonOptionalPartitionSpec(ctx.partitionSpec))(
-      command(ctx))
+    throw new AnalysisException(
+      "Operation not allowed: ALTER TABLE ... ARCHIVE PARTITION ...")
   }
 
   /**
@@ -583,10 +581,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitUnarchiveTablePartition(
       ctx: UnarchiveTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableUnarchivePartition(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitNonOptionalPartitionSpec(ctx.partitionSpec))(
-      command(ctx))
+    throw new AnalysisException(
+      "Operation not allowed: ALTER TABLE ... UNARCHIVE PARTITION ...")
   }
 
   /**

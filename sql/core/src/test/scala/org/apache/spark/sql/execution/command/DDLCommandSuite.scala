@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -25,8 +26,16 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
+// TODO: merge this with DDLSuite (SPARK-14441)
 class DDLCommandSuite extends PlanTest {
   private val parser = SparkSqlParser
+
+  private def assertUnsupported(sql: String): Unit = {
+    val e = intercept[AnalysisException] {
+      parser.parsePlan(sql)
+    }
+    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+  }
 
   test("create database") {
     val sql =
@@ -435,22 +444,12 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2_table, expected2_table)
   }
 
-  test("alter table: archive partition") {
-    val sql = "ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableArchivePartition(
-      TableIdentifier("table_name", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"))(sql)
-    comparePlans(parsed, expected)
+  test("alter table: archive partition (not supported)") {
+    assertUnsupported("ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')")
   }
 
-  test("alter table: unarchive partition") {
-    val sql = "ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableUnarchivePartition(
-      TableIdentifier("table_name", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"))(sql)
-    comparePlans(parsed, expected)
+  test("alter table: unarchive partition (not supported)") {
+    assertUnsupported("ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')")
   }
 
   test("alter table: set file format") {
