@@ -50,7 +50,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
    * avaliable buffer is smaller than this limit, the data cannot be sent within one single write
    * operation while it still will make memory copy with this size.
    */
-  private static final int NIO_BUFFER_LIMIT = 512 * 1024;
+  private static final int NIO_BUFFER_LIMIT = 256 * 1024;
 
   /**
    * Construct a new MessageWithHeader.
