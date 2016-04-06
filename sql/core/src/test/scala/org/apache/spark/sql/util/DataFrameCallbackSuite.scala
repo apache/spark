@@ -20,14 +20,24 @@ package org.apache.spark.sql.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, QueryTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.{functions, Dataset, QueryTest}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, SubqueryAlias}
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegen}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
   import functions._
+
+  private def removeGeneratedSubquery(plan: LogicalPlan): LogicalPlan = {
+    plan transformDown {
+      case SubqueryAlias(alias, child) if alias.startsWith(Dataset.aliasPrefix) => child
+    }
+  }
+
+  private def checkPlan[T <: LogicalPlan](qe: QueryExecution): Unit = {
+    assert(removeGeneratedSubquery(qe.analyzed).isInstanceOf[T])
+  }
 
   test("execute callback functions when a DataFrame action finished successfully") {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Long)]
@@ -48,11 +58,11 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics.length == 2)
 
     assert(metrics(0)._1 == "collect")
-    assert(metrics(0)._2.analyzed.isInstanceOf[Project])
+    checkPlan[Project](metrics(0)._2)
     assert(metrics(0)._3 > 0)
 
     assert(metrics(1)._1 == "count")
-    assert(metrics(1)._2.analyzed.isInstanceOf[Aggregate])
+    checkPlan[Aggregate](metrics(1)._2)
     assert(metrics(1)._3 > 0)
 
     sqlContext.listenerManager.unregister(listener)
@@ -79,7 +89,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     assert(metrics.length == 1)
     assert(metrics(0)._1 == "collect")
-    assert(metrics(0)._2.analyzed.isInstanceOf[Project])
+    checkPlan[Project](metrics(0)._2)
     assert(metrics(0)._3.getMessage == e.getMessage)
 
     sqlContext.listenerManager.unregister(listener)

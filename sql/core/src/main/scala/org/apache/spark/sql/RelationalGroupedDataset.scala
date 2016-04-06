@@ -51,30 +51,23 @@ class RelationalGroupedDataset protected[sql](
     val aliasedAgg = aggregates.map(alias)
 
     groupType match {
-      case RelationalGroupedDataset.GroupByType =>
-        Dataset.ofRows(
-          df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
-      case RelationalGroupedDataset.RollupType =>
-        Dataset.ofRows(
-          df.sqlContext, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
-      case RelationalGroupedDataset.CubeType =>
-        Dataset.ofRows(
-          df.sqlContext, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
-      case RelationalGroupedDataset.PivotType(pivotCol, values) =>
+      case RelationalGroupedDataset.GroupByType => df.withPlan {
+        Aggregate(groupingExprs, aliasedAgg, df.logicalPlan)
+      }
+      case RelationalGroupedDataset.RollupType => df.withPlan {
+        Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan)
+      }
+      case RelationalGroupedDataset.CubeType => df.withPlan {
+        Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan)
+      }
+      case RelationalGroupedDataset.PivotType(pivotCol, values) => df.withPlan {
         val aliasedGrps = groupingExprs.map(alias)
-        Dataset.ofRows(
-          df.sqlContext, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
+        Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan)
+      }
     }
   }
 
-  // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-  // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-  // make it a NamedExpression.
-  private[this] def alias(expr: Expression): NamedExpression = expr match {
-    case u: UnresolvedAttribute => UnresolvedAlias(u)
-    case expr: NamedExpression => expr
-    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
-  }
+  private[this] def alias(expr: Expression): NamedExpression = Column(expr).named
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
     : DataFrame = {

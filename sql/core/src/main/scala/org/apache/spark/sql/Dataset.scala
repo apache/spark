@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -57,10 +58,28 @@ private[sql] object Dataset {
     new Dataset(sqlContext, logicalPlan, implicitly[Encoder[T]])
   }
 
+  def withAlias[T : Encoder](
+      sqlContext: SQLContext,
+      logicalPlan: LogicalPlan): Dataset[T] = {
+    apply(sqlContext, alias(logicalPlan))
+  }
+
   def ofRows(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sqlContext.executePlan(logicalPlan)
     qe.assertAnalyzed()
-    new Dataset[Row](sqlContext, logicalPlan, RowEncoder(qe.analyzed.schema))
+    new Dataset[Row](sqlContext, qe, RowEncoder(qe.analyzed.schema))
+  }
+
+  def ofRowsWithAlias(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
+    ofRows(sqlContext, alias(logicalPlan))
+  }
+
+  private[this] val nextDatasetId = new AtomicLong(0)
+
+  val aliasPrefix = "dataset_"
+
+  private def alias(plan: LogicalPlan): LogicalPlan = {
+    SubqueryAlias(aliasPrefix + nextDatasetId.getAndIncrement(), plan)
   }
 }
 
@@ -187,6 +206,8 @@ class Dataset[T] private[sql](
         queryExecution.analyzed
     }
   }
+
+  private[sql] def originalLogicalPlan = removeGeneratedSubquery(logicalPlan)
 
   /**
    * An unresolved version of the internal encoder for the type of this [[Dataset]].  This one is
@@ -354,7 +375,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def as[U : Encoder]: Dataset[U] = Dataset[U](sqlContext, logicalPlan)
+  def as[U : Encoder]: Dataset[U] = Dataset.withAlias(sqlContext, originalLogicalPlan)
 
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
@@ -448,7 +469,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+  def isLocal: Boolean = originalLogicalPlan.isInstanceOf[LocalRelation]
 
   /**
    * Returns true if this [[Dataset]] contains one or more sources that continuously
@@ -560,9 +581,8 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DataFrame): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
-  }
+  def join(right: DataFrame): DataFrame = Dataset.ofRows(
+    sqlContext, Join(logicalPlan, right.logicalPlan, joinType = Inner, None))
 
   /**
    * Inner equi-join with another [[DataFrame]] using the given column.
@@ -638,13 +658,13 @@ class Dataset[T] private[sql](
       Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None))
       .analyzed.asInstanceOf[Join]
 
-    withPlan {
+    val plan =
       Join(
         joined.left,
         joined.right,
         UsingJoin(JoinType(joinType), usingColumns.map(UnresolvedAttribute(_))),
         None)
-    }
+    Dataset.ofRows(sqlContext, plan)
   }
 
   /**
@@ -683,46 +703,8 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
-    // Note that in this function, we introduce a hack in the case of self-join to automatically
-    // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
-    // Consider this case: df.join(df, df("key") === df("key"))
-    // Since df("key") === df("key") is a trivially true condition, this actually becomes a
-    // cartesian join. However, most likely users expect to perform a self join using "key".
-    // With that assumption, this hack turns the trivially true condition into equality on join
-    // keys that are resolved to both sides.
-
-    // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
-    // After the cloning, left and right side will have distinct expression ids.
-    val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr)))
-      .queryExecution.analyzed.asInstanceOf[Join]
-
-    // If auto self join alias is disabled, return the plan.
-    if (!sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
-      return withPlan(plan)
-    }
-
-    // If left/right have no output set intersection, return the plan.
-    val lanalyzed = withPlan(this.logicalPlan).queryExecution.analyzed
-    val ranalyzed = withPlan(right.logicalPlan).queryExecution.analyzed
-    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
-      return withPlan(plan)
-    }
-
-    // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
-    // By the time we get here, since we have already run analysis, all attributes should've been
-    // resolved and become AttributeReference.
-    val cond = plan.condition.map { _.transform {
-      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
-          if a.sameRef(b) =>
-        catalyst.expressions.EqualTo(
-          withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name))
-    }}
-
-    withPlan {
-      plan.copy(condition = cond)
-    }
+    val plan = Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
+    Dataset.ofRows(sqlContext, plan)
   }
 
   /**
@@ -764,13 +746,11 @@ class Dataset[T] private[sql](
       case _ => Alias(CreateStruct(rightOutput), "_2")()
     }
 
-    implicit val tuple2Encoder: Encoder[(T, U)] =
+    val tuple2Encoder: Encoder[(T, U)] =
       ExpressionEncoder.tuple(this.unresolvedTEncoder, other.unresolvedTEncoder)
-    withTypedPlan[(T, U)](other, encoderFor[(T, U)]) { (left, right) =>
-      Project(
-        leftData :: rightData :: Nil,
-        joined.analyzed)
-    }
+
+    val plan = Project(leftData :: rightData :: Nil, joined.analyzed)
+    new Dataset(sqlContext, plan, tuple2Encoder)
   }
 
   /**
@@ -886,8 +866,11 @@ class Dataset[T] private[sql](
     case "*" =>
       Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
-      val expr = resolve(colName)
-      Column(expr)
+      val col = resolve(colName) match {
+        case attr: Attribute => UnresolvedAttribute(attr.qualifier.toSeq :+ attr.name)
+        case Alias(child, _) => UnresolvedAttribute.quotedString(child.sql)
+      }
+      Column(col)
   }
 
   /**
@@ -896,9 +879,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def as(alias: String): Dataset[T] = withTypedPlan {
-    SubqueryAlias(alias, logicalPlan)
-  }
+  def as(alias: String): Dataset[T] =
+    new Dataset(sqlContext, SubqueryAlias(alias, originalLogicalPlan), encoder)
 
   /**
    * (Scala-specific) Returns a new [[Dataset]] with an alias set.
@@ -987,15 +969,12 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    new Dataset[U1](
-      sqlContext,
-      Project(
-        c1.withInputType(
-          boundTEncoder,
-          logicalPlan.output).named :: Nil,
-        logicalPlan),
-      implicitly[Encoder[U1]])
+  def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = withTypedPlan {
+    Project(
+      c1.withInputType(
+        boundTEncoder,
+        logicalPlan.output).named :: Nil,
+      logicalPlan)
   }
 
   /**
@@ -1007,9 +986,8 @@ class Dataset[T] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(resolvedTEncoder, logicalPlan.output).named)
-    val execution = new QueryExecution(sqlContext, Project(namedColumns, logicalPlan))
 
-    new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
+    withTypedPlan(Project(namedColumns, logicalPlan))(ExpressionEncoder.tuple(encoders))
   }
 
   /**
@@ -1256,12 +1234,11 @@ class Dataset[T] private[sql](
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
     val inputPlan = logicalPlan
     val withGroupingKey = AppendColumns(func, inputPlan)
-    val executed = sqlContext.executePlan(withGroupingKey)
 
     new KeyValueGroupedDataset(
       encoderFor[K],
       encoderFor[T],
-      executed,
+      Dataset.ofRows(sqlContext, withGroupingKey),
       inputPlan.output,
       withGroupingKey.newColumns)
   }
@@ -1428,7 +1405,9 @@ class Dataset[T] private[sql](
   def union(other: Dataset[T]): Dataset[T] = withTypedPlan {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, other.logicalPlan))
+    CombineUnions(Union(
+      removeGeneratedSubquery(logicalPlan),
+      removeGeneratedSubquery(other.logicalPlan)))
   }
 
   /**
@@ -1504,8 +1483,9 @@ class Dataset[T] private[sql](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new Dataset[T](
-        sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)(), encoder)
+      withTypedPlan {
+        Sample(x(0), x(1), withReplacement = false, seed, sorted)()
+      }
     }.toArray
   }
 
@@ -1723,8 +1703,7 @@ class Dataset[T] private[sql](
           u.name, sqlContext.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
     }
-    val attrs = this.logicalPlan.output
-    val colsAfterDrop = attrs.filter { attr =>
+    val colsAfterDrop = logicalPlan.output.filter { attr =>
       attr != expression
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
@@ -1923,11 +1902,8 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
-    new Dataset[U](
-      sqlContext,
-      MapPartitions[T, U](func, logicalPlan),
-      implicitly[Encoder[U]])
+  def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = withTypedPlan {
+    MapPartitions[T, U](func, logicalPlan)
   }
 
   /**
@@ -2406,18 +2382,24 @@ class Dataset[T] private[sql](
     }
   }
 
+  private def removeGeneratedSubquery(plan: LogicalPlan): LogicalPlan = {
+    val resolved = sqlContext.executePlan(plan).analyzed
+    resolved transformDown {
+      case SubqueryAlias(alias, child) if alias.startsWith(Dataset.aliasPrefix) => child
+    }
+  }
+
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
-  @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
-    Dataset.ofRows(sqlContext, logicalPlan)
+  @inline private[sql] def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
+    Dataset.ofRowsWithAlias(sqlContext, removeGeneratedSubquery(logicalPlan))
+  }
+
+  @inline private def withPlanNoAlias(logicalPlan: => LogicalPlan): DataFrame = {
+    Dataset.ofRows(sqlContext, removeGeneratedSubquery(logicalPlan))
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
-  @inline private def withTypedPlan(logicalPlan: => LogicalPlan): Dataset[T] = {
-    new Dataset[T](sqlContext, logicalPlan, encoder)
+  @inline private[sql] def withTypedPlan[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
+    Dataset.withAlias(sqlContext, removeGeneratedSubquery(logicalPlan))
   }
-
-  private[sql] def withTypedPlan[R](
-      other: Dataset[_], encoder: Encoder[R])(
-      f: (LogicalPlan, LogicalPlan) => LogicalPlan): Dataset[R] =
-    new Dataset[R](sqlContext, f(logicalPlan, other.logicalPlan), encoder)
 }

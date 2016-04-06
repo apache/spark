@@ -541,4 +541,24 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(3, 1) ::
         Row(3, 2) :: Nil)
   }
+
+  test("friendly error message for self-join") {
+    withTempTable("tbl") {
+      val df = Seq(1 -> "a").toDF("k", "v")
+      df.registerTempTable("tbl")
+
+      val e1 = intercept[AnalysisException](sql("SELECT k FROM tbl JOIN tbl"))
+      assert(e1.message == "Input Attributes tbl.k, tbl.k are ambiguous, please eliminate " +
+        "ambiguity from the inputs first, e.g. alias the left and right plan before join them.")
+
+      val e2 = intercept[AnalysisException](sql("SELECT k FROM tbl t1 JOIN tbl t2"))
+      assert(e2.message == "Reference 'k' is ambiguous, please add a qualifier to distinguish " +
+        "it, e.g. 't1.k', available qualifiers: t1, t2")
+
+      checkAnswer(
+        sql("SELECT t1.k FROM tbl t1 JOIN tbl t2"),
+        Row(1)
+      )
+    }
+  }
 }

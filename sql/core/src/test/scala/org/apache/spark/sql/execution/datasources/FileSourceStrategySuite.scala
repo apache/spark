@@ -265,7 +265,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
   /** Returns a resolved expression for `str` in the context of `df`. */
   def resolve(df: DataFrame, str: String): Expression = {
-    df.select(expr(str)).queryExecution.analyzed.expressions.head.children.head
+    df.select(expr(str)).originalLogicalPlan.expressions.head.children.head
   }
 
   /** Returns a set with all the filters present in the physical plan. */

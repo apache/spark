@@ -291,7 +291,7 @@ case class AttributeReference(
     exprId :: qualifier :: isGenerated :: Nil
   }
 
-  override def toString: String = s"$name#${exprId.id}$typeSuffix"
+  override def toString: String = s"$qualifiedName#${exprId.id}$typeSuffix"
 
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.

@@ -83,7 +83,7 @@ private[sql] class CacheManager extends Logging {
       query: Dataset[_],
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
-    val planToCache = query.queryExecution.analyzed
+    val planToCache = query.originalLogicalPlan
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
@@ -102,7 +102,7 @@ private[sql] class CacheManager extends Logging {
 
   /** Removes the data for the given [[Dataset]] from the cache */
   private[sql] def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Unit = writeLock {
-    val planToCache = query.queryExecution.analyzed
+    val planToCache = query.originalLogicalPlan
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     require(dataIndex >= 0, s"Table $query is not cached.")
     cachedData(dataIndex).cachedRepresentation.uncache(blocking)
@@ -116,7 +116,7 @@ private[sql] class CacheManager extends Logging {
   private[sql] def tryUncacheQuery(
       query: Dataset[_],
       blocking: Boolean = true): Boolean = writeLock {
-    val planToCache = query.queryExecution.analyzed
+    val planToCache = query.originalLogicalPlan
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     val found = dataIndex >= 0
     if (found) {
@@ -128,7 +128,7 @@ private[sql] class CacheManager extends Logging {
 
   /** Optionally returns cached data for the given [[Dataset]] */
   private[sql] def lookupCachedData(query: Dataset[_]): Option[CachedData] = readLock {
-    lookupCachedData(query.queryExecution.analyzed)
+    lookupCachedData(query.originalLogicalPlan)
   }
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */

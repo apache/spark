@@ -287,7 +287,7 @@ class Analyzer(
                     s"grouping columns (${x.groupByExprs.mkString(",")})")
               }
             case Grouping(col: Expression) =>
-              val idx = x.groupByExprs.indexOf(col)
+              val idx = x.groupByExprs.indexWhere(_ semanticEquals col)
               if (idx >= 0) {
                 Cast(BitwiseAnd(ShiftRight(gid, Literal(x.groupByExprs.length - 1 - idx)),
                   Literal(1)), ByteType)
@@ -515,7 +515,7 @@ class Analyzer(
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
       expressions.map {
-        case a: Alias => Alias(a.child, a.name)(isGenerated = a.isGenerated)
+        case a: Alias => a.newInstance()
         case other => other
       }
     }

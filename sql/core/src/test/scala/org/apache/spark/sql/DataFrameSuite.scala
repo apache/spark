@@ -553,8 +553,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         case Row(id: Int, name: String, age: Int, idToDrop: Int, salary: Double) =>
           Row(id, name, age, salary)
       }.toSeq)
+    assert(joinedDf.schema.map(_.name) === Seq("id", "name", "age", "id", "salary"))
     assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
-    assert(df("id") == person("id"))
   }
 
   test("withColumnRenamed") {
@@ -1431,5 +1431,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val e1 = intercept[AnalysisException] (sqlContext.read.json("/mnt/*/*-xyz.json").rdd).
       getMessage()
     assert(e1.startsWith("Path does not exist"))
+  }
+
+  test("Un-direct self-join") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    val df2 = df.filter($"i" > 0)
+    checkAnswer(
+      df.join(df2, (df("i") + 1) === df2("i")),
+      Row(1, "a", 2, "b") :: Nil
+    )
   }
 }

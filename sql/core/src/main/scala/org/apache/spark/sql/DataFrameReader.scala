@@ -129,7 +129,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation()))
+    Dataset.ofRowsWithAlias(sqlContext, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -376,7 +376,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         parsedOptions)
     }
 
-    Dataset.ofRows(
+    Dataset.ofRowsWithAlias(
       sqlContext,
       LogicalRDD(
         schema.toAttributes,

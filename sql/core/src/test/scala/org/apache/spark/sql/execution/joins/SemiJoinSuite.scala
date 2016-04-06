@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, LessThan}
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Expression, LessThan}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.Join
@@ -54,8 +54,8 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
     )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
   private lazy val condition = {
-    And((left.col("a") === right.col("c")).expr,
-      LessThan(left.col("b").expr, right.col("d").expr))
+    And(EqualTo(left.resolve("a"), right.resolve("c")),
+      LessThan(left.resolve("b"), right.resolve("d")))
   }
 
   // Note: the input dataframes and expression must be evaluated lazily because

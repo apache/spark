@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{EqualNullSafe, EqualTo, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
@@ -218,7 +218,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     "inner join, one match per row",
     myUpperCaseData,
     myLowerCaseData,
-    () => (myUpperCaseData.col("N") === myLowerCaseData.col("n")).expr,
+    () => EqualTo(myUpperCaseData.resolve("N"), myLowerCaseData.resolve("n")),
     Seq(
       (1, "A", 1, "a"),
       (2, "B", 2, "b"),
@@ -234,7 +234,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "inner join, multiple matches",
       left,
       right,
-      () => (left.col("a") === right.col("a")).expr,
+      () => EqualTo(left.resolve("a"), right.resolve("a")),
       Seq(
         (1, 1, 1, 1),
         (1, 1, 1, 2),
@@ -251,7 +251,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "inner join, no matches",
       left,
       right,
-      () => (left.col("a") === right.col("a")).expr,
+      () => EqualTo(left.resolve("a"), right.resolve("a")),
       Seq.empty
     )
   }
@@ -263,7 +263,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       "inner join, null safe",
       left,
       right,
-      () => (left.col("b") <=> right.col("b")).expr,
+      () => EqualNullSafe(left.resolve("b"), right.resolve("b")),
       Seq(
         (1, 0, 1, 0),
         (2, null, 2, null)

@@ -664,7 +664,7 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.df
         self.assertEqual(self.testData, df.select("*").collect())
         self.assertEqual(self.testData, df.select(df.key, df.value).collect())
-        self.assertEqual([Row(value='1')], df.where(df.key == 1).select(df.value).collect())
+        self.assertEqual([Row(value='1')], df.where(df.key == 1).select("value").collect())
 
     def test_freqItems(self):
         vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]

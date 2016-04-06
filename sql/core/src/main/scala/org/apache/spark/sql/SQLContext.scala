@@ -352,7 +352,7 @@ class SQLContext private[sql](
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRDD)(self))
+    Dataset.ofRowsWithAlias(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
@@ -367,7 +367,7 @@ class SQLContext private[sql](
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
+    Dataset.ofRowsWithAlias(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
   /**
@@ -377,7 +377,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    Dataset.ofRows(this, LogicalRelation(baseRelation))
+    Dataset.ofRowsWithAlias(this, LogicalRelation(baseRelation))
   }
 
   /**
@@ -432,7 +432,7 @@ class SQLContext private[sql](
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
     val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    Dataset.ofRows(this, logicalPlan)
+    Dataset.ofRowsWithAlias(this, logicalPlan)
   }
 
 
@@ -442,7 +442,7 @@ class SQLContext private[sql](
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
 
-    Dataset[T](this, plan)
+    Dataset.withAlias(self, plan)
   }
 
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
@@ -451,7 +451,7 @@ class SQLContext private[sql](
     val encoded = data.map(d => enc.toRow(d))
     val plan = LogicalRDD(attributes, encoded)(self)
 
-    Dataset[T](this, plan)
+    Dataset.withAlias(self, plan)
   }
 
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
@@ -868,9 +868,8 @@ class SQLContext private[sql](
   protected[sql] def applySchemaToPythonRDD(
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
-
     val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
-    Dataset.ofRows(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
+    Dataset.ofRowsWithAlias(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**

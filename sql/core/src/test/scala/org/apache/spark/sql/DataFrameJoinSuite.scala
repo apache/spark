@@ -115,27 +115,6 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
-  test("[SPARK-6231] join - self join auto resolve ambiguity") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    checkAnswer(
-      df.join(df, df("key") === df("key")),
-      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
-
-    checkAnswer(
-      df.join(df.filter($"value" === "2"), df("key") === df("key")),
-      Row(2, "2", 2, "2") :: Nil)
-
-    checkAnswer(
-      df.join(df, df("key") === df("key") && df("value") === 1),
-      Row(1, "1", 1, "1") :: Nil)
-
-    val left = df.groupBy("key").agg(count("*"))
-    val right = df.groupBy("key").agg(sum("key"))
-    checkAnswer(
-      left.join(right, left("key") === right("key")),
-      Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
-  }
-
   test("broadcast join hint") {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
