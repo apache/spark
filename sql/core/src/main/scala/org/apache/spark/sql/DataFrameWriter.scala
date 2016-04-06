@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -72,6 +74,35 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
         "Accepted modes are 'overwrite', 'append', 'ignore', 'error'.")
     }
+    this
+  }
+
+  /**
+   * :: Experimental ::
+   * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will run
+   * the query as fast as possible.
+   *
+   * Scala Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime("10 seconds"))
+   *
+   *   import scala.concurrent.duration._
+   *   def.writer.trigger(ProcessingTime(10.seconds))
+   * }}}
+   *
+   * Java Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime.create("10 seconds"))
+   *
+   *   import java.util.concurrent.TimeUnit
+   *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def trigger(trigger: Trigger): DataFrameWriter = {
+    this.trigger = trigger
     this
   }
 
@@ -251,8 +282,16 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         options = extraOptions.toMap,
         partitionColumns = normalizedParCols.getOrElse(Nil))
 
+    val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
+    val checkpointLocation = extraOptions.getOrElse("checkpointLocation", {
+      new Path(df.sqlContext.conf.checkpointLocation, queryName).toUri.toString
+    })
     df.sqlContext.sessionState.continuousQueryManager.startQuery(
-      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, dataSource.createSink())
+      queryName,
+      checkpointLocation,
+      df,
+      dataSource.createSink(),
+      trigger)
   }
 
   /**
@@ -542,6 +581,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private var source: String = df.sqlContext.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
+
+  private var trigger: Trigger = ProcessingTime(0L)
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 

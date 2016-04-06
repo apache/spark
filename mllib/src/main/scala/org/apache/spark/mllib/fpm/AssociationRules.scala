@@ -50,7 +50,8 @@ class AssociationRules private[fpm] (
    */
   @Since("1.5.0")
   def setMinConfidence(minConfidence: Double): this.type = {
-    require(minConfidence >= 0.0 && minConfidence <= 1.0)
+    require(minConfidence >= 0.0 && minConfidence <= 1.0,
+      s"Minimal confidence must be in range [0, 1] but got ${minConfidence}")
     this.minConfidence = minConfidence
     this
   }

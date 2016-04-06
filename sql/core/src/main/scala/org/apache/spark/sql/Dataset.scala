@@ -20,10 +20,13 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonFactory
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
@@ -39,11 +42,12 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
-import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.execution.streaming.{StreamingExecutionRelation, StreamingRelation}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -53,7 +57,7 @@ private[sql] object Dataset {
     new Dataset(sqlContext, logicalPlan, implicitly[Encoder[T]])
   }
 
-  def newDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
+  def ofRows(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sqlContext.executePlan(logicalPlan)
     qe.assertAnalyzed()
     new Dataset[Row](sqlContext, logicalPlan, RowEncoder(qe.analyzed.schema))
@@ -150,10 +154,10 @@ private[sql] object Dataset {
  * @since 1.6.0
  */
 class Dataset[T] private[sql](
-    @transient override val sqlContext: SQLContext,
-    @DeveloperApi @transient override val queryExecution: QueryExecution,
+    @transient val sqlContext: SQLContext,
+    @DeveloperApi @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
-  extends Queryable with Serializable {
+  extends Serializable {
 
   queryExecution.assertAnalyzed()
 
@@ -224,7 +228,7 @@ class Dataset[T] private[sql](
    * @param _numRows Number of rows to show
    * @param truncate Whether truncate long strings and align cells right
    */
-  override private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
     val takeResult = take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
@@ -249,7 +253,75 @@ class Dataset[T] private[sql](
       }: Seq[String]
     }
 
-    formatString ( rows, numRows, hasMoreData, truncate )
+    val sb = new StringBuilder
+    val numCols = schema.fieldNames.length
+
+    // Initialise the width of each column to a minimum value of '3'
+    val colWidths = Array.fill(numCols)(3)
+
+    // Compute the width of each column
+    for (row <- rows) {
+      for ((cell, i) <- row.zipWithIndex) {
+        colWidths(i) = math.max(colWidths(i), cell.length)
+      }
+    }
+
+    // Create SeparateLine
+    val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+
+    // column names
+    rows.head.zipWithIndex.map { case (cell, i) =>
+      if (truncate) {
+        StringUtils.leftPad(cell, colWidths(i))
+      } else {
+        StringUtils.rightPad(cell, colWidths(i))
+      }
+    }.addString(sb, "|", "|", "|\n")
+
+    sb.append(sep)
+
+    // data
+    rows.tail.map {
+      _.zipWithIndex.map { case (cell, i) =>
+        if (truncate) {
+          StringUtils.leftPad(cell.toString, colWidths(i))
+        } else {
+          StringUtils.rightPad(cell.toString, colWidths(i))
+        }
+      }.addString(sb, "|", "|", "|\n")
+    }
+
+    sb.append(sep)
+
+    // For Data that has more than "numRows" records
+    if (hasMoreData) {
+      val rowsString = if (numRows == 1) "row" else "rows"
+      sb.append(s"only showing top $numRows $rowsString\n")
+    }
+
+    sb.toString()
+  }
+
+  override def toString: String = {
+    try {
+      val builder = new StringBuilder
+      val fields = schema.take(2).map {
+        case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+      }
+      builder.append("[")
+      builder.append(fields.mkString(", "))
+      if (schema.length > 2) {
+        if (schema.length - fields.size == 1) {
+          builder.append(" ... 1 more field")
+        } else {
+          builder.append(" ... " + (schema.length - 2) + " more fields")
+        }
+      }
+      builder.append("]").toString()
+    } catch {
+      case NonFatal(e) =>
+        s"Invalid tree; ${e.getMessage}:\n$queryExecution"
+    }
   }
 
   /**
@@ -325,7 +397,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   // scalastyle:off println
-  override def printSchema(): Unit = println(schema.treeString)
+  def printSchema(): Unit = println(schema.treeString)
   // scalastyle:on println
 
   /**
@@ -334,7 +406,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  override def explain(extended: Boolean): Unit = {
+  def explain(extended: Boolean): Unit = {
     val explain = ExplainCommand(queryExecution.logical, extended = extended)
     sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
       // scalastyle:off println
@@ -349,7 +421,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  override def explain(): Unit = explain(extended = false)
+  def explain(): Unit = explain(extended = false)
 
   /**
    * Returns all column names and their data types as an array.
@@ -377,6 +449,22 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+
+  /**
+   * Returns true if this [[Dataset]] contains one or more sources that continuously
+   * return data as it arrives. A [[Dataset]] that reads data from a streaming source
+   * must be executed as a [[ContinuousQuery]] using the `startStream()` method in
+   * [[DataFrameWriter]].  Methods that return a single answer, (e.g., `count()` or
+   * `collect()`) will throw an [[AnalysisException]] when there is a streaming
+   * source present.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  @Experimental
+  def isStreaming: Boolean = logicalPlan.find { n =>
+      n.isInstanceOf[StreamingRelation] || n.isInstanceOf[StreamingExecutionRelation]
+    }.isDefined
 
   /**
    * Displays the [[Dataset]] in a tabular form. Strings more than 20 characters will be truncated,
@@ -1180,32 +1268,6 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given [[Column]]
-   * expressions.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  @Experimental
-  @scala.annotation.varargs
-  def groupByKey(cols: Column*): KeyValueGroupedDataset[Row, T] = {
-    val withKeyColumns = logicalPlan.output ++ cols.map(_.expr).map(UnresolvedAlias(_))
-    val withKey = Project(withKeyColumns, logicalPlan)
-    val executed = sqlContext.executePlan(withKey)
-
-    val dataAttributes = executed.analyzed.output.dropRight(cols.size)
-    val keyAttributes = executed.analyzed.output.takeRight(cols.size)
-
-    new KeyValueGroupedDataset(
-      RowEncoder(keyAttributes.toStructType),
-      encoderFor[T],
-      executed,
-      dataAttributes,
-      keyAttributes)
-  }
-
-  /**
-   * :: Experimental ::
    * (Java-specific)
    * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
    *
@@ -1350,20 +1412,24 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def unionAll(other: Dataset[T]): Dataset[T] = withTypedPlan {
-    // This breaks caching, but it's usually ok because it addresses a very specific use case:
-    // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, other.logicalPlan))
-  }
+  @deprecated("use union()", "2.0.0")
+  def unionAll(other: Dataset[T]): Dataset[T] = union(other)
 
   /**
    * Returns a new [[Dataset]] containing union of rows in this Dataset and another Dataset.
    * This is equivalent to `UNION ALL` in SQL.
    *
+   * To do a SQL-style set union (that does deduplication of elements), use this function followed
+   * by a [[distinct]].
+   *
    * @group typedrel
    * @since 2.0.0
    */
-  def union(other: Dataset[T]): Dataset[T] = unionAll(other)
+  def union(other: Dataset[T]): Dataset[T] = withTypedPlan {
+    // This breaks caching, but it's usually ok because it addresses a very specific use case:
+    // using union to union many files or partitions.
+    CombineUnions(Union(logicalPlan, other.logicalPlan))
+  }
 
   /**
    * Returns a new [[Dataset]] containing rows only in both this Dataset and another Dataset.
@@ -1392,18 +1458,6 @@ class Dataset[T] private[sql](
   def except(other: Dataset[T]): Dataset[T] = withTypedPlan {
     Except(logicalPlan, other.logicalPlan)
   }
-
-  /**
-   * Returns a new [[Dataset]] containing rows in this Dataset but not in another Dataset.
-   * This is equivalent to `EXCEPT` in SQL.
-   *
-   * Note that, equality checking is performed directly on the encoded representation of the data
-   * and thus is not affected by a custom `equals` function defined on `T`.
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  def subtract(other: Dataset[T]): Dataset[T] = except(other)
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows.
@@ -1756,7 +1810,7 @@ class Dataset[T] private[sql](
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
 
-      val row = agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
+      val row = groupBy().agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
 
       // Pivot the data so each summary is one row
       row.grouped(outputCols.size).toSeq.zip(statistics).map { case (aggregation, (statistic, _)) =>
@@ -2021,6 +2075,24 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Return an iterator that contains all of [[Row]]s in this [[Dataset]].
+   *
+   * The iterator will consume as much memory as the largest partition in this [[Dataset]].
+   *
+   * Note: this results in multiple Spark jobs, and if the input Dataset is the result
+   * of a wide transformation (e.g. join with different partitioners), to avoid
+   * recomputing the input Dataset should be cached first.
+   *
+   * @group action
+   * @since 2.0.0
+   */
+  def toLocalIterator(): java.util.Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
+    withNewExecutionId {
+      queryExecution.executedPlan.executeToIterator().map(boundTEncoder.fromRow).asJava
+    }
+  }
+
+  /**
    * Returns the number of rows in the [[Dataset]].
    * @group action
    * @since 1.6.0
@@ -2041,7 +2113,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new [[Dataset]] partitioned by the given partitioning expressions into
-   * `numPartitions`. The resulting Datasetis hash partitioned.
+   * `numPartitions`. The resulting Dataset is hash partitioned.
    *
    * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
    *
@@ -2196,14 +2268,12 @@ class Dataset[T] private[sql](
   def write: DataFrameWriter = new DataFrameWriter(toDF())
 
   /**
-   * Returns the content of the [[Dataset]] as a [[Dataset]] of JSON strings.
-   *
-   * @group basic
-   * @since 1.6.0
+   * Returns the content of the [[Dataset]] as a Dataset of JSON strings.
+   * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
-    val rdd = queryExecution.toRdd.mapPartitions { iter =>
+    val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
@@ -2225,8 +2295,8 @@ class Dataset[T] private[sql](
         }
       }
     }
-    import sqlContext.implicits._
-    rdd.toDS
+    import sqlContext.implicits.newStringEncoder
+    sqlContext.createDataset(rdd)
   }
 
   /**
@@ -2263,6 +2333,12 @@ class Dataset[T] private[sql](
   protected[sql] def collectToPython(): Int = {
     withNewExecutionId {
       PythonRDD.collectAndServe(javaToPython.rdd)
+    }
+  }
+
+  protected[sql] def toPythonIterator(): Int = {
+    withNewExecutionId {
+      PythonRDD.toLocalIteratorAndServe(javaToPython.rdd)
     }
   }
 
@@ -2332,7 +2408,7 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
   @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
-    Dataset.newDataFrame(sqlContext, logicalPlan)
+    Dataset.ofRows(sqlContext, logicalPlan)
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */

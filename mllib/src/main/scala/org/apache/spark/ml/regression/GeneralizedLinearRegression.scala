@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
  * Params for Generalized Linear Regression.
@@ -47,6 +47,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * to be used in the model.
    * Supported options: "gaussian", "binomial", "poisson" and "gamma".
    * Default is "gaussian".
+   *
    * @group param
    */
   @Since("2.0.0")
@@ -63,6 +64,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Param for the name of link function which provides the relationship
    * between the linear predictor and the mean of the distribution function.
    * Supported options: "identity", "log", "inverse", "logit", "probit", "cloglog" and "sqrt".
+   *
    * @group param
    */
   @Since("2.0.0")
@@ -210,9 +212,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     }
 
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
-      .map { case Row(label: Double, weight: Double, features: Vector) =>
-        Instance(label, weight, features)
+    val instances: RDD[Instance] =
+      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+        case Row(label: Double, weight: Double, features: Vector) =>
+          Instance(label, weight, features)
       }
 
     if (familyObj == Gaussian && linkObj == Identity) {
@@ -698,7 +701,7 @@ class GeneralizedLinearRegressionModel private[ml] (
     : (GeneralizedLinearRegressionModel, String) = {
     $(predictionCol) match {
       case "" =>
-        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString
         (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
       case p => (this, p)
     }

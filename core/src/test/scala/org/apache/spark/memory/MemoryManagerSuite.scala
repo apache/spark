@@ -71,24 +71,25 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
    */
   protected def makeMemoryStore(mm: MemoryManager): MemoryStore = {
     val ms = mock(classOf[MemoryStore], RETURNS_SMART_NULLS)
-    when(ms.evictBlocksToFreeSpace(any(), anyLong())).thenAnswer(evictBlocksToFreeSpaceAnswer(mm))
+    when(ms.evictBlocksToFreeSpace(any(), anyLong(), any()))
+      .thenAnswer(evictBlocksToFreeSpaceAnswer(mm))
     mm.setMemoryStore(ms)
     ms
   }
 
   /**
-    * Simulate the part of [[MemoryStore.evictBlocksToFreeSpace]] that releases storage memory.
-    *
-    * This is a significant simplification of the real method, which actually drops existing
-    * blocks based on the size of each block. Instead, here we simply release as many bytes
-    * as needed to ensure the requested amount of free space. This allows us to set up the
-    * test without relying on the [[org.apache.spark.storage.BlockManager]], which brings in
-    * many other dependencies.
-    *
-    * Every call to this method will set a global variable, [[evictBlocksToFreeSpaceCalled]], that
-    * records the number of bytes this is called with. This variable is expected to be cleared
-    * by the test code later through [[assertEvictBlocksToFreeSpaceCalled]].
-    */
+   * Simulate the part of [[MemoryStore.evictBlocksToFreeSpace]] that releases storage memory.
+   *
+   * This is a significant simplification of the real method, which actually drops existing
+   * blocks based on the size of each block. Instead, here we simply release as many bytes
+   * as needed to ensure the requested amount of free space. This allows us to set up the
+   * test without relying on the [[org.apache.spark.storage.BlockManager]], which brings in
+   * many other dependencies.
+   *
+   * Every call to this method will set a global variable, [[evictBlocksToFreeSpaceCalled]], that
+   * records the number of bytes this is called with. This variable is expected to be cleared
+   * by the test code later through [[assertEvictBlocksToFreeSpaceCalled]].
+   */
   private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Long] = {
     new Answer[Long] {
       override def answer(invocation: InvocationOnMock): Long = {
@@ -100,7 +101,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
         evictBlocksToFreeSpaceCalled.set(numBytesToFree)
         if (numBytesToFree <= mm.storageMemoryUsed) {
           // We can evict enough blocks to fulfill the request for space
-          mm.releaseStorageMemory(numBytesToFree)
+          mm.releaseStorageMemory(numBytesToFree, MemoryMode.ON_HEAP)
           evictedBlocks.append(
             (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L)))
           numBytesToFree

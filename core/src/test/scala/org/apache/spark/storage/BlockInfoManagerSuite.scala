@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.implicitConversions
+import scala.reflect.ClassTag
 
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
@@ -52,7 +53,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   private def newBlockInfo(): BlockInfo = {
-    new BlockInfo(StorageLevel.MEMORY_ONLY, tellMaster = false)
+    new BlockInfo(StorageLevel.MEMORY_ONLY, ClassTag.Any, tellMaster = false)
   }
 
   private def withTaskId[T](taskAttemptId: Long)(block: => T): T = {

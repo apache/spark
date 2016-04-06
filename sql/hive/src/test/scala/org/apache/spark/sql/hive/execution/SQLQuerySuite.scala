@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
@@ -67,22 +68,43 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext.implicits._
 
   test("UDTF") {
-    sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
-    // The function source code can be found at:
-    // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
-    sql(
-      """
-        |CREATE TEMPORARY FUNCTION udtf_count2
-        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-      """.stripMargin)
+    withUserDefinedFunction("udtf_count2" -> true) {
+      sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+      // The function source code can be found at:
+      // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
+      sql(
+        """
+          |CREATE TEMPORARY FUNCTION udtf_count2
+          |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+        """.stripMargin)
 
-    checkAnswer(
-      sql("SELECT key, cc FROM src LATERAL VIEW udtf_count2(value) dd AS cc"),
-      Row(97, 500) :: Row(97, 500) :: Nil)
+      checkAnswer(
+        sql("SELECT key, cc FROM src LATERAL VIEW udtf_count2(value) dd AS cc"),
+        Row(97, 500) :: Row(97, 500) :: Nil)
 
-    checkAnswer(
-      sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
-      Row(3) :: Row(3) :: Nil)
+      checkAnswer(
+        sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+        Row(3) :: Row(3) :: Nil)
+    }
+  }
+
+  test("permanent UDTF") {
+    withUserDefinedFunction("udtf_count_temp" -> false) {
+      sql(
+        s"""
+          |CREATE FUNCTION udtf_count_temp
+          |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+          |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+        """.stripMargin)
+
+      checkAnswer(
+        sql("SELECT key, cc FROM src LATERAL VIEW udtf_count_temp(value) dd AS cc"),
+        Row(97, 500) :: Row(97, 500) :: Nil)
+
+      checkAnswer(
+        sql("SELECT udtf_count_temp(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+        Row(3) :: Row(3) :: Nil)
+    }
   }
 
   test("SPARK-6835: udtf in lateral view") {
@@ -169,9 +191,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("show functions") {
-    val allBuiltinFunctions =
-      (FunctionRegistry.builtin.listFunction().toSet[String] ++
-        org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames.asScala).toList.sorted
+    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().toSet[String].toList.sorted
     // The TestContext is shared by all the test cases, some functions may be registered before
     // this, so we check that all the builtin functions are returned.
     val allFunctions = sql("SHOW functions").collect().map(r => r(0))
@@ -183,11 +203,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    checkAnswer(sql("SHOW functions `~`"), Row("~"))
+    // TODO: Re-enable this test after we fix SPARK-14335.
+    // checkAnswer(sql("SHOW functions `~`"), Row("~"))
     checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
-    checkAnswer(sql("SHOW functions `weekofyea.*`"), Row("weekofyear"))
+    checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
     // this probably will failed if we add more function with `sha` prefixing.
-    checkAnswer(sql("SHOW functions `sha.*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+    checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+    // Test '|' for alternation.
+    checkAnswer(
+      sql("SHOW functions 'sha*|weekofyea*'"),
+      Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
   }
 
   test("describe functions") {
@@ -211,10 +236,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkExistence(sql("describe functioN abcadf"), true,
       "Function: abcadf not found.")
 
-    checkExistence(sql("describe functioN  `~`"), true,
-      "Function: ~",
-      "Class: org.apache.hadoop.hive.ql.udf.UDFOPBitNot",
-      "Usage: ~ n - Bitwise not")
+    // TODO: Re-enable this test after we fix SPARK-14335.
+    // checkExistence(sql("describe functioN  `~`"), true,
+    //  "Function: ~",
+    //  "Class: org.apache.hadoop.hive.ql.udf.UDFOPBitNot",
+    //  "Usage: ~ n - Bitwise not")
   }
 
   test("SPARK-5371: union with null and sum") {
@@ -729,7 +755,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-5203 union with different decimal precision") {
-    Seq.empty[(Decimal, Decimal)]
+    Seq.empty[(java.math.BigDecimal, java.math.BigDecimal)]
       .toDF("d1", "d2")
       .select($"d1".cast(DecimalType(10, 5)).as("d"))
       .registerTempTable("dn")
@@ -738,20 +764,24 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .queryExecution.analyzed
   }
 
+  test("Star Expansion - script transform") {
+    val data = (1 to 100000).map { i => (i, i, i) }
+    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    assert(100000 === sql("SELECT TRANSFORM (*) USING 'cat' FROM script_trans").count())
+  }
+
   test("test script transform for stdout") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
     assert(100000 ===
-      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans")
-        .queryExecution.toRdd.count())
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans").count())
   }
 
   test("test script transform for stderr") {
     val data = (1 to 100000).map { i => (i, i, i) }
     data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
     assert(0 ===
-      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans")
-        .queryExecution.toRdd.count())
+      sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans").count())
   }
 
   test("test script transform data type") {
@@ -1321,6 +1351,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         .format("parquet")
         .save(path)
 
+      // We don't support creating a temporary table while specifying a database
       val message = intercept[AnalysisException] {
         sqlContext.sql(
           s"""
@@ -1331,9 +1362,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |)
         """.stripMargin)
       }.getMessage
-      assert(message.contains("Specifying database name or other qualifiers are not allowed"))
 
-      // If you use backticks to quote the name of a temporary table having dot in it.
+      // If you use backticks to quote the name then it's OK.
       sqlContext.sql(
         s"""
           |CREATE TEMPORARY TABLE `db.t`
@@ -1720,6 +1750,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withTable("tbl10562") {
       val df = Seq(2012 -> "a").toDF("Year", "val")
       df.write.partitionBy("Year").saveAsTable("tbl10562")
+      checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
       checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
       checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
       checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)

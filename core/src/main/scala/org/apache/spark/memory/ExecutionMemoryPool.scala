@@ -37,12 +37,17 @@ import org.apache.spark.internal.Logging
  * tasks was performed by the ShuffleMemoryManager.
  *
  * @param lock a [[MemoryManager]] instance to synchronize on
- * @param poolName a human-readable name for this pool, for use in log messages
+ * @param memoryMode the type of memory tracked by this pool (on- or off-heap)
  */
 private[memory] class ExecutionMemoryPool(
     lock: Object,
-    poolName: String
+    memoryMode: MemoryMode
   ) extends MemoryPool(lock) with Logging {
+
+  private[this] val poolName: String = memoryMode match {
+    case MemoryMode.ON_HEAP => "on-heap execution"
+    case MemoryMode.OFF_HEAP => "off-heap execution"
+  }
 
   /**
    * Map from taskAttemptId -> memory consumption in bytes

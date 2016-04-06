@@ -109,7 +109,7 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public boolean getIsNull(int rowId) {
+  public boolean isNullAt(int rowId) {
     return Platform.getByte(null, nulls + rowId) == 1;
   }
 
@@ -407,7 +407,7 @@ public final class OffHeapColumnVector extends ColumnVector {
         type instanceof DateType || DecimalType.is32BitDecimalType(type)) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 4, newCapacity * 4);
     } else if (type instanceof LongType || type instanceof DoubleType ||
-        DecimalType.is64BitDecimalType(type)) {
+        DecimalType.is64BitDecimalType(type) || type instanceof TimestampType) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 8, newCapacity * 8);
     } else if (resultStruct != null) {
       // Nothing to store.

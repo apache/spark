@@ -98,7 +98,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public boolean getIsNull(int rowId) {
+  public boolean isNullAt(int rowId) {
     return nulls[rowId] == 1;
   }
 
@@ -212,7 +212,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
     for (int i = 0; i < count; ++i) {
-      intData[i + rowId] = Platform.getInt(src, srcOffset);;
+      intData[i + rowId] = Platform.getInt(src, srcOffset);
       srcIndex += 4;
       srcOffset += 4;
     }
@@ -403,7 +403,8 @@ public final class OnHeapColumnVector extends ColumnVector {
       int[] newData = new int[newCapacity];
       if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
       intData = newData;
-    } else if (type instanceof LongType || DecimalType.is64BitDecimalType(type)) {
+    } else if (type instanceof LongType || type instanceof TimestampType ||
+        DecimalType.is64BitDecimalType(type)) {
       long[] newData = new long[newCapacity];
       if (longData != null) System.arraycopy(longData, 0, newData, 0, elementsAppended);
       longData = newData;

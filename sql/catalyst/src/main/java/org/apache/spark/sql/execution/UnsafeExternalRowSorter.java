@@ -67,6 +67,7 @@ public final class UnsafeExternalRowSorter {
     sorter = UnsafeExternalSorter.create(
       taskContext.taskMemoryManager(),
       sparkEnv.blockManager(),
+      sparkEnv.serializerManager(),
       taskContext,
       new RowComparator(ordering, schema.length()),
       prefixComparator,
@@ -150,7 +151,7 @@ public final class UnsafeExternalRowSorter {
             Platform.throwException(e);
           }
           throw new RuntimeException("Exception should have been re-thrown in next()");
-        };
+        }
       };
     } catch (IOException e) {
       cleanupResources();
