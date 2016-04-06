@@ -201,8 +201,13 @@ class TestHiveContext private[hive](
     }
 
     override lazy val functionRegistry = {
-      new TestHiveFunctionRegistry(
-        org.apache.spark.sql.catalyst.analysis.FunctionRegistry.builtin.copy(), self.executionHive)
+      // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
+      // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
+      val fr = new TestHiveFunctionRegistry
+      org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
+        case (name, (info, builder)) => fr.registerFunction(name, info, builder)
+      }
+      fr
     }
   }
 
@@ -528,19 +533,18 @@ class TestHiveContext private[hive](
 
 }
 
-private[hive] class TestHiveFunctionRegistry(fr: SimpleFunctionRegistry, client: HiveClientImpl)
-  extends HiveFunctionRegistry(fr, client) {
+private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
 
   private val removedFunctions =
     collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
 
   def unregisterFunction(name: String): Unit = {
-    fr.functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
+    functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
   }
 
   def restore(): Unit = {
     removedFunctions.foreach {
-      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
+      case (name, (info, builder)) => registerFunction(name, info, builder)
     }
   }
 }

@@ -43,9 +43,9 @@ import org.apache.spark.util.UninterruptibleThread
  * and the results are committed transactionally to the given [[Sink]].
  */
 class StreamExecution(
-    val sqlContext: SQLContext,
+    override val sqlContext: SQLContext,
     override val name: String,
-    val checkpointRoot: String,
+    checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink,
     val trigger: Trigger) extends ContinuousQuery with Logging {
@@ -72,7 +72,7 @@ class StreamExecution(
 
   /** All stream sources present the query plan. */
   private val sources =
-    logicalPlan.collect { case s: StreamingRelation => s.source }
+    logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
 
   /** A list of unique sources in the query plan. */
   private val uniqueSources = sources.distinct
@@ -295,7 +295,7 @@ class StreamExecution(
     var replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
-      case StreamingRelation(source, output) =>
+      case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { data =>
           val newPlan = data.logicalPlan
           assert(output.size == newPlan.output.size,
