@@ -29,7 +29,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 /**
- * A stress test for streamign queries that read and write files.  This test constists of
+ * A stress test for streaming queries that read and write files.  This test consists of
  * two threads:
  *  - one that writes out `numRecords` distinct integers to files of random sizes (the total
  *    number of records is fixed but each files size / creation time is random).

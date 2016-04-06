@@ -43,19 +43,17 @@ import org.apache.spark.util.UninterruptibleThread
  * and the results are committed transactionally to the given [[Sink]].
  */
 class StreamExecution(
-    val sqlContext: SQLContext,
+    override val sqlContext: SQLContext,
     override val name: String,
-    val checkpointRoot: String,
+    checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
-    val sink: Sink) extends ContinuousQuery with Logging {
+    val sink: Sink,
+    val trigger: Trigger) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
   private val awaitBatchLock = new Object
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
-
-  /** Minimum amount of time in between the start of each batch. */
-  private val minBatchTime = 10
 
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
@@ -74,10 +72,14 @@ class StreamExecution(
 
   /** All stream sources present the query plan. */
   private val sources =
-    logicalPlan.collect { case s: StreamingRelation => s.source }
+    logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
 
   /** A list of unique sources in the query plan. */
   private val uniqueSources = sources.distinct
+
+  private val triggerExecutor = trigger match {
+    case t: ProcessingTime => ProcessingTimeExecutor(t)
+  }
 
   /** Defines the internal state of execution */
   @volatile
@@ -154,11 +156,15 @@ class StreamExecution(
       SQLContext.setActive(sqlContext)
       populateStartOffsets()
       logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-      while (isActive) {
-        if (dataAvailable) runBatch()
-        commitAndConstructNextBatch()
-        Thread.sleep(minBatchTime) // TODO: Could be tighter
-      }
+      triggerExecutor.execute(() => {
+        if (isActive) {
+          if (dataAvailable) runBatch()
+          commitAndConstructNextBatch()
+          true
+        } else {
+          false
+        }
+      })
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
       case NonFatal(e) =>
@@ -289,7 +295,7 @@ class StreamExecution(
     var replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
-      case StreamingRelation(source, output) =>
+      case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { data =>
           val newPlan = data.logicalPlan
           assert(output.size == newPlan.output.size,

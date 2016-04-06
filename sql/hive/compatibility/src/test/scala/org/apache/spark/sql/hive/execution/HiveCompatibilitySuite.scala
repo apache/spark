@@ -360,10 +360,19 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "show_create_table_serde",
     "show_create_table_view",
 
+    // These tests try to change how a table is bucketed, which we don't support
+    "alter4",
+    "sort_merge_join_desc_5",
+    "sort_merge_join_desc_6",
+    "sort_merge_join_desc_7",
+
     // Index commands are not supported
     "drop_index",
     "drop_index_removes_partition_dirs",
-    "alter_index"
+    "alter_index",
+
+    // Macro commands are not supported
+    "macro"
   )
 
   /**
@@ -378,7 +387,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alias_casted_column",
     "alter2",
     "alter3",
-    "alter4",
     "alter5",
     "alter_merge_2",
     "alter_partition_format_loc",
@@ -733,7 +741,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_file_with_space_in_the_name",
     "loadpart1",
     "louter_join_ppr",
-    "macro",
     "mapjoin_distinct",
     "mapjoin_filter_on_outerjoin",
     "mapjoin_mapjoin",
@@ -878,9 +885,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "sort_merge_join_desc_2",
     "sort_merge_join_desc_3",
     "sort_merge_join_desc_4",
-    "sort_merge_join_desc_5",
-    "sort_merge_join_desc_6",
-    "sort_merge_join_desc_7",
     "stats0",
     "stats_aggregator_error_1",
     "stats_empty_partition",

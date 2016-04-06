@@ -105,10 +105,10 @@ abstract class QueryTest extends PlanTest {
       val expected = expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted
       val actual = decoded.toSet.toSeq.map((a: Any) => a.toString).sorted
 
-      val comparision = sideBySide("expected" +: expected, "spark" +: actual).mkString("\n")
+      val comparison = sideBySide("expected" +: expected, "spark" +: actual).mkString("\n")
       fail(
         s"""Decoded objects do not match expected objects:
-            |$comparision
+            |$comparison
             |${ds.resolvedTEncoder.deserializer.treeString}
          """.stripMargin)
     }
