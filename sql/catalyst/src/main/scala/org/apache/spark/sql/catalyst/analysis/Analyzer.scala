@@ -1599,6 +1599,8 @@ object CleanupAliases extends Rule[LogicalPlan] {
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.
     case o: ObjectOperator => o
+    case d: DeserializeToObject => d
+    case s: SerializeFromObject => s
 
     case other =>
       var stop = false

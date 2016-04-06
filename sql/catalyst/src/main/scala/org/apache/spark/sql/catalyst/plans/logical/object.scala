@@ -21,7 +21,34 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{ObjectType, StructType}
+import org.apache.spark.sql.types.{DataType, ObjectType, StructType}
+
+object CatalystSerde {
+  def deserialize[T : Encoder](child: LogicalPlan): DeserializeToObject = {
+    val deserializer = UnresolvedDeserializer(encoderFor[T].deserializer)
+    DeserializeToObject(Alias(deserializer, "obj")(), child)
+  }
+
+  def serialize[T : Encoder](child: LogicalPlan): SerializeFromObject = {
+    SerializeFromObject(encoderFor[T].namedExpressions, child)
+  }
+}
+
+case class DeserializeToObject(
+    deserializer: Alias,
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = deserializer.toAttribute :: Nil
+
+  def outputObjectType: DataType = deserializer.dataType
+}
+
+case class SerializeFromObject(
+    serializer: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+
+  def inputObjectType: DataType = child.output.head.dataType
+}
 
 /**
  * A trait for logical operators that apply user defined functions to domain objects.

@@ -27,6 +27,69 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.ObjectType
 
+case class DeserializeToObject(
+    deserializer: Alias,
+    child: SparkPlan) extends UnaryNode with CodegenSupport {
+  override def output: Seq[Attribute] = deserializer.toAttribute :: Nil
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val bound = ExpressionCanonicalizer.execute(
+      BindReferences.bindReference(deserializer, child.output))
+    ctx.currentVars = input
+    val resultVars = bound.gen(ctx) :: Nil
+    s"""
+      ${consume(ctx, resultVars)}
+    """
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val projection = GenerateSafeProjection.generate(deserializer :: Nil, child.output)
+      iter.map(projection)
+    }
+  }
+}
+
+case class SerializeFromObject(
+    serializer: Seq[NamedExpression],
+    child: SparkPlan) extends UnaryNode with CodegenSupport {
+  override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val bound = serializer.map { expr =>
+      ExpressionCanonicalizer.execute(BindReferences.bindReference(expr, child.output))
+    }
+    ctx.currentVars = input
+    val resultVars = bound.map(_.gen(ctx))
+    s"""
+      ${consume(ctx, resultVars)}
+    """
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val projection = UnsafeProjection.create(serializer)
+      iter.map(projection)
+    }
+  }
+}
+
 /**
  * Helper functions for physical operators that work with user defined objects.
  */
