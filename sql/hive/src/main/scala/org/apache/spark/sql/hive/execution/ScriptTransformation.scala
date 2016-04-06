@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.execution
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
@@ -261,11 +260,10 @@ private class ScriptTransformationWriterThread(
 
   setDaemon(true)
 
-  private val _exception = new AtomicReference[Throwable](null)
+  @volatile private var _exception: Throwable = null
 
   /** Contains the exception thrown while writing the parent iterator to the external process. */
-  def exception: Option[Throwable] =
-    if (_exception.get() == null) None else Option(_exception.get())
+  def exception: Option[Throwable] = Option(_exception)
 
   override def run(): Unit = Utils.logUncaughtExceptions {
     TaskContext.setTaskContext(taskContext)
@@ -312,7 +310,7 @@ private class ScriptTransformationWriterThread(
       case NonFatal(e) =>
         // An error occurred while writing input, so kill the child process. According to the
         // Javadoc this call will not throw an exception:
-        _exception.set(e)
+        _exception = e
         proc.destroy()
         throw e
     } finally {
