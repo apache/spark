@@ -334,8 +334,7 @@ object CheckpointReader extends Logging {
       ignoreReadError: Boolean = false): Option[Checkpoint] = {
     val checkpointPath = new Path(checkpointDir)
 
-    // TODO(rxin): Why is this a def?!
-    def fs: FileSystem = checkpointPath.getFileSystem(hadoopConf)
+    val fs = checkpointPath.getFileSystem(hadoopConf)
 
     // Try to find the checkpoint files
     val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).reverse

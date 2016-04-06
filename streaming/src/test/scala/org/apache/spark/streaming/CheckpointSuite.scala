@@ -228,6 +228,11 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     }
   }
 
+  test("non-existent checkpoint dir") {
+    // SPARK-13211
+    intercept[IllegalArgumentException](new StreamingContext("nosuchdirectory"))
+  }
+
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
 
     assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
