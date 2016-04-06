@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
-
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -78,6 +76,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
+  private def appendTrailingSlash(path: String): String = {
+    if (!path.endsWith("/")) path + "/" else path
+  }
+
   test("Create/Drop Database") {
     val catalog = sqlContext.sessionState.catalog
 
@@ -92,7 +94,29 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db",
+          Map.empty))
+        sql(s"DROP DATABASE $dbName CASCADE")
+        assert(!catalog.databaseExists(dbNameWithoutBackTicks))
+      }
+    }
+  }
+
+  test("Create/Drop Database - location") {
+    val catalog = sqlContext.sessionState.catalog
+
+    val databaseNames = Seq("db1", "`database`")
+
+    databaseNames.foreach { dbName =>
+      try {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+
+        sql(s"CREATE DATABASE $dbName Location '${System.getProperty("java.io.tmpdir")}'")
+        val db1 = catalog.getDatabase(dbNameWithoutBackTicks)
+        assert(db1 == CatalogDatabase(
+          dbNameWithoutBackTicks,
+          "",
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db",
           Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))
@@ -114,7 +138,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db",
           Map.empty))
 
         val message = intercept[AnalysisException] {
@@ -135,7 +159,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       try {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         val location =
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db"
         sql(s"CREATE DATABASE $dbName")
 
         checkAnswer(

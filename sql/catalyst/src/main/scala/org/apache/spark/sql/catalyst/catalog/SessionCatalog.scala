@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import java.io.File
-
 import scala.collection.mutable
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
@@ -120,8 +120,9 @@ class SessionCatalog(
     currentDb = db
   }
 
-  def getDefaultDBPath(db: String): String = {
-    System.getProperty("java.io.tmpdir") + File.separator + db + ".db"
+  def getDatabasePath(dbName: String, path: Option[String]): String = {
+    val dbPath = path.getOrElse(System.getProperty("java.io.tmpdir"))
+    new Path(new Path(dbPath), dbName + ".db").toString
   }
 
   // ----------------------------------------------------------------------------
