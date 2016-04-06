@@ -249,7 +249,7 @@ class GaussianMixture @Since("2.0.0") (
     val parentModel = algo.run(rdd)
     val model = copyValues(new GaussianMixtureModel(uid, parentModel).setParent(this))
     val summary = new GaussianMixtureSummary(model.transform(dataset),
-      $(predictionCol), $(probabilityCol), $(featuresCol))
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
     model.setSummary(summary)
   }
 
@@ -269,6 +269,12 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
 /**
  * :: Experimental ::
  * Summary of GaussianMixture.
+ *
+ * @param predictions  [[DataFrame]] produced by [[GaussianMixtureModel.transform()]]
+ * @param predictionCol  Name for column of predicted clusters in `predictions`
+ * @param probabilityCol  Name for column of predicted probability of each cluster in `predictions`
+ * @param featuresCol  Name for column of features in `predictions`
+ * @param k  Number of clusters
  */
 @Since("2.0.0")
 @Experimental
@@ -276,7 +282,8 @@ class GaussianMixtureSummary private[clustering] (
     @Since("2.0.0") @transient val predictions: DataFrame,
     @Since("2.0.0") val predictionCol: String,
     @Since("2.0.0") val probabilityCol: String,
-    @Since("2.0.0") val featuresCol: String) extends Serializable {
+    @Since("2.0.0") val featuresCol: String,
+    @Since("2.0.0") val k: Int) extends Serializable {
 
   /**
    * Cluster centers of the transformed data.
@@ -291,16 +298,13 @@ class GaussianMixtureSummary private[clustering] (
   @transient lazy val probability: DataFrame = predictions.select(probabilityCol)
 
   /**
-   * Size of each cluster.
+   * Size of (number of data points in) each cluster.
    */
   @Since("2.0.0")
   lazy val clusterSizes: Array[Long] = {
-    val k = probability.head().getSeq[Double](0).size
     val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().map {
-      case Row(cluster: Int, count: Long) => cluster -> count
-    }.foreach {
-      case (i, size) => sizes(i) = size
+    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
+      case Row(cluster: Int, count: Long) => sizes(cluster) = count
     }
     sizes
   }
