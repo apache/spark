@@ -417,23 +417,37 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         .map { s => catalog.getPartition(tableIdent, s).storage }
         .getOrElse { catalog.getTable(tableIdent).storage }
       if (isDatasourceTable) {
-        assert(storageFormat.serdeProperties.get("path") === Some(expected))
+        if (spec.isDefined) {
+          assert(storageFormat.serdeProperties.isEmpty)
+          assert(storageFormat.locationUri.isEmpty)
+        } else {
+          assert(storageFormat.serdeProperties.get("path") === Some(expected))
+          assert(storageFormat.locationUri === Some(expected))
+        }
       } else {
         assert(storageFormat.locationUri === Some(expected))
       }
+    }
+    // Optionally expect AnalysisException
+    def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
+      if (expectException) intercept[AnalysisException] { body } else body
     }
     // set table location
     sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
     verifyLocation("/path/to/your/lovely/heart")
     // set table partition location
-    sql("ALTER TABLE dbx.tab1 PARTITION (a='1') SET LOCATION '/path/to/part/ways'")
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 PARTITION (a='1') SET LOCATION '/path/to/part/ways'")
+    }
     verifyLocation("/path/to/part/ways", Some(partSpec))
     // set table location without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
     verifyLocation("/swanky/steak/place")
     // set table partition location without explicitly specifying database
-    sql("ALTER TABLE tab1 PARTITION (a='1') SET LOCATION 'vienna'")
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 PARTITION (a='1') SET LOCATION 'vienna'")
+    }
     verifyLocation("vienna", Some(partSpec))
     // table to alter does not exist
     intercept[AnalysisException] {
