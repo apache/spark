@@ -425,6 +425,10 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     True
     >>> model.depth == model2.depth
     True
+    >>> isinstance(dt.setVarianceCol("varianceColTest"), DecisionTreeRegressor)
+    True
+    >>> dt.getVarianceCol() == "varianceColTest"
+    True
 
     .. versionadded:: 1.4.0
     """
