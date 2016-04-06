@@ -101,5 +101,5 @@ class FileScanRDD(
 }
 
 object FileScanRDD {
-  private val FILE_PARTITION_PREF_LOCS_FRAC = 0.2D
+  private val FILE_PARTITION_PREF_LOCS_FRAC = 0.1D
 }
