@@ -879,8 +879,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(aq, list))
         self.assertEqual(len(aq), 3)
         self.assertTrue(all(isinstance(q, float) for q in aq))
-
-        aqs = df.stat.approxQuantile(["a","b"], [0.1, 0.5, 0.9], 0.1)
+        aqs = df.stat.approxQuantile(["a", "b"], [0.1, 0.5, 0.9], 0.1)
         self.assertTrue(isinstance(aqs, list))
         self.assertEqual(len(aqs), 2)
         self.assertTrue(isinstance(aqs[0], list))
@@ -889,7 +888,6 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(aqs[1], list))
         self.assertEqual(len(aqs[1]), 3)
         self.assertTrue(all(isinstance(q, float) for q in aqs[1]))
-
 
     def test_corr(self):
         import math
