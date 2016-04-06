@@ -70,6 +70,14 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
     StatFunctions.multipleApproxQuantiles(df, Seq(col), probabilities, relativeError).head.toArray
   }
 
+  def approxQuantile(
+      cols: Array[String],
+      probabilities: Array[Double],
+      relativeError: Double): Array[Array[Double]] = {
+    StatFunctions.multipleApproxQuantiles(df, cols, probabilities, relativeError)
+      .map(_.toArray).toArray
+  }
+
   /**
    * Python-friendly version of [[approxQuantile()]]
    */
@@ -78,6 +86,14 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       probabilities: List[Double],
       relativeError: Double): java.util.List[Double] = {
     approxQuantile(col, probabilities.toArray, relativeError).toList.asJava
+  }
+
+  private[spark] def approxQuantile(
+      cols: List[String],
+      probabilities: List[Double],
+      relativeError: Double): java.util.List[java.util.List[Double]] = {
+    approxQuantile(cols.toArray, probabilities.toArray, relativeError)
+      .map(_.toList.asJava).toList.asJava
   }
 
   /**
