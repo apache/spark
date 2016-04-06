@@ -49,7 +49,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
     // There is 1 receiver, and exec 1 has been allocated to it
     withAllocationManager(numReceivers = 1) { case (receiverTracker, allocationManager) =>
-      when(receiverTracker.getAllocatedExecutors).thenReturn(Map(1 -> Some("1")))
+      when(receiverTracker.allocatedExecutors).thenReturn(Map(1 -> Some("1")))
 
       /** Add data point for batch processing time and verify executor allocation */
       def addBatchProcTimeAndVerifyAllocation(batchProcTimeMs: Double)(body: => Unit): Unit = {
@@ -197,7 +197,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
       reset(allocationClient)
       when(allocationClient.getExecutorIds()).thenReturn(execIds)
-      when(receiverTracker.getAllocatedExecutors).thenReturn(receiverExecIds)
+      when(receiverTracker.allocatedExecutors).thenReturn(receiverExecIds)
       killExecutor(allocationManager)
       if (expectedKilledExec.nonEmpty) {
         verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))

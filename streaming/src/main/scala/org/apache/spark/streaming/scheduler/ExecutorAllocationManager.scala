@@ -27,12 +27,22 @@ import org.apache.spark.util.{Clock, Utils}
 
 /**
  * Class that manages executor allocated to a StreamingContext, and dynamically request or kill
- * executors based on the statistics of the streaming computation. At a high level, the policy is:
+ * executors based on the statistics of the streaming computation. This is different from the core
+ * dynamic allocation policy; the core policy relies on executors being idle for a while, but the
+ * micro-batch model of streaming prevents any particular executors from being idle for a long
+ * time. Instead, the measure of "idle-ness" needs to be based on the time taken to process
+ * each batch.
+ *
+ * At a high level, the policy implemented by this class is as follows:
  * - Use StreamingListener interface get batch processing times of completed batches
  * - Periodically take the average batch completion times and compare with the batch interval
- * - If (avg. proc. time / batch interval) >= scaling up ratio, then request more executors
+ * - If (avg. proc. time / batch interval) >= scaling up ratio, then request more executors.
+ *   The number of executors requested is based on the ratio = (avg. proc. time / batch interval).
  * - If (avg. proc. time / batch interval) <= scaling down ratio, then try to kill a executor that
- *   is not running a receiver
+ *   is not running a receiver.
+ *
+ * This features should ideally be used in conjunction with backpressure, as backpressure ensures
+ * system stability, while executors are being readjusted.
  */
 private[streaming] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
@@ -71,6 +81,10 @@ private[streaming] class ExecutorAllocationManager(
     logInfo("ExecutorAllocationManager stopped")
   }
 
+  /**
+   * Manage executor allocation by requesting or killing executors based on the collected
+   * batch statistics.
+   */
   private def manageAllocation(): Unit = synchronized {
     logInfo(s"Managing executor allocation with ratios = [$scalingUpRatio, $scalingDownRatio]")
     if (batchProcTimeCount > 0) {
@@ -90,6 +104,7 @@ private[streaming] class ExecutorAllocationManager(
     batchProcTimeCount = 0
   }
 
+  /** Request the specified number of executors over the currently active one */
   private def requestExecutors(numNewExecutors: Int): Unit = {
     require(numNewExecutors >= 1)
     val allExecIds = client.getExecutorIds()
@@ -100,12 +115,13 @@ private[streaming] class ExecutorAllocationManager(
     logInfo(s"Requested total $targetTotalExecutors executors")
   }
 
+  /** Kill an executor that is not running any receiver, if possible */
   private def killExecutor(): Unit = {
     val allExecIds = client.getExecutorIds()
     logDebug(s"Executors (${allExecIds.size}) = ${allExecIds}")
 
     if (allExecIds.nonEmpty && allExecIds.size > minNumExecutors) {
-      val execIdsWithReceivers = receiverTracker.getAllocatedExecutors.values.flatten.toSeq
+      val execIdsWithReceivers = receiverTracker.allocatedExecutors.values.flatten.toSeq
       logInfo(s"Executors with receivers (${execIdsWithReceivers.size}): ${execIdsWithReceivers}")
 
       val removableExecIds = allExecIds.diff(execIdsWithReceivers)
@@ -190,7 +206,7 @@ private[streaming] object ExecutorAllocationManager extends Logging {
     val streamingDynamicAllocationEnabled = conf.getBoolean(ENABLED_KEY, false)
     if (numExecutor != 0 && streamingDynamicAllocationEnabled) {
       throw new IllegalArgumentException(
-        "Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+        "Dynamic Allocation for streaming cannot be enabled while spark.executor.instances is set.")
     }
     if (Utils.isDynamicAllocationEnabled(conf) && streamingDynamicAllocationEnabled) {
       throw new IllegalArgumentException(
