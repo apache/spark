@@ -636,10 +636,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitTouchTable(ctx: TouchTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableTouch(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
-      command(ctx))
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... TOUCH ...")
   }
 
   /**
@@ -651,11 +648,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitCompactTable(ctx: CompactTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableCompact(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      string(ctx.STRING))(
-      command(ctx))
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... COMPACT ...")
   }
 
   /**
@@ -667,10 +660,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitConcatenateTable(ctx: ConcatenateTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableMerge(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
-      command(ctx))
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... CONCATENATE")
   }
 
   /**

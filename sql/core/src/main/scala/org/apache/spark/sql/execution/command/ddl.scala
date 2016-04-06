@@ -434,22 +434,6 @@ case class AlterTableSetLocation(
 
 }
 
-case class AlterTableTouch(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableCompact(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    compactType: String)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableMerge(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
 case class AlterTableChangeCol(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],

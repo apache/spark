@@ -499,55 +499,23 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
-  test("alter table: touch") {
-    val sql1 = "ALTER TABLE table_name TOUCH"
-    val sql2 = "ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')"
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableTouch(
-      tableIdent,
-      None)(sql1)
-    val expected2 = AlterTableTouch(
-      tableIdent,
-      Some(Map("dt" -> "2008-08-08", "country" -> "us")))(sql2)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
+  test("alter table: touch (not supported)") {
+    assertUnsupported("ALTER TABLE table_name TOUCH")
+    assertUnsupported("ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')")
   }
 
-  test("alter table: compact") {
-    val sql1 = "ALTER TABLE table_name COMPACT 'compaction_type'"
-    val sql2 =
+  test("alter table: compact (not supported)") {
+    assertUnsupported("ALTER TABLE table_name COMPACT 'compaction_type'")
+    assertUnsupported(
       """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |COMPACT 'MAJOR'
-      """.stripMargin
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableCompact(
-      tableIdent,
-      None,
-      "compaction_type")(sql1)
-    val expected2 = AlterTableCompact(
-      tableIdent,
-      Some(Map("dt" -> "2008-08-08", "country" -> "us")),
-      "MAJOR")(sql2)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
+        |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
+        |COMPACT 'MAJOR'
+      """.stripMargin)
   }
 
-  test("alter table: concatenate") {
-    val sql1 = "ALTER TABLE table_name CONCATENATE"
-    val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE"
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableMerge(tableIdent, None)(sql1)
-    val expected2 = AlterTableMerge(
-      tableIdent, Some(Map("dt" -> "2008-08-08", "country" -> "us")))(sql2)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
+  test("alter table: concatenate (not supported)") {
+    assertUnsupported("ALTER TABLE table_name CONCATENATE")
+    assertUnsupported("ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE")
   }
 
   test("alter table: change column name/type/position/comment") {
