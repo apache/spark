@@ -383,8 +383,9 @@ case class AlterTableSetLocation(
         val part = catalog.getPartition(tableName, spec)
         val newPart =
           if (DDLUtils.isDatasourceTable(table)) {
-            part.copy(storage = part.storage.copy(
-              serdeProperties = part.storage.serdeProperties ++ Map("path" -> location)))
+            throw new AnalysisException(
+              "alter table set location for partition is not allowed for tables defined " +
+              "using the datasource API")
           } else {
             part.copy(storage = part.storage.copy(locationUri = Some(location)))
           }
@@ -394,6 +395,7 @@ case class AlterTableSetLocation(
         val newTable =
           if (DDLUtils.isDatasourceTable(table)) {
             table.withNewStorage(
+              locationUri = Some(location),
               serdeProperties = table.storage.serdeProperties ++ Map("path" -> location))
           } else {
             table.withNewStorage(locationUri = Some(location))
