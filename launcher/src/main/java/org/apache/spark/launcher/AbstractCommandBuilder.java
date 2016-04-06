@@ -74,7 +74,8 @@ abstract class AbstractCommandBuilder {
    *            SparkLauncher constructor that takes an environment), and may be modified to
    *            include other variables needed by the process to be executed.
    */
-  abstract List<String> buildCommand(Map<String, String> env) throws IOException;
+  abstract List<String> buildCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException;
 
   /**
    * Builds a list of arguments to run java.
@@ -86,8 +87,7 @@ abstract class AbstractCommandBuilder {
    * Callers should still add at least the class to run, as well as any arguments to pass to the
    * class.
    */
-  List<String> buildJavaCommand(String extraClassPath)
-          throws IOException, IllegalArgumentException {
+  List<String> buildJavaCommand(String extraClassPath) throws IOException {
     List<String> cmd = new ArrayList<>();
     String envJavaHome;
 

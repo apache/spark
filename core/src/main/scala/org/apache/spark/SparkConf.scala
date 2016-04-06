@@ -456,7 +456,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       }
       if (javaOpts.contains("-Xmx")) {
         val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
-          s"(was '$javaOpts'). " + "Use spark.executor.memory instead."
+          s"(was '$javaOpts'). Use spark.executor.memory instead."
         throw new Exception(msg)
       }
     }
