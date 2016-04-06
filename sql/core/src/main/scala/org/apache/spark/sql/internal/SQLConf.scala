@@ -398,7 +398,8 @@ object SQLConf {
 
   val WHOLESTAGE_MAX_NUM_FIELDS = SQLConfigBuilder("spark.sql.codegen.maxFields")
     .internal()
-    .doc("The maxinum number of fields (nested) could be supported by whole stage codegen")
+    .doc("The maximum number of fields (including nested fields) that will be supported before" +
+      " deactivating whole-stage codegen.")
     .intConf
     .createWithDefault(200)
 

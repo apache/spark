@@ -280,7 +280,7 @@ private[sql] class DefaultSource
    */
   override def supportBatch(sqlContext: SQLContext, schema: StructType): Boolean = {
     val conf = SQLContext.getActive().get.conf
-    conf.parquetVectorizedReaderEnabled &&
+    conf.useFileScan && conf.parquetVectorizedReaderEnabled &&
       conf.wholeStageEnabled && schema.length <= conf.wholeStageMaxNumFields &&
       schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
@@ -316,8 +316,8 @@ private[sql] class DefaultSource
       sqlContext.conf.getConf(SQLConf.PARQUET_INT96_AS_TIMESTAMP))
 
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
-    parquetConf.setBoolean(ParquetRelation.RETURNING_BATCH,
-      supportBatch(sqlContext, StructType(partitionSchema.fields ++ dataSchema.fields)))
+    val returningBatch =
+      supportBatch(sqlContext, StructType(partitionSchema.fields ++ dataSchema.fields))
 
     // Try to push down filters when filter push-down is enabled.
     val pushed = if (sqlContext.getConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key).toBoolean) {
@@ -363,9 +363,12 @@ private[sql] class DefaultSource
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
-        // TODO: fix column appending
+        if (returningBatch) {
+          vectorizedReader.enableReturningBatches()
+        }
         vectorizedReader
       } else {
+        logDebug(s"Falling back to parquet-mr")
         val reader = pushed match {
           case Some(filter) =>
             new ParquetRecordReader[InternalRow](
@@ -411,10 +414,6 @@ private[sql] class DefaultSource
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
-    // TODO: this could be wrong iff:
-    // 1) dataSchema.length <= max fields
-    // 2) dataSchema.length + number of partition columns > max fields
-    val returningBatch = supportBatch(sqlContext, dataSchema)
 
     // Parquet row group size. We will use this value as the value for
     // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
@@ -431,8 +430,7 @@ private[sql] class DefaultSource
         useMetadataCache,
         parquetFilterPushDown,
         assumeBinaryIsString,
-        assumeInt96IsTimestamp,
-        returningBatch) _
+        assumeInt96IsTimestamp) _
 
     val inputFiles = splitFiles(allFiles).data.toArray
 
@@ -563,8 +561,6 @@ private[sql] object ParquetRelation extends Logging {
   // original Hive table name.
   private[sql] val METASTORE_TABLE_NAME = "metastoreTableName"
 
-  private[sql] val RETURNING_BATCH = "returningBatch"
-
   /**
    * If parquet's block size (row group size) setting is larger than the min split size,
    * we use parquet's block size setting as the min split size. Otherwise, we will create
@@ -597,8 +593,7 @@ private[sql] object ParquetRelation extends Logging {
       useMetadataCache: Boolean,
       parquetFilterPushDown: Boolean,
       assumeBinaryIsString: Boolean,
-      assumeInt96IsTimestamp: Boolean,
-      returningBatch: Boolean)(job: Job): Unit = {
+      assumeInt96IsTimestamp: Boolean)(job: Job): Unit = {
     val conf = job.getConfiguration
     conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
 
@@ -628,8 +623,6 @@ private[sql] object ParquetRelation extends Logging {
     // Sets flags for `CatalystSchemaConverter`
     conf.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING.key, assumeBinaryIsString)
     conf.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key, assumeInt96IsTimestamp)
-
-    conf.setBoolean(RETURNING_BATCH, returningBatch)
 
     overrideMinSplitSize(parquetBlockSize, conf)
   }

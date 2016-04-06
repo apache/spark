@@ -470,6 +470,8 @@ trait FileFormat {
 
   /**
    * Returns whether this format support returning columnar batch or not.
+   *
+   * TODO: we should just have different traits for the different formats.
    */
   def supportBatch(sqlContext: SQLContext, dataSchema: StructType): Boolean = {
     false

@@ -110,7 +110,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     super.initialize(inputSplit, taskAttemptContext);
     initializeInternal();
     Configuration conf = ContextUtil.getConfiguration(taskAttemptContext);
-    returnColumnarBatch = conf.getBoolean(ParquetRelation$.MODULE$.RETURNING_BATCH(), false);
   }
 
   /**
@@ -210,6 +209,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public ColumnarBatch resultBatch() {
     if (columnarBatch == null) initBatch();
     return columnarBatch;
+  }
+
+  /*
+   * Can be called before any rows are returned to enable returning columnar batches directly.
+   */
+  public void enableReturningBatches() {
+    returnColumnarBatch = true;
   }
 
   /**
