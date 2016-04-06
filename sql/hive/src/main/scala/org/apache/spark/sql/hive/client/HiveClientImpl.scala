@@ -357,11 +357,13 @@ private[hive] class HiveClientImpl(
       table: String,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = withHiveState {
-    val addPartitionDesc = new AddPartitionDesc(db, table, ignoreIfExists)
-    parts.foreach { s =>
-      addPartitionDesc.addPartition(s.spec.asJava, s.storage.locationUri.orNull)
+    if (parts.nonEmpty) {
+      val addPartitionDesc = new AddPartitionDesc(db, table, ignoreIfExists)
+      parts.foreach { s =>
+        addPartitionDesc.addPartition(s.spec.asJava, s.storage.locationUri.orNull)
+      }
+      client.createPartitions(addPartitionDesc)
     }
-    client.createPartitions(addPartitionDesc)
   }
 
   override def dropPartitions(

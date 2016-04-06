@@ -430,7 +430,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     } else {
       val columns = relation.location.partitionSpec.partitionColumns
       relation.location.partitionSpec.partitions.map { part =>
-        val specs = columns.fieldNames.zip(part.values.toSeq(columns).map { c =>
+        val specs = columns.fieldNames.map(_.toLowerCase).zip(part.values.toSeq(columns).map { c =>
           c match {
             case i: Int => s"$i"
             case l: Long => s"$l"
