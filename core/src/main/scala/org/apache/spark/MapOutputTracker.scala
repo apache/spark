@@ -517,34 +517,13 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
 
   def getSerializedMapOutputStatuses(shuffleId: Int): Array[Byte] = {
     var statuses: Array[MapStatus] = null
+    var retBytes: Array[Byte] = null
     var epochGotten: Long = -1
-    epochLock.synchronized {
-      if (epoch > cacheEpoch) {
-        cachedSerializedStatuses.clear()
-        clearCachedBroadcast()
-        cacheEpoch = epoch
-      }
-      cachedSerializedStatuses.get(shuffleId) match {
-        case Some(bytes) =>
-          return bytes
-        case None =>
-          logDebug("cached status not found for : " + shuffleId)
-          statuses = mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
-          epochGotten = epoch
-      }
-    }
 
-    var shuffleIdLock = shuffleIdLocks.get(shuffleId)
-    if (null == shuffleIdLock) {
-      val newLock = new Object()
-      // in general, this condition should be false - but good to be paranoid
-      val prevLock = shuffleIdLocks.putIfAbsent(shuffleId, newLock)
-      shuffleIdLock = if (null != prevLock) prevLock else newLock
-    }
-    val newbytes = shuffleIdLock.synchronized {
-
-      // double check to make sure someone else didn't serialize and cache the same
-      // mapstatus while we were waiting on the synchronize
+    // Check to see if we have a cached version, returns true if it does
+    // and has side effect of setting retBytes.  If not returns false
+    // with side effect of setting statuses
+    def checkCachedStatuses(): Boolean = {
       epochLock.synchronized {
         if (epoch > cacheEpoch) {
           cachedSerializedStatuses.clear()
@@ -553,13 +532,31 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
         }
         cachedSerializedStatuses.get(shuffleId) match {
           case Some(bytes) =>
-            return bytes
+            retBytes = bytes
+            true
           case None =>
-            logDebug("shuffle lock cached status not found for : " + shuffleId)
+            logDebug("cached status not found for : " + shuffleId)
             statuses = mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
             epochGotten = epoch
+            false
         }
       }
+    }
+
+    if (checkCachedStatuses()) return retBytes
+    var shuffleIdLock = shuffleIdLocks.get(shuffleId)
+    if (null == shuffleIdLock) {
+      val newLock = new Object()
+      // in general, this condition should be false - but good to be paranoid
+      val prevLock = shuffleIdLocks.putIfAbsent(shuffleId, newLock)
+      shuffleIdLock = if (null != prevLock) prevLock else newLock
+    }
+    // synchronize so we only serialize/broadcast it once since multiple threads call
+    // in parallel
+    shuffleIdLock.synchronized {
+      // double check to make sure someone else didn't serialize and cache the same
+      // mapstatus while we were waiting on the synchronize
+      if (checkCachedStatuses()) return retBytes
 
       // If we got here, we failed to find the serialized locations in the cache, so we pulled
       // out a snapshot of the locations as "statuses"; let's serialize and return that
@@ -578,7 +575,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
       }
       bytes
     }
-    newbytes
   }
 
   override def stop() {
