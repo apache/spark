@@ -1687,12 +1687,7 @@ on all of the worker nodes, as they will need access to the Hive serialization a
 (SerDes) in order to access data stored in Hive.
 
 Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (for security configuration),
- `hdfs-site.xml` (for HDFS configuration) file in `conf/`. Please note when running
-the query on a YARN cluster (`cluster` mode), the `datanucleus` jars under the `lib` directory
-and `hive-site.xml` under `conf/` directory need to be available on the driver and all executors launched by the
-YARN cluster. The convenient way to do this is adding them through the `--jars` option and `--file` option of the
-`spark-submit` command.
-
+`hdfs-site.xml` (for HDFS configuration) file in `conf/`.
 
 <div class="codetabs">
 

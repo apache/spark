@@ -51,11 +51,11 @@ case class DescribeCommand(
 }
 
 /**
-  * Used to represent the operation of create table using a data source.
+ * Used to represent the operation of create table using a data source.
  *
-  * @param allowExisting If it is true, we will do nothing when the table already exists.
-  *                      If it is false, an exception will be thrown
-  */
+ * @param allowExisting If it is true, we will do nothing when the table already exists.
+ *                      If it is false, an exception will be thrown
+ */
 case class CreateTableUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],

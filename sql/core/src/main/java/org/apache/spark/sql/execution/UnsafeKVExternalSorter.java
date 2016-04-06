@@ -272,5 +272,5 @@ public final class UnsafeKVExternalSorter {
     public void close() {
       cleanupResources();
     }
-  };
+  }
 }

@@ -52,6 +52,12 @@ trait FunctionRegistry {
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
 
+  /** Checks if a function with a given name exists. */
+  def functionExists(name: String): Boolean = lookupFunction(name).isDefined
+
+  /** Clear all registered functions. */
+  def clear(): Unit
+
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -91,6 +97,10 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.remove(name).isDefined
   }
 
+  override def clear(): Unit = {
+    functionBuilders.clear()
+  }
+
   def copy(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
@@ -127,6 +137,10 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   }
 
   override def dropFunction(name: String): Boolean = {
+    throw new UnsupportedOperationException
+  }
+
+  override def clear(): Unit = {
     throw new UnsupportedOperationException
   }
 
@@ -297,6 +311,7 @@ object FunctionRegistry {
     expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
+    expression[TimeWindow]("window"),
 
     // collection functions
     expression[ArrayContains]("array_contains"),
@@ -361,7 +376,10 @@ object FunctionRegistry {
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
-          case Failure(e) => throw new AnalysisException(e.getMessage)
+          case Failure(e) =>
+            // the exception is an invocation exception. To get a meaningful message, we need the
+            // cause.
+            throw new AnalysisException(e.getCause.getMessage)
         }
       }
     }

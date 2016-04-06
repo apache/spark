@@ -152,19 +152,19 @@ trait StreamSinkProvider {
 @DeveloperApi
 trait CreatableRelationProvider {
   /**
-    * Creates a relation with the given parameters based on the contents of the given
-    * DataFrame. The mode specifies the expected behavior of createRelation when
-    * data already exists.
-    * Right now, there are three modes, Append, Overwrite, and ErrorIfExists.
-    * Append mode means that when saving a DataFrame to a data source, if data already exists,
-    * contents of the DataFrame are expected to be appended to existing data.
-    * Overwrite mode means that when saving a DataFrame to a data source, if data already exists,
-    * existing data is expected to be overwritten by the contents of the DataFrame.
-    * ErrorIfExists mode means that when saving a DataFrame to a data source,
-    * if data already exists, an exception is expected to be thrown.
-     *
-     * @since 1.3.0
-    */
+   * Creates a relation with the given parameters based on the contents of the given
+   * DataFrame. The mode specifies the expected behavior of createRelation when
+   * data already exists.
+   * Right now, there are three modes, Append, Overwrite, and ErrorIfExists.
+   * Append mode means that when saving a DataFrame to a data source, if data already exists,
+   * contents of the DataFrame are expected to be appended to existing data.
+   * Overwrite mode means that when saving a DataFrame to a data source, if data already exists,
+   * existing data is expected to be overwritten by the contents of the DataFrame.
+   * ErrorIfExists mode means that when saving a DataFrame to a data source,
+   * if data already exists, an exception is expected to be thrown.
+   *
+   * @since 1.3.0
+   */
   def createRelation(
       sqlContext: SQLContext,
       mode: SaveMode,
@@ -437,6 +437,15 @@ trait FileFormat {
       sqlContext: SQLContext,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType]
+
+  /**
+   * Prepares a read job and returns a potentially updated data source option [[Map]]. This method
+   * can be useful for collecting necessary global information for scanning input data.
+   */
+  def prepareRead(
+      sqlContext: SQLContext,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Map[String, String] = options
 
   /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can

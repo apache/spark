@@ -20,11 +20,11 @@ package org.apache.spark.mllib.tree
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.tree.impl.TimeTracker
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
-import org.apache.spark.mllib.tree.impl.TimeTracker
 import org.apache.spark.mllib.tree.impurity.Variance
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel}
 import org.apache.spark.rdd.RDD
@@ -165,6 +165,7 @@ object GradientBoostedTrees extends Logging {
 
   /**
    * Internal method for performing regression using trees as base learners.
+   *
    * @param input Training dataset.
    * @param validationInput Validation dataset, ignored if validate is set to false.
    * @param boostingStrategy Boosting parameters.
