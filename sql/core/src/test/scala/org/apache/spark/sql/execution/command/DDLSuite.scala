@@ -236,7 +236,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(catalog.getTableMetadata(tableIdent).properties.isEmpty)
     // set table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
-    assert(catalog.getTableMetadata(tableIdent).properties == Map("andrew" -> "or14", "kor" -> "bel"))
+    assert(catalog.getTableMetadata(tableIdent).properties ==
+      Map("andrew" -> "or14", "kor" -> "bel"))
     // set table properties without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")

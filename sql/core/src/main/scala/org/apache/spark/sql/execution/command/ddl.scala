@@ -149,7 +149,8 @@ case class DescribeDatabase(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val dbMetadata: CatalogDatabase = sqlContext.sessionState.catalog.getDatabaseMetadata(databaseName)
+    val dbMetadata: CatalogDatabase =
+      sqlContext.sessionState.catalog.getDatabaseMetadata(databaseName)
     val result =
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
